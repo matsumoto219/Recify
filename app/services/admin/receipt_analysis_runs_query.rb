@@ -261,6 +261,7 @@ module Admin
           ai_input_snapshot: summaries[:ai_input],
           ocr_result_snapshot: detailed_snapshots[:ocr_result_snapshot]
         ),
+        ocr_response_artifact: ocr_response_artifact_info(run),
         snapshot_presence: snapshot_presence(run),
         finalize_decision: safe_summary(run.metadata.to_h["finalize_decision"] || {}),
         amount_calculation_profile: amount_calculation_profile
@@ -294,12 +295,28 @@ module Admin
       {
         ocr_summary: run.ocr_summary.present?,
         ocr_result_snapshot: run.ocr_result_snapshot.present?,
+        ocr_response_artifact: run.ocr_response_artifact.attached?,
         ai_input_snapshot: run.ai_input_snapshot.present?,
         ai_result_summary: run.ai_result_summary.present?,
         ai_normalized_result_snapshot: run.ai_normalized_result_snapshot.present?,
         build_params_snapshot: run.metadata.to_h["build_params_snapshot"].present?,
         final_result_summary: run.final_result_summary.present?,
         finalize_decision: run.metadata.to_h["finalize_decision"].present?
+      }
+    end
+
+    def ocr_response_artifact_info(run)
+      return { attached: false } unless run.ocr_response_artifact.attached?
+
+      blob = run.ocr_response_artifact.blob
+      attachment = run.ocr_response_artifact.attachment
+
+      {
+        attached: true,
+        filename: blob.filename.to_s,
+        byte_size: blob.byte_size,
+        content_type: blob.content_type,
+        created_at: attachment&.created_at
       }
     end
 

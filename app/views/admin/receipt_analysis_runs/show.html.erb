@@ -230,6 +230,64 @@
     <% end %>
   </div>
 
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%
+      ocr_response_artifact = (@record[:ocr_response_artifact] || {}).with_indifferent_access
+      ocr_response_artifact_attached = ocr_response_artifact[:attached] == true
+    %>
+    <section class="space-y-4">
+      <div class="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div class="min-w-0">
+          <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.ocr_response_artifact") %></h2>
+          <p class="mt-1 text-sm token-text-muted">
+            <%= ocr_response_artifact_attached ? t("admin.receipt_analysis_runs.show.ocr_response_artifact.attached") : t("admin.receipt_analysis_runs.show.ocr_response_artifact.missing") %>
+          </p>
+        </div>
+        <% if ocr_response_artifact_attached && admin_ocr_response_artifact_download_enabled? %>
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: ocr_response_artifact_admin_receipt_analysis_run_path(@record[:run_key]),
+                label: t("admin.receipt_analysis_runs.show.ocr_response_artifact.download"),
+                size: :compact,
+                icon: "download" %>
+        <% elsif ocr_response_artifact_attached %>
+          <%= render "shared/ui/actions/button",
+                as: :link,
+                href: new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(@record[:run_key])),
+                label: t("admin.receipt_analysis_runs.show.ocr_response_artifact.reauthentication_link"),
+                size: :compact,
+                icon: "passkey" %>
+        <% end %>
+      </div>
+
+      <% if ocr_response_artifact_attached %>
+        <% if !admin_ocr_response_artifact_download_enabled? %>
+          <p class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-warning-soft p-3 text-sm token-text-base [overflow-wrap:anywhere]">
+            <%= t("admin.receipt_analysis_runs.show.ocr_response_artifact.reauthentication_guidance") %>
+          </p>
+        <% end %>
+        <dl class="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-4">
+          <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.ocr_response_artifact.filename") %></dt>
+            <dd class="min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= ocr_response_artifact[:filename] %></dd>
+          </div>
+          <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.ocr_response_artifact.byte_size") %></dt>
+            <dd class="min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= number_to_human_size(ocr_response_artifact[:byte_size]) %></dd>
+          </div>
+          <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.ocr_response_artifact.content_type") %></dt>
+            <dd class="min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= ocr_response_artifact[:content_type].presence || "-" %></dd>
+          </div>
+          <div class="min-w-0 rounded-lg border token-border-soft token-bg-card-subtle p-3">
+            <dt class="text-xs font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.ocr_response_artifact.created_at") %></dt>
+            <dd class="min-w-0 break-words font-mono text-xs token-text-base [overflow-wrap:anywhere]"><%= ocr_response_artifact[:created_at].present? ? l(ocr_response_artifact[:created_at], format: :short) : "-" %></dd>
+          </div>
+        </dl>
+      <% end %>
+    </section>
+  <% end %>
+
   <div class="grid gap-6 lg:grid-cols-2">
     <%= render "shared/ui/layout/surface_card", padding: :md, class: "min-w-0 max-w-full" do %>
       <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.timing_provider") %></h2>

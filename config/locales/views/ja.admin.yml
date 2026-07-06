@@ -755,6 +755,7 @@ ja:
           user: User
           original_image: オリジナル画像
           image_metadata: 画像メタ情報
+          ocr_response_artifact: OCR raw JSON
           timing_provider: Timing / Provider
           snapshot_presence: Snapshot presence
           retry_options: Retry options
@@ -877,6 +878,16 @@ ja:
             system_purge: system_purge
           ocr_input_image: OCR input image
           ocr_input_image_not_implemented: 未実装。現在はオリジナル画像をOCRへ送信します。
+        ocr_response_artifact:
+          attached: 保存済み
+          missing: 未保存
+          filename: filename
+          byte_size: byte size
+          content_type: content type
+          created_at: saved at
+          download: raw JSONをダウンロード
+          reauthentication_guidance: raw JSONには個人情報が含まれる可能性があるため、ダウンロードにはパスキー再認証が必要です。
+          reauthentication_link: パスキー再認証
         snapshot:
           present: present
           missing: missing
@@ -902,6 +913,8 @@ ja:
         confirmation_required: 確認文字列を入力してください。
         accepted: 再解析を受け付けました。
         failed: "再解析を開始できませんでした: %{error_code}"
+        sensitive_download_reauthentication_required: raw JSONのダウンロードにはパスキーによる再認証が必要です。
+        ocr_response_artifact_missing: OCR raw JSONは保存されていません。
     audit_logs:
       index:
         title: 監査ログ

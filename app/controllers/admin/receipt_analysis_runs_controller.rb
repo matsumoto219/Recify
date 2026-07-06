@@ -2,7 +2,10 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   RETRY_TYPES = Analysis.retry_types.freeze
   RETRY_CONFIRMATION_TEXT = Analysis.retry_confirmation_text
 
-  helper_method :admin_retry_enabled?, :admin_retry_reauthentication_required?, :retry_confirmation_text
+  helper_method :admin_retry_enabled?,
+                :admin_retry_reauthentication_required?,
+                :admin_ocr_response_artifact_download_enabled?,
+                :retry_confirmation_text
 
   def index
     @filters = filter_params
@@ -68,9 +71,66 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     end
   end
 
+  def ocr_response_artifact
+    @result = Admin.receipt_analysis_runs(run_key: params[:run_key], limit: 1)
+    @record = @result.records.first
+    raise_not_found if @record.blank?
+
+    unless admin_ocr_response_artifact_download_enabled?
+      redirect_to new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(@record[:run_key])),
+                  alert: t("admin.receipt_analysis_runs.messages.sensitive_download_reauthentication_required"),
+                  status: :see_other
+      return
+    end
+
+    artifact = @record[:run].ocr_response_artifact
+    unless artifact.attached?
+      record_ocr_response_artifact_download_audit!(
+        outcome: "failed",
+        error_code: "artifact_missing",
+        metadata: { receipt_public_id: @record[:public_id] }
+      )
+      redirect_to admin_receipt_analysis_run_path(@record[:run_key]),
+                  alert: t("admin.receipt_analysis_runs.messages.ocr_response_artifact_missing"),
+                  status: :see_other
+      return
+    end
+
+    blob = artifact.blob
+    record_ocr_response_artifact_download_audit!(
+      outcome: "succeeded",
+      metadata: {
+        receipt_public_id: @record[:public_id],
+        byte_size: blob.byte_size,
+        content_type: blob.content_type,
+        filename: blob.filename.to_s
+      }
+    )
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    send_data artifact.download,
+              filename: blob.filename.to_s,
+              type: blob.content_type.presence || "application/json",
+              disposition: "attachment"
+  rescue ActiveStorage::FileNotFoundError
+    record_ocr_response_artifact_download_audit!(
+      outcome: "failed",
+      error_code: "artifact_file_missing",
+      metadata: { receipt_public_id: @record&.dig(:public_id) }
+    )
+    redirect_to admin_receipt_analysis_run_path(@record[:run_key]),
+                alert: t("admin.receipt_analysis_runs.messages.ocr_response_artifact_missing"),
+                status: :see_other
+  end
+
   private
 
   def admin_retry_enabled?
+    current_user.passkeys.exists? && admin_passkey_reauthenticated?
+  end
+
+  def admin_ocr_response_artifact_download_enabled?
     current_user.passkeys.exists? && admin_passkey_reauthenticated?
   end
 
@@ -80,6 +140,19 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
 
   def retry_confirmation_text
     RETRY_CONFIRMATION_TEXT
+  end
+
+  def record_ocr_response_artifact_download_audit!(outcome:, error_code: nil, metadata: {})
+    AuditLogs.record_admin_action!(
+      actor: current_user,
+      action: "receipt_analysis_runs.ocr_response_artifact.download",
+      target: @record[:run],
+      target_uid: @record[:run_key],
+      outcome: outcome,
+      error_code: error_code,
+      metadata: metadata.compact,
+      request: request
+    )
   end
 
   def filter_params

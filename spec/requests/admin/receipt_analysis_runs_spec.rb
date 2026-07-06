@@ -788,6 +788,32 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       end
     end
 
+    it 'OCR raw JSON artifactがある場合も本文やblob keyを表示せずメタ情報だけ表示する' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      raw_body = JSON.generate('status' => 'succeeded', 'analyzeResult' => { 'content' => 'RAW OCR JSON BODY' })
+      run.ocr_response_artifact.attach(
+        io: StringIO.new(raw_body),
+        filename: "ocr_response_#{run.run_key}_attempt01.json",
+        content_type: 'application/json'
+      )
+      sign_in admin
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('OCR raw JSON')
+        expect(response.body).to include("ocr_response_#{run.run_key}_attempt01.json")
+        expect(response.body).to include('application/json')
+        expect(response.body).to include('raw JSONには個人情報が含まれる可能性')
+        expect(response.body).to include(new_admin_passkey_reauthentication_path)
+        expect(response.body).not_to include('RAW OCR JSON BODY')
+        expect(response.body).not_to include(run.ocr_response_artifact.blob.key)
+        expect(response.body).not_to include('signed_id')
+      end
+    end
+
     it 'AI停止中はai_retryをdisabled表示し実行フォームを出さない' do
       admin = create(:user, :admin)
       run = create(
@@ -847,6 +873,105 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('ai_unavailable')
         expect(response.body).not_to include('value="ai_retry"')
         expect(response.body).to include('value="full_reanalyze"')
+      end
+    end
+  end
+
+  describe 'GET /admin/receipt_analysis_runs/:run_key/ocr_response_artifact' do
+    it '一般ユーザーには404を返す' do
+      user = create(:user)
+      run = create(:receipt_analysis_run, :succeeded)
+      run.ocr_response_artifact.attach(
+        io: StringIO.new(JSON.generate('status' => 'succeeded')),
+        filename: "ocr_response_#{run.run_key}_attempt01.json",
+        content_type: 'application/json'
+      )
+      sign_in user
+
+      get ocr_response_artifact_admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(response.body).to include(I18n.t('errors.not_found.title'))
+      end
+    end
+
+    it 'adminでもfresh reauthなしではdownloadせずpasskey再認証へredirectする' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      run.ocr_response_artifact.attach(
+        io: StringIO.new(JSON.generate('status' => 'succeeded')),
+        filename: "ocr_response_#{run.run_key}_attempt01.json",
+        content_type: 'application/json'
+      )
+      sign_in admin
+
+      get ocr_response_artifact_admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(run.run_key)))
+        expect(flash[:alert]).to include('パスキーによる再認証')
+        expect(response.body).not_to include('succeeded')
+      end
+    end
+
+    it 'fresh reauth済みadminにはraw JSONをattachmentとして返し安全なAuditLogだけ残す' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      raw_body = JSON.generate('status' => 'succeeded', 'analyzeResult' => { 'content' => 'RAW OCR JSON BODY' })
+      filename = "ocr_response_#{run.run_key}_attempt01.json"
+      run.ocr_response_artifact.attach(
+        io: StringIO.new(raw_body),
+        filename: filename,
+        content_type: 'application/json'
+      )
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        get ocr_response_artifact_admin_receipt_analysis_run_path(run.run_key)
+      }.to change(AuditLog, :count).by(1)
+
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.media_type).to eq('application/json')
+        expect(response.headers['Cache-Control']).to include('no-store')
+        expect(response.headers['X-Content-Type-Options']).to eq('nosniff')
+        expect(response.headers['Content-Disposition']).to include('attachment')
+        expect(response.headers['Content-Disposition']).to include(filename)
+        expect(response.body).to eq(raw_body)
+        expect(audit_log.action).to eq('receipt_analysis_runs.ocr_response_artifact.download')
+        expect(audit_log.outcome).to eq('succeeded')
+        expect(audit_log.target_uid).to eq(run.run_key)
+        expect(audit_log.metadata).to include(
+          'receipt_public_id' => run.receipt.public_id,
+          'byte_size' => raw_body.bytesize,
+          'content_type' => 'application/json',
+          'filename' => filename
+        )
+        expect(audit_log.metadata.to_json).not_to include('RAW OCR JSON BODY')
+        expect(audit_log.metadata.to_json).not_to include(run.ocr_response_artifact.blob.key)
+        expect(audit_log.metadata.to_json).not_to include('signed_id')
+      end
+    end
+
+    it 'artifact未保存ならdownloadせず失敗AuditLogを残す' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        get ocr_response_artifact_admin_receipt_analysis_run_path(run.run_key)
+      }.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_run_path(run.run_key))
+        expect(flash[:alert]).to include('OCR raw JSON')
+        expect(AuditLog.last.outcome).to eq('failed')
+        expect(AuditLog.last.error_code).to eq('artifact_missing')
       end
     end
   end

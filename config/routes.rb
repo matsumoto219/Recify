@@ -51,6 +51,7 @@ Rails.application.routes.draw do
     end
     resources :receipt_analysis_runs, only: %i[index show], param: :run_key do
       post :retry, on: :member
+      get :ocr_response_artifact, on: :member
     end
     resources :receipts, only: %i[show], param: :public_id do
       post :quarantine, on: :member
