@@ -360,4 +360,78 @@ RSpec.describe 'Security events', type: :request do
       expect(events.map(&:matched_rule)).to all(eq('protected_receipt_attribute'))
     end
   end
+
+  it '通常編集のnested attributes idではparameter tamperingを記録しない' do
+    receipt = create(
+      :receipt,
+      user: user,
+      store_name: 'Before Nested Edit',
+      total_amount: 1100,
+      payment_method: 'cash',
+      status: 'completed'
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: 'コーヒー',
+      price: 1000,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      line_total: 1000,
+      needs_review: false
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'delivery_fee',
+      label: '配送料',
+      amount: 100,
+      sign: 'surcharge',
+      source: 'manual',
+      needs_review: false
+    )
+    payment = receipt.receipt_payments.create!(method: 'cash', amount: 1100)
+
+    expect {
+      patch receipt_path(receipt),
+            params: {
+              receipt: {
+                store_name: 'After Nested Edit',
+                receipt_items_attributes: {
+                  '0' => {
+                    id: item.id,
+                    confirmed_name: 'アイスコーヒー',
+                    price: 1000,
+                    quantity: 1,
+                    quantity_unit_code: 'each',
+                    line_total: 1000,
+                    _destroy: '0'
+                  }
+                },
+                receipt_adjustments_attributes: {
+                  '0' => {
+                    id: adjustment.id,
+                    kind: 'delivery_fee',
+                    label: '配送料',
+                    amount: 100,
+                    sign: 'surcharge',
+                    _destroy: '0'
+                  }
+                },
+                receipt_payments_attributes: {
+                  '0' => {
+                    id: payment.id,
+                    method: 'cash',
+                    amount: 1100,
+                    _destroy: '0'
+                  }
+                }
+              }
+            }
+    }.not_to change(SecurityEvent.where(event_type: 'parameter_tampering_attempt'), :count)
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.reload.store_name).to eq('After Nested Edit')
+      expect(item.reload.confirmed_name).to eq('アイスコーヒー')
+      expect(adjustment.reload.amount).to eq(100)
+      expect(payment.reload.amount).to eq(1100)
+    end
+  end
 end

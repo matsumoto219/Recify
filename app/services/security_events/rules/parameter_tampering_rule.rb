@@ -14,6 +14,7 @@ module SecurityEvents
         image_purged_at
         image_purged_reason
       ].freeze
+      PROTECTED_RECEIPT_NESTED_FIELDS = (PROTECTED_RECEIPT_FIELDS - %w[id]).freeze
       PROTECTED_RECEIPT_TOP_LEVEL_FIELDS = %w[
         amount_calculation_profile
         review_reasons
@@ -66,8 +67,17 @@ module SecurityEvents
       end
 
       def protected_receipt_path?(segments)
-        (segments & PROTECTED_RECEIPT_FIELDS).any? ||
+        protected_receipt_top_level_path?(segments) ||
+          protected_receipt_nested_path?(segments) ||
           PROTECTED_RECEIPT_TOP_LEVEL_FIELDS.include?(segments.second)
+      end
+
+      def protected_receipt_top_level_path?(segments)
+        segments.size == 2 && PROTECTED_RECEIPT_FIELDS.include?(segments.second)
+      end
+
+      def protected_receipt_nested_path?(segments)
+        (segments.drop(2) & PROTECTED_RECEIPT_NESTED_FIELDS).any?
       end
     end
   end

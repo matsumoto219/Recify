@@ -94,6 +94,7 @@ RSpec.describe SecurityEvents::Detector do
     detections = described_class.call(
       params: {
         receipt: {
+          id: '999',
           user_id: '999',
           status: 'failed',
           review_reasons: [ 'forged_reason' ],
@@ -117,6 +118,7 @@ RSpec.describe SecurityEvents::Detector do
       expect(detections.map(&:event_type)).to all(eq('parameter_tampering_attempt'))
       expect(detections.map(&:matched_rule)).to include('protected_receipt_attribute', 'protected_user_attribute')
       expect(detections.map(&:field_name)).to include(
+        'receipt.id',
         'receipt.user_id',
         'receipt.status',
         'receipt.review_reasons[0]',
@@ -127,6 +129,37 @@ RSpec.describe SecurityEvents::Detector do
         'user.admin'
       )
     end
+  end
+
+  it '通常のnested attributes idではparameter tampering扱いしない' do
+    detections = described_class.call(
+      params: {
+        receipt: {
+          receipt_items_attributes: {
+            '0' => {
+              id: '10',
+              confirmed_name: 'コーヒー'
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              id: '20',
+              label: '配送料',
+              amount: '100'
+            }
+          },
+          receipt_payments_attributes: {
+            '0' => {
+              id: '30',
+              method: 'cash',
+              amount: '1100'
+            }
+          }
+        }
+      }
+    )
+
+    expect(detections).to be_empty
   end
 
   it 'admin filterなどの通常パラメータではparameter tampering扱いしない' do
