@@ -79,10 +79,6 @@ module Analysis
           lines:,
           receipt_total: receipt_attributes[:total_amount]
         )
-        review_reasons = (
-          skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes) +
-          invalid_adjustment_review_reasons
-        ).uniq
         amount_hints = build_amount_hints(
           ai_receipt_attributes,
           candidates,
@@ -104,6 +100,19 @@ module Analysis
           receipt_tax_details_attributes,
           receipt_attributes
         )
+        tax_allocation_result = TaxAllocationResolver.call(
+          ownership_result: ownership_result,
+          items: receipt_items_attributes,
+          adjustments: receipt_adjustments_attributes,
+          tax_details: receipt_tax_details_attributes,
+          tax_rate_correction: tax_rate_correction
+        )
+        receipt_adjustments_attributes = tax_allocation_result.adjustments
+        invalid_adjustment_review_reasons = tax_allocation_result.review_reasons
+        review_reasons = (
+          skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes) +
+          invalid_adjustment_review_reasons
+        ).uniq
         corrections = build_params_corrections(
           purchased_at_fallback: purchased_at_fallback_snapshot(ai_receipt_attributes, candidates, lines),
           tax_rate_correction: tax_rate_correction
@@ -817,9 +826,10 @@ module Analysis
             needs_review = true
             review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
           end
-          tax_rate = normalize_rate(normalized[:tax_rate] || normalized[:tax_rate_hint]) ||
-            infer_tax_rate_from_text(adjustment_text) ||
-            matched_surcharge_item_tax_rate(kind:, sign:, amount:, label:, source_text:, receipt_items:)
+          explicit_tax_rate = normalize_rate(normalized[:tax_rate] || normalized[:tax_rate_hint])
+          inferred_tax_rate = infer_tax_rate_from_text(adjustment_text)
+          tax_rate = explicit_tax_rate || inferred_tax_rate
+          tax_rate_source = :explicit if tax_rate
 
           {
             kind: kind,
@@ -827,6 +837,7 @@ module Analysis
             amount: amount,
             sign: sign,
             tax_rate: tax_rate,
+            _tax_rate_source: tax_rate_source,
             source: source,
             source_text: source_text,
             source_line_index: source_line_index,

@@ -40,6 +40,7 @@ module Analysis
           fact_type: :line_item,
           effect_scope: :purchase_total,
           amount: attributes[:line_total] || attributes[:price],
+          tax_rate: attributes[:tax_rate],
           attributes: attributes,
           origin: :item
         )
