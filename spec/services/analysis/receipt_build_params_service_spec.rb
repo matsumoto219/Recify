@@ -4421,7 +4421,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         )
       end
 
-      it 'AI adjustmentがない場合だけ高信頼OCR candidateをsource ocrとしてfallback採用する' do
+      it '高信頼OCR candidateをdeterministic validation後にsource ocrとして採用する' do
         ocr_result[:candidates][:adjustment_candidates] = [
           {
             source_text: '配送料',
@@ -4446,8 +4446,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             sign: 'surcharge',
             tax_rate: BigDecimal('0.1'),
             source: 'ocr',
-            needs_review: true,
-            review_reasons: include('adjustment_uncertain')
+            needs_review: false,
+            review_reasons: []
           )
         )
       end
@@ -4757,8 +4757,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
               amount: 2160,
               sign: 'discount',
               source: 'ocr',
-              needs_review: true,
-              review_reasons: include('adjustment_uncertain')
+              needs_review: false,
+              review_reasons: []
             )
           )
           expect(params[:review_reasons]).to eq([])

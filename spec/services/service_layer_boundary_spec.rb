@@ -25,7 +25,7 @@ RSpec.describe 'Service layer child implementation boundary' do
     },
     {
       name: 'Analysis',
-      child_reference: /\bAnalysis::(?:AdjustmentEvidenceValidator|MoneyTokenClassifier|OwnershipConflictResolver|OwnershipFact|OwnershipResult|OwnershipRules(?:::[A-Za-z]+)?|ReceiptBuildParamsService|ReceiptFactOwnershipResolver|ReceiptProcessingErrorMapper|ReceiptFallbackPatterns|ReceiptSignalEvaluator|ReceiptItemNormalizer|RetryService|SourceEvidenceIndex|SourceRef|StoreNameCandidateClassifier|TaxAllocationResolver)\b/,
+      child_reference: /\bAnalysis::(?:AdjustmentEvidenceValidator|MoneyTokenClassifier|OwnershipConflictResolver|OwnershipConsistencyGuard|OwnershipFact|OwnershipResult|OwnershipRules(?:::[A-Za-z]+)?|ReceiptBuildParamsService|ReceiptFactOwnershipResolver|ReceiptProcessingErrorMapper|ReceiptFallbackPatterns|ReceiptSignalEvaluator|ReceiptItemNormalizer|RetryService|SourceEvidenceIndex|SourceRef|StoreNameCandidateClassifier|TaxAllocationResolver)\b/,
       parent_paths: %w[app/services/analysis.rb],
       internal_globs: %w[app/services/analysis/**/*.rb]
     },

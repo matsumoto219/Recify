@@ -40,6 +40,14 @@ module Analysis
       ReceiptFactOwnershipResolver.call(...)
     end
 
+    def enforce_ownership_consistency(params:)
+      OwnershipConsistencyGuard.call(params: params)
+    end
+
+    def ownership_review_reason_resolved?(params:, reason:)
+      OwnershipConsistencyGuard.review_reason_resolved?(params: params, reason: reason)
+    end
+
     def receipt_item_ai_allowed_keys
       ReceiptItemNormalizer::AI_ALLOWED_KEYS
     end

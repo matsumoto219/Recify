@@ -109,6 +109,7 @@ module Analysis
         )
         receipt_adjustments_attributes = tax_allocation_result.adjustments
         invalid_adjustment_review_reasons = tax_allocation_result.review_reasons
+        ownership_contract = OwnershipConsistencyGuard.contract_for(tax_allocation_result)
         review_reasons = (
           skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes) +
           invalid_adjustment_review_reasons
@@ -131,6 +132,7 @@ module Analysis
           review_reasons: review_reasons,
           amount_hints: amount_hints,
           tax_rate_correction: tax_rate_correction,
+          ownership_contract: ownership_contract,
           corrections: corrections
         }
       end
@@ -821,7 +823,11 @@ module Analysis
 
           label = adjustment_label_for(kind, normalized[:label], source_text)
           review_reasons = normalize_review_reasons(normalized[:review_reasons])
-          needs_review = source == "ocr" || normalized[:needs_review] == true || validation.review_required
+          unless validation.review_required
+            review_reasons -= [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
+          end
+          needs_review = normalized[:needs_review] == true && review_reasons.any?
+          needs_review ||= validation.review_required
           if kind == "other" || normalized[:kind].blank? || sign_value.blank? || validation.review_required
             needs_review = true
             review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON

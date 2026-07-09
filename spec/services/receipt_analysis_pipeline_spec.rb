@@ -3281,7 +3281,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it '明確なsurcharge adjustmentで会計が整合する場合はprice_tax_inclusion_uncertainをreceipt-levelから落とす' do
+    it '明確なsurcharge adjustmentでも税基準の確認理由は所有権判定だけで解除しない' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = {
         success: true,
@@ -3356,12 +3356,13 @@ RSpec.describe ReceiptAnalysisPipeline do
       )
 
       aggregate_failures do
-        expect(receipt.reload.status).to eq('completed')
+        expect(receipt.reload.status).to eq('review_needed')
         expect(receipt.subtotal_amount).to eq(910)
         expect(receipt.tax_amount).to eq(90)
         expect(receipt.total_amount).to eq(1_000)
-        expect(receipt.review_reasons).to eq([])
+        expect(receipt.review_reasons).to eq([ 'price_tax_inclusion_uncertain' ])
         expect(receipt.receipt_payments.sum(:amount)).to eq(1_000)
+        expect(receipt.receipt_adjustments).to all(have_attributes(needs_review: false, review_reasons: []))
       end
     end
 
@@ -3743,7 +3744,8 @@ RSpec.describe ReceiptAnalysisPipeline do
           [ 'service_charge', 486, 'surcharge', 'ocr' ],
           [ 'late_night_charge', 486, 'surcharge', 'ocr' ]
         )
-        expect(receipt.review_reasons).to include('adjustment_uncertain')
+        expect(receipt.receipt_adjustments).to all(have_attributes(needs_review: false, review_reasons: []))
+        expect(receipt.review_reasons).not_to include('adjustment_uncertain')
       end
     end
 
@@ -3902,8 +3904,8 @@ RSpec.describe ReceiptAnalysisPipeline do
           [ 'bag_fee', 10, 'surcharge', 'ocr' ],
           [ 'delivery_fee', 550, 'surcharge', 'ocr' ]
         )
-        expect(receipt.receipt_adjustments).to all(have_attributes(needs_review: true))
-        expect(receipt.review_reasons).to include('adjustment_uncertain')
+        expect(receipt.receipt_adjustments).to all(have_attributes(needs_review: false, review_reasons: []))
+        expect(receipt.review_reasons).not_to include('adjustment_uncertain')
       end
     end
 
@@ -6343,12 +6345,12 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
-    it '割引が多いレシートは商品単位値引きとレシート単位値引きを分けて合計を合わせる' do
+    it '割引が多いレシートは根拠が別の値引きを分けて不要なreviewなしで合計を合わせる' do
       receipt, amount = run_finalize_ocr_fixture('discount_heavy_receipt')
 
       aggregate_failures do
-        expect(receipt.status).to eq('review_needed')
-        expect(receipt.review_reasons).to eq([ 'adjustment_uncertain' ])
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).to be_empty
         expect(receipt.total_amount).to eq(571)
         expect(receipt.receipt_items.pluck(:raw_text, :original_line_total, :discount_amount, :line_total)).to eq([
           [ '国産豚こま切れ肉 200g', 398, 50, 348 ],
@@ -6367,7 +6369,8 @@ RSpec.describe ReceiptAnalysisPipeline do
         ])
         expect(receipt.receipt_payments.sum(&:amount)).to eq(571)
         expect(amount.dig(:computed, :adjusted_item_total)).to eq(571)
-        expect(amount[:blocking_inconsistencies]).to eq([ :adjustment_uncertain ])
+        expect(receipt.receipt_adjustments).to all(have_attributes(needs_review: false, review_reasons: []))
+        expect(amount[:blocking_inconsistencies]).to be_empty
       end
     end
 

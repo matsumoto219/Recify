@@ -11,7 +11,9 @@ module Analysis
             effect_scope: :purchase_total,
             kind: "return_refund",
             sign: "discount",
-            action: :persist
+            action: :persist,
+            review_required: true,
+            reason: :return_refund_requires_review
           )
         end
       end
