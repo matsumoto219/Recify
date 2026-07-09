@@ -71,4 +71,53 @@ RSpec.describe Analysis::ReceiptFactOwnershipResolver do
 
     expect(described_class).to have_received(:call).once
   end
+
+  it 'owner ruleでpurchase adjustmentとpayment adjustmentのeffect scopeを分離する' do
+    adjustments = [
+      {
+        kind: 'coupon',
+        sign: 'discount',
+        amount: 100,
+        source: 'ocr',
+        source_text: 'クーポン値引 -100円',
+        source_line_index: 0
+      },
+      {
+        kind: 'point_usage',
+        sign: 'discount',
+        amount: 200,
+        source: 'ocr',
+        source_text: 'ポイント利用 -200円',
+        source_line_index: 1
+      },
+      {
+        kind: 'receipt_discount',
+        sign: 'discount',
+        amount: 22,
+        source: 'ocr',
+        source_text: 'キャッシュレス還元額 -22円',
+        source_line_index: 2
+      }
+    ]
+    evidence_index = Analysis::SourceEvidenceIndex.call(
+      lines: adjustments.map { |adjustment| adjustment[:source_text] },
+      money_pattern: /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?/,
+      profile: ReceiptAnalysisProfiles.default
+    )
+
+    result = described_class.call(
+      items: [],
+      adjustments: adjustments,
+      payments: [],
+      tax_details: [],
+      review_reasons: [],
+      evidence_index: evidence_index
+    )
+
+    aggregate_failures do
+      expect(result.facts.map(&:fact_type)).to eq(%i[purchase_adjustment payment_adjustment payment_adjustment])
+      expect(result.facts.map(&:effect_scope)).to eq(%i[purchase_total final_payment_total final_payment_total])
+      expect(result.adjustments).to equal(adjustments)
+    end
+  end
 end

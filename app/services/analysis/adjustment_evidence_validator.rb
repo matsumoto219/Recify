@@ -1,6 +1,17 @@
 module Analysis
   class AdjustmentEvidenceValidator
-    Result = Struct.new(:status, :reason, :review_required, keyword_init: true) do
+    Result = Struct.new(
+      :status,
+      :reason,
+      :review_required,
+      :owner,
+      :fact_type,
+      :effect_scope,
+      :kind,
+      :sign,
+      :action,
+      keyword_init: true
+    ) do
       def accepted?
         status == :accepted
       end
@@ -29,12 +40,13 @@ module Analysis
       return reject(:source_line_index_missing, review_required: true) if source_line_index.nil?
       return reject(:source_line_index_out_of_range, review_required: true) unless source_line_index.between?(0, lines.length - 1)
       return reject(:source_text_mismatch, review_required: true) unless source_text_matches_line?
+      decision = ownership_decision
+      return reject_decision(decision) if decision.action == :reject_false_positive
       return reject(:amount_evidence_missing, review_required: true) unless amount_evidence_supported?
-      return reject(:tax_detail_owned, review_required: false) if tax_detail_owned_source?
-      return reject(:item_owned, review_required: false) if item_owned_source?
-      return reject(:payment_owned, review_required: false) if payment_owned_source?
 
-      Result.new(status: :accepted, reason: nil, review_required: false)
+      return reject_decision(decision) unless decision.accepted_proposal?
+
+      accepted_decision(decision)
     end
 
     private
@@ -79,6 +91,17 @@ module Analysis
     def evidence_entries
       indexes = [ source_line_index - 1, source_line_index, source_line_index + 1 ]
       evidence_index.select { |entry| indexes.include?(entry[:line_index]) }
+    end
+
+    def ownership_decision
+      OwnershipRules.classify(
+        proposal: proposal.merge(amount: amount, source_line_index: source_line_index),
+        lines: lines,
+        items: items,
+        payments: payments,
+        tax_details: tax_details,
+        profile: profile
+      )
     end
 
     def explicit_adjustment_context?
@@ -209,6 +232,28 @@ module Analysis
 
     def reject(reason, review_required:)
       Result.new(status: :rejected, reason: reason, review_required: review_required)
+    end
+
+    def reject_decision(decision)
+      result_for(decision, status: :rejected)
+    end
+
+    def accepted_decision(decision)
+      result_for(decision, status: :accepted)
+    end
+
+    def result_for(decision, status:)
+      Result.new(
+        status: status,
+        reason: decision.reason,
+        review_required: decision.review_required,
+        owner: decision.owner,
+        fact_type: decision.fact_type,
+        effect_scope: decision.effect_scope,
+        kind: decision.kind,
+        sign: decision.sign,
+        action: decision.action
+      )
     end
   end
 end

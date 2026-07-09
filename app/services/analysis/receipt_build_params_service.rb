@@ -79,7 +79,8 @@ module Analysis
           payments: receipt_payments_attributes,
           tax_details: receipt_tax_details_attributes,
           review_reasons: invalid_adjustment_review_reasons,
-          evidence_index: source_evidence_index
+          evidence_index: source_evidence_index,
+          profile: profile
         )
         receipt_items_attributes = ownership_result.items
         receipt_adjustments_attributes = ownership_result.adjustments
@@ -794,18 +795,6 @@ module Analysis
 
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
           source_text = adjustment_source_text_for(normalized, source_line_index, lines)
-          next if item_owned_bag_adjustment_proposal?(
-            normalized,
-            source_text: source_text,
-            source_line_index: source_line_index,
-            lines: lines
-          )
-          next if item_level_discount_adjustment?(
-            amount: amount,
-            source_line_index: source_line_index,
-            lines: lines,
-            receipt_items: receipt_items
-          )
           validation = AdjustmentEvidenceValidator.call(
             proposal: normalized.merge(amount: amount, source_line_index: source_line_index),
             source: source,
@@ -824,49 +813,17 @@ module Analysis
           end
 
           adjustment_text = [ source_text, normalized[:label] ].compact.join(" ")
-          kind = ReceiptAdjustment::KINDS.include?(normalized[:kind].to_s) ? normalized[:kind].to_s : "other"
+          kind = validation.kind.presence || (ReceiptAdjustment::KINDS.include?(normalized[:kind].to_s) ? normalized[:kind].to_s : "other")
           sign_value = normalized[:sign].presence || normalized[:sign_hint]
-          sign = ReceiptAdjustment::SIGNS.include?(sign_value.to_s) ? sign_value.to_s : default_adjustment_sign(kind)
-          if cashless_reward_adjustment_text?(adjustment_text)
-            kind = "receipt_discount"
-            sign = "discount"
-          end
-          if kind == "other"
-            inferred_kind = infer_ocr_adjustment_kind(adjustment_text, sign)
-            if inferred_kind != "other"
-              kind = inferred_kind
-              sign = default_adjustment_sign(kind) if sign_value.blank?
-            end
-          end
+          sign = validation.sign.presence || (ReceiptAdjustment::SIGNS.include?(sign_value.to_s) ? sign_value.to_s : default_adjustment_sign(kind))
           next if adjustment_source_noise_line?(source_text, amount)
-          next if post_settlement_promo_adjustment?(source_text, source_line_index, lines)
-          next if payment_row_adjustment?(
-            normalized,
-            amount: amount,
-            source_text: source_text,
-            source_line_index: source_line_index,
-            lines: lines,
-            receipt_payments: receipt_payments
-          )
 
           next if point_payment_adjustment?(normalized, amount:, source_line_index:, lines:)
-          next if point_count_only_adjustment?(normalized, amount:, source_line_index:, lines:)
-          next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
-          next unless adjustment_ownership_supported?(
-            kind: kind,
-            sign: sign,
-            amount: amount,
-            label: normalized[:label],
-            source_text: source_text,
-            source_line_index: source_line_index,
-            lines: lines,
-            receipt_items: receipt_items
-          )
 
           label = adjustment_label_for(kind, normalized[:label], source_text)
           review_reasons = normalize_review_reasons(normalized[:review_reasons])
-          needs_review = source == "ocr" || normalized[:needs_review] == true
-          if kind == "other" || normalized[:kind].blank? || sign_value.blank?
+          needs_review = source == "ocr" || normalized[:needs_review] == true || validation.review_required
+          if kind == "other" || normalized[:kind].blank? || sign_value.blank? || validation.review_required
             needs_review = true
             review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
           end

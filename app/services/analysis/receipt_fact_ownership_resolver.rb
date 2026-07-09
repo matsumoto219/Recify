@@ -6,13 +6,14 @@ module Analysis
       end
     end
 
-    def initialize(items:, adjustments:, payments:, tax_details:, review_reasons:, evidence_index:)
+    def initialize(items:, adjustments:, payments:, tax_details:, review_reasons:, evidence_index:, profile: ReceiptAnalysisProfiles.default)
       @items = Array(items)
       @adjustments = Array(adjustments)
       @payments = Array(payments)
       @tax_details = Array(tax_details)
       @review_reasons = Array(review_reasons)
       @evidence_index = Array(evidence_index)
+      @profile = profile
     end
 
     def call
@@ -29,7 +30,7 @@ module Analysis
 
     private
 
-    attr_reader :items, :adjustments, :payments, :tax_details, :review_reasons, :evidence_index
+    attr_reader :items, :adjustments, :payments, :tax_details, :review_reasons, :evidence_index, :profile
 
     def build_facts
       item_facts + adjustment_facts + payment_facts + tax_detail_facts
@@ -51,18 +52,25 @@ module Analysis
     def adjustment_facts
       adjustments.map do |adjustment|
         attributes = normalized_hash(adjustment)
-        classification = ReceiptAmountService.adjustment_classification(attributes)
-        effect = classification[:effect]
+        decision = OwnershipRules.classify(
+          proposal: attributes,
+          lines: evidence_lines,
+          items: items,
+          payments: payments,
+          tax_details: tax_details,
+          profile: profile
+        )
 
         build_fact(
-          owner: :receipt_adjustment,
-          fact_type: effect,
-          kind: attributes[:kind],
-          effect_scope: effect == :payment_adjustment ? :final_payment_total : :purchase_total,
+          owner: decision.owner,
+          fact_type: decision.fact_type,
+          kind: decision.kind || attributes[:kind],
+          effect_scope: decision.effect_scope,
           amount: attributes[:amount],
-          sign: attributes[:sign],
+          sign: decision.sign || attributes[:sign],
           tax_rate: attributes[:tax_rate],
-          attributes: attributes
+          attributes: attributes,
+          action: decision.action
         )
       end
     end
@@ -94,7 +102,7 @@ module Analysis
       end
     end
 
-    def build_fact(owner:, fact_type:, effect_scope:, amount:, attributes:, kind: nil, sign: nil, tax_rate: nil)
+    def build_fact(owner:, fact_type:, effect_scope:, amount:, attributes:, kind: nil, sign: nil, tax_rate: nil, action: :persist)
       OwnershipFact.new(
         owner: owner,
         fact_type: fact_type,
@@ -105,7 +113,7 @@ module Analysis
         tax_rate: tax_rate,
         tax_rate_source: tax_rate.present? ? :explicit : :unknown,
         source_refs: source_refs_for(attributes, amount),
-        action: :persist,
+        action: action,
         review_reasons: Array(attributes[:review_reasons]).map(&:to_s),
         diagnostics: [],
         attributes: attributes
@@ -132,6 +140,10 @@ module Analysis
           amount_token_kind: token&.fetch(:kind, nil)
         )
       ]
+    end
+
+    def evidence_lines
+      @evidence_lines ||= evidence_index.sort_by { |entry| entry[:line_index].to_i }.map { |entry| entry[:source_text].to_s }
     end
 
     def normalized_hash(value)
