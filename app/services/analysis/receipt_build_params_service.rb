@@ -36,6 +36,11 @@ module Analysis
           lines,
           receipt_attributes
         )
+        source_evidence_index = SourceEvidenceIndex.call(
+          lines: lines,
+          money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+          profile: profile
+        )
         invalid_adjustment_review_reasons = []
         receipt_adjustments_attributes = build_receipt_adjustments_attributes(
           normalized_ai_result[:receipt_adjustments_attributes],
@@ -44,6 +49,8 @@ module Analysis
           receipt_items_attributes,
           skipped_negative_items,
           receipt_payments_attributes,
+          receipt_tax_details_attributes,
+          source_evidence_index,
           invalid_review_reasons: invalid_adjustment_review_reasons
         )
         receipt_adjustments_attributes, receipt_payments_attributes = move_voucher_adjustments_to_payments(
@@ -72,11 +79,7 @@ module Analysis
           payments: receipt_payments_attributes,
           tax_details: receipt_tax_details_attributes,
           review_reasons: invalid_adjustment_review_reasons,
-          evidence_index: SourceEvidenceIndex.call(
-            lines: lines,
-            money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
-            profile: profile
-          )
+          evidence_index: source_evidence_index
         )
         receipt_items_attributes = ownership_result.items
         receipt_adjustments_attributes = ownership_result.adjustments
@@ -764,19 +767,25 @@ module Analysis
         end
       end
 
-      def build_receipt_adjustments_attributes(ai_adjustments, ocr_adjustment_candidates, lines, receipt_items = [], skipped_negative_items = [], receipt_payments = [], invalid_review_reasons: nil)
-        source = Array(ai_adjustments).present? ? "ai" : "ocr"
-        adjustments =
-          if source == "ai"
-            Array(ai_adjustments)
-          else
-            fallback_ocr_adjustments(
-              Array(ocr_adjustment_candidates) +
-                skipped_negative_item_adjustment_candidates(skipped_negative_items, lines)
-            )
-          end
-
-        Array(adjustments).filter_map.with_index do |adjustment, index|
+      def build_receipt_adjustments_attributes(
+        ai_adjustments,
+        ocr_adjustment_candidates,
+        lines,
+        receipt_items = [],
+        skipped_negative_items = [],
+        receipt_payments = [],
+        receipt_tax_details = [],
+        source_evidence_index = [],
+        invalid_review_reasons: nil
+      )
+        adjustment_proposals(
+          ai_adjustments,
+          ocr_adjustment_candidates,
+          skipped_negative_items,
+          lines
+        ).filter_map.with_index do |entry, index|
+          adjustment = entry[:proposal]
+          source = entry[:source]
           next unless adjustment.is_a?(Hash) || adjustment.respond_to?(:to_h)
 
           normalized = (adjustment.is_a?(Hash) ? adjustment : adjustment.to_h).with_indifferent_access
@@ -797,8 +806,20 @@ module Analysis
             lines: lines,
             receipt_items: receipt_items
           )
-          unless ai_adjustment_evidence_supported?(source, normalized, amount:, source_line_index:, lines:)
-            invalid_review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON if invalid_review_reasons
+          validation = AdjustmentEvidenceValidator.call(
+            proposal: normalized.merge(amount: amount, source_line_index: source_line_index),
+            source: source,
+            lines: lines,
+            evidence_index: source_evidence_index,
+            items: receipt_items,
+            payments: receipt_payments,
+            tax_details: receipt_tax_details,
+            profile: profile
+          )
+          unless validation.accepted?
+            if validation.review_required && invalid_review_reasons
+              invalid_review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
+            end
             next
           end
 
@@ -868,6 +889,57 @@ module Analysis
             position_index: normalized[:position_index] || index + 1
           }.compact
         end
+      end
+
+      def adjustment_proposals(ai_adjustments, ocr_adjustment_candidates, skipped_negative_items, lines)
+        ai_proposals = Array(ai_adjustments).map do |proposal|
+          { proposal: proposal, source: "ai" }
+        end
+        ocr_proposals = fallback_ocr_adjustments(
+          Array(ocr_adjustment_candidates) + skipped_negative_item_adjustment_candidates(skipped_negative_items, lines)
+        ).reject do |proposal|
+          ai_proposals.any? do |entry|
+            same_adjustment_proposal?(entry[:proposal], proposal, lines)
+          end
+        end.map do |proposal|
+          { proposal: proposal, source: "ocr" }
+        end
+
+        ai_proposals + ocr_proposals
+      end
+
+      def same_adjustment_proposal?(left, right, lines)
+        return false unless left.respond_to?(:to_h) && right.respond_to?(:to_h)
+
+        left_attributes = left.to_h.with_indifferent_access
+        right_attributes = right.to_h.with_indifferent_access
+        left_index = normalize_non_negative_integer(left_attributes[:source_line_index])
+        right_index = normalize_non_negative_integer(right_attributes[:source_line_index])
+        return false if left_index.nil? || left_index != right_index
+        return false unless normalize_amount(left_attributes[:amount]).to_i.abs == normalize_amount(right_attributes[:amount]).to_i.abs
+
+        left_kind = normalized_adjustment_proposal_kind(left_attributes, lines, left_index)
+        right_kind = normalized_adjustment_proposal_kind(right_attributes, lines, right_index)
+        left_sign = normalized_adjustment_proposal_sign(left_attributes, left_kind)
+        right_sign = normalized_adjustment_proposal_sign(right_attributes, right_kind)
+
+        left_kind == right_kind && left_sign == right_sign &&
+          compact_adjustment_evidence_text(adjustment_source_text_for(left_attributes, left_index, lines)) ==
+            compact_adjustment_evidence_text(adjustment_source_text_for(right_attributes, right_index, lines))
+      end
+
+      def normalized_adjustment_proposal_kind(adjustment, lines, source_line_index)
+        kind = adjustment[:kind].to_s
+        return kind if ReceiptAdjustment::KINDS.include?(kind)
+
+        source_text = adjustment_source_text_for(adjustment, source_line_index, lines)
+        sign = adjustment[:sign].presence || adjustment[:sign_hint]
+        infer_ocr_adjustment_kind([ source_text, adjustment[:label] ].compact.join(" "), sign) || "other"
+      end
+
+      def normalized_adjustment_proposal_sign(adjustment, kind)
+        sign = adjustment[:sign].presence || adjustment[:sign_hint]
+        ReceiptAdjustment::SIGNS.include?(sign.to_s) ? sign.to_s : default_adjustment_sign(kind)
       end
 
       def remove_surcharge_adjustment_items(items, adjustments)
@@ -2516,10 +2588,11 @@ module Analysis
       end
 
       def item_owned_bag_adjustment_proposal?(adjustment, source_text:, source_line_index:, lines:)
+        source_line = Array(lines)[source_line_index] unless source_line_index.nil?
         text = [
           adjustment[:label],
           source_text,
-          Array(lines)[source_line_index]
+          source_line
         ].compact.join(" ")
         sign = adjustment[:sign].presence || adjustment[:sign_hint]
         return false if sign.to_s == "discount"
@@ -2709,7 +2782,7 @@ module Analysis
 
       def adjustment_source_text_for(adjustment, source_line_index, lines)
         explicit_source = adjustment[:source_text].to_s.strip.presence
-        line_source = lines[source_line_index].to_s.strip.presence
+        line_source = Array(lines)[source_line_index].to_s.strip.presence unless source_line_index.nil?
         if generic_return_refund_label?(explicit_source) && line_source.present? && line_source.length > explicit_source.length
           return line_source
         end

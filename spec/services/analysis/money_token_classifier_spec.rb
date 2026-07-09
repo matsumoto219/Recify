@@ -34,6 +34,16 @@ RSpec.describe Analysis::MoneyTokenClassifier do
     end
   end
 
+  it '国別patternが通貨記号を含めない場合も直前の通貨記号をmoney根拠として扱う' do
+    result = described_class.call(
+      text: 'Manual adjustment -$2.00',
+      money_pattern: /\d+/,
+      profile: profile
+    )
+
+    expect(result).to include(include(kind: :money, amount: 2, money_evidence: true))
+  end
+
   it '裸数値は明示許可時だけmoney matchとして返す' do
     denied = described_class.money_matches(
       text: '配送料 550',

@@ -4525,7 +4525,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         )
       end
 
-      it 'AI adjustmentがある場合はOCR candidateへfallbackしない' do
+      it 'AI adjustmentがあっても別根拠の有効なOCR candidateを残す' do
         ocr_result[:candidates][:adjustment_candidates] = [
           {
             source_text: '配送料',
@@ -4551,8 +4551,150 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
         expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+          include(kind: 'bag_fee', amount: 10, source: 'ai'),
+          include(kind: 'delivery_fee', amount: 550, source: 'ocr')
+        )
+      end
+
+      it '同じOCR根拠を指すAI proposalとOCR candidateはAI側だけを残す' do
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: 'レジ袋代',
+            source_line_index: 2,
+            amount: 10,
+            sign_hint: 'surcharge',
+            confidence: BigDecimal('0.86')
+          }
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'bag_fee',
+              label: 'レジ袋代',
+              amount: 10,
+              sign: 'surcharge',
+              source_text: 'レジ袋代',
+              source_line_index: 2
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_adjustments_attributes]).to contain_exactly(
           include(kind: 'bag_fee', amount: 10, source: 'ai')
         )
+      end
+
+      it 'source line indexがないAI adjustmentを例外にせず棄却して確認理由を残す' do
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'bag_fee',
+              label: 'レジ袋代',
+              amount: 10,
+              sign: 'surcharge',
+              source_text: 'レジ袋代'
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+          expect(params[:review_reasons]).to include('adjustment_uncertain')
+        end
+      end
+
+      it '商品行をcouponとするAI proposalはitemを残してadjustmentを保存しない' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '商品A', line_total: 100 }
+        ]
+        ocr_result[:lines] = [
+          '商品A 100円',
+          '合計 100円'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'coupon',
+              label: '商品A',
+              amount: 100,
+              sign: 'discount',
+              source_text: '商品A 100円',
+              source_line_index: 0
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes]).to contain_exactly(include(raw_text: '商品A', line_total: 100))
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+        end
+      end
+
+      it '税詳細行をcouponとするAI proposalはtax detailを残してadjustmentを保存しない' do
+        ocr_result[:candidates][:items] = []
+        ocr_result[:candidates][:tax_details] = [
+          { description: '10%対象', net_amount: 91, amount: 9, rate: 10 }
+        ]
+        ocr_result[:lines] = [
+          '10%対象 91円 税 9円',
+          '合計 100円'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'coupon',
+              label: '税 9円',
+              amount: 9,
+              sign: 'discount',
+              source_text: '10%対象 91円 税 9円',
+              source_line_index: 0
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_tax_details_attributes]).to contain_exactly(include(amount: 9, rate: BigDecimal('0.1')))
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+        end
+      end
+
+      it 'item-ownedのレジ袋行はAIがbag_fee discountを提案してもadjustmentにしない' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '商品A', line_total: 798, tax_rate: BigDecimal('0.08') },
+          { raw_text: 'レジ袋中1枚', line_total: 3, tax_rate: BigDecimal('0.1') }
+        ]
+        ocr_result[:lines] = [
+          '商品A 798円',
+          'レジ袋中1枚 3円',
+          '合計 801円'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'bag_fee',
+              label: 'レジ袋中1枚',
+              amount: 3,
+              sign: 'discount',
+              source_text: 'レジ袋中1枚 3円',
+              source_line_index: 1
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes]).to include(include(raw_text: 'レジ袋中1枚', line_total: 3))
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+        end
       end
 
       it '低信頼または符号不明のOCR candidateはfallback採用しない' do

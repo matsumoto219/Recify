@@ -2,6 +2,7 @@ module Analysis
   class MoneyTokenClassifier
     CURRENCY_EVIDENCE_PATTERN = /[¥￥$€£]|円/.freeze
     SIGN_EVIDENCE_PATTERN = /[▲△\-−]/.freeze
+    LEADING_MONEY_EVIDENCE_PATTERN = /[▲△\-−]?\s*[¥￥$€£]\s*\z/.freeze
     PERCENT_SUFFIX_PATTERN = /\A\s*[%％]/.freeze
     NO_MATCH_PATTERN = /(?!)/.freeze
 
@@ -72,11 +73,17 @@ module Analysis
     end
 
     def currency_evidence?(match)
-      match[0].match?(CURRENCY_EVIDENCE_PATTERN) || suffix_after(match).lstrip.start_with?("円")
+      match[0].match?(CURRENCY_EVIDENCE_PATTERN) ||
+        suffix_after(match).lstrip.start_with?("円") ||
+        prefix_before(match).match?(LEADING_MONEY_EVIDENCE_PATTERN)
     end
 
     def signed_evidence?(match)
-      match[0].match?(SIGN_EVIDENCE_PATTERN)
+      match[0].match?(SIGN_EVIDENCE_PATTERN) || prefix_before(match).match?(/[▲△\-−]\s*\z/)
+    end
+
+    def prefix_before(match)
+      text[0...match.begin(0)].to_s
     end
 
     def profile_pattern(name)
