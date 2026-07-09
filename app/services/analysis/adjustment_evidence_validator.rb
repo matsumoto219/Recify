@@ -17,8 +17,6 @@ module Analysis
       end
     end
 
-    PAYMENT_SIDE_KINDS = %w[point_usage].freeze
-
     class << self
       def call(...)
         new(...).call
@@ -111,113 +109,6 @@ module Analysis
         text.match?(profile.ocr_payment_adjustment_discount_label_pattern) ||
         text.match?(profile.ocr_point_usage_adjustment_label_pattern) ||
         text.match?(/[▲△\-−]/)
-    end
-
-    def item_owned_source?
-      matching_item = items.find do |item|
-        attributes = normalized_hash(item)
-        item_amounts(attributes).include?(amount) && source_matches_item?(attributes)
-      end
-      return false if matching_item.nil?
-      return false if explicit_non_item_adjustment_proposal?
-
-      true
-    end
-
-    def source_matches_item?(item)
-      item_texts(item).any? do |item_text|
-        normalized_item = compact_text(item_text)
-        normalized_line = compact_text(source_line)
-        normalized_item.present? && (
-          normalized_item == normalized_line ||
-          normalized_item.include?(normalized_line) ||
-          normalized_line.include?(normalized_item)
-        )
-      end
-    end
-
-    def item_texts(item)
-      %i[raw_text suggested_name confirmed_name source_text].filter_map { |key| item[key].presence }
-    end
-
-    def item_amounts(item)
-      %i[line_total price original_line_total].filter_map do |key|
-        ReceiptAmountService.parse_amount_or_nil(item[key])&.to_i&.abs
-      end.select(&:positive?)
-    end
-
-    def explicit_surcharge_proposal?
-      sign == "surcharge" && [ proposal[:label], proposal[:source_text], source_line ].compact.join(" ").match?(
-        profile.ocr_adjustment_surcharge_label_pattern
-      )
-    end
-
-    def explicit_non_item_adjustment_proposal?
-      return true if explicit_surcharge_proposal?
-
-      sign == "discount" && [ proposal[:label], proposal[:source_text], source_line ].compact.join(" ").match?(
-        profile.analysis_return_refund_kind_pattern
-      )
-    end
-
-    def tax_detail_owned_source?
-      return true if direct_tax_detail_text?(source_line)
-
-      tax_detail_amount_matches = tax_details.any? do |tax_detail|
-        attributes = normalized_hash(tax_detail)
-        %i[amount net_amount].filter_map do |key|
-          ReceiptAmountService.parse_amount_or_nil(attributes[key])&.to_i&.abs
-        end.include?(amount)
-      end
-
-      tax_detail_amount_matches && tax_detail_text?(context_text)
-    end
-
-    def direct_tax_detail_text?(text)
-      text.match?(profile.ocr_tax_amount_description_pattern) ||
-        (text.match?(profile.ocr_tax_target_marker_pattern) && text.match?(/\d+(?:\.\d+)?\s*[%％]/))
-    end
-
-    def tax_detail_text?(text)
-      text.match?(profile.ocr_tax_context_label_pattern) ||
-        text.match?(profile.ocr_tax_target_marker_pattern) ||
-        text.match?(profile.ocr_tax_amount_description_pattern)
-    end
-
-    def payment_owned_source?
-      return false if payment_side_proposal?
-
-      context = context_text
-      return false unless context.match?(profile.analysis_fallback_payment_line_pattern) ||
-        context.match?(profile.analysis_payment_block_anchor_pattern)
-
-      payments.any? do |payment|
-        ReceiptAmountService.parse_amount(payment_value(payment, :amount)).to_i.abs == amount
-      end
-    end
-
-    def payment_side_proposal?
-      text = [ proposal[:kind], proposal[:label], proposal[:source_text] ].compact.join(" ")
-
-      PAYMENT_SIDE_KINDS.include?(proposal[:kind].to_s) ||
-        text.match?(profile.analysis_cashless_reward_adjustment_pattern) ||
-        text.match?(profile.analysis_voucher_payment_pattern)
-    end
-
-    def context_text
-      start_index = [ source_line_index - 1, 0 ].max
-      end_index = [ source_line_index + 1, lines.length - 1 ].min
-      lines[start_index..end_index].to_a.join(" ")
-    end
-
-    def sign
-      proposal[:sign].presence || proposal[:sign_hint].to_s
-    end
-
-    def payment_value(payment, key)
-      return payment.public_send(key) if payment.respond_to?(key)
-
-      normalized_hash(payment)[key]
     end
 
     def compact_text(value)

@@ -1001,7 +1001,11 @@ class Ocr::ResponseParser
   end
 
   def bag_item_owned_line?(line)
-    ReceiptAdjustmentOwnershipPolicy.bag_item_owned_text?(line, profile: profile)
+    source = line.to_s.unicode_normalize(:nfkc)
+    return false if source.blank?
+    return false if source.match?(profile.bag_fee_owned_label_pattern)
+
+    source.match?(profile.bag_item_owned_label_pattern)
   end
 
   def amount_only_line?(line)
