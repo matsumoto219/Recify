@@ -85,6 +85,26 @@ RSpec.describe GeneratedReceipts::Comparator do
     expect(result.diffs).to include(hash_including(path: "payments"))
   end
 
+  it "compares adjustment effect, tax rate, and review reasons" do
+    case_data = load_case("g007_adjustment_delivery_bag_fee")
+
+    aggregate_failures do
+      {
+        "effect" => "payment",
+        "tax_rate" => 0.08,
+        "review_reasons" => [ "adjustment_uncertain" ]
+      }.each do |key, value|
+        actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
+        actual["receipt_adjustments"][0][key] = value
+
+        result = described_class.call(case_data, actual)
+
+        expect(result.status).to eq("FAIL")
+        expect(result.diffs).to include(hash_including(path: "receipt_adjustments"))
+      end
+    end
+  end
+
   it "summarizes comparison runs with WARN when no run failed" do
     result = GeneratedReceipts::ComparisonRunner::Result.new(
       case_id: "sample",

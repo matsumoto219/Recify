@@ -28,6 +28,14 @@ module Analysis
       TaxDetailLineEvidenceExtractor.call(...)
     end
 
+    def money_token_matches(...)
+      MoneyTokenClassifier.money_matches(...)
+    end
+
+    def source_evidence_index(...)
+      SourceEvidenceIndex.call(...)
+    end
+
     def receipt_item_ai_allowed_keys
       ReceiptItemNormalizer::AI_ALLOWED_KEYS
     end

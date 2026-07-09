@@ -1560,11 +1560,21 @@ class ReceiptAnalysisPipeline
       RESOLVABLE_SURCHARGE_ADJUSTMENT_KINDS.include?(kind) &&
         normalized[:sign].to_s == "surcharge" &&
         amount&.positive? &&
-        (normalized[:label].present? || normalized[:source_text].present?)
+        (normalized[:label].present? || normalized[:source_text].present?) &&
+        surcharge_adjustment_ownership_clear?(kind, normalized)
     end
 
     def clear_purchase_amount_adjustment?(adjustment)
       clear_surcharge_adjustment?(adjustment) || clear_purchase_discount_adjustment?(adjustment)
+    end
+
+    def surcharge_adjustment_ownership_clear?(kind, adjustment)
+      return true unless kind.to_s == "bag_fee"
+
+      ReceiptAdjustmentOwnershipPolicy.bag_fee_owned_text?(
+        [ adjustment[:label], adjustment[:source_text] ].compact.join(" "),
+        profile: profile
+      )
     end
 
     def clear_payment_adjustment?(adjustment)

@@ -768,6 +768,12 @@ module Analysis
 
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
           source_text = adjustment_source_text_for(normalized, source_line_index, lines)
+          next if item_owned_bag_adjustment_proposal?(
+            normalized,
+            source_text: source_text,
+            source_line_index: source_line_index,
+            lines: lines
+          )
           next if item_level_discount_adjustment?(
             amount: amount,
             source_line_index: source_line_index,
@@ -778,20 +784,6 @@ module Analysis
             invalid_review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON if invalid_review_reasons
             next
           end
-          next if adjustment_source_noise_line?(source_text, amount)
-          next if post_settlement_promo_adjustment?(source_text, source_line_index, lines)
-          next if payment_row_adjustment?(
-            normalized,
-            amount: amount,
-            source_text: source_text,
-            source_line_index: source_line_index,
-            lines: lines,
-            receipt_payments: receipt_payments
-          )
-
-          next if point_payment_adjustment?(normalized, amount:, source_line_index:, lines:)
-          next if point_count_only_adjustment?(normalized, amount:, source_line_index:, lines:)
-          next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
 
           adjustment_text = [ source_text, normalized[:label] ].compact.join(" ")
           kind = ReceiptAdjustment::KINDS.include?(normalized[:kind].to_s) ? normalized[:kind].to_s : "other"
@@ -808,6 +800,31 @@ module Analysis
               sign = default_adjustment_sign(kind) if sign_value.blank?
             end
           end
+          next if adjustment_source_noise_line?(source_text, amount)
+          next if post_settlement_promo_adjustment?(source_text, source_line_index, lines)
+          next if payment_row_adjustment?(
+            normalized,
+            amount: amount,
+            source_text: source_text,
+            source_line_index: source_line_index,
+            lines: lines,
+            receipt_payments: receipt_payments
+          )
+
+          next if point_payment_adjustment?(normalized, amount:, source_line_index:, lines:)
+          next if point_count_only_adjustment?(normalized, amount:, source_line_index:, lines:)
+          next unless adjustment_amount_supported_by_ocr?(amount:, source_line_index:, lines:)
+          next unless adjustment_ownership_supported?(
+            kind: kind,
+            sign: sign,
+            amount: amount,
+            label: normalized[:label],
+            source_text: source_text,
+            source_line_index: source_line_index,
+            lines: lines,
+            receipt_items: receipt_items
+          )
+
           label = adjustment_label_for(kind, normalized[:label], source_text)
           review_reasons = normalize_review_reasons(normalized[:review_reasons])
           needs_review = source == "ocr" || normalized[:needs_review] == true
@@ -816,7 +833,8 @@ module Analysis
             review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
           end
           tax_rate = normalize_rate(normalized[:tax_rate] || normalized[:tax_rate_hint]) ||
-            infer_tax_rate_from_text(adjustment_text)
+            infer_tax_rate_from_text(adjustment_text) ||
+            matched_surcharge_item_tax_rate(kind:, sign:, amount:, label:, source_text:, receipt_items:)
 
           {
             kind: kind,
@@ -852,7 +870,8 @@ module Analysis
         %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].include?(kind) &&
           normalized[:sign].to_s == "surcharge" &&
           amount&.positive? &&
-          (normalized[:label].present? || normalized[:source_text].present?)
+          (normalized[:label].present? || normalized[:source_text].present?) &&
+          surcharge_adjustment_ownership_clear?(kind, normalized)
       end
 
       def item_matches_surcharge_adjustment?(item, adjustment)
@@ -886,6 +905,15 @@ module Analysis
 
         pattern = profile.analysis_surcharge_kind_pattern(ReceiptAdjustment.normalize_kind(adjustment[:kind]))
         pattern.present? && item_text.match?(pattern)
+      end
+
+      def surcharge_adjustment_ownership_clear?(kind, adjustment)
+        return true unless kind.to_s == "bag_fee"
+
+        ReceiptAdjustmentOwnershipPolicy.bag_fee_owned_text?(
+          [ adjustment[:label], adjustment[:source_text] ].compact.join(" "),
+          profile: profile
+        )
       end
 
       def post_settlement_promo_adjustment?(source_text, source_line_index, lines)
@@ -2460,7 +2488,62 @@ module Analysis
         context << lines[source_line_index]
         context << lines[source_line_index + 1]
         context.compact!
-        context.any? { |text| adjustment_amounts_in_text(text).include?(amount.to_i.abs) }
+        context.any? do |text|
+          MoneyTokenClassifier.money_matches(
+            text: text,
+            money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+            profile: profile,
+            allow_bare_money: true
+          ).any? { |token| token[:amount] == amount.to_i.abs }
+        end
+      end
+
+      def item_owned_bag_adjustment_proposal?(adjustment, source_text:, source_line_index:, lines:)
+        text = [
+          adjustment[:label],
+          source_text,
+          Array(lines)[source_line_index]
+        ].compact.join(" ")
+        sign = adjustment[:sign].presence || adjustment[:sign_hint]
+        return false if sign.to_s == "discount"
+        return false if text.match?(profile.analysis_receipt_discount_kind_pattern)
+
+        ReceiptAdjustmentOwnershipPolicy.bag_item_owned_text?(text, profile: profile)
+      end
+
+      def adjustment_ownership_supported?(kind:, sign:, amount:, label:, source_text:, source_line_index:, lines:, receipt_items:)
+        return true unless ReceiptAdjustment.normalize_kind(kind) == "bag_fee" && sign.to_s == "surcharge"
+
+        text = [
+          label,
+          source_text,
+          Array(lines)[source_line_index]
+        ].compact.join(" ")
+        return false if ReceiptAdjustmentOwnershipPolicy.bag_item_owned_text?(text, profile: profile)
+        return false unless ReceiptAdjustmentOwnershipPolicy.bag_fee_owned_text?(text, profile: profile)
+
+        !item_owned_bag_adjustment_conflict?(
+          amount: amount,
+          label: label,
+          source_text: source_text,
+          receipt_items: receipt_items
+        )
+      end
+
+      def item_owned_bag_adjustment_conflict?(amount:, label:, source_text:, receipt_items:)
+        text = [ label, source_text ].compact.join(" ")
+        return true if ReceiptAdjustmentOwnershipPolicy.bag_item_owned_text?(text, profile: profile)
+
+        Array(receipt_items).any? do |item|
+          normalized = item.with_indifferent_access
+          item_text = [ normalized[:raw_text], normalized[:suggested_name], normalized[:confirmed_name] ].compact.join(" ")
+          next false unless ReceiptAdjustmentOwnershipPolicy.bag_item_owned_text?(item_text, profile: profile)
+          next false unless item_surcharge_amounts(normalized).include?(amount.to_i.abs)
+
+          compact_adjustment_evidence_text(text).blank? ||
+            compact_adjustment_evidence_text(item_text).include?(compact_adjustment_evidence_text(text)) ||
+            compact_adjustment_evidence_text(text).include?(compact_adjustment_evidence_text(item_text))
+        end
       end
 
       def ai_adjustment_evidence_supported?(source, adjustment, amount:, source_line_index:, lines:)
@@ -2567,9 +2650,28 @@ module Analysis
       end
 
       def adjustment_amounts_in_text(text)
-        text.to_s.scan(profile.analysis_adjustment_amount_candidate_pattern).map do |match|
-          normalize_amount(match).to_i.abs
-        end.select(&:positive?)
+        MoneyTokenClassifier.money_matches(
+          text: text,
+          money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+          profile: profile,
+          allow_bare_money: true
+        ).map { |token| token[:amount] }
+      end
+
+      def matched_surcharge_item_tax_rate(kind:, sign:, amount:, label:, source_text:, receipt_items:)
+        adjustment = {
+          kind: kind,
+          sign: sign,
+          amount: amount,
+          label: label,
+          source_text: source_text
+        }
+        return nil unless clear_surcharge_adjustment_candidate?(adjustment)
+
+        matched_item = Array(receipt_items).find { |item| item_matches_surcharge_adjustment?(item, adjustment) }
+        return nil if matched_item.blank?
+
+        normalize_rate(matched_item.with_indifferent_access[:tax_rate])
       end
 
       def default_adjustment_sign(kind)

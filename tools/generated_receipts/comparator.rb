@@ -56,7 +56,10 @@ module GeneratedReceipts
               "kind" => adjustment.kind,
               "label" => adjustment.label,
               "sign" => adjustment.sign,
-              "amount" => adjustment.amount&.to_i
+              "amount" => adjustment.amount&.to_i,
+              "effect" => normalized_adjustment_effect(adjustment),
+              "tax_rate" => adjustment.tax_rate&.to_s,
+              "review_reasons" => Array(adjustment.review_reasons).map(&:to_s).sort
             }
           end,
           "payment_method" => receipt.payment_method,
@@ -145,7 +148,10 @@ module GeneratedReceipts
           "kind" => adjustment["kind"],
           "label" => normalize_label(adjustment["label"]),
           "sign" => adjustment["sign"],
-          "amount" => adjustment["amount"]
+          "amount" => adjustment["amount"],
+          "effect" => adjustment["effect"],
+          "tax_rate" => normalize_rate(adjustment["tax_rate"]),
+          "review_reasons" => Array(adjustment["review_reasons"]).map(&:to_s).sort
         }
       end.sort_by { |adjustment| [ adjustment["kind"].to_s, adjustment["amount"].to_i, adjustment["label"].to_s ] }
       actual_adjustments = Array(actual["receipt_adjustments"]).map do |adjustment|
@@ -153,10 +159,18 @@ module GeneratedReceipts
           "kind" => adjustment["kind"],
           "label" => normalize_label(adjustment["label"]),
           "sign" => adjustment["sign"],
-          "amount" => adjustment["amount"]
+          "amount" => adjustment["amount"],
+          "effect" => adjustment["effect"],
+          "tax_rate" => normalize_rate(adjustment["tax_rate"]),
+          "review_reasons" => Array(adjustment["review_reasons"]).map(&:to_s).sort
         }
       end.sort_by { |adjustment| [ adjustment["kind"].to_s, adjustment["amount"].to_i, adjustment["label"].to_s ] }
       compare_array("receipt_adjustments", expected_adjustments, actual_adjustments)
+    end
+
+    def self.normalized_adjustment_effect(adjustment)
+      effect = ReceiptAmountService.adjustment_effect(adjustment)
+      effect == "payment_adjustment" ? "payment" : "purchase"
     end
 
     def compare_payments

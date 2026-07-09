@@ -2922,6 +2922,95 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'item-ownedのレジ袋行はAI bag_feeが返ってもadjustmentとして保存しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = {
+        success: true,
+        raw_text: "サンプル袋 東テスト店\n商品A\n¥798\nレジ袋中1枚\n3\n合計\n¥801\nSuica支払\n¥801",
+        lines: [
+          'サンプル袋 東テスト店',
+          '商品A',
+          '¥798',
+          'レジ袋中1枚',
+          '3',
+          '合計',
+          '¥801',
+          'Suica支払',
+          '¥801'
+        ],
+        candidates: {
+          store_name: 'サンプル袋 東テスト店',
+          total_amount: 801,
+          country_region: 'JPN',
+          payment_method_text: 'Suica',
+          items: [
+            { raw_text: '商品A', price: 798, quantity: 1, line_total: 798, tax_rate: 0.08, confidence: 0.95 },
+            { raw_text: 'レジ袋中1枚', price: 3, quantity: 1, line_total: 3, tax_rate: 0.1, confidence: 0.95 }
+          ],
+          payments: [
+            { method: 'Suica支払', amount: 801 }
+          ],
+          tax_details: [
+            { description: '8%対象', amount: 59, rate: 8, net_amount: 739 },
+            { description: '10%対象', amount: 0, rate: 10, net_amount: 3 }
+          ]
+        },
+        meta: {
+          confidence_summary: {
+            overall: 0.95,
+            items_average: 0.95
+          }
+        }
+      }
+      ai_result = {
+        success: true,
+        needs_review: false,
+        review_reasons: [],
+        receipt_attributes: {
+          store_name: 'サンプル袋 東テスト店',
+          payment_method: 'e_money'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: '商品A', category: 'food', line_total: 798, tax_rate: 0.08, needs_review: false },
+          { index: 1, suggested_name: 'レジ袋中1枚', category: 'daily_goods', line_total: 3, tax_rate: 0.1, needs_review: false }
+        ],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'bag_fee',
+            label: 'レジ袋中1枚',
+            amount: 3,
+            sign: 'surcharge',
+            source_text: 'レジ袋中1枚',
+            source_line_index: 3,
+            confidence: BigDecimal('0.9'),
+            needs_review: false,
+            review_reasons: []
+          }
+        ]
+      }
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.total_amount).to eq(801)
+        expect(receipt.subtotal_amount).to eq(742)
+        expect(receipt.tax_amount).to eq(59)
+        expect(receipt.receipt_items.pluck(:raw_text, :line_total)).to include([ 'レジ袋中1枚', 3 ])
+        expect(receipt.receipt_adjustments).to be_empty
+        expect(receipt.review_reasons).not_to include('adjustment_uncertain')
+      end
+    end
+
     it '明確なsurcharge adjustmentはfinal保存値でadjustment_uncertainを解除する' do
       ocr_result = ocr_fixture('delivery_and_bag_fee_receipt')
       ai_result = ai_success_result_for(

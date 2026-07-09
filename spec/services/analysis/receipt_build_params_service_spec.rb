@@ -3920,6 +3920,115 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'item-ownedのレジ袋行に対するAI bag_fee adjustmentは保存しない' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '商品A', line_total: 798, tax_rate: BigDecimal('0.08') },
+          { raw_text: 'レジ袋中1枚', line_total: 3, tax_rate: BigDecimal('0.1') }
+        ]
+        ocr_result[:lines] = [
+          '商品A',
+          '¥798',
+          'レジ袋中1枚',
+          '3',
+          '合計',
+          '¥801'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'bag_fee',
+              label: 'レジ袋中1枚',
+              amount: 3,
+              sign: 'surcharge',
+              source_text: 'レジ袋中1枚',
+              source_line_index: 2,
+              confidence: BigDecimal('0.9')
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].pluck(:raw_text, :line_total, :tax_rate)).to include(
+            [ 'レジ袋中1枚', 3, BigDecimal('0.1') ]
+          )
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+        end
+      end
+
+      it 'item-ownedのレジ袋数量をamountにしたOCR fallback adjustmentは保存しない' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '商品A', line_total: 798, tax_rate: BigDecimal('0.08') },
+          { raw_text: 'レジ袋中1枚', line_total: 3, tax_rate: BigDecimal('0.1') }
+        ]
+        ocr_result[:candidates][:adjustment_candidates] = [
+          {
+            source_text: 'レジ袋中1枚',
+            source_line_index: 2,
+            amount: 1,
+            sign_hint: 'surcharge',
+            confidence: BigDecimal('0.86')
+          }
+        ]
+        ocr_result[:lines] = [
+          '商品A',
+          '¥798',
+          'レジ袋中1枚',
+          '3',
+          '合計',
+          '¥801'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].pluck(:raw_text, :line_total, :tax_rate)).to include(
+            [ 'レジ袋中1枚', 3, BigDecimal('0.1') ]
+          )
+          expect(params[:receipt_adjustments_attributes]).to eq([])
+        end
+      end
+
+      it 'fee-ownedの袋代itemをadjustmentへ一本化する場合はitem tax_rateを引き継ぐ' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '商品小計', line_total: 1_080, tax_rate: BigDecimal('0.1') },
+          { raw_text: '袋代', line_total: 10, tax_rate: BigDecimal('0.1') }
+        ]
+        ocr_result[:lines] = [
+          '商品小計',
+          '¥1,080',
+          '袋代',
+          '¥10',
+          '合計',
+          '¥1,090'
+        ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            {
+              kind: 'bag_fee',
+              label: '袋代',
+              amount: 10,
+              sign: 'surcharge',
+              source_text: '袋代',
+              source_line_index: 2,
+              confidence: BigDecimal('0.9')
+            }
+          ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].pluck(:raw_text, :line_total)).to eq([
+            [ '商品小計', 1080 ]
+          ])
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(kind: 'bag_fee', label: '袋代', amount: 10, sign: 'surcharge', tax_rate: BigDecimal('0.1'))
+          )
+        end
+      end
+
       it '商品名に袋が含まれても同額の明確なsurcharge adjustmentでなければitemから除外しない' do
         ocr_result[:candidates][:items] = [
           { raw_text: '袋入りサンプル品', line_total: 300 },

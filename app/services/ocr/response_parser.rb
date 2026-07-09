@@ -904,6 +904,7 @@ class Ocr::ResponseParser
 
     known_label = known_adjustment_label?(line)
     signed_same_line = line.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
+    return nil if bag_item_owned_line?(line) && !signed_same_line
     return nil if item_line_candidate?(line, items) && !known_label && !signed_same_line
     return nil if tax_detail_amount_context?(lines, index) && !known_label && !signed_same_line
 
@@ -991,19 +992,16 @@ class Ocr::ResponseParser
   end
 
   def adjustment_amounts_in_line(line)
-    text = line.to_s
-    text.to_enum(:scan, ADJUSTMENT_MONEY_PATTERN).filter_map do |match|
-      matched = Regexp.last_match
-      next if percentage_amount_match?(text, matched)
-
-      amount = ReceiptAmountService.parse_amount_or_nil(match)
-      amount&.to_i&.abs
-    end.select(&:positive?)
+    Analysis.money_token_matches(
+      text: line,
+      money_pattern: ADJUSTMENT_MONEY_PATTERN,
+      profile: profile,
+      allow_bare_money: true
+    ).map { |token| token[:amount] }
   end
 
-  def percentage_amount_match?(text, match)
-    after = text[match.end(0)..]
-    after.to_s.lstrip.start_with?("%", "％")
+  def bag_item_owned_line?(line)
+    ReceiptAdjustmentOwnershipPolicy.bag_item_owned_text?(line, profile: profile)
   end
 
   def amount_only_line?(line)

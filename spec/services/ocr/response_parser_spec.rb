@@ -581,6 +581,101 @@ RSpec.describe Ocr::ResponseParser do
       expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
     end
 
+    it '明細化済みのレジ袋数量をadjustment amountとして扱わない' do
+      fixture_response = raw_response.deep_dup
+      fixture_response['analyzeResult']['content'] = <<~TEXT
+        領 収 書
+        具たっぷりサラダ巻
+        *298
+        レジ袋中1枚
+        3
+        小 計(税抜10%)
+        ¥3
+        合計
+        ¥3
+      TEXT
+      fields = fixture_response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields['Items'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Description' => { 'valueString' => 'レジ袋中1枚' },
+              'TotalPrice' => { 'valueCurrency' => { 'amount' => 3, 'currencyCode' => 'JPY' } }
+            }
+          }
+        ]
+      }
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :items)).to include(hash_including(raw_text: 'レジ袋中1枚', line_total: 3))
+        expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
+      end
+    end
+
+    it '数量つきレジ袋行と近傍の裸数値だけではadjustment candidateにしない' do
+      fixture_response = raw_response.deep_dup
+      fixture_response['analyzeResult']['content'] = <<~TEXT
+        領 収 書
+        レジ袋中1枚
+        3
+        合計
+        ¥3
+      TEXT
+      fixture_response.dig('analyzeResult', 'documents', 0, 'fields').delete('Items')
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
+    end
+
+    it '明細化済みのレジ袋行に金額が同一行表示されてもadjustment candidateにしない' do
+      fixture_response = raw_response.deep_dup
+      fixture_response['analyzeResult']['content'] = <<~TEXT
+        領 収 書
+        レジ袋中1枚 3円
+        合計
+        ¥3
+      TEXT
+      fields = fixture_response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields['Items'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Description' => { 'valueString' => 'レジ袋中1枚' },
+              'TotalPrice' => { 'valueCurrency' => { 'amount' => 3, 'currencyCode' => 'JPY' } }
+            }
+          }
+        ]
+      }
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :items)).to include(hash_including(raw_text: 'レジ袋中1枚', line_total: 3))
+        expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
+      end
+    end
+
+    it '明示的な袋代は引き続きbag_fee adjustment candidateにする' do
+      fixture_response = raw_response.deep_dup
+      fixture_response['analyzeResult']['content'] = <<~TEXT
+        OCR境界ストア
+        商品A
+        ¥1,000
+        袋代 ¥10
+        合計
+        ¥1,010
+      TEXT
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :adjustment_candidates)).to include(
+        hash_including(source_text: '袋代 ¥10', amount: 10, sign_hint: 'surcharge', candidate_reason: 'label_same_line_amount')
+      )
+    end
+
     it '日本語の支払時割引はsigned amountがある場合だけadjustment candidateにする' do
       fixture_response = JSON.parse(Rails.root.join('spec/fixtures/ocr/parser_boundary_receipt.json').read)
       fixture_response['analyzeResult']['content'] = <<~TEXT

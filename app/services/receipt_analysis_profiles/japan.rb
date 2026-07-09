@@ -274,7 +274,12 @@ module ReceiptAnalysisProfiles
     OCR_POINT_USAGE_ADJUSTMENT_LABEL_PATTERN = /ポイント\s*(?:利用|支払|払い|決済)|point\s*(?:usage|use|used|redemption|redeemed|payment)|points?\s*(?:used|redeemed|redemption|payment)/i.freeze
     OCR_POINT_DISPLAY_LINE_PATTERN = /ポイント\s*(?:付与|加算|獲得|残高)|(?:獲得予定|獲得|付与|保有|現在|利用可能|残高)\s*ポイント|earned\s*points?|current\s*points?|available\s*points?|points?\s*balance/i.freeze
     OCR_ADJUSTMENT_DISCOUNT_LABEL_PATTERN = /返品|返金|取消|キャンセル|値引|割引|クーポン|coupon|discount|refund|return/i.freeze
-    OCR_ADJUSTMENT_SURCHARGE_LABEL_PATTERN = /深夜|サービス料|配送料|送料|レジ袋|袋代|手数料|チャージ|fee|charge|surcharge|delivery|shipping|bag|handling/i.freeze
+    ADJUSTMENT_QUANTITY_UNIT_PATTERN = /枚|個|点|本|袋|箱/.freeze
+    ADJUSTMENT_POINT_UNIT_PATTERN = /p(?:t|ts|oint|oints)?/i.freeze
+    ADJUSTMENT_ID_LIKE_CONTEXT_PATTERN = /(?:TEL|ＴＥＬ|電話|住所|所在地|登録番号|事業者番号|伝票番号|取引番号|レシート番号|カード番号|会員番号|端末番号|承認番号|receipt\s*(?:no|number)|card\s*(?:no|number)|member\s*(?:no|number)|phone|address)/i.freeze
+    BAG_FEE_OWNED_LABEL_PATTERN = /(?:レジ袋|袋)\s*(?:代|料)|bag\s*(?:fee|charge)/i.freeze
+    BAG_ITEM_OWNED_LABEL_PATTERN = /レジ袋(?!\s*(?:代|料))|bag(?!\s*(?:fee|charge))/i.freeze
+    OCR_ADJUSTMENT_SURCHARGE_LABEL_PATTERN = /深夜|サービス料|配送料|送料|(?:レジ袋|袋)\s*(?:代|料)|手数料|チャージ|fee|charge|surcharge|delivery|shipping|bag\s*(?:fee|charge)|handling/i.freeze
     OCR_ADJUSTMENT_EXCLUDED_LINE_PATTERN = /小計|商品小計|合計|総合計|税抜合計|税込合計|対象|消費税|税額|税率|内税|外税|お預かり|お預り|預り|釣銭|お釣り|つり銭|支払|お支払|決済|現金|カード|au\s*pay|paypay|楽天ペイ|ポイント|獲得|利用可能|残高|カード番号|取引番号|レシート|領収|tel|電話|住所|登録番号|返品はお受け|返品.*(?:不可|致しかね)|お受け致しかね|barcode|qr|total|subtotal|tax|payment|change|point/i.freeze
     OCR_ADJUSTMENT_ZONE_START_PATTERN = /小計|商品小計|税抜合計|内税品計|subtotal/i.freeze
     OCR_ADJUSTMENT_ZONE_END_PATTERN = /合計|総合計|total/i.freeze
@@ -520,7 +525,7 @@ module ReceiptAnalysisProfiles
     ANALYSIS_LATE_NIGHT_CHARGE_KIND_PATTERN = /深夜|late.?night|midnight|after.?hours/i.freeze
     ANALYSIS_SERVICE_CHARGE_KIND_PATTERN = /サービス料|service\s*charge/i.freeze
     ANALYSIS_DELIVERY_FEE_KIND_PATTERN = /配送料|送料|delivery|shipping/i.freeze
-    ANALYSIS_BAG_FEE_KIND_PATTERN = /レジ袋|袋代|bag/i.freeze
+    ANALYSIS_BAG_FEE_KIND_PATTERN = BAG_FEE_OWNED_LABEL_PATTERN
     ANALYSIS_HANDLING_FEE_KIND_PATTERN = /手数料|handling|fee|charge/i.freeze
     ANALYSIS_CASHLESS_REWARD_ADJUSTMENT_PATTERN = /キャッシュレス|cashless|payment\s*discount/i.freeze
     ANALYSIS_TAX_RATE_HINT_PATTERN = /(?:税率|対象|税込|税抜|軽)?\s*(8|10)\s*%/.freeze
@@ -910,6 +915,26 @@ module ReceiptAnalysisProfiles
 
       def analysis_adjustment_amount_candidate_pattern
         ANALYSIS_ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN
+      end
+
+      def adjustment_quantity_unit_pattern
+        ADJUSTMENT_QUANTITY_UNIT_PATTERN
+      end
+
+      def adjustment_point_unit_pattern
+        ADJUSTMENT_POINT_UNIT_PATTERN
+      end
+
+      def adjustment_id_like_context_pattern
+        ADJUSTMENT_ID_LIKE_CONTEXT_PATTERN
+      end
+
+      def bag_fee_owned_label_pattern
+        BAG_FEE_OWNED_LABEL_PATTERN
+      end
+
+      def bag_item_owned_label_pattern
+        BAG_ITEM_OWNED_LABEL_PATTERN
       end
 
       def analysis_point_only_text_pattern
