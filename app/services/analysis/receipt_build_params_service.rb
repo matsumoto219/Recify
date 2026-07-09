@@ -66,6 +66,23 @@ module Analysis
           lines:,
           receipt_total: receipt_attributes[:total_amount]
         )
+        ownership_result = ReceiptFactOwnershipResolver.call(
+          items: receipt_items_attributes,
+          adjustments: receipt_adjustments_attributes,
+          payments: receipt_payments_attributes,
+          tax_details: receipt_tax_details_attributes,
+          review_reasons: invalid_adjustment_review_reasons,
+          evidence_index: SourceEvidenceIndex.call(
+            lines: lines,
+            money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+            profile: profile
+          )
+        )
+        receipt_items_attributes = ownership_result.items
+        receipt_adjustments_attributes = ownership_result.adjustments
+        receipt_payments_attributes = ownership_result.payments
+        receipt_tax_details_attributes = ownership_result.tax_details
+        invalid_adjustment_review_reasons = ownership_result.review_reasons
         review_reasons = (
           skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes) +
           invalid_adjustment_review_reasons

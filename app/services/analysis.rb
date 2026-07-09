@@ -36,6 +36,10 @@ module Analysis
       SourceEvidenceIndex.call(...)
     end
 
+    def resolve_receipt_fact_ownership(...)
+      ReceiptFactOwnershipResolver.call(...)
+    end
+
     def receipt_item_ai_allowed_keys
       ReceiptItemNormalizer::AI_ALLOWED_KEYS
     end
