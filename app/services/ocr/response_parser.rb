@@ -1248,13 +1248,19 @@ class Ocr::ResponseParser
     payments = fields.dig("Payments", "valueArray")
     return [] unless payments.is_a?(Array)
 
-    payments.map do |payment|
+    payments.map.with_index do |payment, index|
       value_object = payment["valueObject"] || {}
+      amount_field = value_object["Amount"]
 
       {
         method: value_object.dig("Method", "valueString") || value_object.dig("Method", "content"),
-        amount: value_object.dig("Amount", "valueCurrency", "amount") || value_object.dig("Amount", "valueNumber")
-      }
+        amount: amount_field&.dig("valueCurrency", "amount") || amount_field&.dig("valueNumber"),
+        **structured_source_metadata(
+          parsed_response,
+          amount_field,
+          field_path: "documents[0].fields.Payments[#{index}].Amount"
+        )
+      }.compact
     end
   rescue NoMethodError, TypeError
     []
@@ -1270,14 +1276,15 @@ class Ocr::ResponseParser
       normalize_rate_value(detail.dig("valueObject", "Rate", "valueNumber"))
     end.uniq
     infer_target_amounts = tax_detail_rates.size > 1
-    tax_details = details.map do |detail|
+    tax_details = details.map.with_index do |detail, index|
       value_object = detail["valueObject"] || {}
+      amount_field = value_object["Amount"]
       rate = value_object.dig("Rate", "valueNumber")
       explicit_net_amount = value_object.dig("NetAmount", "valueCurrency", "amount") ||
         value_object.dig("NetAmount", "valueNumber")
       inferred_net_amount = infer_tax_detail_target_amount_from_lines(lines, rate) if infer_target_amounts && explicit_net_amount.nil?
       {
-        amount: value_object.dig("Amount", "valueCurrency", "amount") || value_object.dig("Amount", "valueNumber"),
+        amount: amount_field&.dig("valueCurrency", "amount") || amount_field&.dig("valueNumber"),
         rate: rate,
         net_amount: explicit_net_amount || inferred_net_amount,
         description: tax_detail_description(
@@ -1287,7 +1294,12 @@ class Ocr::ResponseParser
           amount: value_object.dig("Amount", "valueCurrency", "amount") || value_object.dig("Amount", "valueNumber"),
           net_amount: explicit_net_amount || inferred_net_amount
         ),
-        _net_amount_inferred: explicit_net_amount.nil? && inferred_net_amount.present?
+        _net_amount_inferred: explicit_net_amount.nil? && inferred_net_amount.present?,
+        **structured_source_metadata(
+          parsed_response,
+          amount_field,
+          field_path: "documents[0].fields.TaxDetails[#{index}].Amount"
+        )
       }
     end
 
@@ -1516,6 +1528,8 @@ class Ocr::ResponseParser
 
     items.filter_map.with_index do |item, index|
       value_object = item["valueObject"] || {}
+      amount_field_name = value_object["TotalPrice"].present? ? "TotalPrice" : "Price"
+      amount_field = value_object[amount_field_name]
       total_price = value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
       raw_text = value_object.dig("Description", "valueString") ||
         value_object.dig("Description", "content") ||
@@ -1544,7 +1558,12 @@ class Ocr::ResponseParser
         discount_amount: discount_amount.positive? ? discount_amount : nil,
         discount_rate: discount_details_by_index.dig(index, :rate),
         tax_rate: extract_item_tax_rate(item, value_object),
-        confidence: item["confidence"]
+        confidence: item["confidence"],
+        **structured_source_metadata(
+          parsed_response,
+          amount_field,
+          field_path: "documents[0].fields.Items[#{index}].#{amount_field_name}"
+        )
       }
     end
   rescue NoMethodError, TypeError
@@ -1579,6 +1598,93 @@ class Ocr::ResponseParser
     end.first
   rescue NoMethodError, TypeError
     nil
+  end
+
+  def structured_source_metadata(parsed_response, field, field_path:)
+    return {} unless field.is_a?(Hash)
+
+    metadata = {
+      source_provider: "azure_structured",
+      source_field_path: field_path
+    }
+    line_entry = structured_source_line_entry(parsed_response, field)
+    return metadata unless line_entry
+
+    metadata[:source_line_index] = line_entry[:line_index]
+    local_span = structured_local_span(field, line_entry)
+    if local_span
+      metadata[:source_span_start] = local_span.begin
+      metadata[:source_span_end] = local_span.end
+    end
+    metadata
+  end
+
+  def structured_source_line_entry(parsed_response, field)
+    field_span = normalized_provider_span(Array(field["spans"]).first)
+    if field_span
+      matching_line = structured_line_entries(parsed_response).find do |line|
+        line[:provider_spans].any? { |line_span| provider_spans_overlap?(line_span, field_span) }
+      end
+      return matching_line if matching_line
+    end
+
+    field_content = normalize_text(field["content"])
+    return if field_content.blank?
+
+    structured_line_entries(parsed_response).find do |line|
+      line[:normalized_text].include?(field_content)
+    end
+  end
+
+  def structured_line_entries(parsed_response)
+    return @structured_line_entries if cacheable_response?(parsed_response) && defined?(@structured_line_entries)
+
+    entries = Array(extract_analyze_result(parsed_response)["pages"]).flat_map do |page|
+      Array(page["lines"])
+    end.each_with_object([]) do |line, result|
+      normalized_text = normalize_text(line["content"])
+      next if normalized_text.blank?
+
+      result << {
+        line_index: result.length,
+        normalized_text: normalized_text,
+        provider_spans: Array(line["spans"]).filter_map { |span| normalized_provider_span(span) }
+      }
+    end
+    @structured_line_entries = entries if cacheable_response?(parsed_response)
+    entries
+  end
+
+  def structured_local_span(field, line_entry)
+    field_content = normalize_text(field["content"])
+    if field_content.present?
+      start_index = line_entry[:normalized_text].index(field_content)
+      return (start_index...(start_index + field_content.length)) if start_index
+    end
+
+    field_span = normalized_provider_span(Array(field["spans"]).first)
+    line_span = line_entry[:provider_spans].find { |span| provider_spans_overlap?(span, field_span) }
+    return unless field_span && line_span
+
+    start_index = [ field_span.begin - line_span.begin, 0 ].max
+    end_index = [ field_span.end - line_span.begin, line_entry[:normalized_text].length ].min
+    return unless end_index > start_index
+
+    (start_index...end_index)
+  end
+
+  def normalized_provider_span(value)
+    return unless value.is_a?(Hash)
+
+    offset = Integer(value["offset"], exception: false)
+    length = Integer(value["length"], exception: false)
+    return unless offset && length&.positive?
+
+    (offset...(offset + length))
+  end
+
+  def provider_spans_overlap?(left, right)
+    left && right && left.begin < right.end && right.begin < left.end
   end
 
   # 割引検出。

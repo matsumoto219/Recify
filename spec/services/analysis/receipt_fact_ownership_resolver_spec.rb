@@ -72,6 +72,44 @@ RSpec.describe Analysis::ReceiptFactOwnershipResolver do
     expect(described_class).to have_received(:call).once
   end
 
+  it 'structured fieldのsource参照をfactだけに保持して保存attributesから除外する' do
+    evidence_index = Analysis::SourceEvidenceIndex.call(
+      lines: [ '商品A 100円' ],
+      money_pattern: /[¥￥]?\d+(?:円)?/,
+      profile: ReceiptAnalysisProfiles.default
+    )
+    item = {
+      raw_text: '商品A',
+      line_total: 100,
+      source_provider: 'azure_structured',
+      source_field_path: 'documents[0].fields.Items[0].TotalPrice',
+      source_line_index: 0,
+      source_span_start: 4,
+      source_span_end: 8
+    }
+
+    result = described_class.call(
+      items: [ item ],
+      adjustments: [],
+      payments: [],
+      tax_details: [],
+      review_reasons: [],
+      evidence_index: evidence_index
+    )
+
+    aggregate_failures do
+      expect(result.facts.first.source_refs.first).to have_attributes(
+        provider: :azure_structured,
+        field_path: 'documents[0].fields.Items[0].TotalPrice',
+        line_index: 0,
+        span_start: 4,
+        span_end: 8,
+        amount_token: 100
+      )
+      expect(result.items).to eq([ { raw_text: '商品A', line_total: 100 } ])
+    end
+  end
+
   it 'owner ruleでpurchase adjustmentとpayment adjustmentのeffect scopeを分離する' do
     adjustments = [
       {

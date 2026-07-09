@@ -169,6 +169,59 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it 'Azure structured item/payment/tax detailに金額source参照を付与する' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = "コーヒー 180\nCreditCard 1280\nSales Tax 80"
+      response['analyzeResult']['pages'] = [
+        {
+          'lines' => [
+            { 'content' => 'コーヒー 180', 'spans' => [ { 'offset' => 0, 'length' => 8 } ] },
+            { 'content' => 'CreditCard 1280', 'spans' => [ { 'offset' => 9, 'length' => 15 } ] },
+            { 'content' => 'Sales Tax 80', 'spans' => [ { 'offset' => 25, 'length' => 12 } ] }
+          ]
+        }
+      ]
+      fields = response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields.dig('Items', 'valueArray', 0, 'valueObject', 'TotalPrice').merge!(
+        'content' => '180',
+        'spans' => [ { 'offset' => 5, 'length' => 3 } ]
+      )
+      fields.dig('Payments', 'valueArray', 0, 'valueObject', 'Amount').merge!(
+        'content' => '1280',
+        'spans' => [ { 'offset' => 20, 'length' => 4 } ]
+      )
+      fields.dig('TaxDetails', 'valueArray', 0, 'valueObject', 'Amount').merge!(
+        'content' => '80',
+        'spans' => [ { 'offset' => 35, 'length' => 2 } ]
+      )
+
+      candidates = described_class.new(response: response, provider: 'azure_document_intelligence').call[:candidates]
+
+      aggregate_failures do
+        expect(candidates[:items].first).to include(
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.Items[0].TotalPrice',
+          source_line_index: 0,
+          source_span_start: 5,
+          source_span_end: 8
+        )
+        expect(candidates[:payments].first).to include(
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.Payments[0].Amount',
+          source_line_index: 1,
+          source_span_start: 11,
+          source_span_end: 15
+        )
+        expect(candidates[:tax_details].first).to include(
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TaxDetails[0].Amount',
+          source_line_index: 2,
+          source_span_start: 10,
+          source_span_end: 12
+        )
+      end
+    end
+
     it 'AI向けに小文字化前のOCR行を保持しつつ既存linesは小文字正規化する' do
       response = raw_response.deep_dup
       response['analyzeResult']['content'] = <<~TEXT

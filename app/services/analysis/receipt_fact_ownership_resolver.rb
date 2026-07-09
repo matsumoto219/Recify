@@ -191,7 +191,7 @@ module Analysis
 
     def build_source_ref(attributes, line, token)
       SourceRef.new(
-        provider: attributes[:source_provider].presence || :ocr_line,
+        provider: attributes[:source_provider].to_s.presence&.to_sym || :ocr_line,
         field_path: attributes[:source_field_path] || attributes[:field_path],
         line_index: line[:line_index],
         span_start: token[:span_start],

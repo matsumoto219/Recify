@@ -204,6 +204,15 @@ RSpec.describe Ai::PromptTemplate do
       end
     end
 
+    it 'AI adjustmentをownerではなくOCR根拠付きproposalとして制限する' do
+      aggregate_failures do
+        expect(system_prompt).to include('Each receipt_adjustment output is a proposal, not a persisted owner decision.')
+        expect(system_prompt).to include('Quantity tokens such as item counts or units MUST NOT be used as adjustment amounts.')
+        expect(system_prompt).to include('Do NOT convert item rows, payment rows, or tax-detail rows into receipt_adjustments.')
+        expect(user_prompt).to include('The server validates every proposal against OCR source evidence before deciding its owner.')
+      end
+    end
+
     it 'profile hints がある場合だけローカル解析語彙として提示する' do
       prompt = described_class.build(
         input.merge(

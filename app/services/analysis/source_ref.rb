@@ -27,7 +27,11 @@ module Analysis
     def strong_identity
       return unless strong?
 
-      [ provider, field_path, line_index, span_start, span_end, amount_token, amount_token_kind ]
+      if line_index.nil?
+        [ :field, provider, field_path, span_start, span_end, amount_token, amount_token_kind ]
+      else
+        [ :line, line_index, span_start, span_end, amount_token, amount_token_kind ]
+      end
     end
 
     def strong?

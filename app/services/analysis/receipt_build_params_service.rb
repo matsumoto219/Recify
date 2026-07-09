@@ -766,7 +766,8 @@ module Analysis
             ),
             review_reasons: review_reasons,
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
-            confidence: normalize_confidence(normalized_item[:confidence])
+            confidence: normalize_confidence(normalized_item[:confidence]),
+            **source_evidence_attributes(normalized_item)
           }
         end
       end
@@ -1112,7 +1113,8 @@ module Analysis
             # Azure Payments[].Method -> receipt_payments.method
             method: normalized_payment[:method],
             # Azure Payments[].Amount -> receipt_payments.amount
-            amount: normalize_amount(normalized_payment[:amount])
+            amount: normalize_amount(normalized_payment[:amount]),
+            **source_evidence_attributes(normalized_payment)
           }.compact
         end
         return normalize_structured_payments_with_settlement(structured_payments, lines, total, tax_details: candidates[:tax_details]) if structured_payments.present?
@@ -1598,9 +1600,22 @@ module Analysis
             # Azure TaxDetails[].Rate -> receipt_tax_details.rate
             rate: normalize_rate(normalized_tax_detail[:rate]),
             # Azure TaxDetails[].NetAmount -> receipt_tax_details.net_amount
-            net_amount: normalize_amount(normalized_tax_detail[:net_amount])
+            net_amount: normalize_amount(normalized_tax_detail[:net_amount]),
+            **source_evidence_attributes(normalized_tax_detail)
           }.compact
         end
+      end
+
+      def source_evidence_attributes(value)
+        normalized = value.respond_to?(:to_h) ? value.to_h.with_indifferent_access : {}.with_indifferent_access
+
+        normalized.slice(
+          :source_provider,
+          :source_field_path,
+          :source_line_index,
+          :source_span_start,
+          :source_span_end
+        ).compact.to_h.symbolize_keys
       end
 
       def recover_receipt_tax_details_from_lines(tax_details, lines, receipt_attributes)

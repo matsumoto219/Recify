@@ -64,6 +64,49 @@ RSpec.describe Analysis::OwnershipConflictResolver do
     end
   end
 
+  it "structured itemとAI proposalのproviderが異なっても同じphysical money tokenを競合解決する" do
+    line = "レジ袋中1枚 3円"
+    token = Analysis::SourceEvidenceIndex.call(
+      lines: [ line ],
+      money_pattern: money_pattern,
+      profile: profile
+    ).first[:tokens].find { |candidate| candidate[:kind] == :money }
+    result = resolve(
+      lines: [ line ],
+      items: [
+        {
+          raw_text: "レジ袋中1枚",
+          line_total: 3,
+          tax_rate: 0.1,
+          source_provider: "azure_structured",
+          source_field_path: "documents[0].fields.Items[0].TotalPrice",
+          source_line_index: 0,
+          source_span_start: token[:span_start],
+          source_span_end: token[:span_end]
+        }
+      ],
+      adjustments: [
+        {
+          kind: "bag_fee",
+          sign: "discount",
+          amount: 3,
+          source: "ai",
+          source_text: line,
+          source_line_index: 0
+        }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.items).to contain_exactly(include(raw_text: "レジ袋中1枚", line_total: 3))
+      expect(result.adjustments).to eq([])
+      expect(result.facts.first.source_refs.first).to have_attributes(
+        provider: :azure_structured,
+        field_path: "documents[0].fields.Items[0].TotalPrice"
+      )
+    end
+  end
+
   it "point usageが同じsource tokenのpaymentにもある場合はpayment adjustmentだけを残す" do
     result = resolve(
       lines: [ "ポイント利用 -100円" ],

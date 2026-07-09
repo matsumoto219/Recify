@@ -250,7 +250,9 @@ module Analysis
     end
 
     def sanitize_attributes(value, origin)
-      attributes = value.to_h.with_indifferent_access.except(*INTERNAL_SOURCE_KEYS)
+      internal_keys = INTERNAL_SOURCE_KEYS.dup
+      internal_keys << :source_line_index unless origin == :adjustment
+      attributes = value.to_h.with_indifferent_access.except(*internal_keys)
       return attributes.slice(:method, :amount).to_h.symbolize_keys if origin == :payment
 
       attributes.to_h.symbolize_keys

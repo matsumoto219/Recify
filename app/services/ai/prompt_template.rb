@@ -66,10 +66,13 @@ module Ai
         - price, quantity, quantity_unit_code, line_total, product_code, and confidence are reference-only inputs. Do NOT output or change them.
 
         For receipt_adjustments outputs:
+        - Each receipt_adjustment output is a proposal, not a persisted owner decision.
         - amount MUST be an unsigned absolute integer.
         - Use sign to express whether the adjustment is a discount or surcharge.
         - source_text and source_line_index MUST refer to full_context_lines.
         - Do NOT output an adjustment if its amount cannot be tied to OCR text.
+        - Quantity tokens such as item counts or units MUST NOT be used as adjustment amounts.
+        - Do NOT convert item rows, payment rows, or tax-detail rows into receipt_adjustments.
 
         For review_reasons:
         - Use only allowed review reason codes.
@@ -247,6 +250,7 @@ module Ai
         - If a printed tax breakdown shows the receipt total amount as a single tax-rate target, use that printed rate for all taxable items and taxable adjustments, even when a nearby note appears to mention a reduced tax rate.
 
         For receipt_adjustments:
+        - The server validates every proposal against OCR source evidence before deciding its owner.
         - Return receipt_adjustments when discount, coupon, point usage, return/refund, service charge, late-night charge, delivery fee, bag fee, handling fee, or a similar adjustment row exists.
         - Use full_context_lines to detect adjustments. Use filtered_content only as supporting evidence.
         - adjustment_candidates are OCR parser hints. Do NOT treat them as final facts.
