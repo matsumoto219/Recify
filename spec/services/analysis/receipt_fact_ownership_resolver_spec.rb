@@ -32,10 +32,10 @@ RSpec.describe Analysis::ReceiptFactOwnershipResolver do
     )
 
     aggregate_failures do
-      expect(result.items).to equal(items)
-      expect(result.adjustments).to equal(adjustments)
-      expect(result.payments).to equal(payments)
-      expect(result.tax_details).to equal(tax_details)
+      expect(result.items).to eq(items)
+      expect(result.adjustments).to eq(adjustments)
+      expect(result.payments).to eq(payments)
+      expect(result.tax_details).to eq(tax_details)
       expect(result.facts.map(&:owner)).to eq(%i[item receipt_adjustment payment tax_detail])
       expect(result.facts.second).to have_attributes(
         fact_type: :purchase_adjustment,
@@ -43,7 +43,7 @@ RSpec.describe Analysis::ReceiptFactOwnershipResolver do
         action: :persist
       )
       expect(result.facts.second.source_refs.first).to have_attributes(
-        provider: 'ocr',
+        provider: :ocr_line,
         line_index: 1,
         amount_token: 100,
         amount_token_kind: :money
@@ -117,7 +117,7 @@ RSpec.describe Analysis::ReceiptFactOwnershipResolver do
     aggregate_failures do
       expect(result.facts.map(&:fact_type)).to eq(%i[purchase_adjustment payment_adjustment payment_adjustment])
       expect(result.facts.map(&:effect_scope)).to eq(%i[purchase_total final_payment_total final_payment_total])
-      expect(result.adjustments).to equal(adjustments)
+      expect(result.adjustments).to eq(adjustments)
     end
   end
 end

@@ -1156,7 +1156,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
-      it '同一行に円金額があるポイント利用とクレジットをreceipt_paymentsとして保存する' do
+      it 'AI point usageはpayment adjustmentへ寄せて実決済paymentと分離する' do
         ocr_result[:candidates][:payment_method_text] = 'クレジット'
         ocr_result[:candidates][:payments] = []
         ocr_result[:candidates][:items] = []
@@ -1193,10 +1193,11 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         aggregate_failures do
           expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: 'ポイント利用', amount: 300),
             include(method: 'クレジット', amount: 271)
           )
-          expect(params[:receipt_adjustments_attributes]).to eq([])
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(kind: 'point_usage', amount: 300, sign: 'discount')
+          )
           expect(params[:receipt_items_attributes].map { |item| item[:raw_text] }).to contain_exactly(
             'サンプルポイント対象A ¥571'
           )
@@ -4082,7 +4083,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_adjustments_attributes]).to eq([])
       end
 
-      it '支払ブロックのポイント利用AI adjustmentはpaymentへ寄せてadjustmentにしない' do
+      it '支払ブロックのポイント利用AI adjustmentは実決済paymentと二重保存しない' do
         ocr_result[:candidates][:payment_method_text] = 'クレジット'
         ocr_result[:candidates][:payments] = []
         ocr_result[:candidates][:total_amount] = 571
@@ -4111,9 +4112,10 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
         aggregate_failures do
-          expect(params[:receipt_adjustments_attributes]).to eq([])
+          expect(params[:receipt_adjustments_attributes]).to contain_exactly(
+            include(kind: 'point_usage', amount: 300, sign: 'discount')
+          )
           expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: 'ポイント利用', amount: 300),
             include(method: 'クレジットカード', amount: 271)
           )
         end

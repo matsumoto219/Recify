@@ -13,6 +13,7 @@ module Analysis
     :review_reasons,
     :diagnostics,
     :attributes,
+    :origin,
     keyword_init: true
   ) do
     def persist?

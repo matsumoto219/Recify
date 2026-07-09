@@ -17,14 +17,10 @@ module Analysis
     end
 
     def call
-      OwnershipResult.new(
-        items: items,
-        adjustments: adjustments,
-        payments: payments,
-        tax_details: tax_details,
+      OwnershipConflictResolver.call(
         facts: build_facts,
         review_reasons: review_reasons,
-        diagnostics: []
+        profile: profile
       )
     end
 
@@ -44,7 +40,8 @@ module Analysis
           fact_type: :line_item,
           effect_scope: :purchase_total,
           amount: attributes[:line_total] || attributes[:price],
-          attributes: attributes
+          attributes: attributes,
+          origin: :item
         )
       end
     end
@@ -70,7 +67,8 @@ module Analysis
           sign: decision.sign || attributes[:sign],
           tax_rate: attributes[:tax_rate],
           attributes: attributes,
-          action: decision.action
+          action: decision.action,
+          origin: :adjustment
         )
       end
     end
@@ -83,7 +81,8 @@ module Analysis
           fact_type: :payment,
           effect_scope: :payment_reconciliation,
           amount: attributes[:amount],
-          attributes: attributes
+          attributes: attributes,
+          origin: :payment
         )
       end
     end
@@ -97,12 +96,13 @@ module Analysis
           effect_scope: :tax_allocation,
           amount: attributes[:amount],
           tax_rate: attributes[:rate],
-          attributes: attributes
+          attributes: attributes,
+          origin: :tax_detail
         )
       end
     end
 
-    def build_fact(owner:, fact_type:, effect_scope:, amount:, attributes:, kind: nil, sign: nil, tax_rate: nil, action: :persist)
+    def build_fact(owner:, fact_type:, effect_scope:, amount:, attributes:, origin:, kind: nil, sign: nil, tax_rate: nil, action: :persist)
       OwnershipFact.new(
         owner: owner,
         fact_type: fact_type,
@@ -116,30 +116,90 @@ module Analysis
         action: action,
         review_reasons: Array(attributes[:review_reasons]).map(&:to_s),
         diagnostics: [],
-        attributes: attributes
+        attributes: attributes,
+        origin: origin
       )
     end
 
     def source_refs_for(attributes, amount)
-      line_index = integer_or_nil(attributes[:source_line_index])
-      return [] if line_index.nil?
+      amount_value = amount.to_i.abs
+      return [] unless amount_value.positive?
 
-      line = evidence_index.find { |entry| entry[:line_index] == line_index }
-      return [] if line.nil?
+      source_indexes = source_line_indexes(attributes)
+      return [] if source_indexes.empty?
 
-      token = Array(line[:tokens]).find { |candidate| candidate[:amount].to_i == amount.to_i.abs }
-      [
-        SourceRef.new(
-          provider: attributes[:source],
-          line_index: line_index,
-          span_start: token&.fetch(:span_start, nil),
-          span_end: token&.fetch(:span_end, nil),
-          source_text: attributes[:source_text].presence || line[:source_text],
-          normalized_text: line[:normalized_text],
-          amount_token: token&.fetch(:amount, nil),
-          amount_token_kind: token&.fetch(:kind, nil)
-        )
-      ]
+      token_entries = token_entries_near(source_indexes, amount_value)
+      token_entry = explicit_span_token_entry(attributes, token_entries) || unique_token_entry(token_entries)
+      return [] if token_entry.nil?
+
+      line = token_entry[:line]
+      token = token_entry[:token]
+      [ build_source_ref(attributes, line, token) ]
+    end
+
+    def source_line_indexes(attributes)
+      explicit_index = integer_or_nil(attributes[:source_line_index] || attributes[:source_index])
+      return [ explicit_index ] unless explicit_index.nil?
+
+      source_texts = %i[source_text raw_text suggested_name label method description].filter_map do |key|
+        compact_evidence_text(attributes[key]).presence
+      end
+      return [] if source_texts.empty?
+
+      evidence_index.filter_map do |entry|
+        normalized_line = compact_evidence_text(entry[:source_text])
+        next if normalized_line.blank?
+        next unless source_texts.any? do |source_text|
+          normalized_line.include?(source_text) || source_text.include?(normalized_line)
+        end
+
+        entry[:line_index]
+      end
+    end
+
+    def token_entries_near(source_indexes, amount)
+      nearby_indexes = source_indexes.flat_map { |index| [ index, index + 1, index - 1 ] }.select { |index| index >= 0 }.uniq
+      evidence_index.flat_map do |line|
+        next [] unless nearby_indexes.include?(line[:line_index])
+
+        Array(line[:tokens]).filter_map do |token|
+          next unless token[:amount].to_i == amount
+          next unless %i[money bare_number].include?(token[:kind]&.to_sym)
+
+          { line: line, token: token }
+        end
+      end
+    end
+
+    def explicit_span_token_entry(attributes, token_entries)
+      span_start = integer_or_nil(attributes[:source_span_start] || attributes[:span_start])
+      span_end = integer_or_nil(attributes[:source_span_end] || attributes[:span_end])
+      return if span_start.nil? || span_end.nil?
+
+      token_entries.find do |entry|
+        entry[:token][:span_start].to_i == span_start && entry[:token][:span_end].to_i == span_end
+      end
+    end
+
+    def unique_token_entry(token_entries)
+      return token_entries.first if token_entries.one?
+
+      money_entries = token_entries.select { |entry| entry[:token][:kind]&.to_sym == :money }
+      money_entries.one? ? money_entries.first : nil
+    end
+
+    def build_source_ref(attributes, line, token)
+      SourceRef.new(
+        provider: attributes[:source_provider].presence || :ocr_line,
+        field_path: attributes[:source_field_path] || attributes[:field_path],
+        line_index: line[:line_index],
+        span_start: token[:span_start],
+        span_end: token[:span_end],
+        source_text: line[:source_text],
+        normalized_text: line[:normalized_text],
+        amount_token: token[:amount],
+        amount_token_kind: token[:kind]
+      )
     end
 
     def evidence_lines
@@ -150,6 +210,10 @@ module Analysis
       return value.to_h.with_indifferent_access if value.respond_to?(:to_h)
 
       {}.with_indifferent_access
+    end
+
+    def compact_evidence_text(value)
+      value.to_s.unicode_normalize(:nfkc).downcase.gsub(/[[:space:]　,，¥￥:：]+/, "")
     end
 
     def integer_or_nil(value)

@@ -23,5 +23,19 @@ module Analysis
         amount_token_kind
       ]
     end
+
+    def strong_identity
+      return unless strong?
+
+      [ provider, field_path, line_index, span_start, span_end, amount_token, amount_token_kind ]
+    end
+
+    def strong?
+      (field_path.present? || line_index.present?) &&
+        span_start.present? &&
+        span_end.present? &&
+        amount_token.to_i.positive? &&
+        %i[money bare_number].include?(amount_token_kind&.to_sym)
+    end
   end
 end

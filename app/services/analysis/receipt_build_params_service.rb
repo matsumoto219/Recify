@@ -53,26 +53,6 @@ module Analysis
           source_evidence_index,
           invalid_review_reasons: invalid_adjustment_review_reasons
         )
-        receipt_adjustments_attributes, receipt_payments_attributes = move_voucher_adjustments_to_payments(
-          receipt_adjustments_attributes,
-          receipt_payments_attributes
-        )
-        receipt_items_attributes = remove_surcharge_adjustment_items(
-          receipt_items_attributes,
-          receipt_adjustments_attributes
-        )
-        receipt_payments_attributes = add_cash_difference_payment(
-          receipt_payments_attributes,
-          lines,
-          receipt_attributes[:total_amount]
-        )
-        receipt_attributes[:payment_method] = reconcile_payment_method_with_payments(
-          receipt_attributes[:payment_method],
-          receipt_payments_attributes,
-          adjustments: receipt_adjustments_attributes,
-          lines:,
-          receipt_total: receipt_attributes[:total_amount]
-        )
         ownership_result = ReceiptFactOwnershipResolver.call(
           items: receipt_items_attributes,
           adjustments: receipt_adjustments_attributes,
@@ -87,6 +67,18 @@ module Analysis
         receipt_payments_attributes = ownership_result.payments
         receipt_tax_details_attributes = ownership_result.tax_details
         invalid_adjustment_review_reasons = ownership_result.review_reasons
+        receipt_payments_attributes = add_cash_difference_payment(
+          receipt_payments_attributes,
+          lines,
+          receipt_attributes[:total_amount]
+        )
+        receipt_attributes[:payment_method] = reconcile_payment_method_with_payments(
+          receipt_attributes[:payment_method],
+          receipt_payments_attributes,
+          adjustments: receipt_adjustments_attributes,
+          lines:,
+          receipt_total: receipt_attributes[:total_amount]
+        )
         review_reasons = (
           skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes) +
           invalid_adjustment_review_reasons
@@ -818,8 +810,6 @@ module Analysis
           sign = validation.sign.presence || (ReceiptAdjustment::SIGNS.include?(sign_value.to_s) ? sign_value.to_s : default_adjustment_sign(kind))
           next if adjustment_source_noise_line?(source_text, amount)
 
-          next if point_payment_adjustment?(normalized, amount:, source_line_index:, lines:)
-
           label = adjustment_label_for(kind, normalized[:label], source_text)
           review_reasons = normalize_review_reasons(normalized[:review_reasons])
           needs_review = source == "ocr" || normalized[:needs_review] == true || validation.review_required
@@ -1266,6 +1256,8 @@ module Analysis
           {
             method: method,
             amount: amount,
+            source_text: line.to_s.strip,
+            source_line_index: index,
             source_index: index,
             amount_source: amount_info[:source],
             transaction_context: fallback_payment_transaction_context_line?(line)
@@ -1286,6 +1278,8 @@ module Analysis
         {
           method: point_payment_method_text(lines[index]),
           amount: amount,
+          source_text: Array(lines)[index].to_s.strip,
+          source_line_index: index,
           source_index: index,
           amount_source: amount_info[:source],
           transaction_context: true

@@ -540,7 +540,11 @@ class ReceiptAmountService
       source: normalized[:source],
       label: normalized[:label],
       source_text: normalized[:source_text],
-      source_line_index: normalized[:source_line_index]
+      source_line_index: normalized[:source_line_index],
+      source_provider: normalized[:source_provider],
+      source_field_path: normalized[:source_field_path] || normalized[:field_path],
+      source_span_start: normalized[:source_span_start] || normalized[:span_start],
+      source_span_end: normalized[:source_span_end] || normalized[:span_end]
     }
   end
 
@@ -559,12 +563,16 @@ class ReceiptAmountService
       amount: to_i_or_nil(normalized[:amount]),
       label: normalized[:label],
       source_text: normalized[:source_text],
-      source_line_index: normalized[:source_line_index]
+      source_line_index: normalized[:source_line_index],
+      source_provider: normalized[:source_provider],
+      source_field_path: normalized[:source_field_path] || normalized[:field_path],
+      source_span_start: normalized[:source_span_start] || normalized[:span_start],
+      source_span_end: normalized[:source_span_end] || normalized[:span_end]
     }
   end
 
   def canonical_adjustments(adjustments, payments)
-    grouped = adjustments.group_by { |adjustment| money_effect_key(adjustment) }
+    grouped = adjustments.group_by { |adjustment| adjustment_duplicate_key(adjustment) }
     canonical = grouped.flat_map do |key, entries|
       next entries if key.nil? || entries.one?
 
@@ -579,7 +587,7 @@ class ReceiptAmountService
   end
 
   def preferred_adjustment(adjustments)
-    adjustments.find { |adjustment| payment_adjustment?(adjustment) } || adjustments.first
+    adjustments.find { |adjustment| adjustment[:source].to_s == "ai" } || adjustments.first
   end
 
   def payment_adjustment_duplicate_payment?(payment, adjustments)
@@ -615,17 +623,35 @@ class ReceiptAmountService
     left_key.present? && left_key == money_effect_key(right)
   end
 
+  def adjustment_duplicate_key(adjustment)
+    source_identity = money_effect_key(adjustment)
+    return nil if source_identity.nil?
+
+    classification = Amounts::AdjustmentClassifier.call(adjustment)
+    [ source_identity, classification[:effect], classification[:signed_amount].to_i ]
+  end
+
   def money_effect_key(value)
     amount = to_i(fetch_value(value, :amount))
     return nil unless amount.positive?
 
+    span_start = fetch_value(value, :source_span_start)
+    span_end = fetch_value(value, :source_span_end)
+    return nil if span_start.nil? || span_end.nil?
+
+    field_path = fetch_value(value, :source_field_path)
     source_line_index = fetch_value(value, :source_line_index)
-    return [ :line, source_line_index.to_i, amount ] if source_line_index.present?
+    return nil if field_path.blank? && source_line_index.nil?
 
-    text = normalized_money_effect_text(value)
-    return [ :text, text, amount ] if text.present?
-
-    nil
+    [
+      :source_token,
+      fetch_value(value, :source_provider).to_s.presence,
+      field_path.to_s.presence,
+      source_line_index.nil? ? nil : source_line_index.to_i,
+      span_start.to_i,
+      span_end.to_i,
+      amount
+    ]
   end
 
   def normalized_money_effect_text(value)

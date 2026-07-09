@@ -782,10 +782,26 @@ RSpec.describe 'Amount Engine integration' do
         { line_total: 1_000, tax_rate: BigDecimal('0') }
       ],
       adjustments: [
-        { kind: 'point_usage', sign: 'discount', amount: 100, source_text: 'ポイント利用 -100', source_line_index: 10, source: 'ocr' }
+        {
+          kind: 'point_usage',
+          sign: 'discount',
+          amount: 100,
+          source_text: 'ポイント利用 -100',
+          source_line_index: 10,
+          source_span_start: 7,
+          source_span_end: 11,
+          source: 'ocr'
+        }
       ],
       payments: [
-        { method: 'ポイント利用', amount: 100, source_text: 'ポイント利用 -100', source_line_index: 10 },
+        {
+          method: 'ポイント利用',
+          amount: 100,
+          source_text: 'ポイント利用 -100',
+          source_line_index: 10,
+          source_span_start: 7,
+          source_span_end: 11
+        },
         { method: 'credit', amount: 900 }
       ]
     )
@@ -807,8 +823,14 @@ RSpec.describe 'Amount Engine integration' do
         { line_total: 1_000, tax_rate: BigDecimal('0') }
       ],
       adjustments: [
-        { kind: 'receipt_discount', sign: 'discount', amount: 50, source_text: 'キャッシュレス還元 -50', source_line_index: 11, source: 'ocr' },
-        { kind: 'other', sign: 'discount', amount: 50, source_text: 'キャッシュレス還元 -50', source_line_index: 11, source: 'ocr' }
+        {
+          kind: 'receipt_discount', sign: 'discount', amount: 50, source_text: 'キャッシュレス還元 -50',
+          source_line_index: 11, source_span_start: 10, source_span_end: 13, source: 'ocr'
+        },
+        {
+          kind: 'other', sign: 'discount', amount: 50, source_text: 'キャッシュレス還元 -50',
+          source_line_index: 11, source_span_start: 10, source_span_end: 13, source: 'ocr'
+        }
       ],
       payments: [
         { method: 'credit', amount: 950 }
@@ -875,6 +897,80 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it 'provenanceがない同額・同labelのcouponも重複と断定しない' do
+    result = call_amount_engine(
+      receipt: { total_amount: 800 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'coupon', label: 'クーポン', sign: 'discount', amount: 100, source: 'ocr' },
+        { kind: 'coupon', label: 'クーポン', sign: 'discount', amount: 100, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'credit', amount: 800 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-200)
+      expect(result.dig(:computed, :purchase_total)).to eq(800)
+      expect(result[:blocking_inconsistencies]).to be_empty
+    end
+  end
+
+  it '同じsource line・同額でもspan根拠がなければpurchase/payment adjustmentを誤集約しない' do
+    result = call_amount_engine(
+      receipt: { total_amount: 900 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        { kind: 'coupon', label: 'クーポン', sign: 'discount', amount: 100, source_line_index: 20, source: 'ocr' },
+        { kind: 'point_usage', label: 'ポイント利用', sign: 'discount', amount: 100, source_line_index: 20, source: 'ocr' }
+      ],
+      payments: [
+        { method: 'credit', amount: 800 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-100)
+      expect(result.dig(:computed, :payment_adjustment_total)).to eq(-100)
+      expect(result.dig(:computed, :purchase_total)).to eq(900)
+      expect(result.dig(:computed, :final_payment_total)).to eq(800)
+      expect(result[:blocking_inconsistencies]).to be_empty
+    end
+  end
+
+  it '同じsource line・同額でも異なるspanのcouponを別の購入調整として残す' do
+    result = call_amount_engine(
+      receipt: { total_amount: 800 },
+      items: [
+        { line_total: 1_000, tax_rate: BigDecimal('0') }
+      ],
+      adjustments: [
+        {
+          kind: 'coupon', sign: 'discount', amount: 100, source_line_index: 20,
+          source_span_start: 4, source_span_end: 8, source: 'ocr'
+        },
+        {
+          kind: 'coupon', sign: 'discount', amount: 100, source_line_index: 20,
+          source_span_start: 14, source_span_end: 18, source: 'ocr'
+        }
+      ],
+      payments: [
+        { method: 'credit', amount: 800 }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-200)
+      expect(result.dig(:computed, :purchase_total)).to eq(800)
+      expect(result[:blocking_inconsistencies]).to be_empty
+    end
+  end
+
   it '同額cashless rewardでもsource lineが異なれば別の支払調整として残す' do
     result = call_amount_engine(
       receipt: { total_amount: 1_000 },
@@ -933,10 +1029,16 @@ RSpec.describe 'Amount Engine integration' do
         { line_total: 1_000, tax_rate: BigDecimal('0') }
       ],
       adjustments: [
-        { kind: 'receipt_discount', sign: 'discount', amount: 500, source_text: 'ギフトカード 500', source_line_index: 12, source: 'ocr' }
+        {
+          kind: 'receipt_discount', sign: 'discount', amount: 500, source_text: 'ギフトカード 500',
+          source_line_index: 12, source_span_start: 7, source_span_end: 10, source: 'ocr'
+        }
       ],
       payments: [
-        { method: 'gift_card', amount: 500, source_text: 'ギフトカード 500', source_line_index: 12 },
+        {
+          method: 'gift_card', amount: 500, source_text: 'ギフトカード 500',
+          source_line_index: 12, source_span_start: 7, source_span_end: 10
+        },
         { method: 'credit', amount: 500 }
       ]
     )
