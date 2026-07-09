@@ -1,0 +1,217 @@
+{
+  "status": "succeeded",
+  "analyzeResult": {
+    "modelId": "prebuilt-receipt",
+    "content": "領 収 書\nサンプル軽減商品A\n*128\nサンプル軽減商品B\n*198\nサンプル軽減商品C\n*115\nサンプル軽減商品D\n*298\nレジ袋中1枚\n3円\n小計 (税抜8%)\n739円\n消費税等 (8%)\n59円\n小計 (税抜10%)\n3円\n消費税等 (10%)\n0円\n合計\n801円\nSuica支払\n801円",
+    "pages": [
+      {
+        "pageNumber": 1,
+        "lines": [
+          { "content": "領 収 書" },
+          { "content": "サンプル軽減商品A" },
+          { "content": "*128" },
+          { "content": "サンプル軽減商品B" },
+          { "content": "*198" },
+          { "content": "サンプル軽減商品C" },
+          { "content": "*115" },
+          { "content": "サンプル軽減商品D" },
+          { "content": "*298" },
+          { "content": "レジ袋中1枚" },
+          { "content": "3円" },
+          { "content": "小計 (税抜8%)" },
+          { "content": "739円" },
+          { "content": "消費税等 (8%)" },
+          { "content": "59円" },
+          { "content": "小計 (税抜10%)" },
+          { "content": "3円" },
+          { "content": "消費税等 (10%)" },
+          { "content": "0円" },
+          { "content": "合計" },
+          { "content": "801円" },
+          { "content": "Suica支払" },
+          { "content": "801円" }
+        ]
+      }
+    ],
+    "documents": [
+      {
+        "docType": "receipt.retailMeal",
+        "confidence": 0.99,
+        "fields": {
+          "CountryRegion": {
+            "type": "countryRegion",
+            "valueCountryRegion": "JPN",
+            "confidence": 0.99
+          },
+          "Total": {
+            "type": "currency",
+            "valueCurrency": { "amount": 801, "currencyCode": "JPY" },
+            "content": "801円",
+            "confidence": 0.99
+          },
+          "Items": {
+            "type": "array",
+            "valueArray": [
+              {
+                "type": "object",
+                "valueObject": {
+                  "Description": {
+                    "type": "string",
+                    "valueString": "サンプル軽減商品A",
+                    "content": "サンプル軽減商品A"
+                  },
+                  "Quantity": { "type": "number", "valueNumber": 1 },
+                  "TotalPrice": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 128, "currencyCode": "JPY" },
+                    "content": "*128"
+                  },
+                  "TaxRate": { "type": "number", "valueNumber": 0.08 }
+                },
+                "content": "サンプル軽減商品A\n*128",
+                "confidence": 0.99
+              },
+              {
+                "type": "object",
+                "valueObject": {
+                  "Description": {
+                    "type": "string",
+                    "valueString": "サンプル軽減商品B",
+                    "content": "サンプル軽減商品B"
+                  },
+                  "Quantity": { "type": "number", "valueNumber": 1 },
+                  "TotalPrice": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 198, "currencyCode": "JPY" },
+                    "content": "*198"
+                  },
+                  "TaxRate": { "type": "number", "valueNumber": 0.08 }
+                },
+                "content": "サンプル軽減商品B\n*198",
+                "confidence": 0.99
+              },
+              {
+                "type": "object",
+                "valueObject": {
+                  "Description": {
+                    "type": "string",
+                    "valueString": "サンプル軽減商品C",
+                    "content": "サンプル軽減商品C"
+                  },
+                  "Quantity": { "type": "number", "valueNumber": 1 },
+                  "TotalPrice": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 115, "currencyCode": "JPY" },
+                    "content": "*115"
+                  },
+                  "TaxRate": { "type": "number", "valueNumber": 0.08 }
+                },
+                "content": "サンプル軽減商品C\n*115",
+                "confidence": 0.99
+              },
+              {
+                "type": "object",
+                "valueObject": {
+                  "Description": {
+                    "type": "string",
+                    "valueString": "サンプル軽減商品D",
+                    "content": "サンプル軽減商品D"
+                  },
+                  "Quantity": { "type": "number", "valueNumber": 1 },
+                  "TotalPrice": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 298, "currencyCode": "JPY" },
+                    "content": "*298"
+                  },
+                  "TaxRate": { "type": "number", "valueNumber": 0.08 }
+                },
+                "content": "サンプル軽減商品D\n*298",
+                "confidence": 0.99
+              },
+              {
+                "type": "object",
+                "valueObject": {
+                  "Description": {
+                    "type": "string",
+                    "valueString": "レジ袋中1枚",
+                    "content": "レジ袋中1枚"
+                  },
+                  "Quantity": { "type": "number", "valueNumber": 1 },
+                  "TotalPrice": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 3, "currencyCode": "JPY" },
+                    "content": "3円"
+                  },
+                  "TaxRate": { "type": "number", "valueNumber": 0.1 }
+                },
+                "content": "レジ袋中1枚\n3円",
+                "confidence": 0.99
+              }
+            ]
+          },
+          "TaxDetails": {
+            "type": "array",
+            "valueArray": [
+              {
+                "type": "object",
+                "valueObject": {
+                  "Description": { "type": "string", "valueString": "消費税等", "content": "消費税等" },
+                  "NetAmount": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 739, "currencyCode": "JPY" },
+                    "content": "739円"
+                  },
+                  "Amount": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 59, "currencyCode": "JPY" },
+                    "content": "59円"
+                  },
+                  "Rate": { "type": "number", "valueNumber": 0.08, "content": "8%" }
+                },
+                "content": "小計 (税抜8%)\n739円\n消費税等 (8%)\n59円",
+                "confidence": 0.99
+              },
+              {
+                "type": "object",
+                "valueObject": {
+                  "Description": { "type": "string", "valueString": "消費税等", "content": "消費税等" },
+                  "NetAmount": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 3, "currencyCode": "JPY" },
+                    "content": "3円"
+                  },
+                  "Amount": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 0, "currencyCode": "JPY" },
+                    "content": "0円"
+                  },
+                  "Rate": { "type": "number", "valueNumber": 0.1, "content": "10%" }
+                },
+                "content": "小計 (税抜10%)\n3円\n消費税等 (10%)\n0円",
+                "confidence": 0.99
+              }
+            ]
+          },
+          "Payments": {
+            "type": "array",
+            "valueArray": [
+              {
+                "type": "object",
+                "valueObject": {
+                  "Method": { "type": "string", "valueString": "Suica支払", "content": "Suica支払" },
+                  "Amount": {
+                    "type": "currency",
+                    "valueCurrency": { "amount": 801, "currencyCode": "JPY" },
+                    "content": "801円"
+                  }
+                },
+                "content": "Suica支払\n801円",
+                "confidence": 0.99
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -185,12 +185,18 @@ module Analysis
       def build_receipt_attributes(candidates, ai_receipt_attributes, lines, case_preserved_lines)
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
         ai_store_name = ai_attrs[:store_name].presence
+        item_names = Array(candidates[:items]).filter_map do |item|
+          normalized_item = item.respond_to?(:with_indifferent_access) ? item.with_indifferent_access : {}
+          normalized_item[:raw_text].presence || normalized_item[:description].presence
+        end
         store_name = resolve_store_name(
           ai_store_name || candidates[:store_name],
           lines,
-          ai_store_name: ai_store_name.present?
+          ai_store_name: ai_store_name.present?,
+          item_names: item_names
         )
         store_name = restore_store_name_casing(store_name, case_preserved_lines)
+        purchased_at = parse_purchased_at_with_time_fallback(ai_attrs, candidates, lines)
 
         {
           store_name: store_name,
@@ -199,7 +205,7 @@ module Analysis
             ai_attrs[:store_address_components].presence || candidates[:store_address_components]
           ),
           store_phone_number: ai_attrs[:store_phone_number].presence || candidates[:store_phone_number],
-          purchased_at: parse_purchased_at_with_time_fallback(ai_attrs, candidates, lines),
+          purchased_at: purchased_at,
           total_amount: resolve_receipt_total_amount(ai_attrs, candidates, lines),
           subtotal_amount: ai_attrs[:subtotal_amount] || normalize_amount(candidates[:subtotal_amount]),
           tax_amount: resolve_receipt_tax_amount(ai_attrs, candidates, lines),
@@ -214,7 +220,10 @@ module Analysis
           processing_error_code: ai_attrs[:processing_error_code],
           processing_error_message: ai_attrs[:processing_error_message],
           ocr_completed_at: ai_attrs[:ocr_completed_at]
-        }.compact
+        }.compact.merge(
+          store_name: store_name,
+          purchased_at: purchased_at
+        )
       end
 
       def resolve_receipt_total_amount(ai_attrs, candidates, lines)
@@ -274,9 +283,10 @@ module Analysis
           normalize_amount(receipt_attributes[:total_amount])&.to_i == settlement_total
       end
 
-      def resolve_store_name(store_name, lines, ai_store_name: false)
+      def resolve_store_name(store_name, lines, ai_store_name: false, item_names: [])
         normalized_store_name = compact_store_name(store_name)
         return store_name if normalized_store_name.blank?
+        return nil unless Analysis.store_name_candidate_valid?(store_name, item_names: item_names)
 
         local_complete_replacement = local_complete_store_name_replacement(store_name, lines)
         return local_complete_replacement if local_complete_replacement.present?

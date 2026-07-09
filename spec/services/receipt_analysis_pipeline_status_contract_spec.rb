@@ -4,15 +4,17 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
   def successful_ocr_result(overrides = {})
     {
       success: true,
-      raw_text: "契約テストストア\nコーヒー 180\n合計 180\n現金",
+      raw_text: "契約テストストア\n2025/07/10 12:34\nコーヒー 180\n合計 180\n現金",
       lines: [
         '契約テストストア',
+        '2025/07/10 12:34',
         'コーヒー 180',
         '合計 180',
         '現金'
       ],
       candidates: {
         store_name: '契約テストストア',
+        purchased_at_text: '2025/07/10 12:34',
         total_amount: 180,
         country_region: 'JPN',
         payment_method_text: '現金',
@@ -114,6 +116,7 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
 
   def build_processing_run
     receipt = create(:receipt, :processing, :with_image)
+    receipt.update_column(:purchased_at, nil)
     run = create(:receipt_analysis_run, receipt: receipt)
 
     [ receipt, run ]
@@ -133,9 +136,9 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
     ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
   end
 
-  def run_ai_and_finalize(ai_result, amount_result: no_amount_mismatch_result)
+  def run_ai_and_finalize(ai_result, amount_result: no_amount_mismatch_result, ocr_result: successful_ocr_result)
     receipt, run = build_processing_run
-    record_ocr_snapshot(run)
+    record_ocr_snapshot(run, ocr_result)
     stub_services_available
     stub_amount_service(amount_result)
     allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_result)
@@ -233,6 +236,69 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
         expect(item.confirmed_name).to be_nil
         expect(run.status).to eq('succeeded')
         expect(run.final_result_summary).to include('receipt_status' => 'completed')
+      end
+    end
+
+    it 'AIがmissing reasonを返さなくても購入日時がなければreview_neededにする' do
+      ocr_result = successful_ocr_result(
+        raw_text: "契約テストストア\nコーヒー 180\n合計 180\n現金",
+        lines: [
+          '契約テストストア',
+          'コーヒー 180',
+          '合計 180',
+          '現金'
+        ],
+        candidates: {
+          purchased_at_text: nil
+        }
+      )
+
+      receipt, = run_ai_and_finalize(successful_ai_result, ocr_result: ocr_result)
+
+      aggregate_failures do
+        expect(receipt.purchased_at).to be_nil
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('purchased_at_missing')
+      end
+    end
+
+    it 'OCR-onlyとAI fallbackでも購入日時欠損をserver-side reasonとして残す' do
+      ocr_result = successful_ocr_result(
+        raw_text: "契約テストストア\nコーヒー 180\n合計 180\n現金",
+        lines: [
+          '契約テストストア',
+          'コーヒー 180',
+          '合計 180',
+          '現金'
+        ],
+        candidates: {
+          purchased_at_text: nil
+        }
+      )
+
+      [
+        [ 'ocr_only', nil ],
+        [ 'ai_fallback', 'ai_timeout' ]
+      ].each do |strategy, error_code|
+        receipt, = build_processing_run
+        stub_amount_service
+        decision = ReceiptAnalysisPipeline::FinalizeDecision.new(
+          finalize_strategy: strategy,
+          error_code: error_code,
+          receipt_attributes: {},
+          ocr_result: ocr_result,
+          ai_result: nil,
+          metadata: {}
+        )
+
+        ReceiptAnalysisPipeline.finalize(receipt: receipt, decision: decision)
+        receipt.reload
+
+        aggregate_failures(strategy) do
+          expect(receipt.purchased_at).to be_nil
+          expect(receipt.status).to eq('review_needed')
+          expect(receipt.review_reasons).to include('purchased_at_missing')
+        end
       end
     end
 

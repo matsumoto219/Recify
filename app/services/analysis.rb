@@ -115,5 +115,9 @@ module Analysis
     def store_name_latin_logo_prefix_duplicate?(...)
       StoreNameCandidateClassifier.latin_logo_prefix_duplicate?(...)
     end
+
+    def store_name_candidate_valid?(...)
+      StoreNameCandidateClassifier.valid_candidate?(...)
+    end
   end
 end

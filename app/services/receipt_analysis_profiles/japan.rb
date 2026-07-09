@@ -607,7 +607,8 @@ module ReceiptAnalysisProfiles
     ].freeze
     OCR_BRAND_STORE_NAME_EXCLUSION_PATTERN = /住所|東京都|道府県|市|区|町|丁目|番地|電話|tel|fax/i.freeze
     OCR_BRANCH_LIKE_STORE_NAME_PATTERN = /店$|支店|本店|営業所|センター|モール|ショップ|market|mart|store|通り|駅前|南口|北口|東口|西口/i.freeze
-    OCR_STORE_NAME_NOISE_PATTERN = /tel|fax|領収証|レシート|登録番号|会員|お客様控え|クレジットカード売上票|合計|小計|外税|内税|お釣り|承認番号|取引内容|金額/i.freeze
+    OCR_STORE_NAME_HEADER_PATTERN = /領収書|領収証|会員収書|レシート|お客様控え|クレジットカード売上票/i.freeze
+    OCR_STORE_NAME_NOISE_PATTERN = /tel|fax|領収書|領収証|レシート|登録番号|会員|お客様控え|クレジットカード売上票|合計|小計|外税|内税|お釣り|承認番号|取引内容|金額/i.freeze
     OCR_STORE_NAME_LEGAL_ENTITY_NOISE_PATTERN = /株式会社/.freeze
     FINALIZE_CASH_PAYMENT_METHOD_PATTERN = /現金|現\s*計/.freeze
 
@@ -1401,6 +1402,10 @@ module ReceiptAnalysisProfiles
 
       def ocr_store_name_noise_pattern
         OCR_STORE_NAME_NOISE_PATTERN
+      end
+
+      def ocr_store_name_header_pattern
+        OCR_STORE_NAME_HEADER_PATTERN
       end
 
       def ocr_store_name_legal_entity_noise_pattern

@@ -2202,6 +2202,33 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'AIが返した帳票見出しやstructured item名を店舗名として採用しない' do
+        missing_store_ocr_result = ocr_result.deep_merge(
+          candidates: {
+            store_name: nil,
+            items: [
+              { raw_text: 'サンプル商品', line_total: 100, confidence: 0.95 }
+            ]
+          },
+          lines: [
+            '領 収 書',
+            'サンプル商品',
+            '100円',
+            '合計 100円'
+          ]
+        )
+
+        [ '領 収 書', 'サンプル商品' ].each do |invalid_store_name|
+          invalid_ai_result = ai_result.deep_merge(
+            receipt_attributes: { store_name: invalid_store_name }
+          )
+
+          params = described_class.call(ocr_result: missing_store_ocr_result, ai_result: invalid_ai_result)
+
+          expect(params.dig(:receipt_attributes, :store_name)).to be_nil, invalid_store_name
+        end
+      end
+
       it 'AI name completion OFFの場合はsuggested_nameでOCR item名を変更しない' do
         ai_result[:meta] = { ai_name_completion_enabled: false }
 

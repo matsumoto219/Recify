@@ -246,6 +246,22 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '店舗名と購入日時が欠けた匿名化fixtureでも帳票見出しや税率を誤採用しない' do
+      fixture_response = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/missing_store_name_and_purchased_at_receipt.json').read
+      )
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+
+      aggregate_failures do
+        expect(result.dig(:candidates, :store_name)).to be_nil
+        expect(result.dig(:candidates, :purchased_at_text)).to be_nil
+        expect(result.dig(:candidates, :subtotal_amount)).to be_nil
+        expect(result.dig(:candidates, :total_amount)).to eq(801)
+        expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
+      end
+    end
+
     it 'AI向けに小文字化前のOCR行を保持しつつ既存linesは小文字正規化する' do
       response = raw_response.deep_dup
       response['analyzeResult']['content'] = <<~TEXT
@@ -1323,6 +1339,90 @@ RSpec.describe Ocr::ResponseParser do
 
         expect(result.dig(:candidates, :store_name)).to eq(expected_store_name)
       end
+    end
+
+    it '帳票見出しとstructured itemしかない場合は店舗名を推測しない' do
+      [ '領収書', '領 収 書', '会員収書' ].each do |receipt_header|
+        response = raw_response.deep_dup
+        fields = response.dig('analyzeResult', 'documents', 0, 'fields')
+        fields.delete('MerchantName')
+        fields['Items'] = {
+          'valueArray' => [
+            {
+              'valueObject' => {
+                'Description' => { 'valueString' => 'サンプル商品' },
+                'TotalPrice' => { 'valueCurrency' => { 'amount' => 100, 'currencyCode' => 'JPY' } }
+              }
+            }
+          ]
+        }
+        response['analyzeResult']['content'] = <<~TEXT
+          #{receipt_header}
+          サンプル商品
+          100円
+          合計 100円
+        TEXT
+
+        result = described_class.new(response: response, provider: :fixture).call
+
+        expect(result.dig(:candidates, :store_name)).to be_nil, receipt_header
+      end
+    end
+
+    it 'structured itemの商品名を店舗名fallbackにしない' do
+      response = raw_response.deep_dup
+      fields = response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields.delete('MerchantName')
+      fields['Items'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Description' => { 'valueString' => 'サンプル商品' },
+              'TotalPrice' => { 'valueCurrency' => { 'amount' => 100, 'currencyCode' => 'JPY' } }
+            }
+          }
+        ]
+      }
+      response['analyzeResult']['content'] = <<~TEXT
+        サンプル商品
+        100円
+        合計 100円
+      TEXT
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :store_name)).to be_nil
+    end
+
+    it '税率表現の数字をsubtotal_amountとして採用しない' do
+      response = raw_response.deep_dup
+      fields = response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields.delete('Subtotal')
+      response['analyzeResult']['content'] = <<~TEXT
+        サンプルストア
+        小計 (税抜10%)
+        合計 801円
+      TEXT
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :subtotal_amount)).to be_nil
+    end
+
+    it '税率表現が併記されても明示された小計金額を採用する' do
+      response = raw_response.deep_dup
+      fields = response.dig('analyzeResult', 'documents', 0, 'fields')
+      fields.delete('Subtotal')
+      response['analyzeResult']['content'] = <<~TEXT
+        サンプルストア
+        小計 742円
+        税抜10%
+        合計 801円
+      TEXT
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :subtotal_amount)).to eq(742)
     end
 
     it '指定管理者近傍の法人MerchantNameより上部の顧客向け施設名を優先する' do

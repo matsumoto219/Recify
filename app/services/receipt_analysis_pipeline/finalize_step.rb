@@ -175,6 +175,7 @@ class ReceiptAnalysisPipeline
       review_reasons = merge_review_reasons(
         ai_review_reasons,
         params[:review_reasons],
+        missing_core_review_reasons(params[:receipt_attributes]),
         detail_reasons,
         item_drift_review_reasons,
         amount_review_reasons(amount_result),
@@ -267,6 +268,7 @@ class ReceiptAnalysisPipeline
 
       review_reasons = merge_review_reasons(
         params[:review_reasons],
+        missing_core_review_reasons(params[:receipt_attributes]),
         detail_review_reasons_for(params),
         amount_review_reasons(amount_result),
         ocr_review_reasons
@@ -336,7 +338,12 @@ class ReceiptAnalysisPipeline
         ocr_review_reasons << "ocr_low_confidence"
       end
 
-      review_reasons = merge_review_reasons(params[:review_reasons], amount_review_reasons(amount_result), ocr_review_reasons)
+      review_reasons = merge_review_reasons(
+        params[:review_reasons],
+        missing_core_review_reasons(params[:receipt_attributes]),
+        amount_review_reasons(amount_result),
+        ocr_review_reasons
+      )
       mapped = Analysis.processing_error_mapping(error_code)
 
       receipt_attributes = params[:receipt_attributes].merge(
@@ -688,6 +695,15 @@ class ReceiptAnalysisPipeline
         .reject(&:blank?)
         .uniq
       )
+    end
+
+    def missing_core_review_reasons(receipt_attributes)
+      attributes = normalized_hash(receipt_attributes)
+
+      [].tap do |reasons|
+        reasons << "store_name_missing" if attributes[:store_name].blank?
+        reasons << "purchased_at_missing" if attributes[:purchased_at].blank?
+      end
     end
 
     def amount_review_reasons(amount_result)

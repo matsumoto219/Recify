@@ -240,4 +240,19 @@ RSpec.describe Analysis::StoreNameCandidateClassifier do
       expect(described_class.operator_legal_entity_candidate?('Harima House Ltd.', lines)).to be(true)
     end
   end
+
+  describe '.valid_candidate?' do
+    it '帳票見出し・金額行・structured item由来候補を拒否する' do
+      item_names = [ '商品A', '商品B' ]
+
+      aggregate_failures do
+        expect(described_class.valid_candidate?('サンプルストア', item_names: item_names)).to be(true)
+        expect(described_class.valid_candidate?('領 収 書', item_names: item_names)).to be(false)
+        expect(described_class.valid_candidate?('*128', item_names: item_names)).to be(false)
+        expect(described_class.valid_candidate?('商品A', item_names: item_names)).to be(false)
+        expect(described_class.valid_candidate?('商品A100円', item_names: item_names)).to be(false)
+        expect(described_class.valid_candidate?('商品A商品B', item_names: item_names)).to be(false)
+      end
+    end
+  end
 end

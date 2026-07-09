@@ -153,6 +153,33 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it '帳票見出しとstructured item由来の行をstore候補から除外する' do
+      result = described_class.build(
+        ocr_result.merge(
+          lines: [
+            'サンプルストア',
+            '領 収 書',
+            '商品A 100円',
+            '*100',
+            '商品B 200円',
+            '合計 300円'
+          ],
+          candidates: ocr_result[:candidates].merge(
+            store_name: 'サンプルストア',
+            items: [
+              { raw_text: '商品A', line_total: 100, confidence: 0.9 },
+              { raw_text: '商品B', line_total: 200, confidence: 0.9 }
+            ]
+          )
+        )
+      )
+
+      aggregate_failures do
+        expect(result.dig(:store, :store_candidates)).to include('サンプルストア')
+        expect(result.dig(:store, :store_candidates)).not_to include('領 収 書', '商品A 100円', '*100', '商品B 200円')
+      end
+    end
+
     it '長いレシートfixtureでもitem数とconfidence summaryの互換性を保つ' do
       raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/long_receipt.json').read)
       parsed_ocr_result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call

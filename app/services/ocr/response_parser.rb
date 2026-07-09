@@ -304,9 +304,21 @@ class Ocr::ResponseParser
   def extract_store_name(parsed_response, lines)
     fields = extract_fields(parsed_response)
     merchant_name = fields.dig("MerchantName", "valueString") || fields.dig("MerchantName", "content")
+    item_names = structured_item_names(fields)
     candidates = extract_store_name_candidates(lines, merchant_name)
 
-    candidates.first || merchant_name || lines.find(&:present?)
+    candidates.find do |candidate|
+      Analysis.store_name_candidate_valid?(candidate, item_names: item_names)
+    end
+  end
+
+  def structured_item_names(fields)
+    Array(fields.dig("Items", "valueArray")).filter_map do |item|
+      item.dig("valueObject", "Description", "valueString") ||
+        item.dig("valueObject", "Description", "content")
+    end
+  rescue NoMethodError, TypeError
+    []
   end
 
   def extract_store_name_candidates(lines, merchant_name)
@@ -405,7 +417,9 @@ class Ocr::ResponseParser
     normalized = normalize_store_name_candidate(text)
     return true if normalized.blank?
 
+    compacted = normalized.gsub(/[[:space:]]+/, "")
     return true if normalized.match?(profile.ocr_store_name_noise_pattern)
+    return true if compacted.match?(profile.ocr_store_name_noise_pattern)
     return true if normalized.match?(/^\d+[\d\s\/:\-()]*$/)
     return true if normalized.match?(/〒/)
     return true if normalized.match?(profile.ocr_store_name_legal_entity_noise_pattern)
@@ -549,9 +563,22 @@ class Ocr::ResponseParser
 
     fields.dig("Subtotal", "valueCurrency", "amount") ||
       fields.dig("Subtotal", "valueNumber") ||
-      extract_amount_from_lines(lines, profile.ocr_subtotal_amount_line_pattern)
+      extract_subtotal_amount_from_lines(lines)
   rescue NoMethodError, TypeError
     nil
+  end
+
+  def extract_subtotal_amount_from_lines(lines)
+    Array(lines).filter_map do |line|
+      next unless line.match?(profile.ocr_subtotal_amount_line_pattern)
+
+      Analysis.money_token_matches(
+        text: line,
+        money_pattern: ADJUSTMENT_MONEY_PATTERN,
+        profile: profile,
+        allow_bare_money: true
+      ).map { |token| token[:amount] }.max
+    end.max
   end
 
   def extract_tax_amount(parsed_response, lines)

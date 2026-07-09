@@ -1,6 +1,6 @@
 module Analysis
   class StoreNameCandidateClassifier
-    MONEY_OR_NUMERIC_PATTERN = /\A[\d\s\-\/:().,¥￥$€£%]+\z/.freeze
+    MONEY_OR_NUMERIC_PATTERN = /\A[\d\s\-\/:().,*＊¥￥$€£%円]+\z/.freeze
 
     class << self
       def customer_facing_heading_candidates(lines, max_lines: 8)
@@ -112,6 +112,20 @@ module Analysis
         operator_context_near_candidate?(normalized_candidate, lines)
       end
 
+      def valid_candidate?(text, item_names: [])
+        normalized = normalize_name(text)
+        return false if normalized.blank?
+
+        compacted = normalized.gsub(/[[:space:]]+/, "")
+        return false if normalized.match?(profile.ocr_store_name_header_pattern)
+        return false if compacted.match?(profile.ocr_store_name_header_pattern)
+        return false if compacted.match?(MONEY_OR_NUMERIC_PATTERN)
+        return false if compacted.match?(/\A(?:#{profile.analysis_adjustment_amount_candidate_pattern})\z/)
+        return false if item_derived_candidate?(normalized, item_names)
+
+        true
+      end
+
       def normalize_name(text)
         text.to_s.unicode_normalize(:nfkc).gsub(/[[:space:]]+/, " ").strip.presence
       end
@@ -144,6 +158,32 @@ module Analysis
         return false if text.match?(MONEY_OR_NUMERIC_PATTERN)
 
         text.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
+      end
+
+      def item_derived_candidate?(candidate, item_names)
+        compact_candidate = normalize_compact_name(candidate).to_s.downcase
+        return false if compact_candidate.blank?
+
+        compact_item_names = Array(item_names).filter_map do |item_name|
+          normalized = normalize_compact_name(item_name).to_s.downcase
+          normalized if normalized.length >= 2
+        end.uniq
+
+        return true if compact_item_names.include?(compact_candidate)
+        return true if compact_item_names.any? do |item_name|
+          item_name_with_money_only_context?(compact_candidate, item_name)
+        end
+
+        compact_item_names.count { |item_name| compact_candidate.include?(item_name) } >= 2
+      end
+
+      def item_name_with_money_only_context?(candidate, item_name)
+        return false unless candidate.include?(item_name)
+
+        remainder = candidate.sub(item_name, "")
+        return false if remainder.blank?
+
+        remainder.match?(/\A(?:#{profile.analysis_adjustment_amount_candidate_pattern})\z/)
       end
 
       def isolated_logo_fragment_prefix?(line, header_lines:, line_index:)

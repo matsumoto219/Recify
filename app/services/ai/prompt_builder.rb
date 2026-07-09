@@ -304,6 +304,8 @@ module Ai
         end
         next if operator_reference_line?(text) && customer_facing_store_candidates.present?
         next if store_name_candidate_noise_line?(text)
+        next unless Analysis.store_name_candidate_valid?(text, item_names: item_raw_text_candidates)
+        next if item_like_line?(text)
         next if text.match?(analysis_profile.ai_store_candidate_reference_noise_pattern)
         next if text.match?(/^\d+[\d\s\-\/:]*$/)
 

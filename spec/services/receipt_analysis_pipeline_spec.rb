@@ -4,15 +4,17 @@ RSpec.describe ReceiptAnalysisPipeline do
   def successful_ocr_result
     {
       success: true,
-      raw_text: "テストストア\nコーヒー 180\n合計 180\n現金",
+      raw_text: "テストストア\n2025/05/23 10:00\nコーヒー 180\n合計 180\n現金",
       lines: [
         'テストストア',
+        '2025/05/23 10:00',
         'コーヒー 180',
         '合計 180',
         '現金'
       ],
       candidates: {
         store_name: 'テストストア',
+        purchased_at_text: '2025/05/23 10:00',
         total_amount: 180,
         country_region: 'JPN',
         payment_method_text: '現金',
@@ -2789,6 +2791,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'テストストア',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 740,
           country_region: 'JPN',
           payment_method_text: '現金',
@@ -2940,6 +2943,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプル袋 東テスト店',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 801,
           country_region: 'JPN',
           payment_method_text: 'Suica',
@@ -3062,6 +3066,44 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '店舗名と購入日時が欠けた匿名化fixtureは金額を維持してreview_neededにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = ocr_fixture('missing_store_name_and_purchased_at_receipt')
+      ai_result = ai_success_result_for(ocr_result).merge(
+        receipt_attributes: {
+          payment_method: 'e_money'
+        }
+      )
+
+      captured_amount_result = nil
+      allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+        captured_amount_result = original.call(**kwargs)
+      end
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.store_name).to be_nil
+        expect(receipt.purchased_at).to be_nil
+        expect(receipt.review_reasons).to include('store_name_missing', 'purchased_at_missing')
+        expect(receipt.total_amount).to eq(801)
+        expect(receipt.subtotal_amount).to eq(742)
+        expect(receipt.tax_amount).to eq(59)
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([ [ 'Suica支払', 801 ] ])
+        expect(receipt.receipt_adjustments).to be_empty
+        expect(captured_amount_result[:blocking_inconsistencies]).to be_empty
+      end
+    end
+
     it '明確なsurcharge adjustmentはfinal保存値でadjustment_uncertainを解除する' do
       ocr_result = ocr_fixture('delivery_and_bag_fee_receipt')
       ai_result = ai_success_result_for(
@@ -3131,6 +3173,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプル配送 東テスト店',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 1804,
           country_region: 'JPN',
           payment_method_text: 'PayPay',
@@ -3234,6 +3277,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプル割引 東テスト店',
+          purchased_at_text: '2025/05/23 10:00',
           subtotal_amount: 2_110,
           tax_amount: 211,
           total_amount: 2_321,
@@ -3348,6 +3392,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプル袋 東テスト店',
+          purchased_at_text: '2025/05/23 10:00',
           subtotal_amount: 910,
           tax_amount: 90,
           total_amount: 1_000,
@@ -3469,6 +3514,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプルノイズ テスト店',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 255,
           country_region: 'JPN',
           payment_method_text: 'PayPay',
@@ -4419,6 +4465,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプル食堂',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 1_391,
           tax_amount: 126,
           tax_rate: 10,
@@ -4799,6 +4846,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           ],
           candidates: {
             store_name: '中央南三丁目店',
+            purchased_at_text: '2025/05/23 10:00',
             total_amount: 844,
             tax_amount: 70,
             country_region: 'JPN',
@@ -4952,6 +5000,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプル牛丼 サンプル通り店',
+          purchased_at_text: '2025/05/23 10:00',
           store_address: '東京都港区サンプル1-1-1',
           total_amount: 1_510,
           tax_amount: 137,
@@ -5161,6 +5210,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: '毎日ちょうどいい価格 005905松風店',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 500,
           country_region: 'JPN',
           payment_method_text: '電子マネー',
@@ -5659,6 +5709,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプルノイズ テスト店',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 255,
           country_region: 'JPN',
           payment_method_text: 'PayPay',
@@ -5725,6 +5776,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプル免税ストア テスト店',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 3_000,
           subtotal_amount: 3_000,
           tax_amount: 0,
@@ -5876,6 +5928,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サムプル ショコラ ブティック&カフェ 青山po店',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 500,
           country_region: 'JPN',
           payment_method_text: '現金',
@@ -6075,6 +6128,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         ],
         candidates: {
           store_name: 'サンプルリア',
+          purchased_at_text: '2025/05/23 10:00',
           total_amount: 3_130,
           tax_amount: 284,
           country_region: 'JPN',
