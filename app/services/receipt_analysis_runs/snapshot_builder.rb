@@ -33,6 +33,14 @@ module ReceiptAnalysisRuns
     MAX_PAYMENT_CANDIDATES = 10
     MAX_TAX_DETAILS = 10
     MAX_REVIEW_REASONS = 20
+    OWNERSHIP_CONTRACT_KEYS = %i[
+      schema_version
+      duplicate_source_owner_count
+      payment_source_purchase_adjustment_count
+      tax_detail_source_effect_count
+      unknown_purchase_tax_allocation_count
+      adjustment_review_required_count
+    ].freeze
 
     EXACT_FORBIDDEN_KEYS = (
       %w[
@@ -64,6 +72,9 @@ module ReceiptAnalysisRuns
         set-cookie
         set_cookie
         signed_id
+        source_ref
+        source_refs
+        diagnostics
         system_prompt
         token
         user_prompt
@@ -214,6 +225,7 @@ module ReceiptAnalysisRuns
           receipt_payments_count: Array(params[:receipt_payments_attributes]).size,
           receipt_tax_details_count: Array(params[:receipt_tax_details_attributes]).size,
           receipt_adjustments_count: Array(params[:receipt_adjustments_attributes]).size,
+          ownership_contract: ownership_contract_snapshot(params[:ownership_contract]),
           corrections: build_params_corrections_snapshot(params[:corrections], params[:tax_rate_correction]),
           review_reasons: limited_strings(params[:review_reasons], snapshot_review_reasons_limit)
         }.compact
@@ -397,6 +409,14 @@ module ReceiptAnalysisRuns
     end
 
     private
+
+    def ownership_contract_snapshot(value)
+      contract = normalized_hash(value)
+
+      OWNERSHIP_CONTRACT_KEYS.each_with_object({}) do |key, snapshot|
+        snapshot[key] = safe_value(contract[key]) if contract.key?(key)
+      end.presence
+    end
 
     def finalize_decision_receipt_attributes(value)
       attributes = normalized_hash(value)

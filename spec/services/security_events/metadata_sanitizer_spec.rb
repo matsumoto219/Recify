@@ -59,6 +59,27 @@ RSpec.describe SecurityEvents::MetadataSanitizer do
     end
   end
 
+  it 'ownership source evidenceのraw textをnested metadataから除去する' do
+    metadata = described_class.call(
+      ownership: {
+        owner: 'receipt_adjustment',
+        source_refs: [
+          {
+            source_text: 'RAW OCR SOURCE TEXT',
+            normalized_text: 'raw ocr normalized text',
+            line_index: 12
+          }
+        ]
+      }
+    )
+
+    aggregate_failures do
+      expect(metadata.dig('ownership', 'owner')).to eq('receipt_adjustment')
+      expect(metadata.dig('ownership', 'source_refs', 0)).to eq('line_index' => 12)
+      expect(metadata.to_json).not_to include('RAW OCR SOURCE TEXT', 'raw ocr normalized text')
+    end
+  end
+
   it '文字列内のPIIやsecret風値をredactする' do
     metadata = described_class.call(
       message: 'email=user@example.com Authorization: Bearer abcdefghijklmnopqrstuvwxyz token=secret-value'

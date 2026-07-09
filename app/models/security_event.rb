@@ -46,7 +46,8 @@ class SecurityEvent < ApplicationRecord
   SENSITIVE_KEY_PATTERN = /
     password|token|authorization|cookie|secret|api[_-]?key|access[_-]?token|
     refresh[_-]?token|totp|otp|recovery[_-]?code|backup[_-]?code|csrf|
-    session|credential|challenge|raw[_-]?response|prompt|raw[_-]?text|image
+    session|credential|challenge|raw[_-]?response|prompt|raw[_-]?text|image|
+    source[_-]?text|normalized[_-]?text
   /ix
 
   belongs_to :actor_user,

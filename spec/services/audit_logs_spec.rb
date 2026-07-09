@@ -125,6 +125,28 @@ RSpec.describe AuditLogs do
       expect(log.metadata.to_json).not_to include('ocr raw', 'full prompt', 'sk-test', 'Bearer secret', 'digest-secret')
     end
 
+    it 'ownership source evidenceのraw textを保存しない' do
+      log = described_class.record_system_action!(
+        action: 'receipt_analysis.ownership_check',
+        outcome: 'succeeded',
+        metadata: {
+          owner: 'receipt_adjustment',
+          source_refs: [
+            {
+              source_text: 'RAW OCR SOURCE TEXT',
+              normalized_text: 'raw ocr normalized text',
+              line_index: 12
+            }
+          ]
+        }
+      )
+
+      aggregate_failures do
+        expect(log.metadata.dig('source_refs', 0)).to eq('line_index' => 12)
+        expect(log.metadata.to_json).not_to include('RAW OCR SOURCE TEXT', 'raw ocr normalized text')
+      end
+    end
+
     it '長い文字列と配列を上限内に丸める' do
       long_text = 'a' * (described_class::MAX_STRING_BYTES + 50)
       values = Array.new(described_class::MAX_ARRAY_ITEMS + 5) { |index| { value: index } }

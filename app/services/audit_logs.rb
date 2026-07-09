@@ -36,6 +36,7 @@ module AuditLogs
       raw_id
       raw_response
       raw_text
+      normalized_text
       recovery_code
       recovery_codes
       refresh_token
@@ -48,6 +49,7 @@ module AuditLogs
       set_cookie
       signature
       signed_id
+      source_text
       token
       totp
       totp_code
@@ -80,6 +82,7 @@ module AuditLogs
     raw_id
     raw_response
     raw_text
+    normalized_text
     recovery_code
     response_body
     secret
@@ -87,6 +90,7 @@ module AuditLogs
     session
     signature
     signed_id
+    source_text
     token
     totp
     two_factor
