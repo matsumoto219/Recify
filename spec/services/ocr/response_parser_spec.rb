@@ -222,6 +222,30 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '匿名化した実レシート回帰fixtureで数量付き袋商品をadjustment候補にしない' do
+      fixture_response = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/item_owned_bag_quantity_receipt.json').read
+      )
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      bag_item = result.dig(:candidates, :items).find { |item| item[:raw_text] == 'レジ袋中1枚' }
+
+      aggregate_failures do
+        expect(bag_item).to include(
+          line_total: 3,
+          tax_rate: 0.1,
+          source_field_path: 'documents[0].fields.Items[1].TotalPrice',
+          source_line_index: 5,
+          source_span_start: 0,
+          source_span_end: 2
+        )
+        expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
+        expect(result.dig(:candidates, :payments)).to contain_exactly(
+          include(method: '電子マネー支払', amount: 801)
+        )
+      end
+    end
+
     it 'AI向けに小文字化前のOCR行を保持しつつ既存linesは小文字正規化する' do
       response = raw_response.deep_dup
       response['analyzeResult']['content'] = <<~TEXT

@@ -1,0 +1,66 @@
+{
+  "case_id": "g112_item_owned_bag_quantity",
+  "category": "ocr_anomaly",
+  "intent": "A bag item label containing a quantity token remains an item and does not become a receipt adjustment.",
+  "receipt_kind": "receipt",
+  "expected": {
+    "store_name": "サンプル検証ストア",
+    "store_address": "サンプル県サンプル市検証町1-1",
+    "purchased_at": "2026-07-06T10:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "mixed",
+    "tax_rate": null,
+    "rounding": { "tax": "floor", "discount": "round", "scope": "per_tax_rate_group" },
+    "items": [
+      { "name": "サンプル軽減商品A", "unit_price": 798, "quantity": 1, "line_total": 798, "tax_rate": 0.08, "discount_amount": 0, "tax_inclusion": "gross" },
+      { "name": "レジ袋中1枚", "unit_price": 3, "quantity": 1, "line_total": 3, "tax_rate": 0.1, "discount_amount": 0, "tax_inclusion": "net" }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      { "rate": 0.08, "net": 739, "tax": 59, "gross": 798, "basis": "net", "label": "小計（税抜8%）" },
+      { "rate": 0.1, "net": 3, "tax": 0, "gross": 3, "basis": "net", "label": "小計（税抜10%）" }
+    ],
+    "subtotal": 742,
+    "tax": 59,
+    "total": 801,
+    "payments": [
+      { "method": "e_money", "label": "電子マネー支払", "amount": 801 }
+    ],
+    "payment_sum": 801,
+    "payment_method": "e_money",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "include_tax_detail_lines": false,
+    "noise_lines": [],
+    "custom_lines": [
+      "サンプル検証ストア",
+      "サンプル県サンプル市検証町1-1",
+      "2026年07月06日(月) 10:00",
+      "領 収 書",
+      "--------------------------------",
+      "*サンプル軽減商品A            798",
+      "レジ袋中1枚                      3",
+      "--------------------------------",
+      "合計                          801",
+      "小 計（税抜 8%）              739",
+      "消費税等（ 8%）                59",
+      "小 計（税抜10%）                3",
+      "消費税等（10%）                 0",
+      "（税率 8%対象                 798）",
+      "（税率10%対象                   3）",
+      "電子マネー支払                 801",
+      "[*]マークは軽減税率対象です。"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "assertions": {
+    "critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "receipt_adjustments"],
+    "allow_review_reasons": [],
+    "allow_item_name_minor_diff": false
+  }
+}

@@ -3011,6 +3011,57 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it '匿名化した実レシート回帰fixtureでも数量付き袋商品をitem-ownedとして確定する' do
+      ocr_result = ocr_fixture('item_owned_bag_quantity_receipt')
+      bag_line_index = ocr_result[:lines].index('レジ袋中1枚')
+      ai_result = {
+        success: true,
+        needs_review: false,
+        review_reasons: [],
+        receipt_attributes: {
+          store_name: 'サンプル検証ストア',
+          payment_method: 'e_money'
+        },
+        receipt_items_attributes: [
+          { index: 0, suggested_name: 'サンプル軽減商品A', category: 'food', needs_review: false },
+          { index: 1, suggested_name: 'レジ袋中1枚', category: 'daily_goods', needs_review: false }
+        ],
+        receipt_adjustments_attributes: [
+          {
+            kind: 'bag_fee',
+            label: 'レジ袋中1枚',
+            amount: 3,
+            sign: 'discount',
+            source_text: 'レジ袋中1枚',
+            source_line_index: bag_line_index,
+            confidence: BigDecimal('0.9'),
+            needs_review: false,
+            review_reasons: []
+          }
+        ]
+      }
+
+      receipt, amount = run_finalize_ocr_fixture(
+        'item_owned_bag_quantity_receipt',
+        ai_result: ai_result
+      )
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.subtotal_amount).to eq(742)
+        expect(receipt.tax_amount).to eq(59)
+        expect(receipt.total_amount).to eq(801)
+        expect(receipt.receipt_items.order(:position_index).pluck(:raw_text, :line_total, :tax_rate)).to eq([
+          [ 'サンプル軽減商品A', 798, BigDecimal('0.08') ],
+          [ 'レジ袋中1枚', 3, BigDecimal('0.1') ]
+        ])
+        expect(receipt.receipt_adjustments).to be_empty
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([ [ '電子マネー支払', 801 ] ])
+        expect(receipt.review_reasons).to be_empty
+        expect(amount[:blocking_inconsistencies]).to be_empty
+      end
+    end
+
     it '明確なsurcharge adjustmentはfinal保存値でadjustment_uncertainを解除する' do
       ocr_result = ocr_fixture('delivery_and_bag_fee_receipt')
       ai_result = ai_success_result_for(
