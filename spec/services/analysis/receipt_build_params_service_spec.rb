@@ -1963,6 +1963,49 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '税額0円の有効な第2税率グループを単一税率補正で上書きしない' do
+        params = described_class.call(
+          ocr_result: {
+            candidates: {
+              store_name: 'サンプル検証ストア',
+              total_amount: 801,
+              tax_amount: 59,
+              country_region: 'JPN',
+              items: [
+                { raw_text: 'サンプル軽減商品A', line_total: 798, tax_rate: 0.08 },
+                { raw_text: 'レジ袋中1枚', line_total: 3, tax_rate: 0.1 }
+              ],
+              tax_details: [
+                { description: '小計(税抜8%)', rate: 0.08, net_amount: 739, amount: 59 },
+                { description: '小計(税抜10%)', rate: 0.1, net_amount: 3, amount: 0 }
+              ]
+            },
+            lines: [
+              'サンプル軽減商品A',
+              '798円',
+              'レジ袋中1枚',
+              '3円',
+              '小計(税抜8%) 739円',
+              '消費税等(8%) 59円',
+              '小計(税抜10%) 3円',
+              '消費税等(10%) 0円',
+              '合計 801円'
+            ]
+          },
+          ai_result: nil
+        )
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].pluck(:raw_text, :tax_rate)).to eq([
+            [ 'サンプル軽減商品A', BigDecimal('0.08') ],
+            [ 'レジ袋中1枚', BigDecimal('0.1') ]
+          ])
+          expect(params.dig(:tax_rate_correction, :reason)).not_to eq(
+            'single_tax_detail_total_matches_receipt_total'
+          )
+        end
+      end
+
       it '軽減税率markerの明細合計が税率別対象額に一致しない場合は複数明細の税率を補正しない' do
         mismatched_marker_receipt = {
           candidates: {

@@ -2191,18 +2191,7 @@ module Analysis
         total_amount = normalize_amount(receipt_attributes[:total_amount])
         return nil unless total_amount&.positive?
 
-        usable_tax_details = Array(tax_details).filter_map do |tax_detail|
-          rate = normalize_rate(tax_detail[:rate])
-          amount = normalize_amount(tax_detail[:amount])
-          next unless rate&.positive?
-          next unless amount&.positive?
-
-          {
-            rate: rate,
-            amount: amount,
-            net_amount: normalize_amount(tax_detail[:net_amount])
-          }
-        end
+        usable_tax_details = usable_tax_details_with_gross_amount(tax_details)
         return nil unless usable_tax_details.one?
 
         tax_detail = usable_tax_details.first
@@ -2215,18 +2204,7 @@ module Analysis
         total_amount = normalize_amount(receipt_attributes[:total_amount])&.to_i
         return false unless total_amount&.positive?
 
-        usable_tax_details = Array(tax_details).filter_map do |tax_detail|
-          rate = normalize_rate(tax_detail[:rate])
-          amount = normalize_amount(tax_detail[:amount])
-          next unless rate&.positive?
-          next unless amount&.positive?
-
-          {
-            rate: rate,
-            amount: amount,
-            net_amount: normalize_amount(tax_detail[:net_amount])
-          }
-        end
+        usable_tax_details = usable_tax_details_with_gross_amount(tax_details)
         return false unless usable_tax_details.one?
 
         target_total = single_tax_detail_gross_target_amount(usable_tax_details.first, total_amount)
