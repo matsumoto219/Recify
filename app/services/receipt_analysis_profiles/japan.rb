@@ -274,6 +274,8 @@ module ReceiptAnalysisProfiles
     OCR_POINT_USAGE_ADJUSTMENT_LABEL_PATTERN = /ポイント\s*(?:利用|支払|払い|決済)|point\s*(?:usage|use|used|redemption|redeemed|payment)|points?\s*(?:used|redeemed|redemption|payment)/i.freeze
     OCR_POINT_DISPLAY_LINE_PATTERN = /ポイント\s*(?:付与|加算|獲得|残高)|(?:獲得予定|獲得|付与|保有|現在|利用可能|残高)\s*ポイント|earned\s*points?|current\s*points?|available\s*points?|points?\s*balance/i.freeze
     OCR_ADJUSTMENT_DISCOUNT_LABEL_PATTERN = /返品|返金|取消|キャンセル|値引|割引|クーポン|coupon|discount|refund|return/i.freeze
+    ADJUSTMENT_CURRENCY_EVIDENCE_PATTERN = /[¥￥$€£]|円/.freeze
+    ADJUSTMENT_SIGN_EVIDENCE_PATTERN = /[▲△\-−]/.freeze
     ADJUSTMENT_QUANTITY_UNIT_PATTERN = /枚|個|点|本|袋|箱/.freeze
     ADJUSTMENT_POINT_UNIT_PATTERN = /p(?:t|ts|oint|oints)?/i.freeze
     ADJUSTMENT_ID_LIKE_CONTEXT_PATTERN = /(?:TEL|ＴＥＬ|電話|住所|所在地|登録番号|事業者番号|伝票番号|取引番号|レシート番号|カード番号|会員番号|端末番号|承認番号|receipt\s*(?:no|number)|card\s*(?:no|number)|member\s*(?:no|number)|phone|address)/i.freeze
@@ -915,6 +917,14 @@ module ReceiptAnalysisProfiles
 
       def analysis_adjustment_amount_candidate_pattern
         ANALYSIS_ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN
+      end
+
+      def adjustment_currency_evidence_pattern
+        ADJUSTMENT_CURRENCY_EVIDENCE_PATTERN
+      end
+
+      def adjustment_sign_evidence_pattern
+        ADJUSTMENT_SIGN_EVIDENCE_PATTERN
       end
 
       def adjustment_quantity_unit_pattern

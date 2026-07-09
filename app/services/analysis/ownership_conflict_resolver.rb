@@ -99,12 +99,18 @@ module Analysis
 
     def voucher_payment_method(attributes)
       source = attributes[:source_text].presence || attributes[:label].presence || attributes[:method].presence
-      label = source.to_s.unicode_normalize(:nfkc).sub(
-        /\s*[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?\s*\z/,
-        ""
-      ).strip
+      label = source_without_trailing_amount(source)
 
       label.presence || profile.voucher_label
+    end
+
+    def source_without_trailing_amount(value)
+      source = value.to_s.unicode_normalize(:nfkc)
+      matches = source.to_enum(:scan, profile.analysis_adjustment_amount_candidate_pattern).map { Regexp.last_match }
+      trailing_match = matches.reverse.find { |match| source[match.end(0)..].to_s.strip.empty? }
+      return source.strip if trailing_match.nil?
+
+      source[0...trailing_match.begin(0)].strip
     end
 
     def resolve_cross_owner_conflicts!

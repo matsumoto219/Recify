@@ -44,6 +44,31 @@ RSpec.describe Analysis::MoneyTokenClassifier do
     expect(result).to include(include(kind: :money, amount: 2, money_evidence: true))
   end
 
+  it '通貨・符号の判定をcountry profileから受け取る' do
+    custom_profile = Struct.new(
+      :adjustment_currency_evidence_pattern,
+      :adjustment_sign_evidence_pattern,
+      :adjustment_quantity_unit_pattern,
+      :adjustment_point_unit_pattern,
+      :adjustment_id_like_context_pattern,
+      keyword_init: true
+    ).new(
+      adjustment_currency_evidence_pattern: /USD/,
+      adjustment_sign_evidence_pattern: /~/,
+      adjustment_quantity_unit_pattern: /(?!)/,
+      adjustment_point_unit_pattern: /(?!)/,
+      adjustment_id_like_context_pattern: /(?!)/
+    )
+
+    custom_currency = described_class.call(text: 'fee USD10', money_pattern: /\d+/, profile: custom_profile)
+    japanese_currency = described_class.call(text: 'fee 10円', money_pattern: /\d+/, profile: custom_profile)
+
+    aggregate_failures do
+      expect(custom_currency).to contain_exactly(include(kind: :money, amount: 10))
+      expect(japanese_currency).to contain_exactly(include(kind: :bare_number, amount: 10))
+    end
+  end
+
   it '裸数値は明示許可時だけmoney matchとして返す' do
     denied = described_class.money_matches(
       text: '配送料 550',
