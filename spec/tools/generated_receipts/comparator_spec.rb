@@ -105,6 +105,27 @@ RSpec.describe GeneratedReceipts::Comparator do
     end
   end
 
+  it "treats item unit price, quantity, line total, and tax rate differences as failures" do
+    case_data = load_case("g001_normal_included_10_cash")
+
+    aggregate_failures do
+      {
+        "unit_price" => 551,
+        "quantity" => 2,
+        "line_total" => 551,
+        "tax_rate" => 0.08
+      }.each do |key, value|
+        actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
+        actual["items"][0][key] = value
+
+        result = described_class.call(case_data, actual)
+
+        expect(result.status).to eq("FAIL")
+        expect(result.diffs).to include(hash_including(path: "item_amounts", severity: "FAIL"))
+      end
+    end
+  end
+
   it "summarizes comparison runs with WARN when no run failed" do
     result = GeneratedReceipts::ComparisonRunner::Result.new(
       case_id: "sample",

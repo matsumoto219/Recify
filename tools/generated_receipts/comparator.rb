@@ -15,6 +15,7 @@ module GeneratedReceipts
       total
       tax_rate
       tax_details
+      item_amounts
       receipt_adjustments
       payment_method
       payments
@@ -46,6 +47,8 @@ module GeneratedReceipts
           "items" => receipt.receipt_items.order(:position_index, :id).map do |item|
             {
               "name" => item.confirmed_name.presence || item.suggested_name || item.raw_text,
+              "unit_price" => item.price&.to_i,
+              "quantity" => item.quantity&.to_s,
               "line_total" => item.line_total&.to_i,
               "tax_rate" => item.tax_rate&.to_s,
               "discount_amount" => item.discount_amount&.to_i
@@ -98,6 +101,7 @@ module GeneratedReceipts
       compare_rate("tax_rate", expected["tax_rate"], actual["tax_rate"])
       compare_tax_details
       compare_items
+      compare_item_amounts
       compare_adjustments
       compare_scalar("payment_method", expected["payment_method"], actual["payment_method"])
       compare_payments
@@ -123,23 +127,15 @@ module GeneratedReceipts
     end
 
     def compare_items
-      expected_items = expected["items"].map do |item|
-        {
-          "name" => normalize_label(item["name"]),
-          "line_total" => item["line_total"],
-          "tax_rate" => normalize_rate(item["tax_rate"]),
-          "discount_amount" => zero_to_nil(item["discount_amount"])
-        }
-      end
-      actual_items = Array(actual["items"]).map do |item|
-        {
-          "name" => normalize_label(item["name"]),
-          "line_total" => item["line_total"],
-          "tax_rate" => normalize_rate(item["tax_rate"]),
-          "discount_amount" => zero_to_nil(item["discount_amount"])
-        }
-      end
+      expected_items = expected["items"].map { |item| normalize_label(item["name"]) }
+      actual_items = Array(actual["items"]).map { |item| normalize_label(item["name"]) }
       compare_array("items", expected_items, actual_items)
+    end
+
+    def compare_item_amounts
+      expected_amounts = expected["items"].map { |item| normalize_item_amounts(item) }
+      actual_amounts = Array(actual["items"]).map { |item| normalize_item_amounts(item) }
+      compare_array("item_amounts", expected_amounts, actual_amounts)
     end
 
     def compare_adjustments
@@ -218,7 +214,25 @@ module GeneratedReceipts
       }
     end
 
+    def normalize_item_amounts(item)
+      {
+        "unit_price" => item["unit_price"]&.to_i,
+        "quantity" => normalize_quantity(item["quantity"]),
+        "line_total" => item["line_total"]&.to_i,
+        "tax_rate" => normalize_rate(item["tax_rate"]),
+        "discount_amount" => zero_to_nil(item["discount_amount"])
+      }
+    end
+
     def normalize_rate(value)
+      return nil if value.nil?
+
+      BigDecimal(value.to_s).to_s("F")
+    rescue ArgumentError
+      value
+    end
+
+    def normalize_quantity(value)
       return nil if value.nil?
 
       BigDecimal(value.to_s).to_s("F")
