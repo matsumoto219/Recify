@@ -1501,19 +1501,28 @@ class ReceiptsController < ApplicationController
   end
 
   def amount_receipt(permitted, context, clear_amounts: false)
-    return permitted.except("subtotal_amount", "tax_amount", "total_amount", "tax_rate") if clear_amounts
-    return permitted unless context == :edit_save
-    return permitted unless @receipt&.persisted?
+    if clear_amounts
+      return permitted.except("subtotal_amount", "tax_amount", "total_amount", "tax_rate")
+    end
 
-    existing_amounts = {
-      "subtotal_amount" => @receipt.subtotal_amount,
-      "tax_amount" => @receipt.tax_amount,
-      "total_amount" => @receipt.total_amount,
-      "tax_rate" => @receipt.tax_rate
-    }
+    amounts =
+      if context == :edit_save && @receipt&.persisted?
+        existing_amounts = {
+          "subtotal_amount" => @receipt.subtotal_amount,
+          "tax_amount" => @receipt.tax_amount,
+          "total_amount" => @receipt.total_amount,
+          "tax_rate" => @receipt.tax_rate
+        }
 
-    existing_amounts.merge(permitted) do |_key, existing_value, permitted_value|
-      permitted_value.presence || existing_value
+        existing_amounts.merge(permitted) do |_key, existing_value, permitted_value|
+          permitted_value.presence || existing_value
+        end
+      else
+        permitted
+      end
+
+    %w[subtotal_amount tax_amount total_amount tax_rate].each_with_object(amounts.dup) do |field, result|
+      result["amount_#{field}_submitted"] = permitted.key?(field)
     end
   end
 

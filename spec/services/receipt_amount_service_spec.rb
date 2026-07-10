@@ -356,6 +356,43 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'subtotalとtaxの合計がtotalに一致しないreceipt inputを自動完了候補にしない' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 100,
+          tax_amount: 100,
+          total_amount: 100,
+          tax_rate: BigDecimal('0.1')
+        },
+        receipt_items: [
+          { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 91, tax: 9, total: 100)
+        expect(result[:review_reasons]).to include('invalid_amount_relation')
+        expect(result[:safe_to_auto_complete]).to be(false)
+      end
+    end
+
+    it '課税明細があるtotal-only receipt inputで税額を0へ消さない' do
+      result = call_service(
+        receipt: { total_amount: 100 },
+        receipt_items: [
+          { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 91, tax: 9, total: 100)
+        expect(result[:review_reasons]).to include('invalid_amount_relation')
+        expect(result[:safe_to_auto_complete]).to be(false)
+      end
+    end
+
     it 'native engineでもmanualのtax 0をnilと区別して保持する' do
       result = call_service(
         receipt: {

@@ -40,10 +40,19 @@ module Amounts
     end
 
     def total_mismatch?(candidate)
-      return false if candidate.basis == "receipt_input_preserved"
+      return false unless receipt_input_amount_relation_required?(candidate)
       return false if gross_tax_detail_amount_basis?(candidate)
 
       candidate.subtotal.to_i + candidate.tax.to_i != candidate.purchase_total.to_i
+    end
+
+    def receipt_input_amount_relation_required?(candidate)
+      Amounts::ReceiptInputContract.amount_relation_required?(
+        candidate: candidate,
+        receipt: receipt,
+        items: items,
+        tax_details: tax_details
+      )
     end
 
     def item_total_mismatch?(candidate)

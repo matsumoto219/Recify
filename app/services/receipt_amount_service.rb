@@ -489,7 +489,11 @@ class ReceiptAmountService
       total_amount: to_i_or_nil(fetch_value(r, :total_amount)),
       subtotal_amount: to_i_or_nil(fetch_value(r, :subtotal_amount)),
       tax_amount: to_i_or_nil(fetch_value(r, :tax_amount)),
-      tax_rate: fetch_value(r, :tax_rate)
+      tax_rate: fetch_value(r, :tax_rate),
+      amount_total_amount_submitted: fetch_value(r, :amount_total_amount_submitted),
+      amount_subtotal_amount_submitted: fetch_value(r, :amount_subtotal_amount_submitted),
+      amount_tax_amount_submitted: fetch_value(r, :amount_tax_amount_submitted),
+      amount_tax_rate_submitted: fetch_value(r, :amount_tax_rate_submitted)
     }
   end
 

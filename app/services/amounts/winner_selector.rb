@@ -4,6 +4,7 @@ module Amounts
   class WinnerSelector
     COMPETING_EXACT_BASIS_WARNING = :competing_exact_basis_candidate
     MIXED_BASIS_SEARCH_TRUNCATED_WARNING = :mixed_basis_search_truncated
+    INVALID_RECEIPT_INPUT_WARNING = :invalid_amount_relation
     BASIS_TIE_BREAK_PRIORITY = {
       "receipt_input_preserved" => 0,
       "external_tax_from_receipt" => 10,
@@ -45,7 +46,8 @@ module Amounts
 
       selected = mark_competing_exact_basis(selected)
       selected = mark_mixed_basis_ambiguity(selected)
-      mark_mixed_basis_search_truncated(selected)
+      selected = mark_mixed_basis_search_truncated(selected)
+      mark_invalid_receipt_input(selected)
     end
 
     def no_safe_candidate?
@@ -105,6 +107,16 @@ module Amounts
       return selected unless candidates.any? { |candidate| candidate.warnings.include?(MIXED_BASIS_SEARCH_TRUNCATED_WARNING) }
 
       selected.with_warnings([ MIXED_BASIS_SEARCH_TRUNCATED_WARNING ])
+    end
+
+    def mark_invalid_receipt_input(selected)
+      return selected unless selected
+      return selected unless candidates.any? do |candidate|
+        candidate.basis.to_s == "receipt_input_preserved" &&
+          candidate.hard_reject_reasons.include?(INVALID_RECEIPT_INPUT_WARNING)
+      end
+
+      selected.with_warnings([ INVALID_RECEIPT_INPUT_WARNING ])
     end
 
     def mark_mixed_basis_ambiguity(selected)

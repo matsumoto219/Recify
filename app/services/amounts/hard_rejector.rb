@@ -31,10 +31,19 @@ module Amounts
     attr_reader :receipt, :items, :tax_details, :payments, :detected_tax_details
 
     def valid_amount_relation?(candidate)
-      return true if candidate.basis == "receipt_input_preserved"
+      return true unless receipt_input_amount_relation_required?(candidate)
       return true if gross_tax_detail_amount_basis?(candidate)
 
       candidate.subtotal.to_i + candidate.tax.to_i == candidate.purchase_total.to_i
+    end
+
+    def receipt_input_amount_relation_required?(candidate)
+      Amounts::ReceiptInputContract.amount_relation_required?(
+        candidate: candidate,
+        receipt: receipt,
+        items: items,
+        tax_details: tax_details
+      )
     end
 
     def tax_details_double_counted?(candidate)

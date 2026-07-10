@@ -114,8 +114,16 @@ module Amounts
 
       def fallback_subtotal(total, tax)
         return total - tax if total && tax
+        return total if total && item_data_present? && positive_item_tax_rates.empty?
 
         0
+      end
+
+      def positive_item_tax_rates
+        items.filter_map do |item|
+          rate = normalize_rate(indifferent_hash(item)[:tax_rate])
+          rate if rate.positive?
+        end.uniq
       end
 
       def fallback_tax(total, subtotal)
