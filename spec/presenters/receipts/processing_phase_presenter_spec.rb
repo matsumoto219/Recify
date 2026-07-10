@@ -130,4 +130,40 @@ RSpec.describe Receipts::ProcessingPhasePresenter do
       expect(presenter.steps.map(&:state)).to eq(%w[done done active pending])
     end
   end
+
+  describe 'stream ordering metadata' do
+    it 'exposes a monotonic revision and phase order for processing updates' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(
+        :receipt_analysis_run,
+        receipt:,
+        status: 'running',
+        stage: 'ocr',
+        ocr_started_at: Time.current
+      )
+      presenter = described_class.new(receipt:, analysis_run: run)
+
+      aggregate_failures do
+        expect(presenter.phase_order).to be > described_class.new(
+          receipt:,
+          analysis_run: run.dup.tap { |copy| copy.stage = 'queued'; copy.status = 'queued' }
+        ).phase_order
+        expect(presenter.state_revision).to eq((run.updated_at.to_r * 1_000_000).to_i)
+        expect(presenter).not_to be_terminal
+      end
+    end
+
+    it 'marks final receipt states as terminal' do
+      receipt = create(:receipt, :completed)
+      presenter = described_class.new(receipt:)
+
+      aggregate_failures do
+        expect(presenter).to be_terminal
+        expect(presenter.phase_order).to be > described_class.new(
+          receipt: build_stubbed(:receipt, :processing),
+          analysis_run: nil
+        ).phase_order
+      end
+    end
+  end
 end

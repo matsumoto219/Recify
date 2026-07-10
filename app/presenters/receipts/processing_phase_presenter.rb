@@ -19,6 +19,17 @@ module Receipts
       completed: 3,
       failed: 3
     }.freeze
+    PHASE_ORDER = {
+      queued: 0,
+      processing: 0,
+      ocr: 1,
+      organizing: 2,
+      ai: 3,
+      finalize: 4,
+      review_needed: 5,
+      completed: 5,
+      failed: 5
+    }.freeze
 
     attr_reader :receipt, :analysis_run
 
@@ -61,6 +72,20 @@ module Receipts
 
     def step_index
       PHASE_STEPS.fetch(key, 0)
+    end
+
+    def phase_order
+      PHASE_ORDER.fetch(key, 0)
+    end
+
+    def state_revision
+      timestamp = [ receipt.updated_at, analysis_run&.updated_at ].compact.max
+
+      (timestamp.to_r * 1_000_000).to_i
+    end
+
+    def terminal?
+      FINAL_RECEIPT_PHASES.key?(receipt.status.to_s)
     end
 
     def steps

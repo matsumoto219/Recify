@@ -12,6 +12,7 @@ class ReceiptsController < ApplicationController
              if: :rate_limit_signed_in?
 
   MAX_SEARCH_QUERY_LENGTH = 100
+  MAX_PROCESSING_CARD_SYNC_IDS = 100
   SUSPICIOUS_SEARCH_PATTERN = /(--|;|\/\*|\*\/|\b(drop|delete|insert|update|alter|truncate|union|select)\b)/i
 
   def index
@@ -33,6 +34,31 @@ class ReceiptsController < ApplicationController
     preload_receipt_index_associations
     assign_receipts_index_summary(receipts_scope)
     assign_receipt_index_count_summary
+  end
+
+  def processing_cards
+    public_ids = processing_card_public_ids
+    receipts = current_user.receipts.active_for_user.where(public_id: public_ids).to_a
+    receipts_by_public_id = receipts.index_by(&:public_id)
+    active_runs_by_receipt_id = latest_active_runs_by_receipt_id(receipts)
+
+    response.headers["Cache-Control"] = "no-store"
+    render turbo_stream: public_ids.map { |public_id|
+      receipt = receipts_by_public_id[public_id]
+
+      if receipt
+        turbo_stream.replace(
+          receipt.dom_target_id,
+          partial: "shared/receipts/receipt_card",
+          locals: {
+            receipt: receipt,
+            analysis_run: active_runs_by_receipt_id[receipt.id]
+          }
+        )
+      else
+        turbo_stream.remove("receipt_#{public_id}")
+      end
+    }
   end
 
   def show
@@ -384,6 +410,22 @@ class ReceiptsController < ApplicationController
       records: @receipts,
       associations: :receipt_analysis_runs
     ).call
+  end
+
+  def processing_card_public_ids
+    Array(params[:public_ids])
+      .map(&:to_s)
+      .uniq
+      .select { |public_id| Receipt::PUBLIC_ID_FORMAT.match?(public_id) }
+      .first(MAX_PROCESSING_CARD_SYNC_IDS)
+  end
+
+  def latest_active_runs_by_receipt_id(receipts)
+    ReceiptAnalysisRun
+      .active
+      .where(receipt_id: receipts.map(&:id))
+      .order(:created_at)
+      .index_by(&:receipt_id)
   end
 
   def block_processing_receipt

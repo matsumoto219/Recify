@@ -128,6 +128,7 @@ Rails.application.routes.draw do
     collection do
       get :select_input_method
       get :new_upload
+      get :processing_cards, defaults: { format: :turbo_stream }
       post :upload
     end
   end

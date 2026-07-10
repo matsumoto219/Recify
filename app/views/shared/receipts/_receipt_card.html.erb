@@ -32,6 +32,14 @@
     end
   processing_popover_id = "receipt-processing-popover-#{receipt.public_id}" if processing
   processing_popover_title_id = "#{processing_popover_id}-title" if processing
+  card_data = {
+    receipt_card_public_id: receipt.public_id,
+    receipt_card_state_revision: phase_presenter.state_revision,
+    receipt_card_phase: phase_presenter.key,
+    receipt_card_phase_order: phase_presenter.phase_order,
+    receipt_card_terminal: phase_presenter.terminal?
+  }
+  card_data[:receipt_processing_sync_target] = "card" if processing
 
   card_classes = [
     "group",
@@ -50,6 +58,7 @@
 
 <%= render "shared/ui/layout/surface_card",
   id: receipt_dom_id(receipt),
+  data: card_data,
   padding: :card,
   class: card_classes,
   hoverable: !processing do %>

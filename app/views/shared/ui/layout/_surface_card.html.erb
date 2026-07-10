@@ -19,6 +19,7 @@
   - accent_sides: アクセントを表示する辺の配列。:all も指定可能
   - id: section に付与する id
   - title_id: aria-labelledby に指定する id
+  - data: section に付与する data 属性
 %>
 <%
   variant = local_assigns.fetch(:variant, :default).to_sym
@@ -37,6 +38,7 @@
   accent_sides = [:top, :right, :bottom, :left] if accent_sides.include?(:all)
   id = local_assigns[:id]
   title_id = local_assigns[:title_id]
+  data = local_assigns[:data]
   extra_class_tokens = extra_classes.to_s.split
   custom_background = extra_class_tokens.any? { |class_name| class_name.start_with?("bg-", "from-", "to-") }
 
@@ -154,6 +156,7 @@
   surface_attributes[:id] = id if id.present?
   surface_attributes[:style] = surface_style if surface_style.present?
   surface_attributes[:aria] = { labelledby: title_id } if title_id.present?
+  surface_attributes[:data] = data if data.present?
 %>
 
 <section <%= tag.attributes(surface_attributes) %>>

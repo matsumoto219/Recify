@@ -1207,6 +1207,81 @@ RSpec.describe 'Receipts', type: :request do
     end
   end
 
+  describe 'GET /receipts/processing_cards' do
+    let!(:processing_receipt) do
+      create(:receipt, :processing, :with_image, user:, store_name: '処理中レシート')
+    end
+    let!(:processing_run) do
+      create(
+        :receipt_analysis_run,
+        receipt: processing_receipt,
+        status: 'running',
+        stage: 'ocr',
+        ocr_started_at: Time.current
+      )
+    end
+    let!(:terminal_receipt) do
+      create(:receipt, :review_needed, user:, store_name: '確認対象レシート')
+    end
+
+    it '現在ユーザーの複数カードを最新状態のTurbo Streamで返す' do
+      get processing_cards_receipts_path,
+          params: { public_ids: [ processing_receipt.public_id, terminal_receipt.public_id ] },
+          headers: { 'ACCEPT' => Mime[:turbo_stream].to_s }
+
+      document = Nokogiri::HTML.fragment(response.body)
+      processing_stream = document.at_css(%(turbo-stream[action="replace"][target="#{processing_receipt.dom_target_id}"]))
+      terminal_stream = document.at_css(%(turbo-stream[action="replace"][target="#{terminal_receipt.dom_target_id}"]))
+      processing_card = processing_stream.at_css("##{processing_receipt.dom_target_id}")
+      terminal_card = terminal_stream.at_css("##{terminal_receipt.dom_target_id}")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.media_type).to eq(Mime[:turbo_stream].to_s)
+        expect(response.headers['Cache-Control']).to eq('no-store')
+        expect(processing_card['data-receipt-processing-sync-target']).to eq('card')
+        expect(processing_card['data-receipt-card-public-id']).to eq(processing_receipt.public_id)
+        expect(processing_card['data-receipt-card-phase']).to eq('ocr')
+        expect(processing_card['data-receipt-card-state-revision'].to_i).to be_positive
+        expect(processing_card['data-receipt-card-terminal']).to eq('false')
+        expect(terminal_card['data-receipt-card-terminal']).to eq('true')
+        expect(terminal_card['data-receipt-processing-sync-target']).to be_nil
+      end
+    end
+
+    it '他人のreceipt内容を返さず対象DOMのremoveだけを返す' do
+      other_receipt = create(
+        :receipt,
+        :processing,
+        :with_image,
+        user: create(:user),
+        store_name: '他人の非公開店舗名'
+      )
+
+      get processing_cards_receipts_path,
+          params: { public_ids: [ other_receipt.public_id ] },
+          headers: { 'ACCEPT' => Mime[:turbo_stream].to_s }
+
+      document = Nokogiri::HTML.fragment(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css(%(turbo-stream[action="remove"][target="#{other_receipt.dom_target_id}"]))).to be_present
+        expect(response.body).not_to include('他人の非公開店舗名')
+      end
+    end
+
+    it '未ログインでは利用できない' do
+      sign_out user
+
+      get processing_cards_receipts_path,
+          params: { public_ids: [ processing_receipt.public_id ] },
+          headers: { 'ACCEPT' => Mime[:turbo_stream].to_s }
+
+      expect(response).to redirect_to(new_user_session_path)
+    end
+  end
+
   describe 'GET /receipts/new' do
     it '新規作成画面を取得できる' do
       get new_receipt_path
