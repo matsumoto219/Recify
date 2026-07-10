@@ -70,6 +70,22 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
   end
 
   describe 'GET /admin/receipt_analysis_cleanup' do
+
+    it '文字が混在するlimitを別の件数へ変換せず入力値付きで再表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_receipt_analysis_cleanup_path, params: { stale_limit: '12abc' }
+
+      document = Nokogiri::HTML(response.body)
+      input = document.at_css('input[name="stale_limit"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(input['value']).to eq('12abc')
+        expect(response.body).to include(I18n.t('admin.receipt_analysis_cleanup.messages.invalid_limit'))
+      end
+    end
     it '非ログインユーザーには既存404と同じbody/headerを返す' do
       get '/__recify_missing_route__'
       expected_body = response.body

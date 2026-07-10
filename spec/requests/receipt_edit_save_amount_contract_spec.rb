@@ -794,6 +794,65 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
   end
 
   describe 'strict numeric input' do
+
+    it 'quantityの混在文字列を別の数量へ変換せず拒否する' do
+      receipt = create_completed_receipt
+      item = create_item(receipt)
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, quantity: 'abc12')
+        }
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(item.reload.quantity).to eq(BigDecimal('1'))
+        expect(receipt.reload.total_amount).to eq(100)
+      end
+    end
+
+    it 'adjustment amountの混在文字列を別の金額へ変換せず拒否する' do
+      receipt = create_completed_receipt(total_amount: 110, subtotal_amount: 110, tax_amount: 0)
+      create_item(receipt, tax_rate: nil)
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'delivery_fee', label: '送料', amount: 10, sign: 'surcharge', source: 'manual', needs_review: false
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_adjustments_attributes: {
+          '0' => adjustment_attributes(adjustment, amount: '12abc')
+        }
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(adjustment.reload.amount).to eq(10)
+        expect(receipt.reload.total_amount).to eq(110)
+      end
+    end
+
+    it 'payment amountの科学表記を別の金額へ変換せず拒否する' do
+      receipt = create_completed_receipt
+      create_item(receipt)
+      payment = receipt.receipt_payments.create!(method: '現金', amount: 100)
+
+      patch_receipt(
+        receipt,
+        receipt_payments_attributes: {
+          '0' => payment_attributes(payment, amount: '1e2')
+        }
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(payment.reload.amount).to eq(100)
+        expect(receipt.reload.total_amount).to eq(100)
+      end
+    end
+
     it 'scientific notationのpriceを別の整数へ変換せず拒否する' do
       receipt = create_completed_receipt
       item = create_item(receipt)

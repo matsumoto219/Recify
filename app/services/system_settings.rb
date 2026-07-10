@@ -397,21 +397,21 @@ module SystemSettings
     end
 
     def cast_integer(definition, value)
-      integer = Integer(value)
+      integer = UserNumericInput.integer(value)
       raise ValidationError, "below_min" if definition.min && integer < definition.min
       raise ValidationError, "above_max" if definition.max && integer > definition.max
 
       integer
-    rescue ArgumentError, TypeError
+    rescue UserNumericInput::InvalidValue
       raise ValidationError, "invalid_integer"
     end
 
     def cast_decimal(definition, value)
-      decimal = BigDecimal(value.to_s)
+      decimal = UserNumericInput.decimal(value)
       validate_numeric_range!(definition, decimal)
 
       decimal
-    rescue ArgumentError, TypeError
+    rescue UserNumericInput::InvalidValue
       raise ValidationError, "invalid_decimal"
     end
 
@@ -431,14 +431,14 @@ module SystemSettings
     end
 
     def cast_percentage(definition, value)
-      percentage = BigDecimal(value.to_s)
+      percentage = UserNumericInput.decimal(value)
       min = definition.min || 0
       max = definition.max || 100
       raise ValidationError, "below_min" if percentage < BigDecimal(min.to_s)
       raise ValidationError, "above_max" if percentage > BigDecimal(max.to_s)
 
       percentage
-    rescue ArgumentError, TypeError
+    rescue UserNumericInput::InvalidValue
       raise ValidationError, "invalid_percentage"
     end
 
@@ -460,15 +460,15 @@ module SystemSettings
           duration_value = value["value"] || value[:value]
           unit = (value["unit"] || value[:unit] || "seconds").to_s
 
-          Integer(duration_value) * duration_unit_multiplier(unit)
+          UserNumericInput.integer(duration_value) * duration_unit_multiplier(unit)
         else
-          Integer(value)
+          UserNumericInput.integer(value)
         end
       raise ValidationError, "below_min" if definition.min && seconds < definition.min
       raise ValidationError, "above_max" if definition.max && seconds > definition.max
 
       seconds
-    rescue ArgumentError, TypeError
+    rescue UserNumericInput::InvalidValue
       raise ValidationError, "invalid_duration"
     end
 

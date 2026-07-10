@@ -104,5 +104,11 @@ RSpec.describe Admin::ReceiptAnalysisCleanupPreview do
         )
       end
     end
+
+    it '文字が混在するlimitを別の件数として扱わない' do
+      expect {
+        described_class.call(stale_limit: '12abc')
+      }.to raise_error(Admin::ReceiptAnalysisCleanupPreview::InvalidParameter, 'stale_limit_invalid')
+    end
   end
 end

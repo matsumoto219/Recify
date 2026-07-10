@@ -10,46 +10,26 @@ class ReceiptUserNumericInput
     end
   end
 
-  UNSIGNED_INTEGER_PATTERN = /\A(?:\d+|\d{1,3}(?:,\d{3})+)\z/
-  UNSIGNED_DECIMAL_PATTERN = /\A(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?\z/
-
   class << self
     def integer(value)
-      text = normalize(value)
-      return nil if text.empty?
+      return nil if value.to_s.strip.empty?
 
-      raise InvalidValue, value unless text.match?(UNSIGNED_INTEGER_PATTERN)
-
-      Integer(text.delete(","), 10)
-    rescue ArgumentError
+      UserNumericInput.integer(value, signed: false)
+    rescue UserNumericInput::InvalidValue
       raise InvalidValue, value
     end
 
     def decimal(value)
-      text = normalize(value)
-      return nil if text.empty?
+      return nil if value.to_s.strip.empty?
 
-      text = text.sub(",", ".") if !text.include?(".") && text.count(",") == 1
-
-      raise InvalidValue, value unless text.match?(UNSIGNED_DECIMAL_PATTERN)
-
-      BigDecimal(text.delete(","))
-    rescue ArgumentError
+      UserNumericInput.decimal(value, signed: false, decimal_comma: true)
+    rescue UserNumericInput::InvalidValue
       raise InvalidValue, value
     end
 
     def percentage(value)
       parsed = decimal(value)
       parsed && parsed / 100
-    end
-
-    private
-
-    def normalize(value)
-      value.to_s
-        .strip
-        .tr("０-９", "0-9")
-        .tr("．，", ".,")
     end
   end
 end

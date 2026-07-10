@@ -204,6 +204,20 @@ RSpec.describe 'Admin announcements', type: :request do
   end
 
   describe 'POST /admin/announcements' do
+
+    it 'priorityの混在文字列を別の整数として保存しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      expect {
+        post admin_announcements_path, params: { announcement: announcement_params(priority: '12abc') }
+      }.not_to change(Announcement, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('12abc')
+      end
+    end
     it '下書きとして作成し、最大3件のリンクと作成者を保存する' do
       admin = create(:user, :admin)
       sign_in admin

@@ -21,6 +21,27 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
   end
 
   describe '.call' do
+    it '文字が混在するlimitでcleanupを実行しない' do
+      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale)
+
+      result = described_class.call(
+        operation: 'stale_cleanup',
+        actor: actor,
+        reason: 'invalid limit check',
+        cutoff: 1.day.ago,
+        limit: '12abc',
+        request: request,
+        reauthentication: reauthentication
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('invalid_limit')
+        expect(ReceiptAnalysisRuns).not_to have_received(:cleanup_stale)
+        expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'invalid_limit')
+      end
+    end
+
     it 'stale_cleanupでcleanup_stale dry_run:falseを実行し、success auditを残す' do
       result_payload = stale_result(records: 25.times.map { |i| { run_key: "run-#{i}" } })
       allow(ReceiptAnalysisRuns).to receive(:cleanup_stale).and_return(result_payload)

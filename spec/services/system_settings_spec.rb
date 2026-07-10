@@ -581,6 +581,22 @@ RSpec.describe SystemSettings do
       expect(described_class.stored_value_for_update('operations.ai_enabled', '0')).to eq('value' => false)
     end
 
+    it '管理画面由来の数値を別の有効値へ変換しない' do
+      aggregate_failures do
+        %w[1e2 12abc abc12 1.5].each do |value|
+          expect {
+            described_class.cast_update_value('limits.receipt_upload_soft_limit', value)
+          }.to raise_error(SystemSettings::ValidationError, 'invalid_integer')
+        end
+
+        %w[1e2 12abc abc12].each do |value|
+          expect {
+            described_class.cast_update_value('external_services.ai.max_retry_delay_seconds', value)
+          }.to raise_error(SystemSettings::ValidationError, 'invalid_decimal')
+        end
+      end
+    end
+
     it 'integerのmin/maxを検証する' do
       aggregate_failures do
         expect(described_class.cast_update_value('limits.receipt_upload_soft_limit', '250')).to eq(250)

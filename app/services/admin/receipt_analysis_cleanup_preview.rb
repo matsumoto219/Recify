@@ -1,5 +1,7 @@
 module Admin
   class ReceiptAnalysisCleanupPreview
+    class InvalidParameter < StandardError; end
+
     DEFAULT_STALE_LIMIT = 100
     MAX_STALE_LIMIT = 100
     DEFAULT_RETENTION_LIMIT = 1000
@@ -21,9 +23,19 @@ module Admin
       **_ignored
     )
       @stale_cutoff = normalize_time(stale_cutoff, 6.hours.ago)
-      @stale_limit = normalize_limit(stale_limit, default: DEFAULT_STALE_LIMIT, max: MAX_STALE_LIMIT)
+      @stale_limit = normalize_limit(
+        stale_limit,
+        default: DEFAULT_STALE_LIMIT,
+        max: MAX_STALE_LIMIT,
+        field: :stale_limit
+      )
       @retention_cutoff = normalize_time(retention_cutoff, Time.current)
-      @retention_limit = normalize_limit(retention_limit, default: DEFAULT_RETENTION_LIMIT, max: MAX_RETENTION_LIMIT)
+      @retention_limit = normalize_limit(
+        retention_limit,
+        default: DEFAULT_RETENTION_LIMIT,
+        max: MAX_RETENTION_LIMIT,
+        field: :retention_limit
+      )
     end
 
     def call
@@ -59,11 +71,13 @@ module Admin
       )
     end
 
-    def normalize_limit(value, default:, max:)
-      normalized = value.to_i
+    def normalize_limit(value, default:, max:, field:)
+      normalized = UserNumericInput.integer(value)
       normalized = default if normalized <= 0
 
       [ normalized, max ].min
+    rescue UserNumericInput::InvalidValue
+      raise InvalidParameter, "#{field}_invalid"
     end
 
     def normalize_time(value, fallback)

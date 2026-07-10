@@ -7,6 +7,8 @@
 
   stale_cutoff_value = preview_params[:stale_cutoff]&.strftime("%Y-%m-%dT%H:%M")
   retention_cutoff_value = preview_params[:retention_cutoff]&.strftime("%Y-%m-%dT%H:%M")
+  stale_limit_value = @preview_input_values&.fetch(:stale_limit, nil) || preview_params[:stale_limit]
+  retention_limit_value = @preview_input_values&.fetch(:retention_limit, nil) || preview_params[:retention_limit]
 
   stale_records = Array(stale[:records])
   retention_records = Array(retention[:records])
@@ -61,7 +63,7 @@
             f: form,
             attribute: :stale_limit,
             label: t("admin.receipt_analysis_cleanup.filters.labels.stale_limit"),
-            value: preview_params[:stale_limit],
+            value: stale_limit_value,
             min: 1,
             max: 100,
             size: :dense,
@@ -82,7 +84,7 @@
             f: form,
             attribute: :retention_limit,
             label: t("admin.receipt_analysis_cleanup.filters.labels.retention_limit"),
-            value: preview_params[:retention_limit],
+            value: retention_limit_value,
             min: 1,
             max: 1000,
             size: :dense,

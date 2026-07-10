@@ -186,13 +186,13 @@ module UserLimits
     def cast_value(key, value, system_limit_cache: nil)
       definition = definition_for(key)
       raw_value = raw_value_from(value)
-      integer = Integer(raw_value)
+      integer = UserNumericInput.integer(raw_value)
       raise ValidationError, "below_min" if definition.min && integer < definition.min
       validate_maximum!(definition, integer, system_limit_cache: system_limit_cache)
       validate_definition_dependencies!(definition, integer)
 
       integer
-    rescue ArgumentError, TypeError
+    rescue UserNumericInput::InvalidValue
       raise ValidationError, "invalid_integer"
     end
 
@@ -214,8 +214,8 @@ module UserLimits
     end
 
     def cast_value_for_storage(value)
-      Integer(raw_value_from(value))
-    rescue ArgumentError, TypeError
+      UserNumericInput.integer(raw_value_from(value))
+    rescue UserNumericInput::InvalidValue
       value
     end
 

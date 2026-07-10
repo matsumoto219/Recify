@@ -173,17 +173,21 @@ module SystemOperations
 
     def normalized_limit
       @normalized_limit ||= begin
-        value = limit.to_i
-        value = operation_config.fetch(:limit_default) if value <= 0
+        value = limit.blank? ? operation_config.fetch(:limit_default) : UserNumericInput.integer(limit)
+        raise ValidationError, "invalid_limit" if value <= 0
 
         [ value, operation_config.fetch(:limit_max) ].min
       end
+    rescue UserNumericInput::InvalidValue
+      raise ValidationError, "invalid_limit"
     end
 
     def normalized_limit_for_audit
-      return limit.to_i unless operation_config
+      return unless operation_config
 
       normalized_limit
+    rescue ValidationError
+      nil
     end
 
     def normalize_time(value, fallback)

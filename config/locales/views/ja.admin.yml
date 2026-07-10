@@ -1195,6 +1195,7 @@ ja:
         reauthentication_required: Cleanup実行にはパスキーによる再認証が必要です。
         reason_required: 実行理由を入力してください。
         confirmation_required: 実行確認にチェックしてください。
+        invalid_limit: limitは半角または全角の整数で入力してください。
         failed: "Cleanupを実行できませんでした: %{error_code}"
         stale_executed: "Stale cleanupを実行しました: failed=%{failed_count}, canceled=%{canceled_count}, stuck_processing_failed=%{stuck_processing_failed_count}"
         retention_executed: "Retention cleanupを実行しました: deleted=%{deleted_count}"

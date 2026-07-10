@@ -824,6 +824,26 @@ RSpec.describe 'Admin system settings', type: :request do
       end
     end
 
+    it '科学表記の小数設定を別の有効値として保存しない' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      patch admin_system_setting_path('external_services.ai.max_retry_delay_seconds'),
+            params: {
+              value: '1e2',
+              reason: 'invalid numeric input',
+              confirm: '1'
+            }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('external_services.ai.max_retry_delay_seconds'))
+        expect(flash[:alert]).to be_present
+        expect(SystemSetting.find_by(key: 'external_services.ai.max_retry_delay_seconds')).to be_nil
+        expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'invalid_decimal')
+      end
+    end
+
     it '設定された再認証期間を過ぎると高リスク設定更新を拒否する' do
       create(:system_setting, key: 'security.admin_passkey_reauth_window_minutes', value: SystemSettings.stored_value(1))
       admin = create(:user, :admin)

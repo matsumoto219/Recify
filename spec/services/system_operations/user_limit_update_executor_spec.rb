@@ -22,6 +22,29 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
   end
 
   describe '.call' do
+
+    it '不正な整数表現を別の上限値として保存しない' do
+      %w[1e2 12abc abc12 1.5].each do |value|
+        result = described_class.call(
+          user: target_user,
+          key: 'receipt_uploads_per_day',
+          value: value,
+          enabled: '1',
+          expires_at: nil,
+          actor: actor,
+          reason: 'invalid limit input',
+          request: request,
+          reauthentication: reauthentication,
+          confirmation: 'UPDATE USER LIMIT'
+        )
+
+        aggregate_failures value do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('invalid_integer')
+          expect(UserLimitOverride.where(user: target_user)).to be_empty
+        end
+      end
+    end
     it 'ユーザー別上限overrideを作成し、success auditを保存する' do
       result = described_class.call(
         user: target_user,
