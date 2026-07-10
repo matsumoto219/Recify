@@ -1,7 +1,22 @@
 # frozen_string_literal: true
 
 class ReceiptEditSaveInputBuilder
+  class ConflictError < StandardError
+    attr_reader :attributes_key, :duplicate_ids
+
+    def initialize(attributes_key:, duplicate_ids:)
+      @attributes_key = attributes_key
+      @duplicate_ids = duplicate_ids
+      super("Duplicate nested child ids for #{attributes_key}")
+    end
+  end
+
   Result = Data.define(:receipt_items, :receipt_adjustments, :receipt_payments)
+  NESTED_ATTRIBUTE_KEYS = %w[
+    receipt_items_attributes
+    receipt_adjustments_attributes
+    receipt_payments_attributes
+  ].freeze
 
   ITEM_FIELDS = %i[
     id
@@ -59,6 +74,8 @@ class ReceiptEditSaveInputBuilder
   end
 
   def call
+    validate_unique_child_ids!
+
     Result.new(
       receipt_items: merged_collection(:receipt_items, "receipt_items_attributes", ITEM_FIELDS),
       receipt_adjustments: merged_collection(:receipt_adjustments, "receipt_adjustments_attributes", ADJUSTMENT_FIELDS),
@@ -67,6 +84,16 @@ class ReceiptEditSaveInputBuilder
   end
 
   private
+
+  def validate_unique_child_ids!
+    NESTED_ATTRIBUTE_KEYS.each do |attributes_key|
+      ids = submitted_attributes(attributes_key).filter_map { |attributes| attributes["id"].to_s.presence }
+      duplicate_ids = ids.tally.select { |_id, count| count > 1 }.keys
+      next if duplicate_ids.empty?
+
+      raise ConflictError.new(attributes_key: attributes_key, duplicate_ids: duplicate_ids)
+    end
+  end
 
   def merged_collection(association_name, attributes_key, fields)
     existing_records = @receipt.public_send(association_name).to_a

@@ -65,4 +65,44 @@ RSpec.describe ReceiptEditSaveInputBuilder do
       )
     end
   end
+
+  it '同一の既存IDが複数送信された場合は保存後集合を構築しない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '商品', price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100
+    )
+
+    expect do
+      described_class.call(
+        receipt: receipt,
+        permitted: {
+          'receipt_items_attributes' => {
+            '0' => { 'id' => item.id.to_s, 'price' => '100' },
+            '1' => { 'id' => item.id.to_s, '_destroy' => '1' }
+          }
+        }
+      )
+    end.to raise_error(described_class::ConflictError) do |error|
+      aggregate_failures do
+        expect(error.attributes_key).to eq('receipt_items_attributes')
+        expect(error.duplicate_ids).to eq([ item.id.to_s ])
+      end
+    end
+  end
+
+  it 'IDのない同内容の新規行は別々の入力として保持する' do
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_adjustments_attributes' => {
+          '0' => { 'kind' => 'bag_fee', 'amount' => '3' },
+          '1' => { 'kind' => 'bag_fee', 'amount' => '3' }
+        }
+      }
+    )
+
+    expect(result.receipt_adjustments).to eq([
+      { 'kind' => 'bag_fee', 'amount' => '3' },
+      { 'kind' => 'bag_fee', 'amount' => '3' }
+    ])
+  end
 end

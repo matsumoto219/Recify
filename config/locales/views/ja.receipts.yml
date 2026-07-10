@@ -132,6 +132,7 @@ ja:
       errors:
         items_required: 明細を1件以上入力してください。
         item_amount_required: 明細の金額を入力してください。
+        nested_child_conflict: 同じ明細・調整・支払いを重複して更新できません。画面を再読み込みして、もう一度お試しください。
         amount_limit_exceeded: "%{resource}.%{field} は%{limit}以下で入力してください（入力値: %{actual_value}）"
     item_fields:
       name: 品名

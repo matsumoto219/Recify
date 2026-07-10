@@ -217,6 +217,15 @@ class ReceiptsController < ApplicationController
     end
 
     update_params = normalized_receipt_params.to_h
+    begin
+      receipt_edit_save_input(update_params)
+    rescue ReceiptEditSaveInputBuilder::ConflictError
+      render_nested_child_conflict(
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+
     if manual_child_count_limit_exceeded?(update_params)
       render_manual_child_count_limit_exceeded(
         update_params,
@@ -557,6 +566,14 @@ class ReceiptsController < ApplicationController
     prepare_receipt_form_presenter
     flash.now[:alert] = @receipt.errors.full_messages
     render template, status: :unprocessable_content, formats: :html
+  end
+
+  def render_nested_child_conflict(rebuild_blank_adjustment_row_after_failure: false)
+    @receipt.errors.add(:base, t("receipts.form.errors.nested_child_conflict"))
+    build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+    prepare_receipt_form_presenter
+    flash.now[:alert] = @receipt.errors.full_messages
+    render :edit, status: :unprocessable_content, formats: :html
   end
 
   def receipt_params
