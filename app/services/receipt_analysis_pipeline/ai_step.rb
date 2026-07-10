@@ -17,8 +17,6 @@ class ReceiptAnalysisPipeline
     end
 
     def call
-      ReceiptAnalysisRuns.start_stage(run, "ai")
-
       ai_result =
         if ai_unavailable?
           ReceiptAiEnrichmentService.error_result(

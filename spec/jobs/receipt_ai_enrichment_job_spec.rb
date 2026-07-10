@@ -68,6 +68,46 @@ RSpec.describe ReceiptAiEnrichmentJob, type: :job do
       expect(ReceiptFinalizeJob).not_to have_been_enqueued
     end
 
+    it '同じrunのAI Jobを再実行してもproviderとFinalize enqueueは1回だけにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ReceiptAnalysisRuns.record_ocr_snapshot(
+        run,
+        {
+          success: true,
+          lines: [ 'テストストア', '商品 100', '合計 100' ],
+          candidates: {
+            store_name: 'テストストア',
+            total_amount: 100,
+            country_region: 'JPN',
+            items: [ { raw_text: '商品', line_total: 100 } ],
+            payments: [ { method: 'Cash', amount: 100 } ],
+            tax_details: []
+          },
+          meta: {}
+        }
+      )
+      ai_result = {
+        success: true,
+        needs_review: false,
+        receipt_attributes: { payment_method: 'cash' },
+        receipt_items_attributes: [ { index: 0, category: 'other', needs_review: false } ]
+      }
+      allow(ExternalServices).to receive(:down?).with(:ai).and_return(false)
+      allow(ReceiptAiEnrichmentService).to receive(:call) do |_ocr_result, before_provider_call:, **_kwargs|
+        before_provider_call.call
+        ai_result
+      end
+
+      2.times { described_class.perform_now(run_id: run.id) }
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentService).to have_received(:call).once
+        expect(ReceiptFinalizeJob).to have_been_enqueued.with(run_id: run.id).once
+        expect(UsageCounter.find_by!(user: receipt.user, key: 'ai_jobs_per_day').used_count).to eq(1)
+      end
+    end
+
     it '存在しないrunは安全にdiscardする' do
       allow(ReceiptAnalysisPipeline).to receive(:run_ai)
 

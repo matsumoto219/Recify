@@ -3,6 +3,7 @@ module ReceiptAnalysisRuns
     TERMINAL_STATUSES = %w[succeeded failed skipped superseded canceled].freeze
     STARTABLE_STAGES = %w[ocr ocr_validation ai finalize].freeze
     FINISHABLE_STAGES = %w[ocr ocr_validation ai finalize].freeze
+    STAGE_EXECUTION_CLAIMS_METADATA_KEY = "stage_execution_claims".freeze
     SAFE_RECEIPT_FAILURE_MESSAGE_KEY = "receipts.processing_errors.unexpected_failure".freeze
     NEXT_STAGE = {
       "ocr" => "ocr_validation",
@@ -30,6 +31,32 @@ module ReceiptAnalysisRuns
 
         locked_run.update!(attrs)
         locked_run
+      end
+    end
+
+    def claim_stage(stage, at: Time.current)
+      stage = normalize_stage!(stage, allowed: STARTABLE_STAGES)
+
+      run.with_lock do
+        run.reload
+        return false if TERMINAL_STATUSES.include?(run.status)
+        return false if stage_index(stage) < stage_index(run.stage)
+
+        metadata = run.metadata.to_h.deep_dup
+        claims = metadata[STAGE_EXECUTION_CLAIMS_METADATA_KEY].to_h.deep_dup
+        return false if claims.key?(stage)
+
+        claims[stage] = { "claimed_at" => at.iso8601(6) }
+        metadata[STAGE_EXECUTION_CLAIMS_METADATA_KEY] = claims
+        run.update!(
+          {
+            stage: stage,
+            status: "running",
+            started_at: run.started_at || at,
+            metadata: metadata
+          }.merge(stage_start_attributes(stage, at: at, provider: nil, model: nil))
+        )
+        true
       end
     end
 

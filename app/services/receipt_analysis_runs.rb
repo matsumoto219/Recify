@@ -34,6 +34,10 @@ module ReceiptAnalysisRuns
       Tracker.new(run).start_stage(stage, at: at, provider: provider, model: model)
     end
 
+    def claim_stage(run, stage, at: Time.current)
+      Tracker.new(run).claim_stage(stage, at: at)
+    end
+
     def external_service_runtime_config(run)
       RuntimeConfigSnapshot.fetch_or_record(run)
     end

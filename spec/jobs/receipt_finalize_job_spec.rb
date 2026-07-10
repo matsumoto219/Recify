@@ -44,6 +44,26 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
       expect(run.reload.status).to eq('succeeded')
     end
 
+    it '同じrunのFinalize Jobを再実行しても保存処理は1回だけにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = ReceiptAnalysisPipeline::FinalizeDecision.new(
+        finalize_strategy: 'fail_receipt',
+        error_code: 'ocr_api_error',
+        receipt_attributes: {}
+      )
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      allow(ReceiptAnalysisPipeline).to receive(:finalize).and_call_original
+
+      2.times { described_class.perform_now(run_id: run.id) }
+
+      aggregate_failures do
+        expect(ReceiptAnalysisPipeline).to have_received(:finalize).once
+        expect(receipt.reload.status).to eq('failed')
+        expect(run.reload.status).to eq('succeeded')
+      end
+    end
+
     it 'finalize中に負値itemが混じっても通常明細として保存せず失敗にしない' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)

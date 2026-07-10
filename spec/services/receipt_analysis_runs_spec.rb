@@ -104,6 +104,28 @@ RSpec.describe ReceiptAnalysisRuns do
   end
 
   describe 'stage tracking' do
+    it '同じstageの実行claimは最初の1回だけ成功する' do
+      run = described_class.start(receipt:, source: 'upload').run
+
+      first_claim = described_class.claim_stage(run, 'ocr')
+      second_claim = described_class.claim_stage(run, 'ocr')
+
+      aggregate_failures do
+        expect(first_claim).to eq(true)
+        expect(second_claim).to eq(false)
+        expect(run.reload.stage).to eq('ocr')
+        expect(run.metadata.dig('stage_execution_claims', 'ocr', 'claimed_at')).to be_present
+      end
+    end
+
+    it '現在より前のstageは実行claimしない' do
+      run = described_class.start(receipt:, source: 'upload').run
+
+      expect(described_class.claim_stage(run, 'ai')).to eq(true)
+      expect(described_class.claim_stage(run, 'ocr')).to eq(false)
+      expect(run.reload.stage).to eq('ai')
+    end
+
     it 'stage開始/終了とlatencyを記録する' do
       run = described_class.start(receipt:, source: 'upload').run
       started_at = Time.zone.parse('2026-05-23 10:01:00')

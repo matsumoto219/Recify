@@ -54,13 +54,15 @@ class ReceiptAnalysisPipeline
   def run_ocr
     return skipped_result(:terminal_run) if terminal_run?
     return cancel_and_skip(:not_processing) unless receipt.processing?
-    if (disabled_snapshot = ocr_unavailable_snapshot)
-      return ocr_service_disabled_result(disabled_snapshot)
-    end
 
     with_run_failure do
+      return skipped_result(:stage_already_claimed) unless ReceiptAnalysisRuns.claim_stage(run, "ocr")
+
       mark_processing!
-      ReceiptAnalysisRuns.start_stage(run, "ocr")
+      if (disabled_snapshot = ocr_unavailable_snapshot)
+        return ocr_service_disabled_result(disabled_snapshot)
+      end
+
       ocr_step_result = run_ocr_step
       return usage_limit_blocked_result("ocr") if ocr_step_result == :usage_limit_blocked
 
@@ -92,6 +94,8 @@ class ReceiptAnalysisPipeline
     return cancel_and_skip(:not_processing) unless receipt.processing?
 
     with_run_failure do
+      return skipped_result(:stage_already_claimed) unless ReceiptAnalysisRuns.claim_stage(run, "ai")
+
       ocr_result ||= ocr_result_from_snapshot
       return fail_missing_snapshot!("ocr_result_snapshot_missing", error_stage: "ai") if ocr_result.blank?
 
@@ -134,6 +138,8 @@ class ReceiptAnalysisPipeline
     return cancel_and_skip(:not_processing) unless receipt.processing?
 
     with_run_failure do
+      return skipped_result(:stage_already_claimed) unless ReceiptAnalysisRuns.claim_stage(run, "finalize")
+
       decision = finalize_decision_from_run
       return fail_missing_snapshot!("finalize_decision_missing", error_stage: "finalize") unless decision
 
@@ -370,28 +376,23 @@ class ReceiptAnalysisPipeline
   end
 
   def ocr_service_disabled_result(disabled_snapshot = ExternalServices.snapshot(:ocr))
-    with_run_failure do
-      mark_processing!
-      ReceiptAnalysisRuns.start_stage(run, "ocr")
+    ocr_result = ReceiptOcrService.error_result(
+      error_code: "ocr_disabled",
+      provider: "azure_document_intelligence",
+      provider_error_detail: ocr_unavailable_detail(disabled_snapshot)
+    )
+    log_ocr_result(ocr_result)
+    ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
+    ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
 
-      ocr_result = ReceiptOcrService.error_result(
-        error_code: "ocr_disabled",
-        provider: "azure_document_intelligence",
-        provider_error_detail: ocr_unavailable_detail(disabled_snapshot)
-      )
-      log_ocr_result(ocr_result)
-      ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+    decision = finalize_decision(:fail_receipt, ocr_result: ocr_result, error_code: "ocr_disabled")
+    record_finalize_decision(decision)
 
-      decision = finalize_decision(:fail_receipt, ocr_result: ocr_result, error_code: "ocr_disabled")
-      record_finalize_decision(decision)
-
-      Result.new(
-        ocr_result: ocr_result,
-        finalize_decision: decision,
-        next_step: :finalize
-      )
-    end
+    Result.new(
+      ocr_result: ocr_result,
+      finalize_decision: decision,
+      next_step: :finalize
+    )
   end
 
   def run_ocr_step

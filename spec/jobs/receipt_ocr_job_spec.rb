@@ -88,6 +88,31 @@ RSpec.describe ReceiptOcrJob, type: :job do
       end
     end
 
+    it '同じrunのOCR Jobを再実行してもproviderと後続enqueueは1回だけにする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ocr_result = {
+        success: false,
+        error_code: 'ocr_timeout',
+        lines: [],
+        candidates: {},
+        meta: {}
+      }
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call:, **_kwargs|
+        before_provider_call.call
+        ocr_result
+      end
+
+      2.times { described_class.perform_now(run_id: run.id) }
+
+      aggregate_failures do
+        expect(ReceiptOcrService).to have_received(:call).once
+        expect(ReceiptFinalizeJob).to have_been_enqueued.with(run_id: run.id).once
+        expect(UsageCounter.find_by!(user: receipt.user, key: 'ocr_jobs_per_day').used_count).to eq(1)
+      end
+    end
+
     it '存在しないrunは安全にdiscardする' do
       allow(ReceiptAnalysisPipeline).to receive(:run_ocr)
 

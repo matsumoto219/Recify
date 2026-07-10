@@ -369,6 +369,25 @@ RSpec.describe ReceiptAnalysisPipeline do
   end
 
   describe '.run_ocr' do
+    it 'OCR stageが既にclaim済みならproviderとusageへ再到達しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ReceiptAnalysisRuns.claim_stage(run, 'ocr')
+      allow(ReceiptOcrService).to receive(:call)
+      allow(Usage).to receive(:ensure_ocr_job_within_limit!)
+      allow(Usage).to receive(:consume_ocr_job!)
+
+      result = described_class.run_ocr(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:skipped)
+        expect(result.skip_reason).to eq(:stage_already_claimed)
+        expect(ReceiptOcrService).not_to have_received(:call)
+        expect(Usage).not_to have_received(:ensure_ocr_job_within_limit!)
+        expect(Usage).not_to have_received(:consume_ocr_job!)
+      end
+    end
+
     it 'OCR成功かつAI有効ならAI stepへ進める' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
@@ -789,6 +808,26 @@ RSpec.describe ReceiptAnalysisPipeline do
   end
 
   describe '.run_ai' do
+    it 'AI stageが既にclaim済みならproviderとusageへ再到達しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      ReceiptAnalysisRuns.claim_stage(run, 'ai')
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+      allow(Usage).to receive(:ensure_ai_job_within_limit!)
+      allow(Usage).to receive(:consume_ai_job!)
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:skipped)
+        expect(result.skip_reason).to eq(:stage_already_claimed)
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+        expect(Usage).not_to have_received(:ensure_ai_job_within_limit!)
+        expect(Usage).not_to have_received(:consume_ai_job!)
+      end
+    end
+
     it 'AI実行結果とAI input/result/normalized snapshotを保存する' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
@@ -1245,6 +1284,26 @@ RSpec.describe ReceiptAnalysisPipeline do
   end
 
   describe '.run_finalize' do
+    it 'finalize stageが既にclaim済みなら保存とbookkeepingへ再到達しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ReceiptAnalysisRuns.record_finalize_decision(run, finalize_decision(:fail_receipt))
+      ReceiptAnalysisRuns.claim_stage(run, 'finalize')
+      allow(described_class).to receive(:finalize)
+      allow(ReceiptAnalysisRuns).to receive(:record_final_result)
+      allow(ReceiptAnalysisRuns).to receive(:succeed)
+
+      result = described_class.run_finalize(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:skipped)
+        expect(result.skip_reason).to eq(:stage_already_claimed)
+        expect(described_class).not_to have_received(:finalize)
+        expect(ReceiptAnalysisRuns).not_to have_received(:record_final_result)
+        expect(ReceiptAnalysisRuns).not_to have_received(:succeed)
+      end
+    end
+
     it 'metadata decisionとsnapshotだけで保存しrunをsucceededにする' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
