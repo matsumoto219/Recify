@@ -2,15 +2,18 @@ module Ai
   class Client
     def initialize(
       primary_provider: ProviderSelector.primary,
-      fallback_provider: ProviderSelector.fallback
+      fallback_provider: ProviderSelector.fallback,
+      runtime_config: nil
     )
       @primary_provider = primary_provider
       @fallback_provider = fallback_provider
+      @runtime_config = runtime_config || ExternalServices.runtime_config_snapshot.ai
     end
 
     def call(input, before_provider_call: nil)
+      deadline = monotonic_now + runtime_config.max_elapsed_seconds
       decorate_success_result(
-        run_primary(input, before_provider_call: before_provider_call),
+        run_primary(input, before_provider_call: before_provider_call, deadline: deadline),
         fallback_used: false,
         fallback_provider: fallback_provider,
         fallback_reason: nil,
@@ -22,15 +25,15 @@ module Ai
 
       raise primary_error unless fallback_decision.fallback?
 
-      run_fallback(input, primary_error, fallback_decision, before_provider_call: before_provider_call)
+      run_fallback(input, primary_error, fallback_decision, before_provider_call: before_provider_call, deadline: deadline)
     end
 
     private
 
-    attr_reader :primary_provider, :fallback_provider
+    attr_reader :primary_provider, :fallback_provider, :runtime_config
 
-    def run_primary(input, before_provider_call:)
-      provider_executor(primary_provider, before_provider_call: before_provider_call).call(input)
+    def run_primary(input, before_provider_call:, deadline:)
+      provider_executor(primary_provider, before_provider_call: before_provider_call, deadline: deadline).call(input)
     rescue Ai::Errors::TimeoutError => error
       Rails.logger.error("[AI] primary timeout: #{error.message}")
       raise Ai::Errors::ProviderError.new(
@@ -53,10 +56,10 @@ module Ai
       )
     end
 
-    def run_fallback(input, primary_error, fallback_decision, before_provider_call:)
+    def run_fallback(input, primary_error, fallback_decision, before_provider_call:, deadline:)
       Rails.logger.warn("[AI] fallback triggered: primary=#{primary_provider}")
 
-      result = provider_executor(fallback_provider, before_provider_call: before_provider_call).call(input)
+      result = provider_executor(fallback_provider, before_provider_call: before_provider_call, deadline: deadline).call(input)
 
       decorate_success_result(
         result,
@@ -77,15 +80,20 @@ module Ai
     end
 
     def provider_client(provider_name)
-      ProviderRegistry.fetch(provider_name)
+      ProviderRegistry.fetch(provider_name, runtime_config: runtime_config)
     end
 
-    def provider_executor(provider_name, before_provider_call:)
+    def provider_executor(provider_name, before_provider_call:, deadline:)
       Ai::ProviderExecutor.new(
         provider_client: provider_client(provider_name),
         provider_name: provider_name,
-        before_provider_call: before_provider_call
+        before_provider_call: before_provider_call,
+        deadline: deadline
       )
+    end
+
+    def monotonic_now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
     def fallback_decision_for(error)

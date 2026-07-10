@@ -197,5 +197,56 @@ RSpec.describe Ai::ProviderExecutor do
         end
       }
     end
+
+    it 'max elapsed到達後は次のprovider callを開始しない' do
+      budget_executor = described_class.new(
+        provider_client: provider_client,
+        provider_name: :openai,
+        retry_policy: retry_policy,
+        deadline: 10.0
+      )
+      allow(budget_executor).to receive(:monotonic_now).and_return(11.0)
+      allow(provider_client).to receive(:call)
+
+      expect do
+        budget_executor.call(input)
+      end.to raise_error(Ai::Errors::TimeoutError) { |error|
+        aggregate_failures do
+          expect(error.error_code).to eq('ai_timeout')
+          expect(error.retryable?).to eq(false)
+          expect(error.fallbackable?).to eq(true)
+          expect(provider_client).not_to have_received(:call)
+        end
+      }
+    end
+
+    it 'retry delayが残り時間以上ならsleepせずtimeoutへ倒す' do
+      budget_executor = described_class.new(
+        provider_client: provider_client,
+        provider_name: :openai,
+        retry_policy: retry_policy,
+        deadline: 10.0
+      )
+      allow(budget_executor).to receive(:remaining_elapsed_seconds).and_return(0.5)
+      allow(budget_executor).to receive(:sleep)
+      allow(provider_client).to receive(:call).with(input).and_raise(
+        Ai::Errors::ProviderError.new(
+          message: 'server error',
+          error_code: 'ai_api_error',
+          provider: 'openai',
+          retryable: true
+        )
+      )
+
+      expect do
+        budget_executor.call(input)
+      end.to raise_error(Ai::Errors::TimeoutError) { |error|
+        aggregate_failures do
+          expect(error.error_code).to eq('ai_timeout')
+          expect(provider_client).to have_received(:call).once
+          expect(budget_executor).not_to have_received(:sleep)
+        end
+      }
+    end
   end
 end

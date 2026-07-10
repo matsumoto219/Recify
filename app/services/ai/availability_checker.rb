@@ -70,10 +70,7 @@ module Ai
     end
 
     def provider_implemented?(provider)
-      Ai::ProviderRegistry.fetch(provider)
-      true
-    rescue ArgumentError, NotImplementedError
-      false
+      Ai::ProviderRegistry.implemented?(provider)
     end
   end
 end

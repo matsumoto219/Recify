@@ -2,7 +2,11 @@ require 'rails_helper'
 
 RSpec.describe Ai::Providers::Openai::Client do
   let(:input) { { filtered_content: 'sample receipt text' } }
-  let(:client) { described_class.new }
+  let(:runtime_config_overrides) { {} }
+  let(:runtime_config) do
+    ExternalServices.runtime_config_snapshot.ai.with(**runtime_config_overrides)
+  end
+  let(:client) { described_class.new(runtime_config: runtime_config) }
   let(:request_body) { { model: 'gpt-test', input: 'payload' } }
   let(:backoff_policy) { Ai::BackoffPolicy.new(base_delay: 1.0, max_delay: 10.0, jitter: -> { 0.0 }) }
   let(:configured_env) do
@@ -10,16 +14,6 @@ RSpec.describe Ai::Providers::Openai::Client do
       'OPENAI_API_KEY' => 'test-openai-key',
       'OPENAI_AI_MODEL' => 'gpt-test'
     }
-  end
-  let(:operational_env_keys) do
-    %w[
-      OPENAI_TIMEOUT
-      OPENAI_OPEN_TIMEOUT
-      OPENAI_READ_TIMEOUT
-      OPENAI_MAX_RETRIES
-      OPENAI_BASE_RETRY_DELAY
-      OPENAI_MAX_RETRY_DELAY
-    ]
   end
   let(:parsed_response) do
     {
@@ -82,7 +76,7 @@ RSpec.describe Ai::Providers::Openai::Client do
   end
 
   around do |example|
-    with_env(configured_env.merge(operational_env_keys.to_h { |key| [ key, nil ] })) do
+    with_env(configured_env) do
       example.run
     end
   end
@@ -175,20 +169,41 @@ RSpec.describe Ai::Providers::Openai::Client do
       }
     end
 
-    it 'ENVでretry上限を上書きできる' do
-      with_env('OPENAI_MAX_RETRIES' => '0') do
-        expect(client.retry_policy.max_retries).to eq(0)
+    it 'runtime configでretry上限を設定する' do
+      configured_client = described_class.new(runtime_config: runtime_config.with(max_retries: 0))
+
+      expect(configured_client.retry_policy.max_retries).to eq(0)
+    end
+
+    it 'runtime configでretry delayを設定する' do
+      configured_client = described_class.new(
+        runtime_config: runtime_config.with(
+          base_retry_delay_seconds: 2.0,
+          max_retry_delay_seconds: 3.0
+        )
+      )
+
+      aggregate_failures do
+        expect(configured_client.send(:base_retry_delay)).to eq(2.0)
+        expect(configured_client.send(:max_retry_delay)).to eq(3.0)
       end
     end
 
-    it 'ENVでretry delay設定を上書きできる' do
+    it '廃止した数値ENVを参照しない' do
       with_env(
-        'OPENAI_BASE_RETRY_DELAY' => '2.0',
-        'OPENAI_MAX_RETRY_DELAY' => '3.0'
+        'OPENAI_TIMEOUT' => '999',
+        'OPENAI_OPEN_TIMEOUT' => '999',
+        'OPENAI_READ_TIMEOUT' => '999',
+        'OPENAI_MAX_RETRIES' => '0',
+        'OPENAI_BASE_RETRY_DELAY' => '99',
+        'OPENAI_MAX_RETRY_DELAY' => '99'
       ) do
         aggregate_failures do
-          expect(client.send(:base_retry_delay)).to eq(2.0)
-          expect(client.send(:max_retry_delay)).to eq(3.0)
+          expect(client.send(:open_timeout)).to eq(10)
+          expect(client.send(:read_timeout)).to eq(120)
+          expect(client.send(:max_retries)).to eq(2)
+          expect(client.send(:base_retry_delay)).to eq(1.0)
+          expect(client.send(:max_retry_delay)).to eq(10.0)
         end
       end
     end
@@ -378,23 +393,20 @@ RSpec.describe Ai::Providers::Openai::Client do
       end
     end
 
-    it 'ENVでopen/read timeoutを上書きできる' do
-      with_env(
-        'OPENAI_API_KEY' => 'test-openai-key',
-        'OPENAI_OPEN_TIMEOUT' => '12',
-        'OPENAI_READ_TIMEOUT' => '90'
-      ) do
-        allow(client).to receive(:parse_response_body)
-          .with(body, provider_status: '200', request_body: request_body)
-          .and_return({ 'id' => 'resp_timeout_env' })
+    it 'runtime configのopen/read timeoutをHTTP clientへ設定する' do
+      configured_client = described_class.new(
+        runtime_config: runtime_config.with(open_timeout_seconds: 12, read_timeout_seconds: 360)
+      )
+      allow(configured_client).to receive(:parse_response_body)
+        .with(body, provider_status: '200', request_body: request_body)
+        .and_return({ 'id' => 'resp_runtime_config' })
 
-        result = client.send(:post_request, request_body)
+      result = configured_client.send(:post_request, request_body)
 
-        aggregate_failures do
-          expect(result).to eq({ 'id' => 'resp_timeout_env' })
-          expect(http).to have_received(:open_timeout=).with(12)
-          expect(http).to have_received(:read_timeout=).with(90)
-        end
+      aggregate_failures do
+        expect(result).to eq({ 'id' => 'resp_runtime_config' })
+        expect(http).to have_received(:open_timeout=).with(12)
+        expect(http).to have_received(:read_timeout=).with(360)
       end
     end
 

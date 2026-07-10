@@ -5,11 +5,12 @@ module Ai
       backoff_policy: Ai::BackoffPolicy.new(base_delay: 0.0, max_delay: 0.0, jitter: -> { 0.0 })
     )
 
-    def initialize(provider_client:, provider_name: nil, retry_policy: nil, before_provider_call: nil)
+    def initialize(provider_client:, provider_name: nil, retry_policy: nil, before_provider_call: nil, deadline: nil)
       @provider_client = provider_client
       @provider_name = provider_name
       @retry_policy = retry_policy
       @before_provider_call = before_provider_call
+      @deadline = deadline
     end
 
     def call(input)
@@ -17,14 +18,17 @@ module Ai
       attempts = 0
 
       begin
+        ensure_elapsed_budget!
         attempts += 1
         result = ensure_provider_result!(call_provider(input))
+        ensure_elapsed_budget!
         build_result(result)
       rescue Ai::Errors::ProviderError => error
         enriched_error = build_error(error)
         raise enriched_error unless retry?(enriched_error, attempts)
 
         delay = current_retry_policy.delay_for(attempt: attempts, error: enriched_error)
+        ensure_retry_delay_within_budget!(delay)
         track_retry!(error: enriched_error, delay: delay)
         sleep(delay)
         retry
@@ -35,7 +39,7 @@ module Ai
 
     private
 
-    attr_reader :provider_client, :provider_name, :retry_policy, :before_provider_call
+    attr_reader :provider_client, :provider_name, :retry_policy, :before_provider_call, :deadline
 
     def call_provider(input)
       return provider_client.call(input, before_provider_call: before_provider_call) if before_provider_call
@@ -117,6 +121,35 @@ module Ai
       attempts <= current_retry_policy.max_retries
     end
 
+    def ensure_elapsed_budget!
+      return unless deadline
+      return if remaining_elapsed_seconds.positive?
+
+      raise_elapsed_timeout!
+    end
+
+    def ensure_retry_delay_within_budget!(delay)
+      return unless deadline
+      return if delay.to_f < remaining_elapsed_seconds
+
+      raise_elapsed_timeout!
+    end
+
+    def remaining_elapsed_seconds
+      deadline.to_f - monotonic_now
+    end
+
+    def raise_elapsed_timeout!
+      raise Ai::Errors::TimeoutError.new(
+        message: "AI maximum elapsed time exceeded",
+        provider: provider_name,
+        retryable: false,
+        fallbackable: true,
+        phase: "ai_request",
+        metrics: Ai::ProviderMetrics.merge(current_metrics, elapsed_ms: elapsed_ms)
+      )
+    end
+
     def track_retry!(error:, delay:)
       retry_after = current_retry_policy.retry_after_for(error)
       @current_metrics = Ai::ProviderMetrics.merge(
@@ -152,7 +185,7 @@ module Ai
     end
 
     def start_metrics!
-      @started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      @started_at = monotonic_now
       @current_metrics = Ai::ProviderMetrics.build(
         provider: provider_name,
         retry_count: 0,
@@ -174,7 +207,11 @@ module Ai
     def elapsed_ms
       return unless @started_at
 
-      ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @started_at) * 1000).round
+      ((monotonic_now - @started_at) * 1000).round
+    end
+
+    def monotonic_now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
   end
 end

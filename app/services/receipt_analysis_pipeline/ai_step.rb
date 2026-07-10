@@ -32,6 +32,7 @@ class ReceiptAnalysisPipeline
           ReceiptAiEnrichmentService.call(
             ocr_result,
             ai_name_completion_enabled: ai_name_completion_enabled,
+            runtime_config: ReceiptAnalysisRuns.external_service_runtime_config(run).ai,
             capture_input: ai_input_capture_callback,
             before_provider_call: before_provider_call
           )

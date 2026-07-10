@@ -9,15 +9,10 @@ module Ai
       class Client < Ai::Providers::Base
         PROVIDER_NAME = "openai".freeze
         ENDPOINT = "https://api.openai.com/v1/responses".freeze
-        DEFAULT_OPEN_TIMEOUT = 10
-        DEFAULT_READ_TIMEOUT = 120
-        DEFAULT_MAX_RETRIES = 2
-        DEFAULT_BASE_RETRY_DELAY = 1.0
-        DEFAULT_MAX_RETRY_DELAY = 10.0
 
-        MAX_RETRIES = DEFAULT_MAX_RETRIES
-        BASE_RETRY_DELAY = DEFAULT_BASE_RETRY_DELAY
-        MAX_RETRY_DELAY = DEFAULT_MAX_RETRY_DELAY
+        def initialize(runtime_config: nil)
+          @runtime_config = runtime_config || ExternalServices.runtime_config_snapshot.ai
+        end
 
         def call(input, before_provider_call: nil)
           body = RequestBuilder.build(input)
@@ -69,6 +64,8 @@ module Ai
         end
 
         private
+
+        attr_reader :runtime_config
 
         def post_request(body, before_provider_call: nil)
           uri = URI.parse(ENDPOINT)
@@ -238,27 +235,23 @@ module Ai
         end
 
         def open_timeout
-          ENV.fetch("OPENAI_OPEN_TIMEOUT") do
-            ENV.fetch("OPENAI_TIMEOUT", DEFAULT_OPEN_TIMEOUT)
-          end.to_i
+          runtime_config.open_timeout_seconds
         end
 
         def read_timeout
-          ENV.fetch("OPENAI_READ_TIMEOUT") do
-            ENV.fetch("OPENAI_TIMEOUT", DEFAULT_READ_TIMEOUT)
-          end.to_i
+          runtime_config.read_timeout_seconds
         end
 
         def max_retries
-          ENV.fetch("OPENAI_MAX_RETRIES", DEFAULT_MAX_RETRIES).to_i
+          runtime_config.max_retries
         end
 
         def base_retry_delay
-          ENV.fetch("OPENAI_BASE_RETRY_DELAY", DEFAULT_BASE_RETRY_DELAY).to_f
+          runtime_config.base_retry_delay_seconds
         end
 
         def max_retry_delay
-          ENV.fetch("OPENAI_MAX_RETRY_DELAY", DEFAULT_MAX_RETRY_DELAY).to_f
+          runtime_config.max_retry_delay_seconds
         end
 
         def backoff_policy

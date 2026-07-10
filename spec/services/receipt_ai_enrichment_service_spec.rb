@@ -49,6 +49,22 @@ RSpec.describe ReceiptAiEnrichmentService do
 
   describe '.call' do
     context '正常系' do
+      it '指定されたruntime configをAI clientへ固定して渡す' do
+        runtime_config = ExternalServices.runtime_config_snapshot.ai
+        allow(Ai::PromptBuilder).to receive(:build)
+          .with(valid_ocr_result, ai_name_completion_enabled: false)
+          .and_return({ filtered_content: 'test' })
+        allow(Ai::Client).to receive(:new).with(runtime_config: runtime_config).and_return(client)
+        allow(client).to receive(:call).with({ filtered_content: 'test' }).and_return(successful_ai_result)
+
+        result = described_class.call(valid_ocr_result, runtime_config: runtime_config)
+
+        aggregate_failures do
+          expect(result).to eq(successful_ai_result)
+          expect(Ai::Client).to have_received(:new).with(runtime_config: runtime_config)
+        end
+      end
+
       it 'AI成功時は結果をそのまま返し success を記録する' do
         allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
         allow(client).to receive(:call).with({ filtered_content: 'test' }).and_return(successful_ai_result)

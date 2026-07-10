@@ -6,11 +6,13 @@ RSpec.describe Ai::Client do
   let(:fallback_provider) { :fallback_ai }
   let(:primary_client) { instance_double('PrimaryProviderClient') }
   let(:fallback_client) { instance_double('FallbackProviderClient') }
+  let(:runtime_config) { ExternalServices.runtime_config_snapshot.ai }
 
   subject(:client) do
     described_class.new(
       primary_provider: primary_provider,
-      fallback_provider: fallback_provider
+      fallback_provider: fallback_provider,
+      runtime_config: runtime_config
     )
   end
 
@@ -25,8 +27,12 @@ RSpec.describe Ai::Client do
   end
 
   before do
-    allow(Ai::ProviderRegistry).to receive(:fetch).with(primary_provider).and_return(primary_client)
-    allow(Ai::ProviderRegistry).to receive(:fetch).with(fallback_provider).and_return(fallback_client)
+    allow(Ai::ProviderRegistry).to receive(:fetch)
+      .with(primary_provider, runtime_config: runtime_config)
+      .and_return(primary_client)
+    allow(Ai::ProviderRegistry).to receive(:fetch)
+      .with(fallback_provider, runtime_config: runtime_config)
+      .and_return(fallback_client)
   end
 
   describe '#call' do
@@ -186,7 +192,7 @@ RSpec.describe Ai::Client do
       let(:fallback_provider) { nil }
 
       before do
-        allow(Ai::ProviderRegistry).to receive(:fetch).with(nil).and_return(nil)
+        allow(Ai::ProviderRegistry).to receive(:fetch).with(nil, runtime_config: runtime_config).and_return(nil)
       end
 
       it 'primary 失敗時に error result を返す' do
@@ -339,7 +345,7 @@ RSpec.describe Ai::Client do
       let(:fallback_provider) { nil }
 
       before do
-        allow(Ai::ProviderRegistry).to receive(:fetch).with(nil).and_return(nil)
+        allow(Ai::ProviderRegistry).to receive(:fetch).with(nil, runtime_config: runtime_config).and_return(nil)
       end
 
       it 'ai_primary_failed を primary_error_code として使う' do
@@ -360,7 +366,7 @@ RSpec.describe Ai::Client do
       let(:fallback_provider) { nil }
 
       before do
-        allow(Ai::ProviderRegistry).to receive(:fetch).with(nil).and_return(nil)
+        allow(Ai::ProviderRegistry).to receive(:fetch).with(nil, runtime_config: runtime_config).and_return(nil)
       end
 
       it 'primary_error_code に ai_primary_failed を入れて error result を返す' do

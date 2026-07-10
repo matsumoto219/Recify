@@ -822,8 +822,9 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       }
 
-      allow(ReceiptAiEnrichmentService).to receive(:call) do |_ocr_result, ai_name_completion_enabled:, capture_input:, before_provider_call:|
+      allow(ReceiptAiEnrichmentService).to receive(:call) do |_ocr_result, ai_name_completion_enabled:, runtime_config:, capture_input:, before_provider_call:|
         expect(ai_name_completion_enabled).to eq(true)
+        expect(runtime_config).to be_a(ExternalServices::RuntimeConfig::AIConfig)
         before_provider_call.call
         capture_input.call(ai_input)
         ai_result
@@ -897,6 +898,30 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(result.next_step).to eq(:finalize)
         expect(result.finalize_decision.finalize_strategy).to eq('ai_success')
         expect(run.reload.metadata.dig('finalize_decision', 'strategy')).to eq('ai_success')
+      end
+    end
+
+    it 'runtime config取得失敗時はAI providerを呼ばずrunを失敗させる' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      allow(SystemSettings).to receive(:values_for).and_call_original
+      allow(SystemSettings).to receive(:values_for)
+        .with(SystemSettings::EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS)
+        .and_raise(ActiveRecord::ConnectionNotEstablished)
+      allow(ReceiptAiEnrichmentService).to receive(:call)
+
+      expect { described_class.run_ai(run) }
+        .to raise_error(ExternalServices::RuntimeConfigUnavailableError)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentService).not_to have_received(:call)
+        expect(run.reload).to have_attributes(
+          status: 'failed',
+          error_stage: 'ai',
+          error_code: 'external_service_runtime_config_unavailable'
+        )
+        expect(UsageCounter.where(user: receipt.user, key: 'ai_jobs_per_day')).to be_empty
       end
     end
 

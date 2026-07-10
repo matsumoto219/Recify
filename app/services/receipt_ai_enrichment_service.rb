@@ -10,10 +10,11 @@ class ReceiptAiEnrichmentService
   end
 
   class << self
-    def call(ocr_result, ai_name_completion_enabled: false, capture_input: nil, before_provider_call: nil)
+    def call(ocr_result, ai_name_completion_enabled: false, runtime_config: nil, capture_input: nil, before_provider_call: nil)
       new(
         ocr_result,
         ai_name_completion_enabled: ai_name_completion_enabled,
+        runtime_config: runtime_config,
         capture_input: capture_input,
         before_provider_call: before_provider_call
       ).call
@@ -42,12 +43,12 @@ class ReceiptAiEnrichmentService
     end
   end
 
-  def initialize(ocr_result, ai_name_completion_enabled: false, capture_input: nil, before_provider_call: nil, client: Ai::Client.new)
+  def initialize(ocr_result, ai_name_completion_enabled: false, runtime_config: nil, capture_input: nil, before_provider_call: nil, client: nil)
     @ocr_result = ocr_result
     @ai_name_completion_enabled = ai_name_completion_enabled == true
     @capture_input = capture_input
     @before_provider_call = before_provider_call
-    @client = client
+    @client = client || Ai::Client.new(runtime_config: runtime_config || ExternalServices.runtime_config_snapshot.ai)
   end
 
   def call

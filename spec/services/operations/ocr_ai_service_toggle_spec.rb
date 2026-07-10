@@ -261,7 +261,9 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     run = create(:receipt_analysis_run, receipt: receipt)
     ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
     provider_client = double('ProviderClient')
-    allow(Ai::ProviderRegistry).to receive(:fetch).with('openai').and_return(provider_client)
+    allow(Ai::ProviderRegistry).to receive(:fetch)
+      .with('openai', runtime_config: an_instance_of(ExternalServices::RuntimeConfig::AIConfig))
+      .and_return(provider_client)
     allow(provider_client).to receive(:call) do |_input, before_provider_call:|
       before_provider_call.call
       raise Ai::Errors::ProviderError.new(

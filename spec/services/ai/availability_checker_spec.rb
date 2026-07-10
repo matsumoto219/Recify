@@ -68,7 +68,7 @@ RSpec.describe Ai::AvailabilityChecker do
   end
 
   it '例外時は false を返す' do
-    allow(Ai::ProviderRegistry).to receive(:fetch).and_raise(StandardError, 'boom')
+    allow(Ai::ProviderRegistry).to receive(:implemented?).and_raise(StandardError, 'boom')
 
     with_env(configured_env) do
       expect(described_class.call).to eq(false)
