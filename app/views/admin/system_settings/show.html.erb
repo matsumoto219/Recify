@@ -46,6 +46,8 @@
       "store_name_casing_context_lines_note"
     elsif %w[operations.ocr_enabled operations.ai_enabled].include?(@record[:key].to_s)
       "operation_service_toggle_note"
+    elsif SystemSettings::EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS.include?(@record[:key].to_s)
+      "external_service_tuning_note"
     elsif @record[:key].to_s == "amount_engine.tax_excluded_price_conversion_enabled"
       "amount_engine_tax_excluded_price_conversion_note"
     elsif amount_limit_keys.include?(@record[:key].to_s)

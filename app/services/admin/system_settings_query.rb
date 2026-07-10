@@ -17,6 +17,7 @@ module Admin
       storage_policy
       storage_warning
       external_service_status
+      external_service_tuning
       security_event
       amount_engine
       ui_toggle

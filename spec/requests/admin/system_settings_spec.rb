@@ -139,6 +139,8 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('feature.receipt_logo_display_enabled')
         expect(response.body).to include('operations.ocr_enabled')
         expect(response.body).to include('operations.ai_enabled')
+        expect(response.body).to include('external_services.ai.read_timeout_seconds')
+        expect(response.body).to include('external_services.ocr.poll_interval_seconds')
         expect(response.body).to include('amount_engine.tax_excluded_price_conversion_enabled')
         expect(response.body).to include('amount_engine.max_candidate_snapshot_count')
         expect(response.body).to include('limits.receipt_upload_soft_limit')
@@ -167,6 +169,11 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include(admin_system_setting_path('feature.receipt_logo_display_enabled'))
         expect(response.body).not_to include('SENTRY_DSN')
         expect(response.body).not_to include('WEBAUTHN_RP_ID')
+        expect(response.body).not_to include('AZURE_OCR_ENDPOINT')
+        expect(response.body).not_to include('AZURE_OCR_API_KEY')
+        expect(response.body).not_to include('OPENAI_API_KEY')
+        expect(response.body).not_to include('OPENAI_AI_MODEL')
+        expect(response.body).not_to include('AI_PRIMARY_PROVIDER')
         expect(response.body).not_to include('SMTP credentials')
         expect(response.body).not_to include('API key')
         expect(response.body).not_to include('RAW OCR RESPONSE')
@@ -302,6 +309,30 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('true')
         expect(note.text).to include('画像解析を開始できません')
         expect(note.text).to include('AI補完を行わずOCR結果のみで保存')
+      end
+    end
+
+    it 'AI/OCR実行調整値をhigh risk設定として注意事項付きで表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('external_services.ai.read_timeout_seconds')
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('external_services.ai.read_timeout_seconds')
+        expect(response.body).to include('external_service_tuning')
+        expect(response.body).to include('high')
+        expect(response.body).to include('120')
+        expect(response.body).to include('900')
+        expect(note.text).to include('次の解析から変更')
+        expect(note.text).to include('API費用やworker占有時間')
+        expect(note.text).to include('実行中の解析には反映されません')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
       end
     end
 
@@ -983,6 +1014,69 @@ RSpec.describe 'Admin system settings', type: :request do
           'category' => 'operation',
           'risk_level' => 'high',
           'reauthenticated' => true
+        )
+      end
+    end
+
+    it 'AI最大処理時間を実SystemOperations経由で更新し、AuditLogを作成する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path('external_services.ai.max_elapsed_seconds'),
+              params: {
+                value: '1200',
+                reason: 'allow long product name completion',
+                confirm: '1'
+              },
+              headers: { 'HTTP_USER_AGENT' => 'System Settings Request Spec' }
+      }.to change(AuditLog, :count).by(1)
+
+      setting = SystemSetting.find_by!(key: 'external_services.ai.max_elapsed_seconds')
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('external_services.ai.max_elapsed_seconds'))
+        expect(setting.value).to eq('value' => 1200)
+        expect(audit_log).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_uid: 'external_services.ai.max_elapsed_seconds',
+          reason: 'allow long product name completion'
+        )
+        expect(audit_log.before_state).to eq('value' => 600, 'source' => 'default')
+        expect(audit_log.after_state).to eq('value' => 1200, 'source' => 'db')
+        expect(audit_log.metadata).to include(
+          'category' => 'external_service_tuning',
+          'risk_level' => 'high',
+          'reauthenticated' => true
+        )
+      end
+    end
+
+    it 'AI timeout系列が最大処理時間を超える場合は日本語の理由を表示して拒否する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path('external_services.ai.read_timeout_seconds'),
+              params: {
+                value: '300',
+                reason: 'extend AI read timeout',
+                confirm: '1'
+              }
+      }.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('external_services.ai.read_timeout_seconds'))
+        expect(flash[:alert]).to include('(open timeout + read timeout) × (retry回数 + 1)')
+        expect(SystemSetting.find_by(key: 'external_services.ai.read_timeout_seconds')).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'failed',
+          error_code: 'external_service_ai_elapsed_budget'
         )
       end
     end

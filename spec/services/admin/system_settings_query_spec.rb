@@ -200,6 +200,15 @@ RSpec.describe Admin::SystemSettingsQuery do
       )
     end
 
+    it 'external service tuning filterを適用できる' do
+      result = described_class.call(category: 'external_service_tuning')
+
+      expect(result.records.map { |record| record[:key] }).to contain_exactly(
+        *SystemSettings::EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS
+      )
+      expect(result.records).to all(include(risk_level: 'high', editable: true))
+    end
+
     it 'risk filterを適用できる' do
       result = described_class.call(risk_level: 'high')
 
@@ -225,6 +234,11 @@ RSpec.describe Admin::SystemSettingsQuery do
         expect(result_json).not_to include('SECRET')
         expect(result_json).not_to include('SENTRY_DSN')
         expect(result_json).not_to include('WEBAUTHN_RP_ID')
+        expect(result_json).not_to include('AZURE_OCR_ENDPOINT')
+        expect(result_json).not_to include('AZURE_OCR_API_KEY')
+        expect(result_json).not_to include('OPENAI_API_KEY')
+        expect(result_json).not_to include('OPENAI_AI_MODEL')
+        expect(result_json).not_to include('AI_PRIMARY_PROVIDER')
       end
     end
   end
