@@ -81,6 +81,7 @@ module Amounts
         payment_amount_sum: payment_amount_sum,
         payment_delta: payment_delta,
         matched: matched?,
+        reconciliation_status: reconciliation_status,
         warnings: warnings,
         evidence: evidence
       }
@@ -107,14 +108,23 @@ module Amounts
     end
 
     def matched?
-      return false if payments.blank? && payment_adjustment_total.nonzero?
+      return true if reconciliation_status == :matched
+      return false if %i[mismatched evidence_missing].include?(reconciliation_status)
 
-      payment_delta.nil? || payment_delta.zero?
+      nil
+    end
+
+    def reconciliation_status
+      return payment_adjustment_total.zero? ? :not_observed : :evidence_missing if payments.blank?
+
+      payment_delta.zero? ? :matched : :mismatched
     end
 
     def warnings
       # 支払不足・過払いは計算候補の破綻ではなく、保存後にユーザーへ確認を促すreview対象として扱う。
-      matched? ? [] : [ :payment_amount_mismatch ]
+      return [] if %i[matched not_observed].include?(reconciliation_status)
+
+      [ :payment_amount_mismatch ]
     end
 
     def evidence
