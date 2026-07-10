@@ -107,6 +107,8 @@ module Amounts
     end
 
     def matched?
+      return false if payments.blank? && payment_adjustment_total.nonzero?
+
       payment_delta.nil? || payment_delta.zero?
     end
 
@@ -116,7 +118,19 @@ module Amounts
     end
 
     def evidence
-      return [] if payments.blank?
+      if payments.blank?
+        return [] if payment_adjustment_total.zero?
+
+        return [
+          {
+            source: "receipt_payments",
+            payment_amount_sum: nil,
+            final_payment_total: final_payment_total,
+            payment_delta: nil,
+            payment_evidence_missing: true
+          }
+        ]
+      end
 
       [
         {

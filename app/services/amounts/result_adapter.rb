@@ -108,7 +108,7 @@ module Amounts
         tax_rate_groups: selected_candidate.tax_rate_groups,
         items: selected_candidate.computed_items
       )
-      result[:tax_details] = selected_candidate.tax_details
+      result[:tax_details] = negative_purchase_candidate? ? [] : selected_candidate.tax_details
 
       policy = Amounts::ReviewPolicy.new(
         candidate: selected_candidate,
@@ -158,6 +158,8 @@ module Amounts
     end
 
     def resolved_values
+      return empty_nonnegative_review_draft if negative_purchase_candidate?
+
       preserved = receipt_input_resolved_values
       return preserved if preserved
 
@@ -166,6 +168,23 @@ module Amounts
         tax: selected_candidate.tax,
         total: selected_candidate.purchase_total,
         tax_rate: resolved_tax_rate
+      }
+    end
+
+    def negative_purchase_candidate?
+      [
+        selected_candidate.subtotal,
+        selected_candidate.tax,
+        selected_candidate.purchase_total
+      ].any? { |amount| amount.to_i.negative? }
+    end
+
+    def empty_nonnegative_review_draft
+      {
+        subtotal: 0,
+        tax: 0,
+        total: 0,
+        tax_rate: nil
       }
     end
 

@@ -1719,6 +1719,83 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'purchase totalを下回る過大なcouponを自動完了候補にしない' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0') }
+        ],
+        receipt_adjustments: [
+          { kind: 'coupon', label: 'クーポン', amount: 200, sign: 'discount', tax_rate: BigDecimal('0'), source: 'manual' }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0)
+        expect(result[:review_reasons]).to include('invalid_amount_relation')
+        expect(result[:safe_to_auto_complete]).to be(false)
+      end
+    end
+
+    it 'final payment totalを負にするpoint usageを自動完了候補にしない' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0') }
+        ],
+        receipt_adjustments: [
+          { kind: 'point_usage', label: 'ポイント利用', amount: 200, sign: 'discount', source: 'manual' }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 100, tax: 0, total: 100)
+        expect(result.dig(:computed, :final_payment_total)).to eq(-100)
+        expect(result[:review_reasons]).to include('invalid_amount_relation')
+        expect(result[:safe_to_auto_complete]).to be(false)
+      end
+    end
+
+    it '支払調整があるのに支払行がなければ照合済み扱いにしない' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100, tax_rate: BigDecimal('0') }
+        ],
+        receipt_adjustments: [
+          { kind: 'point_usage', label: 'ポイント利用', amount: 10, sign: 'discount', source: 'manual' }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result.dig(:computed, :final_payment_total)).to eq(90)
+        expect(result[:review_reasons]).to include('payment_amount_mismatch')
+        expect(result[:safe_to_auto_complete]).to be(false)
+      end
+    end
+
+    it 'return refund後もpurchase totalが非負なら既存のreview draftを維持する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          { price: 1_000, quantity: 1, quantity_unit_code: 'each', line_total: 1_000, tax_rate: BigDecimal('0') }
+        ],
+        receipt_adjustments: [
+          { kind: 'return_refund', label: '返品', amount: 200, sign: 'discount', tax_rate: BigDecimal('0'), source: 'ocr', needs_review: true }
+        ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:resolved][:total]).to eq(800)
+        expect(result[:review_reasons]).to include('adjustment_uncertain')
+        expect(result[:review_reasons]).not_to include('invalid_amount_relation')
+      end
+    end
+
     it 'allowlist外のitem_discountはother相当の不確実な調整行として扱う' do
       result = call_service(
         receipt: { total_amount: 900 },

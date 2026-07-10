@@ -157,7 +157,18 @@ class ReceiptsController < ApplicationController
       )
       return
     end
-    create_params["review_reasons"] = manual_update_blocking_review_reasons(amount_result)
+    consistency_guard = receipt_edit_save_consistency_guard(create_params, amount_result)
+    unless consistency_guard.consistent?
+      render_manual_amount_consistency_error!(
+        create_params,
+        template: :new,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+    create_params["review_reasons"] = (
+      manual_update_blocking_review_reasons(amount_result) + consistency_guard.review_reasons
+    ).uniq
     apply_current_image_retention_snapshot!(
       create_params,
       purge_eligible: create_params["image"].present?
@@ -636,13 +647,13 @@ class ReceiptsController < ApplicationController
     render :edit, status: :unprocessable_content, formats: :html
   end
 
-  def render_manual_amount_consistency_error!(permitted, rebuild_blank_adjustment_row_after_failure: false)
+  def render_manual_amount_consistency_error!(permitted, template: :edit, rebuild_blank_adjustment_row_after_failure: false)
     @receipt.assign_attributes(permitted)
     @receipt.errors.add(:base, t("receipts.form.errors.amount_consistency_failed"))
     build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
     prepare_receipt_form_presenter
     flash.now[:alert] = @receipt.errors.full_messages
-    render :edit, status: :unprocessable_content, formats: :html
+    render template, status: :unprocessable_content, formats: :html
   end
 
   def receipt_params

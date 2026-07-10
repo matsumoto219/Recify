@@ -65,4 +65,55 @@ RSpec.describe 'Receipt manual amount contract', type: :request do
       expect(receipt.review_reasons).to include('invalid_amount_relation')
     end
   end
+
+  it '購入合計を超えるcouponを保存しない' do
+    expect do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '過大クーポン入力店',
+          payment_method: 'cash',
+          receipt_items_attributes: manual_item_attributes,
+          receipt_adjustments_attributes: {
+            '0' => {
+              kind: 'coupon',
+              label: 'クーポン',
+              amount: '200',
+              sign: 'discount',
+              tax_rate: '0'
+            }
+          }
+        }
+      }
+    end.not_to change(Receipt, :count)
+
+    expect(response).to have_http_status(:unprocessable_content)
+  end
+
+  it '購入合計を超えるpoint usageをreview_neededで保存する' do
+    post receipts_path, params: {
+      receipt: {
+        store_name: '過大ポイント入力店',
+        payment_method: 'e_money',
+        receipt_items_attributes: manual_item_attributes,
+        receipt_adjustments_attributes: {
+          '0' => {
+            kind: 'point_usage',
+            label: 'ポイント利用',
+            amount: '200',
+            sign: 'discount',
+            tax_rate: ''
+          }
+        }
+      }
+    }
+
+    receipt = Receipt.order(:id).last
+
+    aggregate_failures do
+      expect(receipt.status).to eq('review_needed')
+      expect(receipt.total_amount).to eq(100)
+      expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(-100)
+      expect(receipt.review_reasons).to include('invalid_amount_relation')
+    end
+  end
 end

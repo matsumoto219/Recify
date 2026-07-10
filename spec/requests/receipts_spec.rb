@@ -3608,7 +3608,8 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
-        expect(receipt.status).to eq('completed')
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('payment_amount_mismatch')
         expect(receipt.total_amount).to eq(1100)
         expect(receipt.tax_amount).to eq(100)
         expect(tax_detail.net_amount).to eq(1000)

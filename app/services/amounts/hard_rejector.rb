@@ -18,6 +18,7 @@ module Amounts
     def call(candidate)
       reasons = []
       reasons << :invalid_amount_relation unless valid_amount_relation?(candidate)
+      reasons << :invalid_amount_relation unless nonnegative_amounts?(candidate)
       reasons << :tax_details_double_counted if tax_details_double_counted?(candidate)
       reasons << :unsupported_tax_detail_gross_basis if unsupported_tax_detail_gross_basis?(candidate)
       reasons << :tax_detail_gross_item_mismatch if tax_detail_gross_item_mismatch?(candidate)
@@ -27,6 +28,15 @@ module Amounts
     end
 
     private
+
+    def nonnegative_amounts?(candidate)
+      [
+        candidate.subtotal,
+        candidate.tax,
+        candidate.purchase_total,
+        candidate.final_payment_total
+      ].all? { |amount| amount.to_i >= 0 }
+    end
 
     attr_reader :receipt, :items, :tax_details, :payments, :detected_tax_details
 
