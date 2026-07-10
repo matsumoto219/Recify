@@ -67,6 +67,7 @@ RSpec.describe ReceiptOcrService do
           expect(Ocr::Client).to have_received(:new).with(
             image: image,
             provider: provider,
+            runtime_config: an_instance_of(ExternalServices::RuntimeConfig::OCRConfig),
             before_provider_call: nil,
             after_provider_success_response: nil
           )

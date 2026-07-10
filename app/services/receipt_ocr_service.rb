@@ -13,10 +13,11 @@ class ReceiptOcrService
     end
   end
 
-  def self.call(image, provider: "azure_document_intelligence", before_provider_call: nil, after_provider_success_response: nil)
+  def self.call(image, provider: "azure_document_intelligence", runtime_config: nil, before_provider_call: nil, after_provider_success_response: nil)
     new(
       image: image,
       provider: provider,
+      runtime_config: runtime_config,
       before_provider_call: before_provider_call,
       after_provider_success_response: after_provider_success_response
     ).call
@@ -36,9 +37,10 @@ class ReceiptOcrService
     Ocr::AvailabilityChecker.call
   end
 
-  def initialize(image:, provider: "azure_document_intelligence", before_provider_call: nil, after_provider_success_response: nil)
+  def initialize(image:, provider: "azure_document_intelligence", runtime_config: nil, before_provider_call: nil, after_provider_success_response: nil)
     @image = image
     @provider = provider
+    @runtime_config = runtime_config || ExternalServices.runtime_config_snapshot.ocr
     @before_provider_call = before_provider_call
     @after_provider_success_response = after_provider_success_response
   end
@@ -52,6 +54,7 @@ class ReceiptOcrService
     response = Ocr::Client.new(
       image: image,
       provider: provider,
+      runtime_config: runtime_config,
       before_provider_call: before_provider_call,
       after_provider_success_response: after_provider_success_response
     ).call
@@ -90,7 +93,7 @@ class ReceiptOcrService
 
   private
 
-  attr_reader :image, :provider, :before_provider_call, :after_provider_success_response
+  attr_reader :image, :provider, :runtime_config, :before_provider_call, :after_provider_success_response
 
   def validate_image!
     unless image&.attached?

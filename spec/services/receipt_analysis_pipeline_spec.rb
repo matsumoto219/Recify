@@ -373,7 +373,7 @@ RSpec.describe ReceiptAnalysisPipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
+      allow(ReceiptOcrService).to receive(:call) do |_image, runtime_config: nil, before_provider_call: nil, after_provider_success_response: nil|
         before_provider_call&.call
         successful_ocr_result
       end
@@ -392,12 +392,32 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'runtime config取得失敗時はOCR providerを呼ばずrunを失敗させる' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      allow(ExternalServices).to receive(:down?).and_return(false)
+      allow(SystemSettings).to receive(:values_for).and_raise(ActiveRecord::ConnectionNotEstablished)
+      allow(ReceiptOcrService).to receive(:call)
+
+      expect { described_class.run_ocr(run) }
+        .to raise_error(ExternalServices::RuntimeConfigUnavailableError)
+
+      aggregate_failures do
+        expect(ReceiptOcrService).not_to have_received(:call)
+        expect(run.reload).to have_attributes(
+          status: 'failed',
+          error_code: 'external_service_runtime_config_unavailable'
+        )
+        expect(UsageCounter.where(user: receipt.user, key: 'ocr_jobs_per_day')).to be_empty
+      end
+    end
+
     it 'OCR成功時に設定ONならraw OCR response JSONをrun artifactへ保存する' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
       raw_body = JSON.generate('status' => 'succeeded', 'modelId' => 'prebuilt-receipt', 'analyzeResult' => { 'content' => 'safe raw json fixture' })
       create(:system_setting, key: 'analysis_artifact.ocr_raw_response_capture_enabled', value: SystemSettings.stored_value(true))
-      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
+      allow(ReceiptOcrService).to receive(:call) do |_image, runtime_config: nil, before_provider_call: nil, after_provider_success_response: nil|
         before_provider_call&.call
         after_provider_success_response&.call(
           raw_body,
@@ -438,7 +458,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       }
 
-      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
+      allow(ReceiptOcrService).to receive(:call) do |_image, runtime_config: nil, before_provider_call: nil, after_provider_success_response: nil|
         before_provider_call&.call
         ocr_result
       end
@@ -483,7 +503,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       }
 
-      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
+      allow(ReceiptOcrService).to receive(:call) do |_image, runtime_config: nil, before_provider_call: nil, after_provider_success_response: nil|
         before_provider_call&.call
         ocr_result
       end
@@ -534,7 +554,7 @@ RSpec.describe ReceiptAnalysisPipeline do
         }
       )
 
-      allow(ReceiptOcrService).to receive(:call) do |_image, before_provider_call: nil, after_provider_success_response: nil|
+      allow(ReceiptOcrService).to receive(:call) do |_image, runtime_config: nil, before_provider_call: nil, after_provider_success_response: nil|
         before_provider_call&.call
         ocr_result
       end

@@ -4,46 +4,24 @@ require "time"
 
 module Ocr
   class Client
-    DEFAULT_TIMEOUT = 30
-    # NOTE:
-    # pollingはRetry-Afterを優先し、未指定時はbase intervalから緩やかにcapped backoffする。
-    # 408/429/5xxやpolling GET timeoutのretryでは、別系統のRetry-After / backoff / jitterを利用する。
-    # request timeout / polling / retry値は AZURE_OCR_* ENV で運用調整できる。
-    DEFAULT_POLL_INTERVAL = 1.0
-    # NOTE:
-    # 受信JSONの行数上限ではなく、まずは polling 上限が実運用上のボトルネックになりやすい。
-    # レスポンスが大きい場合や Azure 側が混雑している場合、ここが短すぎると ocr_timeout になる。
-    # 現時点ではbase interval 1秒/max 20回を維持し、staging / production のOCR latencyとpolling metricsを見て
-    # poll_backoff_factor / max_poll_interval を調整する。
-    DEFAULT_MAX_POLL = 20
-    DEFAULT_MAX_RETRIES = 2
-    DEFAULT_POLL_BACKOFF_FACTOR = 1.5
-    DEFAULT_MAX_POLL_INTERVAL = 3.0
-    DEFAULT_BASE_RETRY_DELAY = 0.5
-    DEFAULT_MAX_RETRY_DELAY = 10.0
     ENDPOINT_ENV_KEY = "AZURE_OCR_ENDPOINT"
     API_KEY_ENV_KEY = "AZURE_OCR_API_KEY"
 
-    POLL_INTERVAL = DEFAULT_POLL_INTERVAL
-    MAX_POLL = DEFAULT_MAX_POLL
-    MAX_RETRIES = DEFAULT_MAX_RETRIES
-    POLL_BACKOFF_FACTOR = DEFAULT_POLL_BACKOFF_FACTOR
-    MAX_POLL_INTERVAL = DEFAULT_MAX_POLL_INTERVAL
-    BASE_RETRY_DELAY = DEFAULT_BASE_RETRY_DELAY
-    MAX_RETRY_DELAY = DEFAULT_MAX_RETRY_DELAY
     POLLING_METRICS_KEY = "recify_polling_metrics".freeze
     QUERY_FIELDS_FEATURE = "queryFields"
     QUERY_FIELDS = [ "PaymentMethods" ].freeze
 
-    def initialize(image:, provider: "azure_document_intelligence", before_provider_call: nil, after_provider_success_response: nil)
+    def initialize(image:, provider: "azure_document_intelligence", runtime_config: nil, before_provider_call: nil, after_provider_success_response: nil)
       @image = image
       @provider = provider
+      @runtime_config = runtime_config || ExternalServices.runtime_config_snapshot.ocr
       @before_provider_call = before_provider_call
       @after_provider_success_response = after_provider_success_response
     end
 
     def call
       reset_polling_metrics!
+      start_elapsed_budget!
       Rails.logger.info("[OCR::Client] request start provider=#{provider}")
 
       op_location = submit_request
@@ -78,11 +56,12 @@ module Ocr
 
     private
 
-    attr_reader :image, :provider, :before_provider_call, :after_provider_success_response
+    attr_reader :image, :provider, :runtime_config, :before_provider_call, :after_provider_success_response
 
     def connection
       @connection ||= Faraday.new(url: endpoint) do |f|
         f.options.timeout = timeout
+        f.options.open_timeout = timeout
         f.adapter Faraday.default_adapter
       end
     end
@@ -96,6 +75,7 @@ module Ocr
       # POST timeout は Azure 側で受理済みの可能性があるため retry しない。
       res = with_retries(operation: :submit_request, retry_timeouts: false) do
         connection.post do |req|
+          configure_request_timeout(req)
           req.url analyze_path
           req.headers["Ocp-Apim-Subscription-Key"] = api_key
           req.headers["Content-Type"] = "application/octet-stream"
@@ -122,12 +102,13 @@ module Ocr
       max_poll.times do |index|
         poll_delay = poll_delay_for(index, retry_after: next_poll_retry_after)
         track_poll_sleep_metrics!(poll_delay, retry_after: next_poll_retry_after)
-        sleep poll_delay
+        sleep_with_budget(poll_delay)
         next_poll_retry_after = nil
 
         res = with_retries(operation: :poll_result, retry_timeouts: true) do
           @poll_count += 1
           Faraday.get(op_location) do |req|
+            configure_request_timeout(req)
             req.headers["Ocp-Apim-Subscription-Key"] = api_key
           end.tap do |response|
             handle_response_status!(response, phase: "poll")
@@ -199,7 +180,7 @@ module Ocr
         Rails.logger.warn(
           "[OCR::Client] retry operation=#{operation} attempt=#{attempts} delay=#{retry_delay} error_code=#{error_code_for(e)} class=#{e.class}"
         )
-        sleep(retry_delay)
+        sleep_with_budget(retry_delay)
         retry
       end
     end
@@ -211,7 +192,7 @@ module Ocr
       when Faraday::ConnectionFailed
         true
       when OcrTimeoutError
-        error.message == "ocr_timeout"
+        error.message == "ocr_timeout" && !elapsed_budget_exhausted?
       when OcrError
         %w[external_service_unavailable external_service_rate_limited].include?(error.message)
       else
@@ -255,6 +236,7 @@ module Ocr
       @last_poll_status = nil
       @polling_started_at = nil
       @next_poll_retry_after = nil
+      @elapsed_budget_exhausted = false
     end
 
     def ensure_polling_metrics!
@@ -320,6 +302,47 @@ module Ocr
 
     def cap_poll_delay(delay)
       [ [ delay.to_f, 0.0 ].max, max_poll_interval ].min
+    end
+
+    def start_elapsed_budget!
+      @operation_started_at = monotonic_now
+    end
+
+    def configure_request_timeout(request)
+      request_timeout = bounded_request_timeout
+      request.options.timeout = request_timeout
+      request.options.open_timeout = request_timeout
+    end
+
+    def bounded_request_timeout
+      remaining = remaining_elapsed_seconds
+      raise_elapsed_timeout! unless remaining.positive?
+
+      [ timeout.to_f, remaining ].min
+    end
+
+    def sleep_with_budget(delay)
+      raise_elapsed_timeout! if delay.to_f >= remaining_elapsed_seconds
+
+      sleep(delay)
+    end
+
+    def remaining_elapsed_seconds
+      return max_elapsed_seconds.to_f unless @operation_started_at
+
+      max_elapsed_seconds.to_f - (monotonic_now - @operation_started_at)
+    end
+
+    def raise_elapsed_timeout!
+      @elapsed_budget_exhausted = true
+      raise OcrTimeoutError.new(
+        "ocr_timeout",
+        polling_metrics: polling_metrics(final_status: "timeout")
+      )
+    end
+
+    def elapsed_budget_exhausted?
+      @elapsed_budget_exhausted == true
     end
 
     def error_code_for(error)
@@ -494,35 +517,39 @@ module Ocr
     end
 
     def timeout
-      ENV.fetch("AZURE_OCR_TIMEOUT", DEFAULT_TIMEOUT).to_i
+      runtime_config.request_timeout_seconds
+    end
+
+    def max_elapsed_seconds
+      runtime_config.max_elapsed_seconds
     end
 
     def max_poll
-      ENV.fetch("AZURE_OCR_MAX_POLL", DEFAULT_MAX_POLL).to_i
+      runtime_config.max_poll_attempts
     end
 
     def poll_interval
-      ENV.fetch("AZURE_OCR_POLL_INTERVAL", DEFAULT_POLL_INTERVAL).to_f
+      runtime_config.poll_interval_seconds
     end
 
     def poll_backoff_factor
-      ENV.fetch("AZURE_OCR_POLL_BACKOFF_FACTOR", DEFAULT_POLL_BACKOFF_FACTOR).to_f
+      runtime_config.poll_backoff_factor
     end
 
     def max_poll_interval
-      ENV.fetch("AZURE_OCR_MAX_POLL_INTERVAL", DEFAULT_MAX_POLL_INTERVAL).to_f
+      runtime_config.max_poll_interval_seconds
     end
 
     def max_retries
-      ENV.fetch("AZURE_OCR_MAX_RETRIES", DEFAULT_MAX_RETRIES).to_i
+      runtime_config.max_retries
     end
 
     def base_retry_delay
-      ENV.fetch("AZURE_OCR_BASE_RETRY_DELAY", DEFAULT_BASE_RETRY_DELAY).to_f
+      runtime_config.base_retry_delay_seconds
     end
 
     def max_retry_delay
-      ENV.fetch("AZURE_OCR_MAX_RETRY_DELAY", DEFAULT_MAX_RETRY_DELAY).to_f
+      runtime_config.max_retry_delay_seconds
     end
   end
 

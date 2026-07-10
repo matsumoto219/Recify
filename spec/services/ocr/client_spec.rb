@@ -5,24 +5,23 @@ RSpec.describe Ocr::Client do
   let(:image) { Rack::Test::UploadedFile.new(image_path, 'image/jpeg') }
   let(:provider) { 'azure_document_intelligence' }
   let(:before_provider_call) { nil }
-  let(:client) { described_class.new(image: image, provider: provider, before_provider_call: before_provider_call) }
+  let(:runtime_config_overrides) { {} }
+  let(:runtime_config) do
+    ExternalServices.runtime_config_snapshot.ocr.with(**runtime_config_overrides)
+  end
+  let(:client) do
+    described_class.new(
+      image: image,
+      provider: provider,
+      runtime_config: runtime_config,
+      before_provider_call: before_provider_call
+    )
+  end
   let(:configured_env) do
     {
       'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
       'AZURE_OCR_API_KEY' => 'test-key'
     }
-  end
-  let(:operational_env_keys) do
-    %w[
-      AZURE_OCR_TIMEOUT
-      AZURE_OCR_MAX_POLL
-      AZURE_OCR_POLL_INTERVAL
-      AZURE_OCR_POLL_BACKOFF_FACTOR
-      AZURE_OCR_MAX_POLL_INTERVAL
-      AZURE_OCR_MAX_RETRIES
-      AZURE_OCR_BASE_RETRY_DELAY
-      AZURE_OCR_MAX_RETRY_DELAY
-    ]
   end
   let(:operation_location) do
     'https://example.cognitiveservices.azure.com/documentintelligence/documentModels/prebuilt-receipt/analyzeResults/123'
@@ -52,11 +51,11 @@ RSpec.describe Ocr::Client do
   end
 
   def request_double
-    Struct.new(:headers, :body) do
+    Struct.new(:headers, :body, :options) do
       def url(value)
         @url = value
       end
-    end.new({})
+    end.new({}, nil, Faraday::RequestOptions.new)
   end
 
   def stub_connection_post(target_client, *outcomes)
@@ -73,6 +72,15 @@ RSpec.describe Ocr::Client do
     end
 
     connection
+  end
+
+  def client_with_runtime_config(**overrides)
+    described_class.new(
+      image: image,
+      provider: provider,
+      runtime_config: ExternalServices.runtime_config_snapshot.ocr.with(**overrides),
+      before_provider_call: before_provider_call
+    )
   end
 
   def with_env(overrides)
@@ -95,7 +103,7 @@ RSpec.describe Ocr::Client do
   end
 
   around do |example|
-    with_env(configured_env.merge(operational_env_keys.to_h { |key| [ key, nil ] })) do
+    with_env(configured_env) do
       example.run
     end
   end
@@ -472,36 +480,74 @@ RSpec.describe Ocr::Client do
     end
   end
 
-  describe 'operational ENV settings' do
-    it 'AZURE_OCR_TIMEOUTでFaraday timeoutを上書きできる' do
-      with_env(
-        'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
-        'AZURE_OCR_TIMEOUT' => '45'
-      ) do
-        connection = client.send(:connection)
+  describe 'runtime config' do
+    it 'request timeoutをsubmit connectionへ設定する' do
+      connection = client.send(:connection)
 
-        expect(connection.options.timeout).to eq(45)
+      aggregate_failures do
+        expect(connection.options.timeout).to eq(30)
+        expect(connection.options.open_timeout).to eq(30)
       end
     end
 
-    it 'AZURE_OCR_MAX_POLLとAZURE_OCR_POLL_INTERVALでpolling上限とbase intervalを上書きできる' do
-      with_env(
-        'AZURE_OCR_MAX_POLL' => '2',
-        'AZURE_OCR_POLL_INTERVAL' => '0.25'
-      ) do
-        running_response = faraday_response(status: 200, body: JSON.generate({ 'status' => 'running' }))
-        allow(Faraday).to receive(:get).and_return(running_response)
-        allow(client).to receive(:sleep)
+    it 'request timeoutをpolling GETへも明示設定する' do
+      poll_request = request_double
+      succeeded_poll_response = faraday_response(status: 200, body: JSON.generate(succeeded_response))
+      allow(Faraday).to receive(:get) do |_url, &block|
+        block.call(poll_request)
+        succeeded_poll_response
+      end
+      allow(client).to receive(:sleep)
 
-        expect do
-          client.send(:poll_result, operation_location)
-        end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout')
+      client.send(:poll_result, operation_location)
 
-        aggregate_failures do
-          expect(Faraday).to have_received(:get).twice
-          expect(client).to have_received(:sleep).with(0.25).once
-          expect(client).to have_received(:sleep).with(0.375).once
-        end
+      aggregate_failures do
+        expect(poll_request.options.timeout).to eq(30.0)
+        expect(poll_request.options.open_timeout).to eq(30.0)
+      end
+    end
+
+    it '残り時間がrequest timeoutより短い場合はpolling timeoutを残り時間でcapする' do
+      poll_request = request_double
+      succeeded_poll_response = faraday_response(status: 200, body: JSON.generate(succeeded_response))
+      allow(Faraday).to receive(:get) do |_url, &block|
+        block.call(poll_request)
+        succeeded_poll_response
+      end
+      allow(client).to receive(:sleep)
+      allow(client).to receive(:remaining_elapsed_seconds).and_return(5.0)
+
+      client.send(:poll_result, operation_location)
+
+      aggregate_failures do
+        expect(poll_request.options.timeout).to eq(5.0)
+        expect(poll_request.options.open_timeout).to eq(5.0)
+      end
+    end
+
+    it 'max elapsedで次のpolling requestを開始せずocr_timeoutへ倒す' do
+      allow(client).to receive(:remaining_elapsed_seconds).and_return(0.5)
+      expect(Faraday).not_to receive(:get)
+
+      expect do
+        client.send(:poll_result, operation_location)
+      end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout')
+    end
+
+    it 'max poll attemptsとbase intervalをruntime configから読む' do
+      configured_client = client_with_runtime_config(max_poll_attempts: 2, poll_interval_seconds: 0.25)
+      running_response = faraday_response(status: 200, body: JSON.generate({ 'status' => 'running' }))
+      allow(Faraday).to receive(:get).and_return(running_response)
+      allow(configured_client).to receive(:sleep)
+
+      expect do
+        configured_client.send(:poll_result, operation_location)
+      end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout')
+
+      aggregate_failures do
+        expect(Faraday).to have_received(:get).twice
+        expect(configured_client).to have_received(:sleep).with(0.25).once
+        expect(configured_client).to have_received(:sleep).with(0.375).once
       end
     end
 
@@ -525,46 +571,53 @@ RSpec.describe Ocr::Client do
       end
     end
 
-    it 'AZURE_OCR_POLL_BACKOFF_FACTORとAZURE_OCR_MAX_POLL_INTERVALでpolling delayを上書きできる' do
-      with_env(
-        'AZURE_OCR_POLL_INTERVAL' => '0.5',
-        'AZURE_OCR_POLL_BACKOFF_FACTOR' => '2.0',
-        'AZURE_OCR_MAX_POLL_INTERVAL' => '2.5'
-      ) do
-        aggregate_failures do
-          expect((0..4).map { |index| client.send(:poll_delay_for, index) }).to eq([ 0.5, 1.0, 2.0, 2.5, 2.5 ])
-          expect(client.send(:poll_delay_for, 0, retry_after: 9.0)).to eq(2.5)
-        end
+    it 'poll backoffとmax intervalをruntime configから読む' do
+      configured_client = client_with_runtime_config(
+        poll_interval_seconds: 0.5,
+        poll_backoff_factor: 2.0,
+        max_poll_interval_seconds: 2.5
+      )
+
+      aggregate_failures do
+        expect((0..4).map { |index| configured_client.send(:poll_delay_for, index) }).to eq([ 0.5, 1.0, 2.0, 2.5, 2.5 ])
+        expect(configured_client.send(:poll_delay_for, 0, retry_after: 9.0)).to eq(2.5)
       end
     end
 
-    it 'AZURE_OCR_MAX_RETRIESでretry上限を上書きできる' do
-      with_env('AZURE_OCR_MAX_RETRIES' => '0') do
-        connection = stub_connection_post(client, faraday_response(status: 429))
-        allow(client).to receive(:sleep)
+    it 'max retriesをruntime configから読む' do
+      configured_client = client_with_runtime_config(max_retries: 0)
+      connection = stub_connection_post(configured_client, faraday_response(status: 429))
+      allow(configured_client).to receive(:sleep)
 
-        expect do
-          client.send(:submit_request)
-        end.to raise_error(Ocr::OcrError, 'external_service_rate_limited')
+      expect do
+        configured_client.send(:submit_request)
+      end.to raise_error(Ocr::OcrError, 'external_service_rate_limited')
 
-        aggregate_failures do
-          expect(connection).to have_received(:post).once
-          expect(client).not_to have_received(:sleep)
-        end
+      aggregate_failures do
+        expect(connection).to have_received(:post).once
+        expect(configured_client).not_to have_received(:sleep)
       end
     end
 
-    it 'AZURE_OCR_BASE_RETRY_DELAYとAZURE_OCR_MAX_RETRY_DELAYでretry delayを上書きできる' do
-      with_env(
-        'AZURE_OCR_BASE_RETRY_DELAY' => '2.0',
-        'AZURE_OCR_MAX_RETRY_DELAY' => '3.0'
-      ) do
-        allow(client).to receive(:retry_jitter_delay).and_return(0.25)
+    it 'retry delayをruntime configから読む' do
+      configured_client = client_with_runtime_config(base_retry_delay_seconds: 2.0, max_retry_delay_seconds: 3.0)
+      allow(configured_client).to receive(:retry_jitter_delay).and_return(0.25)
 
-        aggregate_failures do
-          expect(client.send(:retry_delay_for, 1)).to eq(2.25)
-          expect(client.send(:retry_delay_for, 3)).to eq(3.0)
-        end
+      aggregate_failures do
+        expect(configured_client.send(:retry_delay_for, 1)).to eq(2.25)
+        expect(configured_client.send(:retry_delay_for, 3)).to eq(3.0)
+      end
+    end
+
+    it '廃止した数値ENVを参照しない' do
+      with_env(
+        'AZURE_OCR_TIMEOUT' => '99',
+        'AZURE_OCR_MAX_POLL' => '99',
+        'AZURE_OCR_MAX_RETRIES' => '0'
+      ) do
+        expect(client.send(:timeout)).to eq(30)
+        expect(client.send(:max_poll)).to eq(20)
+        expect(client.send(:max_retries)).to eq(2)
       end
     end
   end
@@ -589,8 +642,8 @@ RSpec.describe Ocr::Client do
         expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
         expect(result[described_class::POLLING_METRICS_KEY]).to include(
           'total_poll_sleep_ms' => 2000,
-          'max_poll_interval' => described_class::MAX_POLL_INTERVAL,
-          'poll_backoff_factor' => described_class::POLL_BACKOFF_FACTOR,
+          'max_poll_interval' => runtime_config.max_poll_interval_seconds,
+          'poll_backoff_factor' => runtime_config.poll_backoff_factor,
           'retry_after_used' => true
         )
         expect(connection).to have_received(:post).once
@@ -667,8 +720,8 @@ RSpec.describe Ocr::Client do
         expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
         expect(result[described_class::POLLING_METRICS_KEY]).to include(
           'total_poll_sleep_ms' => 7750,
-          'max_poll_interval' => described_class::MAX_POLL_INTERVAL,
-          'poll_backoff_factor' => described_class::POLL_BACKOFF_FACTOR,
+          'max_poll_interval' => runtime_config.max_poll_interval_seconds,
+          'poll_backoff_factor' => runtime_config.poll_backoff_factor,
           'retry_after_used' => false
         )
         expect(Faraday).to have_received(:get).exactly(4).times
@@ -699,8 +752,8 @@ RSpec.describe Ocr::Client do
         expect(result[described_class::POLLING_METRICS_KEY]).to include(
           'poll_count' => 2,
           'final_status' => 'succeeded',
-          'max_poll_count' => described_class::MAX_POLL,
-          'poll_interval' => described_class::POLL_INTERVAL,
+          'max_poll_count' => runtime_config.max_poll_attempts,
+          'poll_interval' => runtime_config.poll_interval_seconds,
           'reached_max_poll' => false,
           'retry_after_used' => false,
           'retry_count' => 1
@@ -776,10 +829,10 @@ RSpec.describe Ocr::Client do
         client.send(:poll_result, operation_location)
       end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout') { |error|
         expect(error.polling_metrics).to include(
-          'poll_count' => described_class::MAX_POLL,
+          'poll_count' => runtime_config.max_poll_attempts,
           'final_status' => 'running',
-          'max_poll_count' => described_class::MAX_POLL,
-          'poll_interval' => described_class::POLL_INTERVAL,
+          'max_poll_count' => runtime_config.max_poll_attempts,
+          'poll_interval' => runtime_config.poll_interval_seconds,
           'reached_max_poll' => true,
           'retry_after_used' => false,
           'retry_count' => 0
@@ -787,7 +840,7 @@ RSpec.describe Ocr::Client do
       }
 
       aggregate_failures do
-        expect(Faraday).to have_received(:get).exactly(described_class::MAX_POLL).times
+        expect(Faraday).to have_received(:get).exactly(runtime_config.max_poll_attempts).times
         expect(client).not_to have_received(:sleep).with(0.5)
       end
     end

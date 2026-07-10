@@ -25,6 +25,7 @@ class ReceiptAnalysisPipeline
         else
           ReceiptOcrService.call(
             receipt.image,
+            runtime_config: ReceiptAnalysisRuns.external_service_runtime_config(run).ocr,
             before_provider_call: before_provider_call,
             after_provider_success_response: ocr_response_artifact_callback
           )
