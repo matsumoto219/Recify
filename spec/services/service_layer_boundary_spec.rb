@@ -25,7 +25,7 @@ RSpec.describe 'Service layer child implementation boundary' do
     },
     {
       name: 'Analysis',
-      child_reference: /\bAnalysis::(?:AdjustmentEvidenceValidator|MoneyTokenClassifier|OwnershipConflictResolver|OwnershipConsistencyGuard|OwnershipFact|OwnershipResult|OwnershipRules(?:::[A-Za-z]+)?|ReceiptBuildParamsService|ReceiptFactOwnershipResolver|ReceiptProcessingErrorMapper|ReceiptFallbackPatterns|ReceiptSignalEvaluator|ReceiptItemNormalizer|RetryService|SourceEvidenceIndex|SourceRef|StoreNameCandidateClassifier|TaxAllocationResolver)\b/,
+      child_reference: /\bAnalysis::[A-Z][A-Za-z0-9_:]*/,
       parent_paths: %w[app/services/analysis.rb],
       internal_globs: %w[app/services/analysis/**/*.rb]
     },
@@ -43,7 +43,7 @@ RSpec.describe 'Service layer child implementation boundary' do
     },
     {
       name: 'ReceiptAnalysisRuns',
-      child_reference: /\bReceiptAnalysisRuns::RuntimeConfigSnapshot\b/,
+      child_reference: /\bReceiptAnalysisRuns::(?!(?:EnqueueError|TerminalRunError)\b)[A-Z][A-Za-z0-9_:]*/,
       parent_paths: %w[app/services/receipt_analysis_runs.rb],
       internal_globs: %w[app/services/receipt_analysis_runs/**/*.rb]
     },
@@ -74,6 +74,26 @@ RSpec.describe 'Service layer child implementation boundary' do
     end
 
     expect(violations).to be_empty, violations.join("\n")
+  end
+
+  it '追加済みのAnalysisとReceiptAnalysisRuns子実装を検査対象に含める' do
+    probes = {
+      'Analysis' => %w[Analysis::TaxDetailLineEvidenceExtractor],
+      'ReceiptAnalysisRuns' => %w[
+        ReceiptAnalysisRuns::Enqueuer
+        ReceiptAnalysisRuns::OcrResponseArtifact
+        ReceiptAnalysisRuns::SnapshotBuilder
+        ReceiptAnalysisRuns::Starter
+        ReceiptAnalysisRuns::Tracker
+      ]
+    }
+
+    missing = probes.flat_map do |rule_name, references|
+      pattern = SERVICE_LAYER_RULES.find { |rule| rule[:name] == rule_name }.fetch(:child_reference)
+      references.reject { |reference| reference.match?(pattern) }
+    end
+
+    expect(missing).to be_empty, "boundary対象外: #{missing.join(', ')}"
   end
 
   def scanned_files_for(rule)

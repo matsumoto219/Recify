@@ -14,6 +14,7 @@ export default class extends Controller {
     this.abortController = null
     this.syncInFlight = false
     this.pollingPaused = false
+    this.authenticationRequired = false
 
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this)
@@ -53,6 +54,8 @@ export default class extends Controller {
       this.stopPolling({ abort: true })
       return
     }
+
+    if (this.authenticationRequired) return
 
     this.pollingPaused = false
     this.queueImmediateSync()
@@ -101,6 +104,18 @@ export default class extends Controller {
         cache: 'no-store',
         signal: controller.signal
       })
+      const contentType = response.headers.get('content-type') || ''
+      if (
+        response.redirected ||
+        response.status === 401 ||
+        response.status === 403 ||
+        response.status === 404 ||
+        (response.ok && !contentType.includes('application/json'))
+      ) {
+        this.authenticationRequired = true
+        this.pausePolling()
+        return
+      }
       if (!response.ok) return
 
       this.applyPayload(await response.json())
@@ -176,6 +191,11 @@ export default class extends Controller {
       this.abortController.abort()
       this.abortController = null
     }
+  }
+
+  pausePolling () {
+    this.pollingPaused = true
+    this.stopPolling()
   }
 
   clearImmediateTimer () {

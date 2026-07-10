@@ -175,6 +175,35 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it '別receiptのparent_runを拒否してrunやjobを作らない' do
+      foreign_parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: create(:receipt, :completed, :with_image)
+      )
+
+      result = described_class.call(
+        receipt: receipt,
+        parent_run: foreign_parent_run,
+        actor: actor,
+        retry_type: :ocr_retry,
+        reason: 'cross receipt retry',
+        reauthentication: reauthentication_context,
+        confirmation: retry_confirmation
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('parent_run_receipt_mismatch')
+        expect(receipt.receipt_analysis_runs).to be_empty
+        expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          outcome: 'failed',
+          error_code: 'parent_run_receipt_mismatch'
+        )
+      end
+    end
+
     it 'OCR停止中はfull_reanalyzeをrun作成やcounter消費前に拒否する' do
       create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
 
@@ -1031,6 +1060,22 @@ RSpec.describe Analysis::RetryService do
       aggregate_failures do
         expect(options.map { |option| option[:possible] }).to all(be(false))
         expect(options.map { |option| option[:disabled_reason] }).to all(eq('active_run_exists'))
+      end
+    end
+
+    it '別receiptのparent_runでは全retryを不可にする' do
+      foreign_parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt: create(:receipt, :completed, :with_image)
+      )
+
+      options = described_class.eligibility(receipt: receipt, parent_run: foreign_parent_run).retry_options
+
+      aggregate_failures do
+        expect(options.map { |option| option[:possible] }).to all(be(false))
+        expect(options.map { |option| option[:disabled_reason] })
+          .to all(eq('parent_run_receipt_mismatch'))
       end
     end
 

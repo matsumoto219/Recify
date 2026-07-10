@@ -198,6 +198,9 @@ module Analysis
     end
 
     def disabled_reason_for(type)
+      if parent_run.present? && parent_run.receipt_id != receipt&.id
+        return "parent_run_receipt_mismatch"
+      end
       return "active_run_exists" if active_run_exists?
 
       case type
@@ -246,6 +249,8 @@ module Analysis
         "AI service is unavailable"
       when "parent_run_missing"
         "parent_run is required"
+      when "parent_run_receipt_mismatch"
+        "parent_run must belong to the receipt"
       when "ocr_snapshot_missing"
         "parent_run.ocr_result_snapshot is required"
       when "ai_snapshot_missing"

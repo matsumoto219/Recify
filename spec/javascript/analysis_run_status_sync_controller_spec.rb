@@ -32,4 +32,15 @@ RSpec.describe "Analysis run status sync Stimulus controller" do
       expect(source).to include("cache: 'no-store'")
     end
   end
+
+  it "stops polling when authentication expires or the endpoint returns HTML" do
+    aggregate_failures do
+      expect(source).to include('response.redirected')
+      expect(source).to include('response.status === 401')
+      expect(source).to include('response.status === 403')
+      expect(source).to include('response.status === 404')
+      expect(source).to include("response.headers.get('content-type')")
+      expect(source).to include('this.pausePolling()')
+    end
+  end
 end
