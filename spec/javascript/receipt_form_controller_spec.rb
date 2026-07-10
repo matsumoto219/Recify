@@ -27,4 +27,12 @@ RSpec.describe "Receipt form Stimulus controller" do
       expect(source).not_to include("RECEIPT_REVIEW_TARGET_ITEMS = 'receipt-section-items'")
     end
   end
+
+  it "keeps the latest countable line total as the baseline for repeated recalculation" do
+    aggregate_failures do
+      expect(source).to include("lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)")
+      expect(source).to include("lineTotalInput.dataset.originalSavedLineTotal = String(lineTotal)")
+      expect(source).to include("if (this.recalculatesQuantityUnit(quantityUnit))")
+    end
+  end
 end

@@ -1160,6 +1160,7 @@ export default class extends Controller {
 
     if (this.recalculatesQuantityUnit(quantityUnit)) {
       lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)
+      lineTotalInput.dataset.originalSavedLineTotal = String(lineTotal)
     }
   }
 
