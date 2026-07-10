@@ -11,6 +11,13 @@ module SecurityEvents
       (["'\s:=]+)
       ([^"',\s};&]+)
     /ix
+    PROVIDER_SENSITIVE_TEXT_PATTERN = /
+      \b(provider[_-]?raw[_-]?response|system[_-]?prompt|user[_-]?prompt|prompt|endpoint|
+      operation[_-]?location|(?:ocp[_-]apim[_-])?subscription[_-]?key)\b
+      (["'\s:=]+)
+      ([^\r\n;]*)
+    /ix
+    URL_PATTERN = %r{https?://[^\s"'<>]+}i
     LONG_SECRET_PATTERN = /\b[A-Za-z0-9+\/=_-]{40,}\b/
     STORAGE_KEY_PATTERN = /
       blob[_-]?key|signed[_-]?id|signed[_-]?blob[_-]?id|checksum|attachment[_-]?id|
@@ -32,6 +39,10 @@ module SecurityEvents
       def sanitize_text(value)
         new.sanitize_text(value)
       end
+
+      def sanitize_exception_text(value)
+        new.sanitize_exception_text(value)
+      end
     end
 
     def call(value)
@@ -39,19 +50,31 @@ module SecurityEvents
     end
 
     def sanitize_text(value)
+      sanitize_text_value(value, redact_provider_details: false)
+    end
+
+    def sanitize_exception_text(value)
+      sanitize_text_value(value, redact_provider_details: true)
+    end
+
+    private
+
+    def sanitize_text_value(value, redact_provider_details:)
       sanitized = value.to_s.dup
       sanitized = sanitized.encode("UTF-8", invalid: :replace, undef: :replace, replace: "")
       sanitized.gsub!(EMAIL_PATTERN, "[REDACTED_EMAIL]")
       sanitized.gsub!(AUTH_HEADER_PATTERN) { "#{$1} [FILTERED]" }
       sanitized.gsub!(SECRET_ASSIGNMENT_PATTERN) { "#{$1}#{$2}[FILTERED]" }
+      if redact_provider_details
+        sanitized.gsub!(PROVIDER_SENSITIVE_TEXT_PATTERN) { "#{$1}#{$2}[FILTERED]" }
+      end
       sanitized = Recify::ActiveStorageLogRedactor.redact(sanitized)
+      sanitized.gsub!(URL_PATTERN, "[FILTERED_URL]") if redact_provider_details
       sanitized.gsub!(LONG_SECRET_PATTERN, "[FILTERED_SECRET]")
       sanitized = visible_control_chars(sanitized)
 
       truncate_bytes(sanitized, SecurityEvent::PAYLOAD_EXCERPT_MAX_BYTES)
     end
-
-    private
 
     def sanitize_value(value, depth:)
       return "[TRUNCATED]" if depth > MAX_DEPTH

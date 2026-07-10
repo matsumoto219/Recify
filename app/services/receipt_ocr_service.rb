@@ -86,7 +86,7 @@ class ReceiptOcrService
     ExternalServices.mark_failure!(:ocr, error_code: "image_corrupted")
     build_error_result("image_corrupted")
   rescue StandardError => e
-    Rails.logger.error("[OCR] unexpected_error class=#{e.class} message=#{e.message}")
+    Rails.logger.error("[OCR] unexpected_error class=#{e.class}")
     ExternalServices.mark_failure!(:ocr, error_code: "unexpected_error")
     build_error_result("unexpected_error")
   end

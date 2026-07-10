@@ -20,6 +20,10 @@ module SecurityEvents
       MetadataSanitizer.sanitize_text(value)
     end
 
+    def sanitize_exception_message(value)
+      MetadataSanitizer.sanitize_exception_text(value)
+    end
+
     def record!(...)
       Recorder.call(...)
     end

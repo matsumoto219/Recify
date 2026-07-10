@@ -14,7 +14,7 @@ module Ocr
       client.available? == true
     rescue StandardError => e
       Rails.logger.warn(
-        "[OCR::AvailabilityChecker] unavailable class=#{e.class} message=#{e.message}"
+        "[OCR::AvailabilityChecker] unavailable class=#{e.class}"
       )
       false
     end

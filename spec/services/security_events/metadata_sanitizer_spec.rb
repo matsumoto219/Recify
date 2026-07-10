@@ -126,6 +126,30 @@ RSpec.describe SecurityEvents::MetadataSanitizer do
     )
   end
 
+  it '例外文言内のprovider URL・prompt・raw responseをredactする' do
+    text = <<~TEXT
+      Bearer sk-secret-token endpoint=https://ocr.example.test/operations/123?sig=secret
+      prompt=receipt user@example.com provider_raw_response={"token":"raw-secret"}
+      operation-location: https://ocr.example.test/result/456
+      request failed at https://provider.example.test/failure/789?token=secret
+    TEXT
+
+    sanitized = described_class.sanitize_exception_text(text)
+
+    aggregate_failures do
+      expect(sanitized).to include('[FILTERED]', '[FILTERED_URL]', '[REDACTED_EMAIL]')
+      expect(sanitized).not_to include(
+        'sk-secret-token',
+        'ocr.example.test',
+        'receipt user',
+        'raw-secret',
+        'operations/123',
+        'result/456',
+        'failure/789'
+      )
+    end
+  end
+
   it '配列とhashの保存量を制限する' do
     metadata = described_class.call(
       list: Array.new(60) { |index| index },

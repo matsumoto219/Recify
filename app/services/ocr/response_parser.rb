@@ -83,7 +83,7 @@ class Ocr::ResponseParser
     Rails.logger.error("[OCR::ResponseParser] json_parse_failed class=#{e.class}")
     build_error_result("ocr_api_error")
   rescue InvalidOcrResponseError => e
-    Rails.logger.error("[OCR::ResponseParser] invalid_response class=#{e.class} message=#{e.message}")
+    Rails.logger.error("[OCR::ResponseParser] invalid_response class=#{e.class}")
     build_error_result("ocr_api_error")
   rescue TypeError => e
     Rails.logger.error("[OCR::ResponseParser] type_error class=#{e.class}")

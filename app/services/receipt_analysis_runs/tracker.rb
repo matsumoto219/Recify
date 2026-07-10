@@ -455,7 +455,7 @@ module ReceiptAnalysisRuns
     def safe_error_message(value)
       return nil if value.blank?
 
-      text = value.to_s
+      text = SecurityEvents.sanitize_exception_message(value)
       return text if text.bytesize <= SnapshotBuilder::STRING_MAX_BYTES
 
       truncated = +""

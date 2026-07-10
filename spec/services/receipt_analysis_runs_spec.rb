@@ -199,6 +199,27 @@ RSpec.describe ReceiptAnalysisRuns do
         described_class.start_stage(run, 'ai')
       end.to raise_error(ReceiptAnalysisRuns::TerminalRunError)
     end
+
+    it 'runのerror_messageからsecret・endpoint・promptを除去する' do
+      run = described_class.start(receipt:, source: 'upload').run
+
+      described_class.fail(
+        run,
+        error_stage: 'ocr',
+        error_code: 'unexpected_error',
+        error_message: 'Bearer sk-secret endpoint=https://ocr.example.test/operation/123 prompt=raw receipt text'
+      )
+
+      aggregate_failures do
+        expect(run.reload.error_message).to include('[FILTERED]')
+        expect(run.error_message).not_to include(
+          'sk-secret',
+          'ocr.example.test',
+          'operation/123',
+          'raw receipt text'
+        )
+      end
+    end
   end
 
   describe 'result tracking' do

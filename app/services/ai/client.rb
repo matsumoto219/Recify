@@ -35,7 +35,7 @@ module Ai
     def run_primary(input, before_provider_call:, deadline:)
       provider_executor(primary_provider, before_provider_call: before_provider_call, deadline: deadline).call(input)
     rescue Ai::Errors::TimeoutError => error
-      Rails.logger.error("[AI] primary timeout: #{error.message}")
+      Rails.logger.error("[AI] primary_timeout class=#{error.class}")
       raise Ai::Errors::ProviderError.new(
         message: error.message,
         error_code: "ai_primary_failed",
@@ -44,7 +44,9 @@ module Ai
         **provider_error_attributes(error)
       )
     rescue Ai::Errors::ProviderError => error
-      Rails.logger.error("[AI] primary provider error: #{error.message}")
+      Rails.logger.error(
+        "[AI] primary_provider_error class=#{error.class} code=#{error.error_code.presence || 'unknown'}"
+      )
       raise error if error.error_code.present?
 
       raise Ai::Errors::ProviderError.new(

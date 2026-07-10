@@ -374,7 +374,7 @@ module ReceiptAnalysisRuns
         id: run&.id,
         run_key: run&.run_key,
         error_class: error.class.name,
-        error_message: error.message
+        error_message: SecurityEvents.sanitize_exception_message(error.message)
       }
     end
 
@@ -383,7 +383,7 @@ module ReceiptAnalysisRuns
         receipt_id: receipt&.id,
         receipt_public_id: receipt&.public_id,
         error_class: error.class.name,
-        error_message: error.message
+        error_message: SecurityEvents.sanitize_exception_message(error.message)
       }
     end
 

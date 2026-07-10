@@ -27,7 +27,7 @@ class ExternalServiceMonitorJob < ApplicationJob
     end
   rescue StandardError => e
     Rails.logger.warn(
-      "[ExternalServiceMonitorJob] service=#{service} failed class=#{e.class} message=#{e.message}"
+      "[ExternalServiceMonitorJob] service=#{service} failed class=#{e.class}"
     )
     ExternalServices.mark_monitor_failure!(service, error_code: DEFAULT_ERROR_CODES.fetch(service))
   end

@@ -96,7 +96,7 @@ class ReceiptAiEnrichmentService
       meta: { final_error_detail: detail }.compact
     )
   rescue StandardError => e
-    Rails.logger.error("[AIEnrichment] unexpected_error #{e.class}: #{e.message}")
+    Rails.logger.error("[AIEnrichment] unexpected_error class=#{e.class}")
     ExternalServices.mark_failure!(:ai, error_code: "ai_api_error")
     Ai::ResultTemplate.error(
       error_code: "ai_api_error",

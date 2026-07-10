@@ -30,7 +30,7 @@ module Ai
         fallback_provider_configured?
     rescue StandardError => e
       Rails.logger.warn(
-        "[AI::AvailabilityChecker] unavailable class=#{e.class} message=#{e.message}"
+        "[AI::AvailabilityChecker] unavailable class=#{e.class}"
       )
       false
     end

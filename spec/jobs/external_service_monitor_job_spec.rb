@@ -11,6 +11,24 @@ RSpec.describe ExternalServiceMonitorJob, type: :job do
     end
   end
 
+  it 'monitor例外ログへ例外本文を出さない' do
+    logged_message = nil
+    logger = instance_double(ActiveSupport::Logger)
+    allow(logger).to receive(:warn) { |message| logged_message = message }
+    allow(Rails).to receive(:logger).and_return(logger)
+    allow(ExternalServices).to receive(:services_due_for_check).and_return([ :ocr ])
+    allow(ExternalServices).to receive(:check_available?)
+      .and_raise(StandardError, 'Bearer sk-secret https://ocr.example.test/operation/123')
+    allow(ExternalServices).to receive(:mark_monitor_failure!)
+
+    described_class.perform_now
+
+    aggregate_failures do
+      expect(logged_message).to include('service=ocr', 'class=StandardError')
+      expect(logged_message).not_to include('sk-secret', 'ocr.example.test', 'operation/123')
+    end
+  end
+
   before do
     allow(Rails).to receive(:cache).and_return(cache_store)
     Rails.cache.clear
