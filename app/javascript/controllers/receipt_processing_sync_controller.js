@@ -34,7 +34,7 @@ export default class extends Controller {
     document.addEventListener('visibilitychange', this.handleVisibilityChange)
     document.addEventListener('turbo:before-stream-render', this.handleBeforeStreamRender)
     window.addEventListener('online', this.handleOnline)
-    this.cableObserver = new MutationObserver(this.handleCableMutations)
+    this.cableObserver = new window.MutationObserver(this.handleCableMutations)
     this.cableObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['connected'],
@@ -159,7 +159,7 @@ export default class extends Controller {
       const response = await window.fetch(url, {
         method: 'GET',
         headers: {
-          'Accept': 'text/vnd.turbo-stream.html',
+          Accept: 'text/vnd.turbo-stream.html',
           'X-Requested-With': 'XMLHttpRequest'
         },
         credentials: 'same-origin',
