@@ -131,4 +131,70 @@ RSpec.describe ReceiptEditSaveReviewState do
 
     expect(result.status).to eq('review_needed')
   end
+
+  it 'item入力があってもOCR全体reasonを自動解除しない' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: %w[ocr_unreadable ocr_low_confidence multiple_receipts_suspected],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+
+    result = resolve(receipt, item_inputs_submitted: true)
+
+    aggregate_failures do
+      expect(result.review_reasons).to include(
+        'ocr_unreadable',
+        'ocr_low_confidence',
+        'multiple_receipts_suspected'
+      )
+      expect(result.status).to eq('review_needed')
+    end
+  end
+
+  it 'category変更だけではreceipt-level item_tax_rate_uncertainを解除しない' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_tax_rate_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    item = receipt.receipt_items.build(category: nil, tax_rate: BigDecimal('0.10'))
+
+    result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: item.id, category: 'food', tax_rate: BigDecimal('0.10') }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    expect(result.review_reasons).to include('item_tax_rate_uncertain')
+  end
+
+  it 'item-level reasonは対応fieldを変更したものだけ解除する' do
+    item = ReceiptItem.new(
+      category: nil,
+      tax_rate: BigDecimal('0.10'),
+      needs_review: true,
+      review_reasons: %w[item_category_uncertain item_tax_rate_uncertain]
+    )
+
+    result = described_class.item_review_state(
+      item: item,
+      submitted_attributes: {
+        category: 'food',
+        tax_rate: BigDecimal('0.10')
+      }
+    )
+
+    aggregate_failures do
+      expect(result.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+      expect(result.needs_review).to be(true)
+    end
+  end
 end

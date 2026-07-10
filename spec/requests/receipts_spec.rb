@@ -7185,13 +7185,16 @@ RSpec.describe 'Receipts', type: :request do
       receipt.update!(
         status: 'review_needed',
         review_reasons: [ 'tax_detail_mismatch' ],
+        subtotal_amount: receipt.total_amount,
+        tax_amount: 0,
+        tax_rate: BigDecimal('0'),
         amount_calculation_profile: { 'existing' => 'profile' }
       )
 
       patch_receipt receipt, params: {
         receipt: {
           store_name: '保護属性更新',
-          total_amount: 100,
+          total_amount: receipt.total_amount,
           payment_method: 'cash',
           status: 'completed',
           review_reasons: [],
@@ -7780,7 +7783,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it 'multiple_receipts_suspected は編集保存を確認済みとして扱い解除する' do
+    it 'multiple_receipts_suspected はitem編集だけでは解除しない' do
       receipt.update!(status: 'review_needed', review_reasons: [ 'multiple_receipts_suspected' ])
       item = receipt.receipt_items.create!(
         confirmed_name: '単体確認商品',
@@ -7814,8 +7817,8 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
-        expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).not_to include('multiple_receipts_suspected')
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('multiple_receipts_suspected')
       end
     end
 

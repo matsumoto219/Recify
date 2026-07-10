@@ -1304,7 +1304,7 @@ class ReceiptsController < ApplicationController
       amount_result: amount_result,
       consistency_review_reasons: consistency_guard&.review_reasons,
       child_review_remaining: manual_update_child_review_remaining?(permitted),
-      nested_amount_inputs_submitted: nested_amount_inputs_submitted?,
+      nested_amount_inputs_submitted: manual_amount_inputs_changed?(permitted),
       item_inputs_submitted: item_inputs_submitted?
     )
     permitted["review_reasons"] = review_state.review_reasons
@@ -1361,15 +1361,8 @@ class ReceiptsController < ApplicationController
     end
   end
 
-  def nested_amount_inputs_submitted?
-    submitted = params[:receipt]
-    return false unless submitted.respond_to?(:key?)
-
-    %w[
-      receipt_items_attributes
-      receipt_adjustments_attributes
-      receipt_payments_attributes
-    ].any? { |key| submitted.key?(key) }
+  def manual_amount_inputs_changed?(permitted)
+    receipt_edit_save_change_set(permitted, :edit_save)&.amount_related_changed? == true
   end
 
   def item_inputs_submitted?
@@ -1630,46 +1623,14 @@ class ReceiptsController < ApplicationController
 
       item = existing_items[item_attributes["id"].to_s]
       next if item.blank?
-      next unless review_clear_target_changed?(item, item_attributes)
 
-      item_attributes["needs_review"] = false
-      item_attributes["review_reasons"] = []
+      state = ReceiptEditSaveReviewState.item_review_state(
+        item: item,
+        submitted_attributes: item_attributes
+      )
+      item_attributes["needs_review"] = state.needs_review
+      item_attributes["review_reasons"] = state.review_reasons
     end
-  end
-
-  def review_clear_target_changed?(item, item_attributes)
-    review_clear_target_fields.any? do |field|
-      item_value = normalize_review_compare_value(item.public_send(field), field)
-      param_value = normalize_review_compare_value(item_attributes[field.to_s], field)
-
-      item_value != param_value
-    end
-  end
-
-  def review_clear_target_fields
-    %i[
-      confirmed_name
-      category
-      price
-      quantity
-      quantity_unit_code
-      product_code
-      tax_rate
-      line_total
-    ]
-  end
-
-  def normalize_review_compare_value(value, field)
-    return nil if value.blank?
-
-    case field
-    when :price, :quantity, :tax_rate, :line_total
-      BigDecimal(value.to_s)
-    else
-      value.to_s
-    end
-  rescue ArgumentError
-    nil
   end
 
   def normalize_search_query(value)

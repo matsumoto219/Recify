@@ -458,6 +458,110 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
 
+    it 'category変更だけではitem_tax_rate_uncertainを解除しない' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: [ 'item_tax_rate_uncertain' ]
+      )
+      item = create_item(
+        receipt,
+        category: nil,
+        needs_review: true,
+        review_reasons: [ 'item_tax_rate_uncertain' ]
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, category: 'food')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(item.category).to eq('food')
+        expect(item.needs_review).to be(true)
+        expect(item.review_reasons).to include('item_tax_rate_uncertain')
+        expect(receipt.review_reasons).to include('item_tax_rate_uncertain')
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
+    it 'tax_rateを修正した場合はitem_tax_rate_uncertainだけを解除する' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: [ 'item_tax_rate_uncertain' ]
+      )
+      item = create_item(
+        receipt,
+        tax_rate: nil,
+        needs_review: true,
+        review_reasons: [ 'item_tax_rate_uncertain' ]
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, tax_rate: '10')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(item.tax_rate).to eq(BigDecimal('0.10'))
+        expect(item.needs_review).to be(false)
+        expect(item.review_reasons).to be_empty
+        expect(receipt.review_reasons).not_to include('item_tax_rate_uncertain')
+        expect(receipt.status).to eq('completed')
+      end
+    end
+
+    it 'category変更だけでは既存Amount reasonを解除しない' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: [ 'tax_detail_mismatch' ],
+        tax_rate: BigDecimal('0.10')
+      )
+      item = create_item(receipt, category: nil)
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, category: 'food')
+        }
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(item.reload.category).to eq('food')
+        expect(receipt.review_reasons).to include('tax_detail_mismatch')
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
+    it 'item編集だけではOCR全体reasonを解除しない' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: %w[ocr_unreadable ocr_low_confidence]
+      )
+      item = create_item(receipt)
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, confirmed_name: '修正済み商品')
+        }
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(receipt.review_reasons).to include('ocr_unreadable', 'ocr_low_confidence')
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
     it '不正文字列quantityを1へ丸めて保存しない' do
       receipt = create_completed_receipt
       item = create_item(receipt)
