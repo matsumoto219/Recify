@@ -82,6 +82,66 @@ RSpec.describe ExternalServices::StatusStore do
   end
 
   describe '.mark_failure!' do
+    it '並行する失敗記録でもfailure countを欠落させない' do
+      first_read_reached = Queue.new
+      release_first_read = Queue.new
+      read_count = 0
+      read_count_lock = Mutex.new
+
+      allow(cache_store).to receive(:read).and_wrap_original do |original, *args|
+        value = original.call(*args)
+        block_first_read = read_count_lock.synchronize do
+          read_count += 1
+          read_count == 1
+        end
+
+        if block_first_read
+          first_read_reached << true
+          release_first_read.pop
+        end
+
+        value
+      end
+
+      errors = Queue.new
+      first = Thread.new do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+      rescue StandardError => error
+        errors << error
+      end
+
+      first_read_reached.pop
+      second = Thread.new do
+        described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+      rescue StandardError => error
+        errors << error
+      end
+
+      sleep 0.05
+      release_first_read << true
+      [ first, second ].each(&:join)
+
+      raise errors.pop unless errors.empty?
+
+      expect(described_class.snapshot(:ocr)[:consecutive_failures]).to eq(2)
+    end
+
+    it 'SystemSettings取得失敗時もcode defaultで状態を更新する' do
+      allow(SystemSettings).to receive(:limit_for)
+        .and_raise(SystemSettings::ValidationError, 'invalid external service setting')
+
+      expect do
+        3.times do
+          described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')
+        end
+      end.not_to raise_error
+
+      aggregate_failures do
+        expect(described_class.snapshot(:ocr)[:state]).to eq('down')
+        expect(described_class.snapshot(:ocr)[:consecutive_failures]).to eq(3)
+      end
+    end
+
     it '1回目の外部サービス系失敗では ok のまま' do
       travel_to(Time.zone.parse('2026-04-15 10:00:00')) do
         described_class.mark_failure!(:ocr, error_code: 'external_service_unavailable')

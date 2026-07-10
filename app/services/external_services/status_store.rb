@@ -24,88 +24,102 @@ module ExternalServices
     DEGRADED_THRESHOLD = 2
     DOWN_THRESHOLD = 3
     RECOVERY_SUCCESS_THRESHOLD = 2
+    # Every process must use the same namespace so rolling deploys do not split the lock domain.
+    ADVISORY_LOCK_NAMESPACE = 1_693_745_635
+    ADVISORY_LOCK_IDS = { ocr: 1, ai: 2 }.freeze
+    PROCESS_LOCKS = SERVICES.index_with { Mutex.new }.freeze
 
     class << self
       def mark_success!(service_name)
         service = normalize_service_name(service_name)
-        data = read(service)
+        with_atomic_update(service) do |data|
+          data["consecutive_successes"] += 1
+          data["consecutive_failures"] = 0
+          data["first_failed_at"] = nil
+          data["last_error_code"] = nil
+          data["last_error_reason"] = nil
+          data["last_error_detail"] = nil
+          data["last_checked_at"] = current_time.iso8601
 
-        data["consecutive_successes"] += 1
-        data["consecutive_failures"] = 0
-        data["first_failed_at"] = nil
-        data["last_error_code"] = nil
-        data["last_error_reason"] = nil
-        data["last_error_detail"] = nil
-        data["last_checked_at"] = current_time.iso8601
+          if data["state"] == "down" && data["consecutive_successes"] >= recovery_success_threshold
+            data["state"] = "ok"
+            data["monitoring"] = false
+            data["next_check_at"] = nil
+          elsif data["state"] == "degraded" && data["consecutive_successes"] >= 1
+            data["state"] = "ok"
+            data["monitoring"] = false
+            data["next_check_at"] = nil
+          end
 
-        if data["state"] == "down" && data["consecutive_successes"] >= recovery_success_threshold
-          data["state"] = "ok"
-          data["monitoring"] = false
-          data["next_check_at"] = nil
-        elsif data["state"] == "degraded" && data["consecutive_successes"] >= 1
-          data["state"] = "ok"
-          data["monitoring"] = false
-          data["next_check_at"] = nil
+          data
         end
-
-        write(service, data)
       end
 
       def mark_failure!(service_name, error_code:, reason: nil, detail: nil)
         return unless external_error?(error_code)
 
         service = normalize_service_name(service_name)
-        data = read(service)
         now = current_time
-        assign_error_data!(data, service:, error_code:, reason:, detail:, checked_at: now)
+        data = with_atomic_update(service) do |current_data|
+          assign_error_data!(current_data, service:, error_code:, reason:, detail:, checked_at: now)
+          reset_failure_window!(current_data, now)
+          current_data["consecutive_successes"] = 0
 
-        reset_failure_window!(data, now)
+          down_failure_limit = down_failure_threshold
 
-        data["consecutive_successes"] = 0
+          if current_data["state"] == "down"
+            current_data["consecutive_failures"] = down_failure_limit
+          else
+            current_data["consecutive_failures"] = [
+              current_data["consecutive_failures"] + 1,
+              down_failure_limit
+            ].min
+            current_data["first_failed_at"] ||= now.iso8601
 
-        down_failure_limit = down_failure_threshold
+            if current_data["consecutive_failures"] >= down_failure_limit
+              current_data["state"] = "down"
+              current_data["monitoring"] = true
+              current_data["next_check_at"] = next_check_at_for(1, now).iso8601
+            elsif current_data["consecutive_failures"] >= degraded_failure_threshold
+              current_data["state"] = "degraded"
+              current_data["monitoring"] = true
+              current_data["next_check_at"] = next_check_at_for(0, now).iso8601
+            end
+          end
 
-        if data["state"] == "down"
-          data["consecutive_failures"] = down_failure_limit
-          record_security_event(service:, error_code:, detail:, consecutive_failures: data["consecutive_failures"])
-          return write(service, data)
-        end
-
-        data["consecutive_failures"] = [ data["consecutive_failures"] + 1, down_failure_limit ].min
-        data["first_failed_at"] ||= now.iso8601
-
-        if data["consecutive_failures"] >= down_failure_limit
-          data["state"] = "down"
-          data["monitoring"] = true
-          data["next_check_at"] = next_check_at_for(1, now).iso8601
-        elsif data["consecutive_failures"] >= degraded_failure_threshold
-          data["state"] = "degraded"
-          data["monitoring"] = true
-          data["next_check_at"] = next_check_at_for(0, now).iso8601
+          current_data
         end
 
         record_security_event(service:, error_code:, detail:, consecutive_failures: data["consecutive_failures"])
-        write(service, data)
+        data
       end
 
       def mark_monitor_failure!(service_name, error_code: "external_service_unavailable", reason: nil, detail: nil)
         return unless external_error?(error_code)
 
         service = normalize_service_name(service_name)
-        data = read(service)
         now = current_time
+        monitoring = false
+        data = with_atomic_update(service) do |current_data|
+          current_data["consecutive_successes"] = 0
+          assign_error_data!(current_data, service:, error_code:, reason:, detail:, checked_at: now)
 
-        data["consecutive_successes"] = 0
-        assign_error_data!(data, service:, error_code:, reason:, detail:, checked_at: now)
+          if current_data["monitoring"] == true
+            monitoring = true
+            current_data["state"] = "degraded" unless current_data["state"] == "down"
+            current_data["next_check_at"] = next_check_at_for(
+              monitor_recovery_attempt_for(current_data),
+              now
+            ).iso8601
+          end
 
-        return write(service, data) unless data["monitoring"] == true
+          current_data
+        end
 
-        data["state"] = "degraded" unless data["state"] == "down"
-        data["monitoring"] = true
-        data["next_check_at"] = next_check_at_for(monitor_recovery_attempt_for(data), now).iso8601
-
-        record_security_event(service:, error_code:, detail:, consecutive_failures: data["consecutive_failures"])
-        write(service, data)
+        if monitoring
+          record_security_event(service:, error_code:, detail:, consecutive_failures: data["consecutive_failures"])
+        end
+        data
       end
 
       def state(service_name)
@@ -146,7 +160,7 @@ module ExternalServices
 
       def reset!(service_name)
         service = normalize_service_name(service_name)
-        write(service, default_data)
+        with_atomic_update(service) { default_data }
       end
 
       def external_error?(error_code)
@@ -154,19 +168,19 @@ module ExternalServices
       end
 
       def failure_window
-        SystemSettings.limit_for("external_services.failure_window_minutes").minutes
+        status_setting("external_services.failure_window_minutes", FAILURE_WINDOW_MINUTES).minutes
       end
 
       def degraded_failure_threshold
-        SystemSettings.limit_for("external_services.degraded_failure_threshold")
+        status_setting("external_services.degraded_failure_threshold", DEGRADED_THRESHOLD)
       end
 
       def down_failure_threshold
-        SystemSettings.limit_for("external_services.down_failure_threshold")
+        status_setting("external_services.down_failure_threshold", DOWN_THRESHOLD)
       end
 
       def recovery_success_threshold
-        SystemSettings.limit_for("external_services.recovery_success_threshold")
+        status_setting("external_services.recovery_success_threshold", RECOVERY_SUCCESS_THRESHOLD)
       end
 
       private
@@ -192,6 +206,35 @@ module ExternalServices
         normalized = data.deep_stringify_keys
         Rails.cache.write(cache_key(service_name), normalized)
         normalized
+      end
+
+      def with_atomic_update(service)
+        PROCESS_LOCKS.fetch(service).synchronize do
+          ApplicationRecord.connection_pool.with_connection do |connection|
+            lock_id = ADVISORY_LOCK_IDS.fetch(service)
+            connection.execute(
+              "SELECT pg_advisory_lock(#{ADVISORY_LOCK_NAMESPACE}, #{lock_id})"
+            )
+
+            begin
+              write(service, yield(read(service)))
+            ensure
+              connection.execute(
+                "SELECT pg_advisory_unlock(#{ADVISORY_LOCK_NAMESPACE}, #{lock_id})"
+              )
+            end
+          end
+        end
+      end
+
+      def status_setting(key, fallback)
+        SystemSettings.limit_for(key)
+      rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError,
+             ActiveRecord::ActiveRecordError, ArgumentError, TypeError => error
+        Rails.logger.warn(
+          "[ExternalServices::StatusStore] setting_fallback key=#{key} class=#{error.class}"
+        )
+        fallback
       end
 
       def default_data
