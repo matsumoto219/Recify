@@ -94,6 +94,101 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
       end
     end
 
+    it '依存設定を対応するdependency lock内で更新する' do
+      allow(SystemOperations::SystemSettingDependencyLock).to receive(:call).and_call_original
+
+      result = described_class.call(
+        key: 'external_services.ai.read_timeout_seconds',
+        value: '120',
+        actor: actor,
+        reason: 'adjust AI read timeout',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: '1'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemOperations::SystemSettingDependencyLock).to have_received(:call)
+          .with(groups: [ 'external_service_ai_runtime' ])
+      end
+    end
+
+    it '依存する設定の並行更新で不正な組み合わせを保存しない' do
+      create(
+        :system_setting,
+        key: 'external_services.down_failure_threshold',
+        value: SystemSettings.stored_value(5)
+      )
+      create(
+        :system_setting,
+        key: 'external_services.degraded_failure_threshold',
+        value: SystemSettings.stored_value(2)
+      )
+
+      model_validated = Queue.new
+      release_writes = Queue.new
+      allow(SystemSettings).to receive(:validate_stored_value!).and_wrap_original do |original, *args|
+        result = original.call(*args)
+        model_validated << true
+        release_writes.pop
+        result
+      end
+
+      results = Queue.new
+      errors = Queue.new
+      first_thread = Thread.new do
+        results << described_class.call(
+          key: 'external_services.degraded_failure_threshold',
+          value: '4',
+          actor: actor,
+          reason: 'raise degraded threshold',
+          request: request,
+          reauthentication: reauthentication,
+          confirmation: '1'
+        )
+      rescue StandardError => error
+        errors << error
+      end
+
+      second_thread = Thread.new do
+        results << described_class.call(
+          key: 'external_services.down_failure_threshold',
+          value: '3',
+          actor: actor,
+          reason: 'lower down threshold',
+          request: request,
+          reauthentication: reauthentication,
+          confirmation: '1'
+        )
+      rescue StandardError => error
+        errors << error
+      end
+
+      begin
+        Timeout.timeout(0.1) { 2.times { model_validated.pop } }
+      rescue Timeout::Error
+        nil
+      ensure
+        2.times { release_writes << true }
+      end
+      [ first_thread, second_thread ].each(&:join)
+
+      raise errors.pop unless errors.empty?
+
+      update_results = 2.times.map { results.pop }
+      degraded = SystemSettings.limit_for('external_services.degraded_failure_threshold')
+      down = SystemSettings.limit_for('external_services.down_failure_threshold')
+
+      aggregate_failures do
+        expect(update_results.count(&:success?)).to eq(1)
+        expect(update_results.count(&:failure?)).to eq(1)
+        expect(update_results.find(&:failure?).error_code)
+          .to eq('external_service_status_threshold_relationship')
+        expect(degraded).to be < down
+      end
+    end
+
     it 'orphan blob保持期間の変更はhigh riskとして監査ログに残す' do
       result = described_class.call(
         key: 'retention.orphan_blobs_hours',
@@ -317,6 +412,30 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
           outcome: 'succeeded',
           target_uid: 'limits.receipt_items_per_receipt'
         )
+      end
+    end
+
+    it 'snapshot item上限を明細上限未満へ下げる更新を拒否する' do
+      create(
+        :system_setting,
+        key: 'limits.receipt_items_per_receipt',
+        value: SystemSettings.stored_value(500)
+      )
+
+      result = described_class.call(
+        key: 'limits.snapshot_ocr_items_max',
+        value: '100',
+        actor: actor,
+        reason: 'lower OCR snapshot item limit',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: '1'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('receipt_items_snapshot_limit')
+        expect(SystemSettings.limit_for('limits.snapshot_ocr_items_max')).to eq(1000)
       end
     end
 

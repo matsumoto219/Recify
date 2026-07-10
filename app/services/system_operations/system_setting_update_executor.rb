@@ -31,11 +31,12 @@ module SystemOperations
 
       setting = nil
       audit_log = nil
-      before_state = current_state
+      before_state = nil
       after_state = nil
       casted_value = nil
 
-      SystemSetting.transaction do
+      SystemSettingDependencyLock.call(groups: SystemSettings.dependency_lock_groups_for(key)) do
+        before_state = current_state
         casted_value = SystemSettings.cast_update_value(key, raw_value)
         setting = update_setting_record!(casted_value)
         after_state = state_for(value: casted_value, source: "db")

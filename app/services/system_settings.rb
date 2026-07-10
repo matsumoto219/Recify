@@ -38,6 +38,9 @@ module SystemSettings
     limits.snapshot_ocr_items_max
     limits.snapshot_ai_normalized_items_max
   ].freeze
+  RECEIPT_ITEMS_SNAPSHOT_DEPENDENCY_KEYS = (
+    [ RECEIPT_ITEMS_LIMIT_KEY ] + SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS
+  ).freeze
   STORE_NAME_CASING_CONTEXT_LINES_DEPENDENCY_KEYS = [
     STORE_NAME_CASING_CONTEXT_LINES_KEY,
     SNAPSHOT_OCR_LINES_KEY
@@ -125,6 +128,24 @@ module SystemSettings
     "limits.max_ocr_per_day" => %w[ocr_jobs_per_day],
     "limits.max_ai_per_day" => %w[ai_jobs_per_day],
     "limits.max_storage_bytes" => %w[storage_bytes]
+  }.freeze
+  SETTING_DEPENDENCY_LOCK_GROUPS = {
+    "receipt_items_snapshot" => RECEIPT_ITEMS_SNAPSHOT_DEPENDENCY_KEYS,
+    "store_name_casing_snapshot" => STORE_NAME_CASING_CONTEXT_LINES_DEPENDENCY_KEYS,
+    "user_limit_safety" => (
+      USER_LIMIT_SETTING_SAFETY_KEYS.keys + USER_LIMIT_SETTING_SAFETY_KEYS.values.flatten
+    ).uniq.freeze,
+    "analysis_run_retention" => ANALYSIS_RUN_RETENTION_KEYS,
+    "ocr_artifact_retention" => OCR_RAW_RESPONSE_RETENTION_DEPENDENCY_KEYS,
+    "amount_limits" => AMOUNT_LIMIT_KEYS,
+    "image_dimensions" => IMAGE_DIMENSION_LIMIT_KEYS,
+    "storage_usage_thresholds" => STORAGE_USAGE_PERCENTAGE_KEYS,
+    "storage_remaining_thresholds" => STORAGE_REMAINING_BYTES_KEYS,
+    "global_storage_usage_thresholds" => GLOBAL_STORAGE_USAGE_PERCENTAGE_KEYS,
+    "security_event_retention" => SECURITY_EVENT_RETENTION_KEYS,
+    "external_service_status" => EXTERNAL_SERVICE_FAILURE_THRESHOLD_KEYS,
+    "external_service_ai_runtime" => AI_RUNTIME_TUNING_KEYS,
+    "external_service_ocr_runtime" => OCR_RUNTIME_TUNING_KEYS
   }.freeze
 
   UnknownKeyError = Class.new(KeyError)
@@ -274,6 +295,14 @@ module SystemSettings
 
     def valid_key?(key)
       definitions.key?(normalize_key(key))
+    end
+
+    def dependency_lock_groups_for(key)
+      normalized_key = normalize_key(key)
+
+      SETTING_DEPENDENCY_LOCK_GROUPS.filter_map do |group, keys|
+        group if keys.include?(normalized_key)
+      end.sort
     end
 
     def validate_stored_value!(key, value)
@@ -475,16 +504,15 @@ module SystemSettings
     end
 
     def validate_receipt_items_snapshot_dependency!(definition, value)
-      return unless definition.key == RECEIPT_ITEMS_LIMIT_KEY
-      return if Integer(value) <= receipt_items_snapshot_ceiling
+      return unless RECEIPT_ITEMS_SNAPSHOT_DEPENDENCY_KEYS.include?(definition.key)
+
+      values = limits_for(RECEIPT_ITEMS_SNAPSHOT_DEPENDENCY_KEYS)
+      values[definition.key] = Integer(value)
+      receipt_items_limit = values.fetch(RECEIPT_ITEMS_LIMIT_KEY)
+      snapshot_ceiling = values.slice(*SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS).values.min
+      return if receipt_items_limit <= snapshot_ceiling
 
       raise ValidationError, RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR
-    end
-
-    def receipt_items_snapshot_ceiling
-      limits_for(SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS).values.min
-    rescue UnknownKeyError, ValidationError, ArgumentError, TypeError
-      1000
     end
 
     def validate_store_name_casing_context_lines_dependency!(definition, value)
