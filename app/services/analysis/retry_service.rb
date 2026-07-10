@@ -110,30 +110,36 @@ module Analysis
       verify_audit_writable!
       result = nil
 
-      ReceiptAnalysisRun.transaction do
-        start_result = ReceiptAnalysisRuns.start(
-          receipt: receipt,
-          source: SOURCE,
-          requested_by_user: actor,
-          request_reason: reason,
-          parent_run: parent_run
-        )
+      begin
+        ReceiptAnalysisRun.transaction do
+          start_result = ReceiptAnalysisRuns.start(
+            receipt: receipt,
+            source: SOURCE,
+            requested_by_user: actor,
+            request_reason: reason,
+            parent_run: parent_run
+          )
 
-        unless start_result.created?
-          result = failure(:active_run_exists, "receipt already has an active analysis run", run: start_result.run)
-          raise ActiveRecord::Rollback
+          unless start_result.created?
+            result = failure(:active_run_exists, "receipt already has an active analysis run", run: start_result.run)
+            raise ActiveRecord::Rollback
+          end
+
+          run = start_result.run
+          unless consume_retry_operation_limit
+            result = failure(:usage_limit_exceeded, "usage_limit_exceeded")
+            raise ActiveRecord::Rollback
+          end
+
+          copy_retry_snapshots(run)
+          mark_receipt_processing!
+
+          result = Result.new(run: run, enqueued_job: job_class, retry_type: retry_type)
         end
-
-        run = start_result.run
-        unless consume_retry_operation_limit
-          result = failure(:usage_limit_exceeded, "usage_limit_exceeded")
-          raise ActiveRecord::Rollback
-        end
-
-        copy_retry_snapshots(run)
-        mark_receipt_processing!
-
-        result = Result.new(run: run, enqueued_job: job_class, retry_type: retry_type)
+      rescue ExternalServices::RuntimeConfigUnavailableError
+        result = failure(:runtime_config_unavailable, "runtime config is unavailable")
+        record_audit!(result)
+        return result
       end
 
       if result&.failure?

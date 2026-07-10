@@ -1916,6 +1916,29 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'runtime config取得失敗時はrunとjobを作らず失敗状態を表示する' do
+      allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)
+      allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
+      allow(ExternalServices).to receive(:runtime_config_snapshot)
+        .and_raise(ExternalServices::RuntimeConfigUnavailableError)
+
+      post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+
+      receipt = Receipt.order(:id).last
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(flash[:alert]).to eq(I18n.t('flash.receipts.analysis_enqueue_failed'))
+        expect(receipt.reload).to have_attributes(
+          status: 'failed',
+          processing_error_code: 'runtime_config_unavailable'
+        )
+        expect(receipt.receipt_analysis_runs).to be_empty
+        expect(ReceiptOcrJob).not_to have_received(:perform_later)
+      end
+    end
+
     it '単一uploadはuserの画像保持設定をsnapshotし、解析完了前はpurge候補化しない' do
       user.update!(keep_receipt_images: false)
       allow(ExternalServices).to receive(:down?).with(:ocr).and_return(false)

@@ -588,7 +588,12 @@ RSpec.describe Analysis::RetryService do
           'schema_version' => 'receipt_analysis_run_ai_normalized_result_v1',
           'success' => true
         )
-        expect(run.metadata.keys).to contain_exactly('finalize_decision')
+        expect(run.metadata.keys).to contain_exactly(
+          'external_service_runtime_config',
+          'external_service_runtime_config_origin',
+          'finalize_decision'
+        )
+        expect(run.metadata['external_service_runtime_config_origin']).to eq('run_creation')
         expect(run.metadata.dig('finalize_decision', 'strategy')).to eq('ai_success')
         expect(snapshot_json(run)).not_to include('full raw OCR text')
         expect(snapshot_json(run)).not_to include('do-not-copy')
@@ -929,6 +934,39 @@ RSpec.describe Analysis::RetryService do
           error_code: 'analysis_enqueue_failed'
         )
         expect(AuditLog.where(action: 'receipt_analysis.full_reanalyze', outcome: 'succeeded')).to be_empty
+      end
+    end
+
+    it 'runtime config取得失敗時はrunとjobを作らず失敗auditを残す' do
+      allow(ExternalServices).to receive(:runtime_config_snapshot)
+        .and_raise(ExternalServices::RuntimeConfigUnavailableError)
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: 'runtime config failure retry',
+          request: request_context,
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('runtime_config_unavailable')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      aggregate_failures do
+        expect(receipt.reload).to be_completed
+        expect(receipt.receipt_analysis_runs).to be_empty
+        expect_no_analysis_job_enqueued
+        expect(AuditLog.last).to have_attributes(
+          action: 'receipt_analysis.full_reanalyze',
+          outcome: 'failed',
+          error_code: 'runtime_config_unavailable'
+        )
       end
     end
 

@@ -1,5 +1,8 @@
 module ReceiptAnalysisRuns
   class Starter
+    RUNTIME_CONFIG_ERROR_CODE = "runtime_config_unavailable".freeze
+    SAFE_RECEIPT_FAILURE_MESSAGE_KEY = "receipts.processing_errors.unexpected_failure".freeze
+
     class << self
       def call(receipt:, source:, requested_by_user: nil, request_reason: nil, parent_run: nil)
         new(
@@ -26,6 +29,7 @@ module ReceiptAnalysisRuns
           return StartResult.new(run: active_run, created: false)
         end
 
+        runtime_config_metadata = RuntimeConfigSnapshot.metadata_for_new_run
         run = receipt.receipt_analysis_runs.create!(
           source: source,
           stage: "queued",
@@ -33,7 +37,8 @@ module ReceiptAnalysisRuns
           requested_by_user: requested_by_user,
           request_reason: request_reason,
           parent_run: parent_run,
-          attempt_number: next_attempt_number
+          attempt_number: next_attempt_number,
+          metadata: runtime_config_metadata
         )
 
         StartResult.new(run: run, created: true)
@@ -43,6 +48,9 @@ module ReceiptAnalysisRuns
       raise unless active_run
 
       StartResult.new(run: active_run, created: false)
+    rescue ExternalServices::RuntimeConfigUnavailableError
+      fail_processing_receipt!
+      raise
     end
 
     private
@@ -55,6 +63,20 @@ module ReceiptAnalysisRuns
 
     def next_attempt_number
       receipt.receipt_analysis_runs.maximum(:attempt_number).to_i + 1
+    end
+
+    def fail_processing_receipt!
+      receipt.with_lock do
+        receipt.reload
+        return unless receipt.processing?
+
+        receipt.update!(
+          status: "failed",
+          processing_error_code: RUNTIME_CONFIG_ERROR_CODE,
+          processing_error_message: I18n.t(SAFE_RECEIPT_FAILURE_MESSAGE_KEY),
+          review_reasons: []
+        )
+      end
     end
   end
 end

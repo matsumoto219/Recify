@@ -472,7 +472,7 @@ class ReceiptsController < ApplicationController
 
     ReceiptAnalysisRuns.enqueue(result.run, job_class: ReceiptOcrJob)
     true
-  rescue ReceiptAnalysisRuns::EnqueueError
+  rescue ReceiptAnalysisRuns::EnqueueError, ExternalServices::RuntimeConfigUnavailableError
     false
   end
 

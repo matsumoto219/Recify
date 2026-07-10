@@ -118,7 +118,7 @@ class ReceiptBatchUploadService
       )
 
       ReceiptAnalysisRuns.enqueue(result.run, job_class: ReceiptOcrJob)
-    rescue ReceiptAnalysisRuns::EnqueueError
+    rescue ReceiptAnalysisRuns::EnqueueError, ExternalServices::RuntimeConfigUnavailableError
       errors << I18n.t("receipts.batch_upload.errors.analysis_enqueue_failed")
     end
 

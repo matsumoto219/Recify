@@ -97,6 +97,26 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     end
   end
 
+  it 'runtime config取得失敗時はrunとjobを作らず作成済みreceiptをfailedへ補償する' do
+    allow(ExternalServices).to receive(:runtime_config_snapshot)
+      .and_raise(ExternalServices::RuntimeConfigUnavailableError)
+
+    result = described_class.call(user:, files: [ uploaded_receipt_fixture ])
+    receipt = user.receipts.sole
+
+    aggregate_failures do
+      expect(result).not_to be_success
+      expect(result.created_receipts).to contain_exactly(receipt)
+      expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.analysis_enqueue_failed'))
+      expect(receipt.reload).to have_attributes(
+        status: 'failed',
+        processing_error_code: 'runtime_config_unavailable'
+      )
+      expect(receipt.receipt_analysis_runs).to be_empty
+      expect(ReceiptOcrJob).not_to have_received(:perform_later)
+    end
+  end
+
   it '成功時にfile数でbatch_files_per_dayを消費する' do
     files = [
       uploaded_receipt_fixture,
