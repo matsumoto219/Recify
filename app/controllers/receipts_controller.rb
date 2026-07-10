@@ -259,7 +259,16 @@ class ReceiptsController < ApplicationController
       )
       return
     end
-    rebuild_review_state_after_manual_update!(update_params, amount_result)
+    consistency_guard = receipt_edit_save_consistency_guard(update_params, amount_result)
+    unless consistency_guard.consistent?
+      render_manual_amount_consistency_error!(
+        update_params,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+
+    rebuild_review_state_after_manual_update!(update_params, amount_result, consistency_guard: consistency_guard)
     clear_processing_error_after_manual_update!(update_params)
 
     if manual_receipt_items_missing?(update_params, context: :edit_save)
@@ -576,6 +585,15 @@ class ReceiptsController < ApplicationController
     render :edit, status: :unprocessable_content, formats: :html
   end
 
+  def render_manual_amount_consistency_error!(permitted, rebuild_blank_adjustment_row_after_failure: false)
+    @receipt.assign_attributes(permitted)
+    @receipt.errors.add(:base, t("receipts.form.errors.amount_consistency_failed"))
+    build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+    prepare_receipt_form_presenter
+    flash.now[:alert] = @receipt.errors.full_messages
+    render :edit, status: :unprocessable_content, formats: :html
+  end
+
   def receipt_params
     params.require(:receipt).permit(
       :store_name,
@@ -647,10 +665,13 @@ class ReceiptsController < ApplicationController
     permitted = receipt_params.to_h.deep_dup
     permitted.delete("remove_image")
 
+    purchased_at_submitted = permitted.key?("purchased_on") || permitted.key?("purchased_time")
     purchased_on = permitted.delete("purchased_on")
     purchased_time = permitted.delete("purchased_time")
 
-    permitted["purchased_at"] = build_purchased_at(purchased_on, purchased_time)
+    if purchased_at_submitted
+      permitted["purchased_at"] = build_purchased_at(purchased_on, purchased_time)
+    end
     normalize_receipt_item_tax_rates!(permitted)
     normalize_receipt_item_quantity_units!(permitted)
     normalize_receipt_adjustment_attributes!(permitted)
@@ -857,6 +878,8 @@ class ReceiptsController < ApplicationController
     adjustments_attributes = permitted["receipt_adjustments_attributes"]
     return if adjustments_attributes.blank?
 
+    existing_adjustments = @receipt&.receipt_adjustments&.index_by { |adjustment| adjustment.id.to_s } || {}
+
     adjustments_attributes.each_value do |adjustment_attributes|
       adjustment_attributes["kind"] = ReceiptAdjustment.normalize_kind(adjustment_attributes["kind"])
       adjustment_attributes["tax_rate"] = normalize_tax_rate(adjustment_attributes["tax_rate"])
@@ -864,10 +887,27 @@ class ReceiptsController < ApplicationController
         kind: adjustment_attributes["kind"],
         requested_sign: adjustment_attributes["sign"]
       )
+
+      existing = existing_adjustments[adjustment_attributes["id"].to_s]
+      next if existing && !manual_adjustment_review_target_changed?(existing, adjustment_attributes)
+
       adjustment_attributes["source"] = "manual"
       adjustment_attributes["needs_review"] = false
       adjustment_attributes["review_reasons"] = []
     end
+  end
+
+  def manual_adjustment_review_target_changed?(adjustment, attributes)
+    changed_adjustment = adjustment.dup
+    changed_adjustment.assign_attributes(attributes.slice(*manual_adjustment_review_target_fields.map(&:to_s)))
+
+    manual_adjustment_review_target_fields.any? do |field|
+      attributes.key?(field.to_s) && changed_adjustment.public_send(field) != adjustment.public_send(field)
+    end
+  end
+
+  def manual_adjustment_review_target_fields
+    %i[kind label amount sign tax_rate]
   end
 
   def manual_adjustment_sign(kind:, requested_sign:)
@@ -1181,40 +1221,86 @@ class ReceiptsController < ApplicationController
     permitted["status"] = "completed" if @receipt.failed? && !permitted.key?("status")
   end
 
-  def rebuild_review_state_after_manual_update!(permitted, amount_result)
+  def rebuild_review_state_after_manual_update!(permitted, amount_result, consistency_guard: nil)
     return unless manual_review_state_rebuild_target?(permitted)
 
-    blocking_reasons = manual_update_blocking_review_reasons(amount_result)
-    permitted["review_reasons"] = blocking_reasons
-    permitted["status"] =
-      if blocking_reasons.empty? && !manual_update_item_review_remaining?(permitted)
-        "completed"
-      else
-        "review_needed"
-      end
+    review_state = ReceiptEditSaveReviewState.call(
+      receipt: @receipt,
+      permitted: permitted,
+      amount_result: amount_result,
+      consistency_review_reasons: consistency_guard&.review_reasons,
+      child_review_remaining: manual_update_child_review_remaining?(permitted),
+      nested_amount_inputs_submitted: nested_amount_inputs_submitted?,
+      item_inputs_submitted: item_inputs_submitted?
+    )
+    permitted["review_reasons"] = review_state.review_reasons
+    permitted["status"] = review_state.status
   end
 
   def manual_review_state_rebuild_target?(permitted)
-    return false if permitted["receipt_items_attributes"].blank?
+    submitted = params[:receipt]
+    return false unless submitted.respond_to?(:key?)
+    return false unless manual_review_state_rebuild_keys.any? { |key| submitted.key?(key) }
 
     @receipt.completed? || @receipt.review_needed? || @receipt.failed? || @receipt.has_processing_error?
   end
 
+  def manual_review_state_rebuild_keys
+    %w[
+      total_amount
+      subtotal_amount
+      tax_amount
+      tax_rate
+      receipt_items_attributes
+      receipt_adjustments_attributes
+      receipt_payments_attributes
+    ]
+  end
+
   def manual_update_blocking_review_reasons(amount_result)
     reasons =
-      if amount_result.respond_to?(:key?) && amount_result.key?(:blocking_inconsistencies)
+      if amount_result.respond_to?(:key?) && amount_result.key?(:review_reasons)
+        amount_result[:review_reasons]
+      elsif amount_result.respond_to?(:key?) && amount_result.key?(:blocking_inconsistencies)
         amount_result[:blocking_inconsistencies]
       else
         amount_result[:inconsistencies]
       end
 
-    ReviewReasons.blocking_reasons_for_user(reasons)
+    ReviewReasons.review_reasons_for_user(reasons)
   end
 
   def manual_update_item_review_remaining?(permitted)
     manual_update_item_review_states(permitted).any? do |state|
       state[:needs_review] || ReviewReasons.blocking_reasons_for_user(state[:review_reasons]).any?
     end
+  end
+
+  def manual_update_child_review_remaining?(permitted)
+    manual_update_item_review_remaining?(permitted) || manual_update_adjustment_review_remaining?(permitted)
+  end
+
+  def manual_update_adjustment_review_remaining?(permitted)
+    receipt_edit_save_input(permitted).receipt_adjustments.any? do |adjustment|
+      ActiveModel::Type::Boolean.new.cast(adjustment["needs_review"]) ||
+        ReviewReasons.review_reasons_for_user(adjustment["review_reasons"]).present?
+    end
+  end
+
+  def nested_amount_inputs_submitted?
+    submitted = params[:receipt]
+    return false unless submitted.respond_to?(:key?)
+
+    %w[
+      receipt_items_attributes
+      receipt_adjustments_attributes
+      receipt_payments_attributes
+    ].any? { |key| submitted.key?(key) }
+  end
+
+  def item_inputs_submitted?
+    submitted = params[:receipt]
+    submitted.respond_to?(:key?) && submitted.key?("receipt_items_attributes")
   end
 
   def manual_update_item_review_states(permitted)
@@ -1426,6 +1512,17 @@ class ReceiptsController < ApplicationController
     end
 
     @receipt_edit_save_change_set
+  end
+
+  def receipt_edit_save_consistency_guard(permitted, amount_result)
+    input = receipt_edit_save_input(permitted)
+
+    ReceiptEditSaveConsistencyGuard.call(
+      receipt_items: input.receipt_items,
+      receipt_adjustments: input.receipt_adjustments,
+      receipt_payments: input.receipt_payments,
+      amount_result: amount_result
+    )
   end
 
   def replace_receipt_tax_details?(context, change_set, tax_details_recalculated:)
