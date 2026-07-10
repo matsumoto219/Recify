@@ -3,6 +3,7 @@
 <%= turbo_stream_from [current_user, :receipts] %>
 <%
   searching = @query.present?
+  refresh_on_terminal = searching || %w[amount_desc amount_asc store_name updated review_priority].include?(@sort)
   page_header_action_classes = [
     "w-full justify-end md:w-auto md:block",
     searching ? "hidden md:block" : "flex"
@@ -51,6 +52,7 @@
     monthly_change_label: @monthly_change_label,
     monthly_change_icon: @monthly_change_icon,
     monthly_change_icon_class: @monthly_change_icon_class,
+    dom_id: searching ? "receipts_search_summary" : "receipts_summary",
     hide_on_mobile: searching %>
 </div>
 
@@ -58,7 +60,12 @@
   <%= render "receipts/index_controls" %>
 </div>
 
-<div id="receipts-results">
+<div
+  id="receipts-results"
+  data-controller="receipt-processing-sync"
+  data-receipt-processing-sync-url-value="<%= processing_cards_receipts_path %>"
+  data-receipt-processing-sync-interval-value="3000"
+  data-receipt-processing-sync-refresh-on-terminal-value="<%= refresh_on_terminal %>">
   <% if @query.blank? && @pagy.page == 1 && @receipt_index_query.default_index_view? %>
     <%= turbo_stream_from [current_user, :receipts, :index_first_page] %>
   <% end %>

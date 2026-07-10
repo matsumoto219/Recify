@@ -37,22 +37,27 @@ class ReceiptsController < ApplicationController
   end
 
   def processing_cards
-    public_ids = processing_card_public_ids
+    sync_requests = processing_card_sync_requests
+    public_ids = sync_requests.keys
     receipts = current_user.receipts.active_for_user.where(public_id: public_ids).to_a
     receipts_by_public_id = receipts.index_by(&:public_id)
     active_runs_by_receipt_id = latest_active_runs_by_receipt_id(receipts)
 
     response.headers["Cache-Control"] = "no-store"
-    render turbo_stream: public_ids.map { |public_id|
+    render turbo_stream: public_ids.filter_map { |public_id|
       receipt = receipts_by_public_id[public_id]
 
       if receipt
+        analysis_run = active_runs_by_receipt_id[receipt.id]
+        phase_presenter = Receipts::ProcessingPhasePresenter.new(receipt: receipt, analysis_run: analysis_run)
+        next if sync_requests[public_id] == phase_presenter.state_revision.to_s
+
         turbo_stream.replace(
           receipt.dom_target_id,
           partial: "shared/receipts/receipt_card",
           locals: {
             receipt: receipt,
-            analysis_run: active_runs_by_receipt_id[receipt.id]
+            analysis_run: analysis_run
           }
         )
       else
@@ -412,12 +417,18 @@ class ReceiptsController < ApplicationController
     ).call
   end
 
-  def processing_card_public_ids
-    Array(params[:public_ids])
-      .map(&:to_s)
-      .uniq
-      .select { |public_id| Receipt::PUBLIC_ID_FORMAT.match?(public_id) }
-      .first(MAX_PROCESSING_CARD_SYNC_IDS)
+  def processing_card_sync_requests
+    revisions = Array(params[:state_revisions])
+
+    Array(params[:public_ids]).each_with_index.each_with_object({}) do |(raw_public_id, index), requests|
+      break requests if requests.size >= MAX_PROCESSING_CARD_SYNC_IDS
+
+      public_id = raw_public_id.to_s
+      next unless Receipt::PUBLIC_ID_FORMAT.match?(public_id)
+      next if requests.key?(public_id)
+
+      requests[public_id] = revisions[index].to_s
+    end
   end
 
   def latest_active_runs_by_receipt_id(receipts)

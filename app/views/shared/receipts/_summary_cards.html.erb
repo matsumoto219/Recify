@@ -15,18 +15,20 @@
   - monthly_change_icon_class: 今月合計の補足アイコンCSSクラス。未指定時は token-text-muted
   - hide_on_mobile: モバイルで非表示にする場合は true。未指定時は false
   - animate_on_connect: 接続時アニメーションを有効にする場合は true。未指定時は false
+  - dom_id: summary全体のDOM id。未指定時は receipts_summary
 %>
 
 <%
   hide_on_mobile = local_assigns.fetch(:hide_on_mobile, false)
   animate_on_connect = local_assigns.fetch(:animate_on_connect, false)
+  dom_id = local_assigns.fetch(:dom_id, "receipts_summary")
   summary_classes = [
     hide_on_mobile ? "hidden md:grid" : "grid",
     "grid-cols-1 md:grid-cols-4 xl:grid-cols-5 gap-4 mb-10"
   ].join(" ")
 %>
 
-<section id="receipts_summary"
+<section id="<%= dom_id %>"
   class="<%= summary_classes %>"
   data-controller="receipt-summary"
   data-receipt-summary-storage-key-value="receiptAmountMode"

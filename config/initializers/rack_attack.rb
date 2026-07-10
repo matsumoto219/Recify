@@ -27,6 +27,7 @@ class Rack::Attack
     (?:\z|[/?#])
   }ix.freeze
   ADMIN_SERVICE_STATUS_PATH = %r{\A/admin/external_services/status(?:\z|[/?#])}.freeze
+  RECEIPT_PROCESSING_CARDS_PATH = "/receipts/processing_cards".freeze
   ACTIVE_STORAGE_DIRECT_UPLOAD_PATH = "/rails/active_storage/direct_uploads"
   SCANNER_PATH = %r{
     (?:\A|/)(?:\.env|\.env\.[^/?#]+|\.git(?:/config)?|wp-login\.php|xmlrpc\.php|etc/passwd|windows/win\.ini|boot\.ini)(?:\z|[/?#])
@@ -47,7 +48,11 @@ class Rack::Attack
 
   class << self
     def throttleable_request?(request)
-      !BASIC_THROTTLE_SKIP_PATH.match?(request.path.to_s)
+      !BASIC_THROTTLE_SKIP_PATH.match?(request.path.to_s) && !receipt_processing_cards_request?(request)
+    end
+
+    def receipt_processing_cards_request?(request)
+      request.get? && request.path.to_s == RECEIPT_PROCESSING_CARDS_PATH
     end
 
     def scanner_request?(request)
@@ -156,6 +161,10 @@ class Rack::Attack
 
   throttle("requests/ip", limit: 300, period: 5.minutes) do |request|
     request.ip if Rack::Attack.throttleable_request?(request)
+  end
+
+  throttle("receipts/processing_cards/ip", limit: 600, period: 5.minutes) do |request|
+    request.ip if Rack::Attack.receipt_processing_cards_request?(request)
   end
 
   throttle("auth/sign_in/ip", limit: 20, period: 5.minutes) do |request|

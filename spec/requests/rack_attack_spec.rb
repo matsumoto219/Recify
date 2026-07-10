@@ -105,8 +105,28 @@ RSpec.describe 'Rack::Attack', type: :request do
       'auth/unlock/ip',
       'auth/registration/ip',
       'auth/guest_sign_in/ip',
-      'receipts/upload/ip'
+      'receipts/upload/ip',
+      'receipts/processing_cards/ip'
     )
+  end
+
+  it 'processing card pollingを通常リクエスト枠から分離して専用上限で保護する' do
+    request = Rack::Attack::Request.new(
+      Rack::MockRequest.env_for(
+        processing_cards_receipts_path,
+        'REQUEST_METHOD' => 'GET',
+        'REMOTE_ADDR' => '203.0.113.41'
+      )
+    )
+    throttle = Rack::Attack.throttles.fetch('receipts/processing_cards/ip')
+
+    aggregate_failures do
+      expect(Rack::Attack.throttleable_request?(request)).to be(false)
+      expect(Rack::Attack.receipt_processing_cards_request?(request)).to be(true)
+      expect(throttle.limit).to eq(600)
+      expect(throttle.period).to eq(5.minutes)
+      expect(throttle.block.call(request)).to eq('203.0.113.41')
+    end
   end
 
   it 'throttles sign in attempts by IP' do

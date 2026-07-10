@@ -302,6 +302,48 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '処理中カードがある間だけ再同期するcontroller設定を一覧へ描画する' do
+      processing_receipt = create(:receipt, :processing, :with_image, user:)
+
+      get receipts_path
+
+      document = Nokogiri::HTML(response.body)
+      results = document.at_css('#receipts-results')
+      processing_card = document.at_css("##{processing_receipt.dom_target_id}")
+      completed_card = document.at_css("##{my_receipt.dom_target_id}")
+
+      aggregate_failures do
+        expect(results['data-controller'].split).to include('receipt-processing-sync')
+        expect(results['data-receipt-processing-sync-url-value']).to eq(processing_cards_receipts_path)
+        expect(results['data-receipt-processing-sync-interval-value']).to eq('3000')
+        expect(results['data-receipt-processing-sync-refresh-on-terminal-value']).to eq('false')
+        expect(processing_card['data-receipt-processing-sync-target']).to eq('card')
+        expect(completed_card['data-receipt-processing-sync-target']).to be_nil
+      end
+    end
+
+    it '検索中は全体summary broadcastとDOM targetを分けてterminal更新時にscopeを再取得する' do
+      get receipts_path(q: my_receipt.store_name)
+
+      document = Nokogiri::HTML(response.body)
+      results = document.at_css('#receipts-results')
+
+      aggregate_failures do
+        expect(document.at_css('#receipts_search_summary')).to be_present
+        expect(document.at_css('#receipts_summary')).to be_nil
+        expect(results['data-receipt-processing-sync-refresh-on-terminal-value']).to eq('true')
+      end
+    end
+
+    it '金額や店舗名に依存するsortではterminal更新時に並び順を再取得する' do
+      %w[amount_desc amount_asc store_name updated review_priority].each do |sort|
+        get receipts_path(sort: sort)
+
+        document = Nokogiri::HTML(response.body)
+        expect(document.at_css('#receipts-results')['data-receipt-processing-sync-refresh-on-terminal-value']).to eq('true')
+      end
+    end
+
     it '非検索の1ページ目ではcreate prepend専用streamも購読する' do
       get receipts_path
 
@@ -511,7 +553,7 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path(q: my_receipt.store_name)
 
       document = Nokogiri::HTML(response.body)
-      summary = document.at_css('#receipts_summary')
+      summary = document.at_css('#receipts_search_summary')
       page_header_action = document.at_css("#receipts-page-header a[href='#{select_input_method_receipts_path}']").parent
       mobile_bottom_nav_action = document.at_css("#mobile-bottom-nav a[href='#{select_input_method_receipts_path}']")
 
@@ -861,7 +903,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(card_ids.index("receipt_#{newer_receipt.public_id}")).to be < card_ids.index("receipt_#{older_receipt.public_id}")
         expect(document.at_css('#receipts-page-header').text).to include('3件')
-        expect(document.at_css('#receipts_summary').text).to include('¥300')
+        expect(document.at_css('#receipts_search_summary').text).to include('¥300')
       end
     end
 
@@ -1268,6 +1310,26 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(document.at_css(%(turbo-stream[action="remove"][target="#{other_receipt.dom_target_id}"]))).to be_present
         expect(response.body).not_to include('他人の非公開店舗名')
+      end
+    end
+
+    it 'カードのstate revisionが変わっていなければDOMを置換しない' do
+      presenter = Receipts::ProcessingPhasePresenter.new(
+        receipt: processing_receipt,
+        analysis_run: processing_run
+      )
+
+      get processing_cards_receipts_path,
+          params: {
+            public_ids: [ processing_receipt.public_id ],
+            state_revisions: [ presenter.state_revision.to_s ]
+          },
+          headers: { 'ACCEPT' => Mime[:turbo_stream].to_s }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.media_type).to eq(Mime[:turbo_stream].to_s)
+        expect(response.body).not_to include('<turbo-stream')
       end
     end
 
