@@ -147,6 +147,7 @@
             <%= render "shared/ui/form/text_field",
                        f: f,
                        attribute: :store_name,
+                       value: form_presenter.submitted_value(:store_name, fallback: receipt.store_name),
                        label: t("receipts.form.fields.store_name"),
                        icon: "storefront",
                        placeholder: t("receipts.form.fields.store_name_placeholder"),
@@ -159,7 +160,7 @@
                        attribute: :payment_method,
                        label: t("receipts.form.fields.payment_method"),
                        options: Receipt.payment_method_options,
-                       selected: f.object.payment_method,
+                       selected: form_presenter.submitted_value(:payment_method, fallback: f.object.payment_method),
                        include_blank: t("receipts.form.fields.payment_method_blank"),
                        highlight_variant: (error_flags[:payment_method] ? :error : nil),
                        size: :regular %>
@@ -169,7 +170,7 @@
                        id: "receipt_purchased_on",
                        label: t("receipts.form.fields.purchased_on"),
                        type: :date,
-                       value: receipt.purchased_at&.in_time_zone&.to_date,
+                       value: form_presenter.submitted_value(:purchased_on, fallback: receipt.purchased_at&.in_time_zone&.to_date),
                        icon: "calendar_today",
                        highlight_variant: (error_flags[:purchased_at] ? :error : nil),
                        error_message: receipt.errors.full_messages_for(:purchased_at).first,
@@ -180,7 +181,7 @@
                        id: "receipt_purchased_time",
                        label: t("receipts.form.fields.purchased_time"),
                        type: :time,
-                       value: receipt.purchased_at&.in_time_zone&.strftime("%H:%M"),
+                       value: form_presenter.submitted_value(:purchased_time, fallback: receipt.purchased_at&.in_time_zone&.strftime("%H:%M")),
                        icon: "schedule",
                        highlight_variant: (error_flags[:purchased_at] ? :error : nil),
                        size: :regular %>
@@ -190,7 +191,7 @@
                          f: f,
                          attribute: :store_phone_number,
                          label: t("receipts.form.fields.store_phone_number"),
-                         value: receipt.display_store_phone_number,
+                         value: form_presenter.submitted_value(:store_phone_number, fallback: receipt.display_store_phone_number),
                          icon: "call",
                          field_type: :telephone_field,
                          placeholder: t("receipts.form.fields.store_phone_number_placeholder"),
@@ -208,6 +209,7 @@
               <%= render "shared/ui/form/text_field",
                          f: f,
                          attribute: :store_address,
+                         value: form_presenter.submitted_value(:store_address, fallback: receipt.store_address),
                          label: t("receipts.form.fields.store_address"),
                          icon: "location_on",
                          placeholder: t("receipts.form.fields.store_address_placeholder"),
@@ -241,8 +243,8 @@
                 <%= render "receipts/receipt_item_fields",
                       item_form: item_form,
                       item: item_form.object,
-                      new_record: false,
-                      row_state: form_presenter.item_row(item_form.object, new_record: false) %>
+                      new_record: item_form.object.new_record?,
+                      row_state: form_presenter.item_row(item_form.object, new_record: item_form.object.new_record?) %>
               <% end %>
             <% end %>
 
@@ -294,8 +296,8 @@
                 <%= render "receipts/receipt_adjustment_fields",
                       adjustment_form: adjustment_form,
                       adjustment: adjustment_form.object,
-                      new_record: false,
-                      row_state: form_presenter.adjustment_row(adjustment_form.object, new_record: false) %>
+                      new_record: adjustment_form.object.new_record?,
+                      row_state: form_presenter.adjustment_row(adjustment_form.object, new_record: adjustment_form.object.new_record?) %>
               <% end %>
             <% end %>
 
@@ -396,8 +398,8 @@
                   <%= render "receipts/receipt_payment_fields",
                         payment_form: payment_form,
                         payment: payment_form.object,
-                        new_record: false,
-                        row_state: form_presenter.payment_row(payment_form.object, new_record: false) %>
+                        new_record: payment_form.object.new_record?,
+                        row_state: form_presenter.payment_row(payment_form.object, new_record: payment_form.object.new_record?) %>
                 <% end %>
               <% end %>
 
@@ -435,6 +437,7 @@
           <%= render "shared/ui/form/textarea_field",
                      f: f,
                      attribute: :memo,
+                     value: form_presenter.submitted_value(:memo, fallback: receipt.memo),
                      label: t("receipts.form.fields.memo"),
                      placeholder: t("receipts.form.fields.memo_placeholder"),
                      show_label: false,

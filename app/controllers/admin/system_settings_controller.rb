@@ -21,9 +21,7 @@ class Admin::SystemSettingsController < Admin::BaseController
     end
 
     if update_params[:reason].to_s.strip.blank?
-      redirect_to admin_system_setting_path(@record[:key]),
-                  alert: t("admin.system_settings.messages.reason_required"),
-                  status: :see_other
+      render_update_failure(t("admin.system_settings.messages.reason_required"))
       return
     end
 
@@ -42,9 +40,7 @@ class Admin::SystemSettingsController < Admin::BaseController
                   notice: t("admin.system_settings.messages.updated"),
                   status: :see_other
     else
-      redirect_to admin_system_setting_path(@record[:key]),
-                  alert: failure_message(result),
-                  status: :see_other
+      render_update_failure(failure_message(result))
     end
   end
 
@@ -72,10 +68,18 @@ class Admin::SystemSettingsController < Admin::BaseController
           "No route matches [#{request.request_method}] #{request.path}"
   end
 
-  def prepare_form_presenter
+  def prepare_form_presenter(form_values: {})
     @form_presenter = Admin::SystemSettingFormPresenter.new(
       record: @record,
-      reauthenticated: admin_passkey_reauthenticated?
+      reauthenticated: admin_passkey_reauthenticated?,
+      form_values: form_values
     )
+  end
+
+  def render_update_failure(message)
+    @form_values = update_params.to_h.symbolize_keys.slice(:value, :reason, :confirm)
+    prepare_form_presenter(form_values: @form_values)
+    flash.now[:alert] = message
+    render :show, status: :unprocessable_content
   end
 end

@@ -836,9 +836,13 @@ RSpec.describe 'Admin system settings', type: :request do
               confirm: '1'
             }
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
-        expect(response).to redirect_to(admin_system_setting_path('external_services.ai.max_retry_delay_seconds'))
-        expect(flash[:alert]).to be_present
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(document.at_css('input[name="value"]')['value']).to eq('1e2')
+        expect(document.at_css('textarea[name="reason"]').text.strip).to eq('invalid numeric input')
+        expect(document.at_css('input[name="confirm"][type="checkbox"]')['checked']).to eq('checked')
         expect(SystemSetting.find_by(key: 'external_services.ai.max_retry_delay_seconds')).to be_nil
         expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'invalid_decimal')
       end
@@ -879,9 +883,12 @@ RSpec.describe 'Admin system settings', type: :request do
               reason: ' '
             }
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
-        expect(response).to redirect_to(admin_system_setting_path('feature.receipt_logo_display_enabled'))
-        expect(flash[:alert]).to include('変更理由')
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('変更理由')
+        expect(document.at_css('select[name="value"] option[selected]')['value']).to eq('true')
         expect(SystemOperations).not_to have_received(:update_setting)
         expect(SystemSetting.find_by(key: 'feature.receipt_logo_display_enabled')).to be_nil
       end
@@ -1089,9 +1096,14 @@ RSpec.describe 'Admin system settings', type: :request do
               }
       }.to change(AuditLog, :count).by(1)
 
+      document = Nokogiri::HTML(response.body)
+
       aggregate_failures do
-        expect(response).to redirect_to(admin_system_setting_path('external_services.ai.read_timeout_seconds'))
-        expect(flash[:alert]).to include('(open timeout + read timeout) × (retry回数 + 1)')
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('(open timeout + read timeout) × (retry回数 + 1)')
+        expect(document.at_css('input[name="value"]')['value']).to eq('300')
+        expect(document.at_css('textarea[name="reason"]').text.strip).to eq('extend AI read timeout')
+        expect(document.at_css('input[name="confirm"][type="checkbox"]')['checked']).to eq('checked')
         expect(SystemSetting.find_by(key: 'external_services.ai.read_timeout_seconds')).to be_nil
         expect(AuditLog.last).to have_attributes(
           action: 'system_settings.update',
@@ -1115,7 +1127,7 @@ RSpec.describe 'Admin system settings', type: :request do
       }.to change(AuditLog, :count).by(1)
 
       aggregate_failures do
-        expect(response).to redirect_to(admin_system_setting_path('limits.receipt_items_per_receipt'))
+        expect(response).to have_http_status(:unprocessable_content)
         expect(flash[:alert]).to include('receipt_items_per_receipt の最大値を上げるには、先に snapshot OCR/AI 上限を同等以上に変更してください。')
         expect(SystemSetting.find_by(key: 'limits.receipt_items_per_receipt')).to be_nil
         expect(AuditLog.last).to have_attributes(
@@ -1140,7 +1152,7 @@ RSpec.describe 'Admin system settings', type: :request do
       }.to change(AuditLog, :count).by(1)
 
       aggregate_failures do
-        expect(response).to redirect_to(admin_system_setting_path('retention.analysis_runs_default_days'))
+        expect(response).to have_http_status(:unprocessable_content)
         expect(flash[:alert]).to include('解析run保持期間は failed >= default >= short の関係を維持してください。')
         expect(SystemSetting.find_by(key: 'retention.analysis_runs_default_days')).to be_nil
         expect(AuditLog.last).to have_attributes(
@@ -1166,7 +1178,7 @@ RSpec.describe 'Admin system settings', type: :request do
       }.to change(AuditLog, :count).by(1)
 
       aggregate_failures do
-        expect(response).to redirect_to(admin_system_setting_path('limits.receipt_payment_amount_max'))
+        expect(response).to have_http_status(:unprocessable_content)
         expect(flash[:alert]).to include('金額上限の大小関係を維持してください')
         expect(SystemSetting.find_by(key: 'limits.receipt_payment_amount_max')).to be_nil
         expect(AuditLog.last).to have_attributes(
@@ -1192,7 +1204,7 @@ RSpec.describe 'Admin system settings', type: :request do
       }.to change(AuditLog, :count).by(1)
 
       aggregate_failures do
-        expect(response).to redirect_to(admin_system_setting_path('limits.ocr_jobs_per_day'))
+        expect(response).to have_http_status(:unprocessable_content)
         expect(flash[:alert]).to include('UserLimitsのシステム上限を超えています')
         expect(SystemSetting.find_by(key: 'limits.ocr_jobs_per_day')).to be_nil
         expect(AuditLog.last).to have_attributes(
@@ -1220,7 +1232,7 @@ RSpec.describe 'Admin system settings', type: :request do
       }.to change(AuditLog, :count).by(1)
 
       aggregate_failures do
-        expect(response).to redirect_to(admin_system_setting_path('limits.max_ai_per_day'))
+        expect(response).to have_http_status(:unprocessable_content)
         expect(flash[:alert]).to include('UserLimitsのシステム上限を超えています')
         expect(SystemSetting.find_by(key: 'limits.max_ai_per_day')).to be_nil
         expect(AuditLog.last).to have_attributes(

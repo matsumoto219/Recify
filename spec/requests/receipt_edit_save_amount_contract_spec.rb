@@ -794,7 +794,6 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
   end
 
   describe 'strict numeric input' do
-
     it 'quantityの混在文字列を別の数量へ変換せず拒否する' do
       receipt = create_completed_receipt
       item = create_item(receipt)
@@ -859,14 +858,28 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
 
       patch_receipt(
         receipt,
+        memo: '入力保持メモ',
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
-          '0' => item_attributes(item, price: '1e2', line_total: '100')
+          '0' => item_attributes(
+            item,
+            confirmed_name: '入力保持商品',
+            quantity: '2',
+            price: '1e2',
+            line_total: '100'
+          )
         }
       )
 
+      document = Nokogiri::HTML(response.body)
+      item_row = document.at_css('[data-receipt-form-target="itemRow"]')
+
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
+        expect(document.at_css('textarea[name="receipt[memo]"]').text.strip).to eq('入力保持メモ')
+        expect(item_row.at_css('input[name$="[confirmed_name]"]')['value']).to eq('入力保持商品')
+        expect(item_row.at_css('input[name$="[quantity]"]')['value']).to eq('2')
+        expect(item_row.at_css('input[name$="[price]"]')['value']).to eq('1e2')
         expect(item.reload.price).to eq(100)
         expect(item.line_total).to eq(100)
         expect(receipt.reload.total_amount).to eq(100)

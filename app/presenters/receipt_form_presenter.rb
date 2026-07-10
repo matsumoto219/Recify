@@ -1,8 +1,10 @@
 class ReceiptFormPresenter
   attr_reader :receipt
 
-  def initialize(receipt:)
+  def initialize(receipt:, submitted_params: nil)
     @receipt = receipt
+    @submitted_params = submitted_params.to_h.with_indifferent_access
+    @submitted_values_by_object_id = {}
   end
 
   def form_dom_id
@@ -10,7 +12,10 @@ class ReceiptFormPresenter
   end
 
   def visible_receipt_items
-    receipt.receipt_items.reject(&:marked_for_destruction?)
+    @visible_receipt_items ||= begin
+      persisted = receipt.receipt_items.reject(&:marked_for_destruction?)
+      persisted + submitted_new_items
+    end
   end
 
   def destroyed_receipt_items
@@ -18,7 +23,10 @@ class ReceiptFormPresenter
   end
 
   def visible_receipt_adjustments
-    receipt.receipt_adjustments.reject(&:marked_for_destruction?)
+    @visible_receipt_adjustments ||= begin
+      persisted = receipt.receipt_adjustments.reject(&:marked_for_destruction?)
+      persisted + submitted_new_adjustments
+    end
   end
 
   def destroyed_receipt_adjustments
@@ -26,7 +34,10 @@ class ReceiptFormPresenter
   end
 
   def visible_receipt_payments
-    receipt.receipt_payments.reject(&:marked_for_destruction?)
+    @visible_receipt_payments ||= begin
+      persisted = receipt.receipt_payments.reject(&:marked_for_destruction?)
+      persisted + submitted_new_payments
+    end
   end
 
   def destroyed_receipt_payments
@@ -34,15 +45,15 @@ class ReceiptFormPresenter
   end
 
   def next_item_index
-    receipt.receipt_items.size
+    [ receipt.receipt_items.size, visible_receipt_items.size ].max
   end
 
   def next_adjustment_index
-    receipt.receipt_adjustments.size
+    [ receipt.receipt_adjustments.size, visible_receipt_adjustments.size ].max
   end
 
   def next_payment_index
-    receipt.receipt_payments.size
+    [ receipt.receipt_payments.size, visible_receipt_payments.size ].max
   end
 
   def adjustment_surcharge_kinds_value
@@ -103,19 +114,93 @@ class ReceiptFormPresenter
     }
   end
 
+  def submitted_value(field, fallback: nil)
+    submitted_params.key?(field) ? submitted_params[field] : fallback
+  end
+
   def item_row(item, new_record:)
-    ItemRowState.new(item: item, new_record: new_record)
+    ItemRowState.new(
+      item: item,
+      new_record: new_record,
+      submitted_values: submitted_child_values(:receipt_items_attributes, item)
+    )
   end
 
   def adjustment_row(adjustment, new_record:)
-    AdjustmentRowState.new(adjustment: adjustment, new_record: new_record)
+    AdjustmentRowState.new(
+      adjustment: adjustment,
+      new_record: new_record,
+      submitted_values: submitted_child_values(:receipt_adjustments_attributes, adjustment)
+    )
   end
 
   def payment_row(payment, new_record:)
-    PaymentRowState.new(payment: payment, new_record: new_record)
+    PaymentRowState.new(
+      payment: payment,
+      new_record: new_record,
+      submitted_values: submitted_child_values(:receipt_payments_attributes, payment)
+    )
   end
 
   private
+
+  attr_reader :submitted_params, :submitted_values_by_object_id
+
+  def submitted_child_values(collection_key, record)
+    transient_values = submitted_values_by_object_id[record.object_id]
+    return transient_values if transient_values
+    return {} unless record.persisted?
+
+    submitted_child_rows(collection_key).find do |values|
+      values["id"].to_s == record.id.to_s
+    end || {}
+  end
+
+  def submitted_child_rows(collection_key)
+    values = submitted_params[collection_key]
+    return [] unless values.respond_to?(:each_value)
+
+    values.each_value.map { |row| row.to_h.with_indifferent_access }
+  end
+
+  def submitted_new_items
+    build_submitted_rows(:receipt_items_attributes, ReceiptItem) do |values|
+      {
+        confirmed_name: values["confirmed_name"],
+        category: values["category"],
+        quantity_unit_code: values["quantity_unit_code"],
+        product_code: values["product_code"]
+      }
+    end
+  end
+
+  def submitted_new_adjustments
+    build_submitted_rows(:receipt_adjustments_attributes, ReceiptAdjustment) do |values|
+      {
+        kind: values["kind"],
+        label: values["label"],
+        sign: values["sign"],
+        source: "manual"
+      }
+    end
+  end
+
+  def submitted_new_payments
+    build_submitted_rows(:receipt_payments_attributes, ReceiptPayment) do |values|
+      { method: values["method"] }
+    end
+  end
+
+  def build_submitted_rows(collection_key, record_class)
+    submitted_child_rows(collection_key).filter_map do |values|
+      next if values["id"].present?
+      next if ActiveModel::Type::Boolean.new.cast(values["_destroy"])
+
+      record = record_class.new(yield(values))
+      submitted_values_by_object_id[record.object_id] = values
+      record
+    end
+  end
 
   def receipt_review_reason_codes
     @receipt_review_reason_codes ||= Array(receipt.review_reasons).map(&:to_s)
@@ -128,9 +213,10 @@ class ReceiptFormPresenter
   class ItemRowState
     attr_reader :item
 
-    def initialize(item:, new_record:)
+    def initialize(item:, new_record:, submitted_values: {})
       @item = item
       @new_record = new_record
+      @submitted_values = submitted_values
     end
 
     def new_record?
@@ -138,7 +224,9 @@ class ReceiptFormPresenter
     end
 
     def item_name
-      item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || ""
+      submitted_value(:confirmed_name) do
+        item.confirmed_name.presence || item.suggested_name.presence || item.raw_text.presence || ""
+      end
     end
 
     def warning_reason_labels
@@ -167,7 +255,7 @@ class ReceiptFormPresenter
     end
 
     def line_total_value
-      new_record? ? nil : item.line_total
+      submitted_value(:line_total) { new_record? ? nil : item.line_total }
     end
 
     def original_line_total_value
@@ -184,11 +272,15 @@ class ReceiptFormPresenter
     end
 
     def selected_unit
-      new_record? ? ReceiptQuantityUnit.default_code : item.normalized_quantity_unit_code
+      submitted_value(:quantity_unit_code) do
+        new_record? ? ReceiptQuantityUnit.default_code : item.normalized_quantity_unit_code
+      end
     end
 
     def quantity_value
-      new_record? ? "1" : (item.formatted_quantity_for_input.presence || "1")
+      submitted_value(:quantity) do
+        new_record? ? "1" : (item.formatted_quantity_for_input.presence || "1")
+      end
     end
 
     def quantity_step
@@ -204,17 +296,18 @@ class ReceiptFormPresenter
     end
 
     def price_value
+      return submitted_values[:price] if submitted_values.key?(:price)
       return nil if new_record?
 
       normalized_tax_included_price || item.price
     end
 
     def discount_rate_percentage_input
-      new_record? ? nil : item.discount_rate_percentage_input
+      submitted_value(:discount_rate) { new_record? ? nil : item.discount_rate_percentage_input }
     end
 
     def tax_rate_percentage_value
-      item.tax_rate.present? ? item.tax_rate * 100 : nil
+      submitted_value(:tax_rate) { item.tax_rate.present? ? item.tax_rate * 100 : nil }
     end
 
     def category_options
@@ -222,7 +315,7 @@ class ReceiptFormPresenter
     end
 
     def selected_category
-      new_record? ? nil : item.category
+      submitted_value(:category) { new_record? ? nil : item.category }
     end
 
     def name_highlight_variant
@@ -250,6 +343,14 @@ class ReceiptFormPresenter
     end
 
     private
+
+    attr_reader :submitted_values
+
+    def submitted_value(field)
+      return submitted_values[field] if submitted_values.key?(field)
+
+      yield
+    end
 
     def review_reason_codes
       @review_reason_codes ||= Array(item.review_reasons).map(&:to_s)
@@ -296,9 +397,10 @@ class ReceiptFormPresenter
   class AdjustmentRowState
     attr_reader :adjustment
 
-    def initialize(adjustment:, new_record:)
+    def initialize(adjustment:, new_record:, submitted_values: {})
       @adjustment = adjustment
       @new_record = new_record
+      @submitted_values = submitted_values
     end
 
     def new_record?
@@ -306,11 +408,11 @@ class ReceiptFormPresenter
     end
 
     def selected_kind
-      adjustment.kind.presence
+      submitted_value(:kind) { adjustment.kind.presence }
     end
 
     def selected_sign
-      adjustment.sign.presence || ReceiptAdjustment.default_sign_for(selected_kind)
+      submitted_value(:sign) { adjustment.sign.presence || ReceiptAdjustment.default_sign_for(selected_kind) }
     end
 
     def other_kind?
@@ -318,7 +420,15 @@ class ReceiptFormPresenter
     end
 
     def tax_rate_value
-      adjustment.tax_rate.present? ? adjustment.tax_rate * 100 : nil
+      submitted_value(:tax_rate) { adjustment.tax_rate.present? ? adjustment.tax_rate * 100 : nil }
+    end
+
+    def label_value
+      submitted_value(:label) { adjustment.label }
+    end
+
+    def amount_value
+      submitted_value(:amount) { adjustment.amount }
     end
 
     def calculation_effect
@@ -348,14 +458,25 @@ class ReceiptFormPresenter
     def sign_select_disabled?
       !other_kind?
     end
+
+    private
+
+    attr_reader :submitted_values
+
+    def submitted_value(field)
+      return submitted_values[field] if submitted_values.key?(field)
+
+      yield
+    end
   end
 
   class PaymentRowState
     attr_reader :payment
 
-    def initialize(payment:, new_record:)
+    def initialize(payment:, new_record:, submitted_values: {})
       @payment = payment
       @new_record = new_record
+      @submitted_values = submitted_values
     end
 
     def new_record?
@@ -363,11 +484,21 @@ class ReceiptFormPresenter
     end
 
     def method_value
-      new_record? ? nil : payment.method
+      submitted_value(:method) { new_record? ? nil : payment.method }
     end
 
     def amount_value
-      new_record? ? nil : payment.amount
+      submitted_value(:amount) { new_record? ? nil : payment.amount }
+    end
+
+    private
+
+    attr_reader :submitted_values
+
+    def submitted_value(field)
+      return submitted_values[field] if submitted_values.key?(field)
+
+      yield
     end
   end
 end

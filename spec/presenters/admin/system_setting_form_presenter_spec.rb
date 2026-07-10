@@ -35,6 +35,22 @@ RSpec.describe Admin::SystemSettingFormPresenter do
   end
 
   describe '#value_field_render' do
+    it 'validation失敗時のvalueを現在値より優先する' do
+      field = described_class.new(
+        record: record(value_type: 'integer', current_value: 120),
+        reauthenticated: true,
+        form_values: { value: '1e2', reason: '入力を確認', confirm: '1' }
+      ).value_field_render(form: form)
+
+      aggregate_failures do
+        expect(field.locals[:value]).to eq('1e2')
+        expect(described_class.new(
+          record: record(value_type: 'integer', current_value: 120),
+          reauthenticated: true,
+          form_values: { reason: '入力を確認', confirm: '1' }
+        ).reason_value).to eq('入力を確認')
+      end
+    end
     it 'builds boolean select field config' do
       field = described_class.new(
         record: record(value_type: 'boolean', current_value: true),

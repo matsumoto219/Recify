@@ -3,7 +3,8 @@
 <%
   form_presenter = @form_presenter || Admin::SystemSettingFormPresenter.new(
     record: @record,
-    reauthenticated: admin_passkey_reauthenticated?
+    reauthenticated: admin_passkey_reauthenticated?,
+    form_values: @form_values
   )
   setting_card_class = "min-w-0 max-w-full overflow-hidden rounded-lg border token-border-soft token-bg-card-subtle p-3"
   setting_value_class = "min-w-0 max-w-full break-words font-mono text-base font-bold token-text-base [overflow-wrap:anywhere] md:text-lg"
@@ -188,6 +189,7 @@
               f: form,
               attribute: :reason,
               label: t("admin.system_settings.show.update.reason_label"),
+              value: form_presenter.reason_value,
               rows: 3,
               required: true,
               with_icon: false,
@@ -200,7 +202,8 @@
                 attribute: :confirm,
                 label: t("admin.system_settings.show.update.confirm_label"),
                 required: true,
-                checkbox_class: "mt-1" %>
+                checkbox_class: "mt-1",
+                html_options: { checked: form_presenter.confirmation_checked? } %>
         <% end %>
 
         <%= render "shared/ui/actions/button",

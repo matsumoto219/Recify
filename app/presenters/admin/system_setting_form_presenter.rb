@@ -9,9 +9,10 @@ module Admin
 
     attr_reader :record
 
-    def initialize(record:, reauthenticated:)
+    def initialize(record:, reauthenticated:, form_values: {})
       @record = record
       @reauthenticated = reauthenticated
+      @form_values = form_values.to_h.symbolize_keys
     end
 
     def label_class
@@ -50,6 +51,14 @@ module Admin
       record[:requires_confirmation] == true
     end
 
+    def reason_value
+      form_values[:reason]
+    end
+
+    def confirmation_checked?
+      ActiveModel::Type::Boolean.new.cast(form_values[:confirm])
+    end
+
     def value_field_render(form:)
       case record[:value_type].to_s
       when "boolean"
@@ -73,12 +82,14 @@ module Admin
 
     private
 
+    attr_reader :form_values
+
     def reauthenticated?
       @reauthenticated == true
     end
 
     def current_value
-      record[:current_value]
+      form_values.key?(:value) ? form_values[:value] : record[:current_value]
     end
 
     def base_locals(form)

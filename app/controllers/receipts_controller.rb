@@ -374,8 +374,11 @@ class ReceiptsController < ApplicationController
     @receipt = current_user.receipts.active_for_user.find_by!(public_id: params[:public_id])
   end
 
-  def prepare_receipt_form_presenter
-    @receipt_form_presenter = ReceiptFormPresenter.new(receipt: @receipt)
+  def prepare_receipt_form_presenter(submitted_params: nil)
+    @receipt_form_presenter = ReceiptFormPresenter.new(
+      receipt: @receipt,
+      submitted_params: submitted_params
+    )
   end
 
   def prepare_upload_page_presenter
@@ -675,10 +678,15 @@ class ReceiptsController < ApplicationController
   end
 
   def render_invalid_numeric_input(template:, rebuild_blank_item_row_after_failure: false, rebuild_blank_adjustment_row_after_failure: false)
+    submitted_params = receipt_params.to_h
     @receipt.errors.add(:base, t("receipts.form.errors.invalid_numeric_input"))
-    build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
-    build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
-    prepare_receipt_form_presenter
+    if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty? && submitted_params["receipt_items_attributes"].blank?
+      build_receipt_item_row_for_render
+    end
+    if rebuild_blank_adjustment_row_after_failure && submitted_params["receipt_adjustments_attributes"].blank?
+      build_receipt_adjustment_row_for_render
+    end
+    prepare_receipt_form_presenter(submitted_params: submitted_params)
     flash.now[:alert] = @receipt.errors.full_messages
     render template, status: :unprocessable_content, formats: :html
   end

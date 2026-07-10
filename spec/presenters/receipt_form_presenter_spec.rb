@@ -1,6 +1,47 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptFormPresenter do
+  describe 'submitted form values' do
+    it '保存失敗後のtop-level値と新規child行を表示専用に再構築する' do
+      receipt = build(:receipt, memo: '保存済みメモ')
+      presenter = described_class.new(
+        receipt: receipt,
+        submitted_params: {
+          memo: '入力中メモ',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '入力中商品', quantity: '2', quantity_unit_code: 'each', price: '1e2'
+            }
+          },
+          receipt_adjustments_attributes: {
+            '0' => { kind: 'delivery_fee', label: '入力中送料', amount: '12abc', sign: 'surcharge' }
+          },
+          receipt_payments_attributes: {
+            '0' => { method: '現金', amount: '1e2' }
+          }
+        }
+      )
+
+      item = presenter.visible_receipt_items.first
+      adjustment = presenter.visible_receipt_adjustments.first
+      payment = presenter.visible_receipt_payments.first
+      item_row = presenter.item_row(item, new_record: true)
+      adjustment_row = presenter.adjustment_row(adjustment, new_record: true)
+      payment_row = presenter.payment_row(payment, new_record: true)
+
+      aggregate_failures do
+        expect(presenter.submitted_value(:memo, fallback: receipt.memo)).to eq('入力中メモ')
+        expect(item_row.item_name).to eq('入力中商品')
+        expect(item_row.quantity_value).to eq('2')
+        expect(item_row.price_value).to eq('1e2')
+        expect(adjustment_row.label_value).to eq('入力中送料')
+        expect(adjustment_row.amount_value).to eq('12abc')
+        expect(payment_row.method_value).to eq('現金')
+        expect(payment_row.amount_value).to eq('1e2')
+      end
+    end
+  end
+
   describe '#error_flags' do
     it 'maps receipt review reasons to field flags' do
       receipt = build(
