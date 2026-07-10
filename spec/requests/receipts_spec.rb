@@ -6351,8 +6351,7 @@ RSpec.describe 'Receipts', type: :request do
 
         quantity_unit_select = item_row.at_css('[data-receipt-form-target="quantityUnitInput"]')
         quantity_input = item_row.at_css('[data-receipt-form-target="quantityInput"]')
-        expect(quantity_input['data-action']).to include('beforeinput->receipt-form#preventIntegerQuantityDecimalInput')
-        expect(quantity_input['data-action']).to include('input->receipt-form#sanitizeQuantityInput')
+        expect(quantity_input['data-action']).to eq('input->receipt-form#recalculate')
         expect(quantity_unit_select['data-action']).to include('change->receipt-form#quantityUnitChanged')
         expect(quantity_unit_select['aria-label']).to eq(I18n.t('receipts.item_fields.unit'))
         expect(quantity_input['step']).to eq('1')
@@ -6547,7 +6546,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '数量入力だけdecimal commaを許可する' do
+    it '数量入力も入力途中の値を共通コントローラで補正しない' do
       receipt.receipt_items.create!(
         confirmed_name: '量り売り商品',
         price: 14_400,
@@ -6562,13 +6561,11 @@ RSpec.describe 'Receipts', type: :request do
       document = Nokogiri::HTML(response.body)
       quantity_input = document.at_css('[data-receipt-form-target="quantityInput"]')
       price_input = document.at_css('[data-receipt-form-target="priceInput"]')
-      quantity_field = quantity_input.ancestors.find { |node| node['data-controller'].to_s.split.include?('number-field') }
-      price_field = price_input.ancestors.find { |node| node['data-controller'].to_s.split.include?('number-field') }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(quantity_field['data-number-field-decimal-comma-value']).to eq('true')
-        expect(price_field['data-number-field-decimal-comma-value']).to be_nil
+        expect(quantity_input['data-action']).to eq('input->receipt-form#recalculate')
+        expect(price_input['data-action']).to eq('input->receipt-form#recalculate')
       end
     end
 
@@ -6592,8 +6589,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(quantity_unit_select['data-receipt-form-target']).to eq('quantityUnitInput')
         expect(quantity_unit_select['data-action']).to include('change->receipt-form#quantityUnitChanged')
-        expect(quantity_input['data-action']).to include('beforeinput->receipt-form#preventIntegerQuantityDecimalInput')
-        expect(quantity_input['data-action']).to include('input->receipt-form#sanitizeQuantityInput')
+        expect(quantity_input['data-action']).to eq('input->receipt-form#recalculate')
         expect(quantity_input['step']).to eq('0.001')
         expect(quantity_input['inputmode']).to eq('decimal')
       end

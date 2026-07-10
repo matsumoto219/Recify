@@ -35,4 +35,11 @@ RSpec.describe "Receipt form Stimulus controller" do
       expect(source).to include("if (this.recalculatesQuantityUnit(quantityUnit))")
     end
   end
+
+  it "does not rewrite a quantity while the administrator is typing" do
+    aggregate_failures do
+      expect(source).not_to include("sanitizeQuantityInput")
+      expect(source).not_to include("preventIntegerQuantityDecimalInput")
+    end
+  end
 end

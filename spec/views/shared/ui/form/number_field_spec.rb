@@ -63,4 +63,20 @@ RSpec.describe 'shared/ui/form/_number_field', type: :view do
       expect(input['class']).to include('pr-8')
     end
   end
+
+  it '入力中の値を補正するStimulus actionを付与しない' do
+    input = render_number_field(min: 15, max: 900, step: 1)
+
+    aggregate_failures do
+      expect(input['min']).to eq('15')
+      expect(input['max']).to eq('900')
+      expect(input['data-action']).to be_nil
+    end
+  end
+
+  it '呼び出し側のactionだけを維持する' do
+    input = render_number_field(html_options: { data: { action: 'input->example#change' } })
+
+    expect(input['data-action']).to eq('input->example#change')
+  end
 end

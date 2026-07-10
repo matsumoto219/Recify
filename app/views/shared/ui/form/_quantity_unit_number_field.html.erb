@@ -11,7 +11,7 @@
     - value: 数量inputの表示値
     - selected_unit: 選択中の単位
     - unit_options: 単位select options
-    - min / max / step / decimal_precision / decimal_comma / inputmode
+    - min / max / step / decimal_precision / inputmode
     - show_label / highlight_variant / show_error_message
     - text_align: :left / :center / :right（default: :right）
     - unit_select_variant: :default / :compact_suffix（default: :default）
@@ -30,7 +30,6 @@
   max = local_assigns[:max]
   step = local_assigns[:step]
   decimal_precision = local_assigns[:decimal_precision]
-  decimal_comma = local_assigns.fetch(:decimal_comma, false)
   inputmode = local_assigns.fetch(:inputmode, :decimal)
   show_label = local_assigns.fetch(:show_label, true)
   highlight_variant = (local_assigns[:highlight_variant].presence || :default).to_sym
@@ -109,21 +108,13 @@
 
   existing_data = field_options[:data] || {}
   existing_action = existing_data[:action].presence
-  normalized_action = [
-    "compositionstart->number-field#startComposition",
-    "compositionend->number-field#finishComposition",
-    "input->number-field#normalize",
-    existing_action,
-    "blur->number-field#finishComposition"
-  ].compact.join(" ")
-  merged_data = existing_data.merge(action: normalized_action)
+  merged_data = existing_action ? existing_data.merge(action: existing_action) : existing_data
   merged_field_options = field_options.merge(data: merged_data)
 
   number_field_data = {
     controller: "number-field",
     number_field_decimal_precision_value: decimal_precision
   }.compact
-  number_field_data[:number_field_decimal_comma_value] = true if decimal_comma
 %>
 
 <div class="space-y-2">

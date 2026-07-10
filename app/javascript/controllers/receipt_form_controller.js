@@ -265,25 +265,6 @@ export default class extends Controller {
     this.recalculate()
   }
 
-  preventIntegerQuantityDecimalInput (event) {
-    if (event.isComposing) return
-    if (event.inputType !== 'insertText') return
-    if (!this.integerQuantityInput(event.target)) return
-    if (!this.decimalSeparatorText(event.data)) return
-
-    event.preventDefault()
-  }
-
-  sanitizeQuantityInput (event) {
-    if (event.isComposing) return
-    if (!this.integerQuantityInput(event.target)) return
-
-    const sanitizedValue = this.integerQuantityText(event.target.value)
-    if (event.target.value !== sanitizedValue) {
-      event.target.value = sanitizedValue
-    }
-  }
-
   async removeItem (event) {
     event.preventDefault()
 

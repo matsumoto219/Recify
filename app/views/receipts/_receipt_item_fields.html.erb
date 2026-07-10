@@ -95,7 +95,6 @@
                    max: 9999.999,
                    step: quantity_step,
                    decimal_precision: 3,
-                   decimal_comma: true,
                    inputmode: quantity_inputmode,
                    text_align: :center,
                    unit_select_variant: :compact_suffix,
@@ -105,7 +104,7 @@
                    unit_aria_label: t("receipts.item_fields.unit"),
                    html_options: {
                      data: {
-                       action: "beforeinput->receipt-form#preventIntegerQuantityDecimalInput input->receipt-form#sanitizeQuantityInput input->receipt-form#recalculate",
+                       action: "input->receipt-form#recalculate",
                        receipt_form_target: "quantityInput"
                      }
                    } %>

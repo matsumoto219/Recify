@@ -13,7 +13,6 @@
     - max: max属性
     - step: step属性
     - decimal_precision: ステッパー操作時の小数表示桁数（例: 1）
-    - decimal_comma: trueの場合、単一カンマを小数点として扱う（default: false）
     - inputmode: inputmode属性（default: :decimal）
     - autofocus: true/false
     - required: true/false
@@ -41,7 +40,6 @@
   max = local_assigns[:max]
   step = local_assigns[:step]
   decimal_precision = local_assigns[:decimal_precision]
-  decimal_comma = local_assigns.fetch(:decimal_comma, false)
   inputmode = local_assigns.fetch(:inputmode, :decimal)
   autofocus = local_assigns.fetch(:autofocus, false)
   required = local_assigns.fetch(:required, false)
@@ -142,7 +140,6 @@
     controller: "number-field",
     number_field_decimal_precision_value: decimal_precision
   }.compact
-  number_field_data[:number_field_decimal_comma_value] = true if decimal_comma
 %>
 
 <div class="space-y-2">
@@ -168,14 +165,7 @@
       <%
         existing_data = field_options[:data] || {}
         existing_action = existing_data[:action].presence
-        normalized_action = [
-          "compositionstart->number-field#startComposition",
-          "compositionend->number-field#finishComposition",
-          "input->number-field#normalize",
-          existing_action,
-          "blur->number-field#finishComposition"
-        ].compact.join(" ")
-        merged_data = existing_data.merge(action: normalized_action)
+        merged_data = existing_action ? existing_data.merge(action: existing_action) : existing_data
         merged_data = merged_data.merge(number_field_target: "input") if show_stepper_buttons
         merged_field_options = field_options.merge(data: merged_data)
       %>
