@@ -144,6 +144,8 @@ module Amounts
 
     def normalized_quantity_for(item)
       quantity = to_decimal(fetch_value(item, :quantity))
+      return quantity if manual_input_context? && quantity_input_present?(item)
+
       quantity.positive? ? quantity : BigDecimal("1")
     end
 
@@ -218,6 +220,13 @@ module Amounts
       return flag if flag == true || flag == false
 
       false
+    end
+
+    def quantity_input_present?(item)
+      flag = fetch_value(item, :amount_quantity_present)
+      return flag if flag == true || flag == false
+
+      value_present?(fetch_value(item, :quantity))
     end
 
     def value_present?(value)

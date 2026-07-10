@@ -274,4 +274,44 @@ RSpec.describe Amounts::ItemTotalAggregator do
       expect(result[:items].first[:original_line_total]).to eq(0)
     end
   end
+
+  it 'manual contextでは送信された不正quantityを1へ補正しない' do
+    result = aggregate(
+      [
+        {
+          price: 100,
+          quantity: nil,
+          amount_quantity_present: true,
+          quantity_unit_code: 'each',
+          line_total: 100
+        }
+      ],
+      context: :edit_save
+    )
+
+    aggregate_failures do
+      expect(result[:items].first[:quantity]).to eq(BigDecimal('0'))
+      expect(result[:items].first[:line_total]).to eq(0)
+    end
+  end
+
+  it 'manual contextでは未入力quantityだけを1へ補完する' do
+    result = aggregate(
+      [
+        {
+          price: 100,
+          quantity: nil,
+          amount_quantity_present: false,
+          quantity_unit_code: 'each',
+          line_total: nil
+        }
+      ],
+      context: :manual
+    )
+
+    aggregate_failures do
+      expect(result[:items].first[:quantity]).to eq(BigDecimal('1'))
+      expect(result[:items].first[:line_total]).to eq(100)
+    end
+  end
 end

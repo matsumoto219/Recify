@@ -38,7 +38,7 @@ class ReceiptItem < ApplicationRecord
             allow_blank: true
 
   validates :quantity,
-            numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 9_999.999 },
+            numericality: { greater_than: 0, less_than_or_equal_to: 9_999.999 },
             allow_blank: true
   validate :quantity_must_be_integer_for_integer_unit
 

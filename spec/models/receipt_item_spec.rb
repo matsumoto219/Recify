@@ -77,6 +77,12 @@ RSpec.describe ReceiptItem, type: :model do
 
       expect(item).not_to be_valid
     end
+
+    it '0 quantityは許可しない' do
+      item = build_item(quantity: BigDecimal('0'), quantity_unit_code: 'each')
+
+      expect(item).not_to be_valid
+    end
   end
 
   describe '#formatted_quantity_with_unit' do
