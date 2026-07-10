@@ -35,6 +35,7 @@ class ReceiptEditSaveChangeSet
   ].freeze
   ADJUSTMENT_AMOUNT_FIELDS = %w[
     kind
+    label
     amount
     sign
     tax_rate

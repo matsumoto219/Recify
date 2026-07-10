@@ -130,4 +130,37 @@ RSpec.describe ReceiptEditSaveChangeSet do
 
     expect(result.amount_related_changed?).to be(false)
   end
+
+  it 'labelだけで購入調整から支払調整へ変わる変更を両側の変更として検出する' do
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'receipt_discount',
+      label: 'レシート値引き',
+      amount: 10,
+      sign: 'discount',
+      tax_rate: BigDecimal('0.10'),
+      source: 'manual'
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_adjustments_attributes' => {
+          '0' => {
+            'id' => adjustment.id.to_s,
+            'kind' => adjustment.kind,
+            'label' => 'キャッシュレス還元',
+            'amount' => adjustment.amount.to_s,
+            'sign' => adjustment.sign,
+            'tax_rate' => adjustment.tax_rate.to_s
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.purchase_adjustments_changed).to be(true)
+      expect(result.payment_adjustments_changed).to be(true)
+      expect(result.amount_related_changed?).to be(true)
+    end
+  end
 end

@@ -36,6 +36,37 @@ RSpec.describe Amounts::AdjustmentClassifier do
     )
   end
 
+  it '明示service_chargeをキャッシュレス文言で支払調整へ反転しない' do
+    result = described_class.call(
+      kind: 'service_charge',
+      label: 'キャッシュレス決済サービス料',
+      source_text: 'キャッシュレス決済サービス料 100',
+      sign: 'surcharge',
+      amount: 100,
+      tax_rate: BigDecimal('0.10'),
+      source: 'manual'
+    )
+
+    expect(result).to include(
+      effect: :purchase_adjustment,
+      signed_amount: 100,
+      tax_treatment: :taxable
+    )
+  end
+
+  it '明示couponをキャッシュレス文言で支払調整へ反転しない' do
+    result = described_class.call(
+      kind: 'coupon',
+      label: 'キャッシュレスクーポン',
+      sign: 'discount',
+      amount: 100,
+      tax_rate: BigDecimal('0.10'),
+      source: 'ai'
+    )
+
+    expect(result[:effect]).to eq(:purchase_adjustment)
+  end
+
   it 'クーポン値引きを購入調整として分類する' do
     result = described_class.call(
       kind: 'coupon',

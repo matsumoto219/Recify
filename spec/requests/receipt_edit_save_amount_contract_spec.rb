@@ -230,6 +230,46 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
 
+    it 'labelだけでeffectが変わる場合も古い税詳細を使わず再計算する' do
+      receipt = create_completed_receipt(
+        subtotal_amount: 82,
+        tax_amount: 8,
+        total_amount: 90,
+        payment_method: 'e_money'
+      )
+      create_item(receipt)
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'receipt_discount',
+        label: 'レシート値引き',
+        amount: 10,
+        sign: 'discount',
+        tax_rate: BigDecimal('0.10'),
+        source: 'manual',
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        description: '10%対象', rate: BigDecimal('0.10'), net_amount: 82, amount: 8
+      )
+      receipt.receipt_payments.create!(method: '電子マネー', amount: 90)
+
+      patch_receipt(
+        receipt,
+        receipt_adjustments_attributes: {
+          '0' => adjustment_attributes(adjustment, label: 'キャッシュレス還元')
+        }
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.total_amount).to eq(100)
+        expect(receipt.subtotal_amount).to eq(91)
+        expect(receipt.tax_amount).to eq(9)
+        expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(90)
+        expect(receipt.receipt_tax_details.pluck(:net_amount, :amount)).to contain_exactly([ 91, 9 ])
+      end
+    end
+
     it 'paymentだけ変更しても支払不一致をstatusへ反映する' do
       receipt = create_completed_receipt
       create_item(receipt)

@@ -44,7 +44,9 @@ module Amounts
     attr_reader :adjustment
 
     def effect
-      return :payment_adjustment if payment_adjustment_kind? || cashless_payment_adjustment?
+      return :payment_adjustment if payment_adjustment_kind?
+      return :purchase_adjustment if explicit_purchase_adjustment_kind?
+      return :payment_adjustment if cashless_payment_adjustment?
       return :unknown_adjustment if adjustment[:kind] == "other" && adjustment[:source].to_s != "manual"
 
       :purchase_adjustment
@@ -61,6 +63,10 @@ module Amounts
 
     def payment_adjustment_kind?
       PAYMENT_ADJUSTMENT_KINDS.include?(adjustment[:kind].to_s)
+    end
+
+    def explicit_purchase_adjustment_kind?
+      (SURCHARGE_KINDS + %w[coupon return_refund]).include?(adjustment[:kind].to_s)
     end
 
     def cashless_payment_adjustment?
