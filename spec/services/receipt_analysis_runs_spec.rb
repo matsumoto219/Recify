@@ -1362,6 +1362,29 @@ RSpec.describe ReceiptAnalysisRuns do
       end
     end
 
+    it 'latest run succeeded + old processing receipt はstuck processingとしてfailedへ同期する' do
+      receipt = create_old_processing_receipt
+      latest_run = create(:receipt_analysis_run, :succeeded, receipt:)
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stale_count]).to eq(0)
+        expect(result[:stuck_processing_count]).to eq(1)
+        expect(result[:stuck_processing_failed_count]).to eq(1)
+        expect(result[:stuck_processing_records]).to contain_exactly(
+          include(
+            receipt_id: receipt.id,
+            receipt_status: 'failed',
+            latest_run_key: latest_run.run_key,
+            latest_run_status: 'succeeded'
+          )
+        )
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_code).to eq('analysis_stale_run')
+      end
+    end
+
     it 'latest run canceled / superseded + old processing receipt はfailedへ同期する' do
       canceled_receipt = create_old_processing_receipt
       superseded_receipt = create_old_processing_receipt

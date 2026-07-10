@@ -11,6 +11,7 @@ module ReceiptAnalysisRuns
 
   STALE_ERROR_CODE = "analysis_stale_run".freeze
   STUCK_PROCESSING_TERMINAL_RUN_STATUSES = %w[
+    succeeded
     failed
     canceled
     superseded
