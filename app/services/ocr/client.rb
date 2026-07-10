@@ -1,6 +1,7 @@
 require "faraday"
 require "json"
 require "time"
+require "timeout"
 
 module Ocr
   class Client
@@ -24,8 +25,10 @@ module Ocr
       start_elapsed_budget!
       Rails.logger.info("[OCR::Client] request start provider=#{provider}")
 
-      op_location = submit_request
-      result = poll_result(op_location)
+      result = within_elapsed_budget do
+        op_location = submit_request
+        poll_result(op_location)
+      end
 
       Rails.logger.info("[OCR::Client] request success provider=#{provider}")
       result
@@ -306,6 +309,15 @@ module Ocr
 
     def start_elapsed_budget!
       @operation_started_at = monotonic_now
+    end
+
+    def within_elapsed_budget(&block)
+      remaining = remaining_elapsed_seconds
+      raise_elapsed_timeout! unless remaining.positive?
+
+      Timeout.timeout(remaining, &block)
+    rescue Timeout::Error
+      raise_elapsed_timeout!
     end
 
     def configure_request_timeout(request)

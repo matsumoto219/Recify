@@ -1,3 +1,5 @@
+require "timeout"
+
 module Ai
   class ProviderExecutor
     DEFAULT_RETRY_POLICY = Ai::RetryPolicy.new(
@@ -20,7 +22,7 @@ module Ai
       begin
         ensure_elapsed_budget!
         attempts += 1
-        result = ensure_provider_result!(call_provider(input))
+        result = ensure_provider_result!(call_provider_with_budget(input))
         ensure_elapsed_budget!
         build_result(result)
       rescue Ai::Errors::ProviderError => error
@@ -45,6 +47,17 @@ module Ai
       return provider_client.call(input, before_provider_call: before_provider_call) if before_provider_call
 
       provider_client.call(input)
+    end
+
+    def call_provider_with_budget(input)
+      return call_provider(input) unless deadline
+
+      remaining = remaining_elapsed_seconds
+      raise_elapsed_timeout! unless remaining.positive?
+
+      Timeout.timeout(remaining) { call_provider(input) }
+    rescue Timeout::Error => error
+      raise_elapsed_timeout!(cause: error)
     end
 
     def build_result(result)
@@ -139,12 +152,13 @@ module Ai
       deadline.to_f - monotonic_now
     end
 
-    def raise_elapsed_timeout!
+    def raise_elapsed_timeout!(cause: nil)
       raise Ai::Errors::TimeoutError.new(
         message: "AI maximum elapsed time exceeded",
         provider: provider_name,
         retryable: false,
         fallbackable: true,
+        cause: cause,
         phase: "ai_request",
         metrics: Ai::ProviderMetrics.merge(current_metrics, elapsed_ms: elapsed_ms)
       )

@@ -481,6 +481,28 @@ RSpec.describe Ocr::Client do
   end
 
   describe 'runtime config' do
+    it '画像downloadを含むOCR処理全体をmax elapsedで中断する' do
+      slow_image = instance_double('SlowDownloadable')
+      slow_client = described_class.new(
+        image: slow_image,
+        provider: provider,
+        runtime_config: runtime_config.with(max_elapsed_seconds: 0.01)
+      )
+      connection = instance_double(Faraday::Connection)
+      allow(slow_image).to receive(:download) do
+        sleep 0.05
+        'image-binary'
+      end
+      allow(slow_client).to receive(:connection).and_return(connection)
+      allow(connection).to receive(:post).and_raise('provider call must not start')
+
+      expect do
+        slow_client.call
+      end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout')
+
+      expect(connection).not_to have_received(:post)
+    end
+
     it 'request timeoutをsubmit connectionへ設定する' do
       connection = client.send(:connection)
 

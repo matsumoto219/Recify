@@ -287,5 +287,28 @@ RSpec.describe Ai::ProviderExecutor do
         expect(guarded_executor).to have_received(:sleep).with(1.0).once
       end
     end
+
+    it '実行中のprovider callも残りmax elapsedで中断する' do
+      budget_executor = described_class.new(
+        provider_client: provider_client,
+        provider_name: :openai,
+        retry_policy: retry_policy,
+        deadline: 10.0
+      )
+      allow(budget_executor).to receive(:monotonic_now).and_return(7.0)
+      allow(provider_client).to receive(:call).with(input).and_return(provider_result)
+      allow(Timeout).to receive(:timeout).with(3.0).and_raise(Timeout::Error)
+
+      expect do
+        budget_executor.call(input)
+      end.to raise_error(Ai::Errors::TimeoutError) { |error|
+        aggregate_failures do
+          expect(error.error_code).to eq('ai_timeout')
+          expect(error.retryable?).to eq(false)
+          expect(error.fallbackable?).to eq(true)
+          expect(provider_client).not_to have_received(:call)
+        end
+      }
+    end
   end
 end
