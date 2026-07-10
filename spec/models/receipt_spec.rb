@@ -2,6 +2,23 @@ require 'rails_helper'
 require 'zlib'
 
 RSpec.describe Receipt, type: :model do
+  it 'lock_versionで楽観ロックを使う' do
+    receipt = create(:receipt)
+
+    expect(receipt.reload.lock_version).to eq(0)
+  end
+
+  it '古いReceipt instanceからの更新を拒否する' do
+    receipt = create(:receipt)
+    current = described_class.find(receipt.id)
+    stale = described_class.find(receipt.id)
+    current.update!(memo: '先に保存')
+
+    expect do
+      stale.update!(memo: '古い保存')
+    end.to raise_error(ActiveRecord::StaleObjectError)
+  end
+
   include ActiveSupport::Testing::TimeHelpers
 
   def png_bytes(width:, height:, minimum_byte_size: nil)

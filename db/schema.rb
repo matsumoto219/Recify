@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_30_195605) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_10_103002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -341,6 +341,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_30_195605) do
     t.datetime "image_purged_at"
     t.string "image_purged_reason"
     t.boolean "keep_image", default: true, null: false
+    t.integer "lock_version", default: 0, null: false
     t.text "memo"
     t.string "moderation_status", default: "active", null: false
     t.datetime "ocr_completed_at"

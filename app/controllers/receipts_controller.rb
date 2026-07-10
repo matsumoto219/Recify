@@ -217,6 +217,11 @@ class ReceiptsController < ApplicationController
     end
 
     update_params = normalized_receipt_params.to_h
+    if stale_edit_submission?(update_params)
+      render_stale_edit_conflict
+      return
+    end
+
     begin
       receipt_edit_save_input(update_params)
     rescue ReceiptEditSaveInputBuilder::ConflictError
@@ -281,15 +286,19 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    if @receipt.update(update_params)
-      purge_receipt_image_if_requested!
-      redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
-    else
-      record_invalid_receipt_upload_security_event(uploaded_receipt_image, @receipt.errors) if uploaded_receipt_image.present?
-      build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
-      prepare_receipt_form_presenter
-      flash.now[:alert] = @receipt.errors.full_messages
-      render :edit, status: :unprocessable_content, formats: :html
+    begin
+      if @receipt.update(update_params)
+        purge_receipt_image_if_requested!
+        redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
+      else
+        record_invalid_receipt_upload_security_event(uploaded_receipt_image, @receipt.errors) if uploaded_receipt_image.present?
+        build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+        prepare_receipt_form_presenter
+        flash.now[:alert] = @receipt.errors.full_messages
+        render :edit, status: :unprocessable_content, formats: :html
+      end
+    rescue ActiveRecord::StaleObjectError
+      render_stale_edit_conflict
     end
   end
 
@@ -585,6 +594,22 @@ class ReceiptsController < ApplicationController
     render :edit, status: :unprocessable_content, formats: :html
   end
 
+  def stale_edit_submission?(permitted)
+    return false unless permitted.key?("lock_version")
+
+    Integer(permitted["lock_version"].to_s, 10) != @receipt.lock_version
+  rescue ArgumentError, TypeError
+    true
+  end
+
+  def render_stale_edit_conflict
+    @receipt.reload
+    @receipt.errors.add(:base, t("receipts.form.errors.stale_edit"))
+    prepare_receipt_form_presenter
+    flash.now[:alert] = @receipt.errors.full_messages
+    render :edit, status: :unprocessable_content, formats: :html
+  end
+
   def render_manual_amount_consistency_error!(permitted, rebuild_blank_adjustment_row_after_failure: false)
     @receipt.assign_attributes(permitted)
     @receipt.errors.add(:base, t("receipts.form.errors.amount_consistency_failed"))
@@ -605,6 +630,7 @@ class ReceiptsController < ApplicationController
       :tax_rate,
       :payment_method,
       :memo,
+      :lock_version,
       :image,
       :remove_image,
       :store_address,

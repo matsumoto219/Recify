@@ -58,6 +58,8 @@
                 }
               } do |f| %>
 
+  <%= f.hidden_field :lock_version if receipt.persisted? %>
+
   <% page_title = receipt.persisted? ? t("receipts.form.titles.edit") : t("receipts.form.titles.new") %>
   <% page_description = receipt.persisted? ? t("receipts.form.descriptions.edit") : t("receipts.form.descriptions.new") %>
   <% cancel_path = receipt.persisted? ? receipt_path(receipt) : receipts_path %>

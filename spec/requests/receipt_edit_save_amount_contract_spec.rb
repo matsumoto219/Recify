@@ -557,4 +557,76 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
   end
+
+  describe 'optimistic locking' do
+    it '編集フォームに現在のlock_versionを含める' do
+      receipt = create_completed_receipt
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      lock_input = document.at_css('input[name="receipt[lock_version]"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(lock_input).to be_present
+        expect(lock_input['value']).to eq(receipt.lock_version.to_s)
+      end
+    end
+
+    it '古いlock_versionの保存を拒否して新しいDB値を維持する' do
+      receipt = create_completed_receipt
+      stale_lock_version = receipt.lock_version
+      receipt.update!(memo: '別タブで保存済み')
+
+      patch_receipt(
+        receipt,
+        lock_version: stale_lock_version,
+        memo: '古いタブの値'
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('receipts.form.errors.stale_edit'))
+        expect(receipt.reload.memo).to eq('別タブで保存済み')
+      end
+    end
+
+    it '現在のlock_versionなら保存してversionを進める' do
+      receipt = create_completed_receipt
+      current_lock_version = receipt.lock_version
+
+      patch_receipt(
+        receipt,
+        lock_version: current_lock_version,
+        memo: '現在タブの値'
+      )
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.reload.memo).to eq('現在タブの値')
+        expect(receipt.lock_version).to eq(current_lock_version + 1)
+      end
+    end
+
+    it 'nested item更新でも親Receiptのlock_versionを進める' do
+      receipt = create_completed_receipt
+      item = create_item(receipt)
+      current_lock_version = receipt.lock_version
+
+      patch_receipt(
+        receipt,
+        lock_version: current_lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, quantity: '2', line_total: '100')
+        }
+      )
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.reload.lock_version).to eq(current_lock_version + 1)
+        expect(item.reload.line_total).to eq(200)
+      end
+    end
+  end
 end

@@ -134,6 +134,7 @@ ja:
         item_amount_required: 明細の金額を入力してください。
         nested_child_conflict: 同じ明細・調整・支払いを重複して更新できません。画面を再読み込みして、もう一度お試しください。
         amount_consistency_failed: 金額の再計算結果を確認できませんでした。画面を再読み込みして、もう一度お試しください。
+        stale_edit: 別の画面または処理でレシートが更新されました。最新の内容を確認して、もう一度編集してください。
         amount_limit_exceeded: "%{resource}.%{field} は%{limit}以下で入力してください（入力値: %{actual_value}）"
     item_fields:
       name: 品名
