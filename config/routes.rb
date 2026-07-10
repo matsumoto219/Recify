@@ -50,6 +50,7 @@ Rails.application.routes.draw do
       post :options
     end
     resources :receipt_analysis_runs, only: %i[index show], param: :run_key do
+      get :status, on: :collection
       post :retry, on: :member
       get :ocr_response_artifact, on: :member
     end

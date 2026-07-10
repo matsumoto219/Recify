@@ -225,6 +225,8 @@ module Admin
         display_id: receipt.display_id,
         stage: run.stage,
         status: run.status,
+        terminal: !run.active?,
+        state_revision: state_revision(run, receipt),
         source: run.source,
         receipt_status: receipt_status,
         error_code: run.error_code.presence || processing_error_code,
@@ -268,6 +270,12 @@ module Admin
       }
       record[:retry_options] = Analysis.retry_eligibility(receipt: receipt, parent_run: run).retry_options if include_retry_options?
       record
+    end
+
+    def state_revision(run, receipt)
+      timestamp = [ run.updated_at, receipt.updated_at ].compact.max
+
+      (timestamp.to_r * 1_000_000).to_i
     end
 
     def receipt_info(receipt)

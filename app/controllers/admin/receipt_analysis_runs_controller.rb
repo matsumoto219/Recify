@@ -8,6 +8,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     object_nl: "\n",
     array_nl: "\n"
   }.freeze
+  MAX_STATUS_SYNC_RUNS = 100
 
   helper_method :admin_retry_enabled?,
                 :admin_retry_reauthentication_required?,
@@ -26,6 +27,22 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     return if @record.present?
 
     raise_not_found
+  end
+
+  def status
+    run_keys = status_run_keys
+    records = if run_keys.empty?
+      {}
+    else
+      Admin.receipt_analysis_runs(run_key: run_keys, limit: run_keys.size).records.index_by { |record|
+        record[:run_key]
+      }
+    end
+
+    response.headers["Cache-Control"] = "no-store"
+    render json: {
+      runs: run_keys.map { |run_key| status_payload(run_key, records[run_key]) }
+    }
   end
 
   def retry
@@ -151,6 +168,28 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   end
 
   private
+
+  def status_run_keys
+    Array(params[:run_keys])
+      .map(&:to_s)
+      .select { |run_key| run_key.present? && run_key.length <= 100 }
+      .uniq
+      .first(MAX_STATUS_SYNC_RUNS)
+  end
+
+  def status_payload(run_key, record)
+    return { run_key: run_key, missing: true, terminal: true } unless record
+
+    {
+      run_key: run_key,
+      stage: record[:stage],
+      status: record[:status],
+      receipt_status: record[:receipt_status],
+      error_code: record[:error_code].presence || "-",
+      state_revision: record[:state_revision],
+      terminal: record[:terminal]
+    }
+  end
 
   def admin_retry_enabled?
     current_user.passkeys.exists? && admin_passkey_reauthenticated?

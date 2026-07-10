@@ -9,7 +9,11 @@
   filter_control_class = "rounded-lg text-sm"
 %>
 
-<section class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2">
+<section
+  class="mx-auto w-full max-w-7xl space-y-6 px-0 md:px-2 py-2 pb-28 md:pb-2"
+  data-controller="analysis-run-status-sync"
+  data-analysis-run-status-sync-url-value="<%= status_admin_receipt_analysis_runs_path %>"
+  data-analysis-run-status-sync-interval-value="5000">
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
@@ -193,7 +197,12 @@
         </thead>
         <tbody>
           <% @result.records.each do |record| %>
-            <tr class="border-b token-border-soft">
+            <tr
+              class="border-b token-border-soft"
+              data-analysis-run-status-sync-target="row"
+              data-analysis-run-status-sync-run-key="<%= record[:run_key] %>"
+              data-analysis-run-status-sync-state-revision="<%= record[:state_revision] %>"
+              data-analysis-run-status-sync-terminal="<%= record[:terminal] %>">
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_id) %>">
                 <%= link_to record[:run_key], admin_receipt_analysis_run_path(record[:run_key]), class: "token-text-brand hover:underline" %>
               </td>
@@ -206,11 +215,11 @@
                 <div class="text-xs token-text-muted"><%= record.dig(:user_info, :guest) ? t("admin.receipt_analysis_runs.index.user_kind.guest") : t("admin.receipt_analysis_runs.index.user_kind.registered") %></div>
               </td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>">
-                <div class="token-text-base"><%= record[:stage] %> / <%= record[:status] %></div>
+                <div class="token-text-base" data-analysis-run-status-sync-field="run_status"><%= record[:stage] %> / <%= record[:status] %></div>
               </td>
-              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:receipt_status] %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>" data-analysis-run-status-sync-field="receipt_status"><%= record[:receipt_status] %></td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:source] %></td>
-              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= record[:error_code].presence || "-" %></td>
+              <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>" data-analysis-run-status-sync-field="error_code"><%= record[:error_code].presence || "-" %></td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :datetime) %>"><%= l(record[:timestamps][:created_at], format: :short) %></td>
             </tr>
           <% end %>

@@ -134,6 +134,30 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       end
     end
 
+    it 'active runがある場合だけ同期対象として識別できる行データを描画する' do
+      admin = create(:user, :admin)
+      active_run = create(:receipt_analysis_run, status: 'running', stage: 'ocr')
+      terminal_run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+
+      get admin_receipt_analysis_runs_path
+
+      document = Nokogiri::HTML(response.body)
+      root = document.at_css('[data-controller="analysis-run-status-sync"]')
+      active_row = document.at_css(%([data-analysis-run-status-sync-run-key="#{active_run.run_key}"]))
+      terminal_row = document.at_css(%([data-analysis-run-status-sync-run-key="#{terminal_run.run_key}"]))
+
+      aggregate_failures do
+        expect(root['data-analysis-run-status-sync-url-value']).to eq(status_admin_receipt_analysis_runs_path)
+        expect(root['data-analysis-run-status-sync-interval-value']).to eq('5000')
+        expect(active_row['data-analysis-run-status-sync-terminal']).to eq('false')
+        expect(terminal_row['data-analysis-run-status-sync-terminal']).to eq('true')
+        expect(active_row.at_css('[data-analysis-run-status-sync-field="run_status"]')).to be_present
+        expect(active_row.at_css('[data-analysis-run-status-sync-field="receipt_status"]')).to be_present
+        expect(active_row.at_css('[data-analysis-run-status-sync-field="error_code"]')).to be_present
+      end
+    end
+
     it 'adminユーザーにはfilter formを表示する' do
       admin = create(:user, :admin)
       sign_in admin
@@ -253,6 +277,63 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
           'limit' => '1',
           'offset' => '2'
         )
+      end
+    end
+  end
+
+  describe 'GET /admin/receipt_analysis_runs/status' do
+    it '一般ユーザーには404を返す' do
+      sign_in create(:user)
+
+      get status_admin_receipt_analysis_runs_path, params: { run_keys: [ SecureRandom.uuid ] }, as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it 'adminへ複数runの現在状態だけを返しterminal状態を識別する' do
+      admin = create(:user, :admin)
+      active_run = create(:receipt_analysis_run, status: 'running', stage: 'ai')
+      terminal_run = create(:receipt_analysis_run, :succeeded)
+      missing_run_key = SecureRandom.uuid
+      sign_in admin
+
+      get status_admin_receipt_analysis_runs_path,
+          params: { run_keys: [ active_run.run_key, terminal_run.run_key, missing_run_key ] },
+          as: :json
+
+      runs = response.parsed_body.fetch('runs').index_by { |run| run.fetch('run_key') }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.headers['Cache-Control']).to eq('no-store')
+        expect(runs.fetch(active_run.run_key)).to include(
+          'stage' => 'ai',
+          'status' => 'running',
+          'terminal' => false
+        )
+        expect(runs.fetch(active_run.run_key).fetch('state_revision')).to be_positive
+        expect(runs.fetch(terminal_run.run_key)).to include(
+          'status' => 'succeeded',
+          'terminal' => true
+        )
+        expect(runs.fetch(missing_run_key)).to include(
+          'missing' => true,
+          'terminal' => true
+        )
+        expect(response.body).not_to include('provider_raw_response', 'ai_input_snapshot', 'ocr_result_snapshot')
+      end
+    end
+
+    it 'run keyなしでは全runを誤って返さない' do
+      admin = create(:user, :admin)
+      create(:receipt_analysis_run, status: 'running', stage: 'ocr')
+      sign_in admin
+
+      get status_admin_receipt_analysis_runs_path, as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body).to eq('runs' => [])
       end
     end
   end
@@ -544,6 +625,26 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).not_to include('Analysis.retry_receipt_analysis')
         expect(response.body).not_to include('name="retry_kind"')
         expect(response.body).not_to include('確認文字列 RETRY ANALYSIS')
+      end
+    end
+
+    it 'showのrun状態だけを限定同期できるdata属性を描画する' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, status: 'running', stage: 'ocr')
+      sign_in admin
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      document = Nokogiri::HTML(response.body)
+      root = document.at_css('[data-controller="analysis-run-status-sync"]')
+      row = document.at_css(%([data-analysis-run-status-sync-run-key="#{run.run_key}"]))
+
+      aggregate_failures do
+        expect(root['data-analysis-run-status-sync-url-value']).to eq(status_admin_receipt_analysis_runs_path)
+        expect(row['data-analysis-run-status-sync-terminal']).to eq('false')
+        expect(row.at_css('[data-analysis-run-status-sync-field="run_status"]')).to be_present
+        expect(row.at_css('[data-analysis-run-status-sync-field="receipt_status"]')).to be_present
+        expect(row.at_css('[data-analysis-run-status-sync-field="error_code"]')).to be_present
       end
     end
 
