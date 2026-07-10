@@ -214,7 +214,8 @@ module Amounts
             :effect,
             :kind,
             :sign,
-            :tax_rate
+            :tax_rate,
+            :tax_rate_source
           )
         )
       end

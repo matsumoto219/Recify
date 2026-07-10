@@ -22,8 +22,9 @@ module Amounts
       ceil: 20
     }.freeze
     ROUNDING_SCOPE_TIE_BREAK_PRIORITY = {
-      per_item: 0,
-      per_receipt: 10
+      per_tax_rate_group: 0,
+      per_item: 10,
+      per_receipt: 20
     }.freeze
     EXACT_SCORE_BREAKDOWN_KEYS = %i[
       receipt_total_delta

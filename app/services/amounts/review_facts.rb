@@ -10,7 +10,7 @@ module Amounts
       receipt_adjustment_evidence.any? do |evidence|
         fetch_value(evidence, :effect).to_s == "purchase_adjustment" &&
           to_i(fetch_value(evidence, :amount)).positive? &&
-          tax_rate_missing?(fetch_value(evidence, :tax_rate))
+          tax_rate_missing?(evidence)
       end
     end
 
@@ -104,7 +104,11 @@ module Amounts
       end
     end
 
-    def tax_rate_missing?(value)
+    def tax_rate_missing?(evidence)
+      source = fetch_value(evidence, :tax_rate_source).to_s
+      return source == "unknown" if Amounts::AdjustmentClassifier::TAX_RATE_SOURCES.include?(source)
+
+      value = fetch_value(evidence, :tax_rate)
       return true if value.nil? || value == ""
 
       BigDecimal(value.to_s).zero?

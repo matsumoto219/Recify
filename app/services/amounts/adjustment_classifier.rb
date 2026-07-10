@@ -5,6 +5,7 @@ module Amounts
     PAYMENT_ADJUSTMENT_KINDS = %w[point_usage].freeze
     PURCHASE_DISCOUNT_KINDS = %w[receipt_discount coupon return_refund].freeze
     SURCHARGE_KINDS = %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].freeze
+    TAX_RATE_SOURCES = %w[explicit inherited_single_rate unknown not_applicable].freeze
 
     class << self
       def call(adjustment)
@@ -32,6 +33,7 @@ module Amounts
         tax_treatment: tax_treatment,
         taxable: tax_rate.positive?,
         tax_rate: tax_rate,
+        tax_rate_source: tax_rate_source,
         warnings: warnings,
         evidence: evidence
       }
@@ -51,6 +53,7 @@ module Amounts
     def tax_treatment
       return :not_applicable if effect == :payment_adjustment
       return :unknown if effect == :unknown_adjustment
+      return :unknown if tax_rate_source == "unknown"
       return :taxable if tax_rate.positive?
 
       :non_taxable
@@ -78,7 +81,7 @@ module Amounts
     def warnings
       results = []
       results << :adjustment_uncertain if uncertain?
-      results << :adjustment_tax_rate_missing if effect != :payment_adjustment && purchase_known? && tax_rate.zero? && signed_amount.nonzero?
+      results << :adjustment_tax_rate_missing if purchase_tax_rate_missing?
       results
     end
 
@@ -97,7 +100,8 @@ module Amounts
         amount: adjustment[:amount],
         effect: effect,
         tax_treatment: tax_treatment,
-        tax_rate: tax_rate
+        tax_rate: tax_rate,
+        tax_rate_source: tax_rate_source
       }
     end
 
@@ -121,12 +125,17 @@ module Amounts
 
       kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
       sign = normalized[:sign].to_s
+      tax_rate_present = normalized.key?(:tax_rate_present) ? normalized[:tax_rate_present] : present?(normalized[:tax_rate])
+      tax_rate_source = normalized[:tax_rate_source].to_s
+      tax_rate_source = tax_rate_present ? "explicit" : "unknown" unless TAX_RATE_SOURCES.include?(tax_rate_source)
 
       {
         kind: defined?(ReceiptAdjustment::KINDS) && ReceiptAdjustment::KINDS.include?(kind) ? kind : "other",
         sign: defined?(ReceiptAdjustment::SIGNS) && ReceiptAdjustment::SIGNS.include?(sign) ? sign : default_sign_for(kind),
         amount: Amounts::NumberParser.parse_amount(normalized[:amount]).abs,
         tax_rate: normalized[:tax_rate],
+        tax_rate_present: tax_rate_present,
+        tax_rate_source: tax_rate_source,
         needs_review: normalized[:needs_review] == true,
         source: normalized[:source],
         label: normalized[:label],
@@ -149,6 +158,20 @@ module Amounts
       rate > 1 ? rate / 100 : rate
     rescue ArgumentError
       BigDecimal("0")
+    end
+
+    def tax_rate_source
+      return "not_applicable" if effect == :payment_adjustment
+
+      adjustment[:tax_rate_source]
+    end
+
+    def purchase_tax_rate_missing?
+      effect != :payment_adjustment && purchase_known? && tax_rate_source == "unknown" && signed_amount.nonzero?
+    end
+
+    def present?(value)
+      !value.nil? && value != ""
     end
 
     def profile

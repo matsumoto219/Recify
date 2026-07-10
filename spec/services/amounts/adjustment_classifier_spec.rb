@@ -46,9 +46,29 @@ RSpec.describe Amounts::AdjustmentClassifier do
 
     expect(result).to include(
       effect: :purchase_adjustment,
-      tax_treatment: :non_taxable,
+      tax_treatment: :unknown,
+      tax_rate_source: 'unknown',
       signed_amount: -100
     )
+  end
+
+  it '明示0%のクーポンを税率欠落扱いにしない' do
+    result = described_class.call(
+      kind: 'coupon',
+      sign: 'discount',
+      amount: 100,
+      tax_rate: BigDecimal('0'),
+      source: 'manual'
+    )
+
+    aggregate_failures do
+      expect(result).to include(
+        effect: :purchase_adjustment,
+        tax_treatment: :non_taxable,
+        tax_rate_source: 'explicit'
+      )
+      expect(result[:warnings]).not_to include(:adjustment_tax_rate_missing)
+    end
   end
 
   it '配送料・深夜料金・手数料を購入調整として分類する' do
@@ -65,7 +85,8 @@ RSpec.describe Amounts::AdjustmentClassifier do
       results.each do |result|
         expect(result).to include(
           effect: :purchase_adjustment,
-          tax_treatment: :non_taxable,
+          tax_treatment: :unknown,
+          tax_rate_source: 'unknown',
           signed_amount: 100
         )
       end

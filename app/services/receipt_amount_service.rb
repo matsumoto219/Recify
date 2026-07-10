@@ -112,6 +112,11 @@ class ReceiptAmountService
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
     @adjustments = Array(receipt_adjustments).map { |adjustment| normalize_adjustment(adjustment) }
     @payments = Array(receipt_payments).map { |payment| normalize_payment(payment) }
+    @adjustments = Amounts::AdjustmentTaxRateResolver.call(
+      adjustments: @adjustments,
+      items: @items,
+      tax_details: @tax_details
+    )
     @adjustments = canonical_adjustments(@adjustments, @payments)
     @payments = canonical_payments(@payments, @adjustments)
     @context = normalize_context(context)
@@ -537,12 +542,15 @@ class ReceiptAmountService
     kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
     sign = normalized[:sign].to_s
     amount = to_i_or_nil(normalized[:amount])
+    tax_rate_present = value_present?(normalized[:tax_rate])
 
     {
       kind: ReceiptAdjustment::KINDS.include?(kind) ? kind : "other",
       sign: ReceiptAdjustment::SIGNS.include?(sign) ? sign : default_adjustment_sign(kind),
       amount: amount.nil? ? 0 : amount.abs,
-      tax_rate: normalize_rate(normalized[:tax_rate]),
+      tax_rate: tax_rate_present ? normalize_rate(normalized[:tax_rate]) : nil,
+      tax_rate_present: tax_rate_present,
+      tax_rate_source: tax_rate_present ? "explicit" : "unknown",
       needs_review: normalized[:needs_review] == true,
       review_reasons: Array(normalized[:review_reasons]).map(&:to_s),
       source: normalized[:source],

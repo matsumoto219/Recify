@@ -50,7 +50,9 @@ module Amounts
 
           apply_taxable_delta!(totals, rate, signed)
         else
-          totals[:tax_rate_missing_adjustment_total] += signed.abs
+          if classification[:tax_rate_source] == "unknown"
+            totals[:tax_rate_missing_adjustment_total] += signed.abs
+          end
           totals[:subtotal_delta] += signed
           totals[:total_delta] += signed
         end
@@ -124,12 +126,20 @@ module Amounts
 
       kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
       sign = normalized[:sign].to_s
+      tax_rate_present =
+        if normalized.key?(:tax_rate_present)
+          normalized[:tax_rate_present] == true
+        else
+          !normalized[:tax_rate].nil? && normalized[:tax_rate] != ""
+        end
 
       {
         kind: ReceiptAdjustment::KINDS.include?(kind) ? kind : "other",
         sign: ReceiptAdjustment::SIGNS.include?(sign) ? sign : default_sign_for(kind),
         amount: to_i(normalized[:amount]).abs,
         tax_rate: normalize_rate(normalized[:tax_rate]),
+        tax_rate_present: tax_rate_present,
+        tax_rate_source: normalized[:tax_rate_source],
         needs_review: normalized[:needs_review] == true,
         review_reasons: Array(normalized[:review_reasons]).map(&:to_s),
         source: normalized[:source],

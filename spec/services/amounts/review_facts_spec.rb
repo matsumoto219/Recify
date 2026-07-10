@@ -17,12 +17,36 @@ RSpec.describe Amounts::ReviewFacts do
     facts = described_class.new(
       candidate(
         evidence: [
-          { source: 'receipt_adjustment', effect: :purchase_adjustment, amount: 100, tax_rate: BigDecimal('0') }
+          {
+            source: 'receipt_adjustment',
+            effect: :purchase_adjustment,
+            amount: 100,
+            tax_rate: BigDecimal('0'),
+            tax_rate_source: 'unknown'
+          }
         ]
       )
     )
 
     expect(facts.tax_rate_missing_purchase_adjustment?).to be(true)
+  end
+
+  it '明示0%のpurchase adjustmentを税率欠落扱いにしない' do
+    facts = described_class.new(
+      candidate(
+        evidence: [
+          {
+            source: 'receipt_adjustment',
+            effect: :purchase_adjustment,
+            amount: 100,
+            tax_rate: BigDecimal('0'),
+            tax_rate_source: 'explicit'
+          }
+        ]
+      )
+    )
+
+    expect(facts.tax_rate_missing_purchase_adjustment?).to be(false)
   end
 
   it '複数税率のpurchase adjustment税配賦不確実を判定する' do

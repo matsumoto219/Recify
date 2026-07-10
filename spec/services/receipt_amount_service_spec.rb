@@ -580,7 +580,7 @@ RSpec.describe ReceiptAmountService do
       aggregate_failures do
         # 検算: 明細税込合計770円。10%内税は floor(770 * 10 / 110) = 70円、税抜700円。
         # 現金1,000円はお預かり由来の過払い方向なので、770円を税抜として846円にする候補へ寄せない。
-        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('items_as_tax_included/floor/per_item')
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('items_as_tax_included/floor/per_tax_rate_group')
         expect(result.dig(:amount_engine, :selected_candidate, :score_breakdown, :payment_delta)).to eq(0)
         expect(result[:resolved]).to include(subtotal: 700, tax: 70, total: 770, tax_rate: BigDecimal('0.1'))
         expect(result[:warning_inconsistencies]).to eq([ :tax_detail_incomplete ])
@@ -777,7 +777,7 @@ RSpec.describe ReceiptAmountService do
       aggregate_failures do
         # 検算: 明細合計は1,110円。印字税内訳は8%税21円 + 10%税30円のみで、
         # 490円10%税込行や50円非課税行が税内訳に含まれず、税抜/税込混在の可能性が残る。
-        expect(result[:resolved]).to include(subtotal: 1_020, tax: 90, total: 1_110)
+        expect(result[:resolved]).to include(subtotal: 1_019, tax: 91, total: 1_110)
         expect(result[:warning_inconsistencies]).to include(:price_tax_inclusion_uncertain)
         expect(result[:review_reasons]).to include('price_tax_inclusion_uncertain')
       end
@@ -1716,6 +1716,67 @@ RSpec.describe ReceiptAmountService do
         expect(result[:warning_inconsistencies]).to include(:adjustment_tax_rate_missing)
         expect(result[:blocking_inconsistencies]).not_to include(:adjustment_tax_rate_missing)
         expect(result.dig(:computed, :adjustment_tax_rate_missing_total)).to eq(300)
+      end
+    end
+
+    it '単一10%明細では税率未指定couponへ税率を継承する' do
+      result = call_service(
+        receipt: { total_amount: 90 },
+        receipt_items: [
+          { line_total: 100, tax_rate: BigDecimal('0.10') }
+        ],
+        receipt_adjustments: [
+          { kind: 'coupon', sign: 'discount', amount: 10, source: 'manual' }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 82, tax: 8, total: 90)
+        expect(result[:warning_inconsistencies]).not_to include(:adjustment_tax_rate_missing)
+        expect(result[:review_reasons]).not_to include('purchase_adjustment_tax_allocation_uncertain')
+        expect(result.dig(:amount_engine, :selected_candidate, :evidence)).to include(
+          include(
+            source: 'receipt_adjustment',
+            tax_rate: BigDecimal('0.10'),
+            tax_rate_source: 'inherited_single_rate'
+          )
+        )
+      end
+    end
+
+    it '同点なら国内内税を税率グループ単位で丸める' do
+      result = call_service(
+        receipt: { total_amount: 12 },
+        receipt_items: [
+          { line_total: 6, tax_rate: BigDecimal('0.10') },
+          { line_total: 6, tax_rate: BigDecimal('0.10') }
+        ]
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 11, tax: 1, total: 12)
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq(
+          'items_as_tax_included/floor/per_tax_rate_group'
+        )
+      end
+    end
+
+    it '明示0%のcouponを10%へ継承しない' do
+      result = call_service(
+        receipt: { total_amount: 90 },
+        receipt_items: [
+          { line_total: 100, tax_rate: BigDecimal('0.10') }
+        ],
+        receipt_adjustments: [
+          { kind: 'coupon', sign: 'discount', amount: 10, tax_rate: BigDecimal('0'), source: 'manual' }
+        ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 81, tax: 9, total: 90)
+        expect(result[:warning_inconsistencies]).not_to include(:adjustment_tax_rate_missing)
       end
     end
 

@@ -163,6 +163,12 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
               evidence: [
                 { source: 'receipt_payments', payment_amount_sum: 1_139, final_payment_total: 1_139 },
                 {
+                  source: 'receipt_adjustment',
+                  amount: 22,
+                  effect: :payment_adjustment,
+                  tax_rate_source: 'not_applicable'
+                },
+                {
                   source: 'receipt_payments',
                   raw_text: '保存しない',
                   source_text: '保存しないsource text',
@@ -198,6 +204,14 @@ RSpec.describe Amounts::CalculationProfileSnapshot do
         )
         expect(snapshot.dig(:amount_engine, :selected_candidate, :score_breakdown)).to eq(
           'receipt_total_delta' => 0
+        )
+        expect(snapshot.dig(:amount_engine, :selected_candidate, :evidence)).to include(
+          {
+            'source' => 'receipt_adjustment',
+            'amount' => 22,
+            'effect' => 'payment_adjustment',
+            'tax_rate_source' => 'not_applicable'
+          }
         )
         expect(snapshot.dig(:amount_engine, :selected_candidate, :computed_items)).to eq([
           {

@@ -103,6 +103,23 @@ RSpec.describe Amounts::WinnerSelector do
     expect(result.candidate_id).to eq('zzz_receipt_input')
   end
 
+  it '国内丸めの同点候補では税率グループ単位を明細単位より優先する' do
+    per_item = candidate(
+      id: 'items_as_tax_included/floor/per_item',
+      basis: 'items_as_tax_included',
+      score: 10
+    ).with(rounding_mode: :floor, rounding_scope: :per_item)
+    per_group = candidate(
+      id: 'items_as_tax_included/floor/per_tax_rate_group',
+      basis: 'items_as_tax_included',
+      score: 10
+    ).with(rounding_mode: :floor, rounding_scope: :per_tax_rate_group)
+
+    result = described_class.new([ per_item, per_group ]).call
+
+    expect(result.candidate_id).to eq('items_as_tax_included/floor/per_tax_rate_group')
+  end
+
   it '別basisのexact候補がなければcompeting warningを付けない' do
     selected = candidate(
       id: 'printed_tax_details_net/floor',

@@ -150,12 +150,20 @@ module Amounts
 
       kind = ReceiptAdjustment.normalize_kind(normalized[:kind])
       sign = normalized[:sign].to_s
+      tax_rate_present =
+        if normalized.key?(:tax_rate_present)
+          normalized[:tax_rate_present] == true
+        else
+          !normalized[:tax_rate].nil? && normalized[:tax_rate] != ""
+        end
 
       {
         kind: ReceiptAdjustment::KINDS.include?(kind) ? kind : "other",
         sign: ReceiptAdjustment::SIGNS.include?(sign) ? sign : default_sign_for(kind),
         amount: to_i(normalized[:amount]).abs,
         tax_rate: normalized[:tax_rate],
+        tax_rate_present: tax_rate_present,
+        tax_rate_source: normalized[:tax_rate_source],
         source: normalized[:source],
         label: normalized[:label],
         source_text: normalized[:source_text],

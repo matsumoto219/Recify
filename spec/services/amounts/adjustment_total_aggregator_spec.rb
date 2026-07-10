@@ -74,6 +74,19 @@ RSpec.describe Amounts::AdjustmentTotalAggregator do
     end
   end
 
+  it '明示0% adjustmentを税率欠落合計に含めない' do
+    result = aggregate(
+      adjustments: [
+        { kind: 'coupon', sign: 'discount', amount: 100, tax_rate: BigDecimal('0') }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result[:receipt_total_delta]).to eq(-100)
+      expect(result[:tax_rate_missing_adjustment_total]).to eq(0)
+    end
+  end
+
   it 'point_usageは支払調整として扱い税計算・合計計算から除外する' do
     result = aggregate(
       adjustments: [

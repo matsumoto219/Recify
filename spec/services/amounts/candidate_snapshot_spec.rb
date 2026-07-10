@@ -149,6 +149,14 @@ RSpec.describe Amounts::CandidateSnapshot do
           provider_raw_response: { body: '保存しないprovider body' },
           store_metadata: { name: '保存しない店舗metadata' },
           metadata: { raw_ocr_text: '保存しないnested raw OCR' }
+        },
+        {
+          source: 'receipt_adjustment',
+          effect: :purchase_adjustment,
+          amount: 10,
+          tax_rate: BigDecimal('0.10'),
+          tax_rate_source: 'inherited_single_rate',
+          source_text: '保存しない調整原文'
         }
       ],
       computed_items: [
@@ -178,6 +186,13 @@ RSpec.describe Amounts::CandidateSnapshot do
           target_net_amount: 746,
           target_tax_amount: 74,
           target_gross_amount: 820
+        },
+        {
+          source: 'receipt_adjustment',
+          amount: 10,
+          effect: :purchase_adjustment,
+          tax_rate: BigDecimal('0.10'),
+          tax_rate_source: 'inherited_single_rate'
         }
       ])
       expect(snapshot.dig(:selected_candidate, :computed_items)).to eq([
