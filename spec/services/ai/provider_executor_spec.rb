@@ -248,5 +248,44 @@ RSpec.describe Ai::ProviderExecutor do
         end
       }
     end
+
+    it 'retryごとにprovider call前の利用量guardを再実行する' do
+      callback_calls = 0
+      quota_error = Usage::LimitExceeded.new(
+        key: 'ai_jobs_per_day',
+        limit: 1,
+        used: 1,
+        requested: 1
+      )
+      callback = lambda do
+        callback_calls += 1
+        raise quota_error if callback_calls == 2
+      end
+      guarded_executor = described_class.new(
+        provider_client: provider_client,
+        provider_name: :openai,
+        retry_policy: retry_policy,
+        before_provider_call: callback
+      )
+      allow(provider_client).to receive(:call)
+        .with(input, before_provider_call: callback) do |_input, before_provider_call:|
+          before_provider_call.call
+          raise Ai::Errors::ProviderError.new(
+            message: 'server error',
+            error_code: 'ai_api_error',
+            provider: 'openai',
+            retryable: true
+          )
+        end
+      allow(guarded_executor).to receive(:sleep)
+
+      expect { guarded_executor.call(input) }.to raise_error(Usage::LimitExceeded)
+
+      aggregate_failures do
+        expect(callback_calls).to eq(2)
+        expect(provider_client).to have_received(:call).twice
+        expect(guarded_executor).to have_received(:sleep).with(1.0).once
+      end
+    end
   end
 end

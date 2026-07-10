@@ -41,6 +41,22 @@ RSpec.describe ExternalServices do
         end
       end
     end
+
+    it 'SystemSettingsが有効でもOCRのENV kill switchを優先する' do
+      create(:system_setting, key: 'operations.ocr_enabled', value: described_class_setting(true))
+
+      with_env('RECEIPT_OCR_ENABLED' => 'false') do
+        aggregate_failures do
+          expect(described_class.state(:ocr)).to eq('down')
+          expect(described_class.down?(:ocr)).to eq(true)
+          expect(described_class.snapshot(:ocr)).to include(
+            disabled: true,
+            source: 'env',
+            reason: 'RECEIPT_OCR_ENABLED'
+          )
+        end
+      end
+    end
   end
 
   describe '.snapshot and .snapshots' do

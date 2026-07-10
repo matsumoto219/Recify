@@ -21,6 +21,33 @@ RSpec.describe "External service tuning SystemSettings" do
 
       expect(definition).to have_attributes(default: 120, min: 15, max: 900)
     end
+
+    it "全keyのdefaultと安全範囲を固定する" do
+      expected_ranges = {
+        "external_services.ai.open_timeout_seconds" => [ 10, 1, 60 ],
+        "external_services.ai.read_timeout_seconds" => [ 120, 15, 900 ],
+        "external_services.ai.max_elapsed_seconds" => [ 600, 60, 1200 ],
+        "external_services.ai.max_retries" => [ 2, 0, 3 ],
+        "external_services.ai.base_retry_delay_seconds" => [ 1.0, 0.1, 30.0 ],
+        "external_services.ai.max_retry_delay_seconds" => [ 10.0, 0.1, 120.0 ],
+        "external_services.ocr.request_timeout_seconds" => [ 30, 1, 300 ],
+        "external_services.ocr.max_elapsed_seconds" => [ 180, 30, 1200 ],
+        "external_services.ocr.max_poll_attempts" => [ 20, 1, 300 ],
+        "external_services.ocr.poll_interval_seconds" => [ 1.0, 0.25, 30.0 ],
+        "external_services.ocr.poll_backoff_factor" => [ 1.5, 1.0, 5.0 ],
+        "external_services.ocr.max_poll_interval_seconds" => [ 3.0, 0.25, 120.0 ],
+        "external_services.ocr.max_retries" => [ 2, 0, 3 ],
+        "external_services.ocr.base_retry_delay_seconds" => [ 0.5, 0.1, 30.0 ],
+        "external_services.ocr.max_retry_delay_seconds" => [ 10.0, 0.1, 120.0 ]
+      }
+
+      actual_ranges = expected_ranges.keys.to_h do |key|
+        definition = SystemSettings.definition_for(key)
+        [ key, [ definition.default, definition.min, definition.max ] ]
+      end
+
+      expect(actual_ranges).to eq(expected_ranges)
+    end
   end
 
   describe "AI dependencies" do
