@@ -626,6 +626,7 @@ class ReceiptsController < ApplicationController
   end
 
   def normalized_receipt_params
+    reset_receipt_edit_save_input!
     permitted = receipt_params.to_h.deep_dup
     permitted.delete("remove_image")
 
@@ -654,7 +655,7 @@ class ReceiptsController < ApplicationController
   def manual_amount_limit_violations(permitted, context:)
     ReceiptAmountLimits.violations_for(
       receipt: amount_receipt(permitted, context, clear_amounts: false),
-      receipt_items: amount_receipt_items(permitted),
+      receipt_items: amount_receipt_items(permitted, context),
       receipt_adjustments: amount_receipt_adjustments(permitted, context),
       receipt_payments: amount_receipt_payments(permitted, context),
       receipt_tax_details: amount_receipt_tax_details_for_limit(permitted, context)
@@ -1025,7 +1026,9 @@ class ReceiptsController < ApplicationController
   end
 
   def manual_amount_error_message(permitted)
-    if amount_receipt_items(permitted).empty?
+    context = @receipt.persisted? ? :edit_save : :manual
+
+    if amount_receipt_items(permitted, context).empty?
       t("receipts.form.errors.items_required")
     else
       t("receipts.form.errors.item_amount_required")
@@ -1045,7 +1048,7 @@ class ReceiptsController < ApplicationController
       return false
     end
 
-    amount_receipt_items(permitted).empty?
+    amount_receipt_items(permitted, context).empty?
   end
 
   def prepare_manual_receipt_items_missing_error!(permitted)
@@ -1078,13 +1081,14 @@ class ReceiptsController < ApplicationController
     # 明細の quantity / line_total を計算結果で上書き（複数行対応）
     apply_item_totals!(permitted, result.dig(:computed, :items))
     permitted["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(result[:tax_details])
+    reset_receipt_edit_save_input!
     result
   end
 
   def calculate_receipt_amounts(permitted, context, clear_amounts, receipt_tax_details)
     ReceiptAmountService.call(
       receipt: amount_receipt(permitted, context, clear_amounts: clear_amounts),
-      receipt_items: amount_receipt_items(permitted),
+      receipt_items: amount_receipt_items(permitted, context),
       receipt_tax_details: receipt_tax_details,
       receipt_adjustments: amount_receipt_adjustments(permitted, context),
       receipt_payments: amount_receipt_payments(permitted, context),
@@ -1260,7 +1264,11 @@ class ReceiptsController < ApplicationController
     end
   end
 
-  def amount_receipt_items(permitted)
+  def amount_receipt_items(permitted, context)
+    if context == :edit_save && @receipt&.persisted?
+      return receipt_edit_save_input(permitted).receipt_items
+    end
+
     items_attributes = permitted["receipt_items_attributes"]
     return [] if items_attributes.blank?
 
@@ -1270,6 +1278,10 @@ class ReceiptsController < ApplicationController
   end
 
   def amount_receipt_adjustments(permitted, context)
+    if context == :edit_save && @receipt&.persisted?
+      return receipt_edit_save_input(permitted).receipt_adjustments
+    end
+
     adjustments_attributes = permitted["receipt_adjustments_attributes"]
     if adjustments_attributes.present?
       return adjustments_attributes.values.reject do |adjustment_attributes|
@@ -1295,6 +1307,10 @@ class ReceiptsController < ApplicationController
   end
 
   def amount_receipt_payments(permitted, context)
+    if context == :edit_save && @receipt&.persisted?
+      return receipt_edit_save_input(permitted).receipt_payments
+    end
+
     payments_attributes = permitted["receipt_payments_attributes"]
     if payments_attributes.present?
       return payments_attributes.values.reject do |payment_attributes|
@@ -1336,7 +1352,7 @@ class ReceiptsController < ApplicationController
 
     items_attributes = permitted["receipt_items_attributes"]
     return false if items_attributes.blank?
-    return false if amount_receipt_items(permitted).present?
+    return false if amount_receipt_items(permitted, context).present?
 
     items_attributes.values.any? do |item_attributes|
       item_attributes["id"].present? && ActiveModel::Type::Boolean.new.cast(item_attributes["_destroy"])
@@ -1367,6 +1383,20 @@ class ReceiptsController < ApplicationController
     end
 
     amount_receipt_tax_details(context)
+  end
+
+  def receipt_edit_save_input(permitted)
+    if @receipt_edit_save_input_params_id != permitted.object_id
+      @receipt_edit_save_input = ReceiptEditSaveInputBuilder.call(receipt: @receipt, permitted: permitted)
+      @receipt_edit_save_input_params_id = permitted.object_id
+    end
+
+    @receipt_edit_save_input
+  end
+
+  def reset_receipt_edit_save_input!
+    @receipt_edit_save_input = nil
+    @receipt_edit_save_input_params_id = nil
   end
 
   def clear_review_flags_for_edited_items!(permitted)
