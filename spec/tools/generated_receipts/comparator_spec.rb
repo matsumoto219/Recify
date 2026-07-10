@@ -40,7 +40,7 @@ RSpec.describe GeneratedReceipts::Comparator do
     end
   end
 
-  it "classifies status and review differences as warnings" do
+  it "keeps a safer review_needed result as a warning when completed was expected" do
     case_data = load_case("g001_normal_included_10_cash")
     actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
     actual["status"] = "review_needed"
@@ -53,6 +53,39 @@ RSpec.describe GeneratedReceipts::Comparator do
       expect(result.diffs).to include(hash_including(path: "status", severity: "WARN"))
       expect(result.diffs).to include(hash_including(path: "review_reasons", severity: "WARN"))
     end
+  end
+
+  it "fails when a review_needed case is completed without its review reasons" do
+    case_data = load_case("g091_tax_detail_conflict")
+    actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
+    actual["status"] = "completed"
+    actual["review_reasons"] = []
+
+    result = described_class.call(case_data, actual)
+
+    aggregate_failures do
+      expect(result.status).to eq("FAIL")
+      expect(result.diffs).to include(
+        hash_including(
+          path: "status",
+          expected: "review_needed",
+          actual: "completed",
+          severity: "FAIL"
+        )
+      )
+      expect(result.diffs).to include(hash_including(path: "review_reasons"))
+    end
+  end
+
+  it "fails when a completed receipt remains failed after processing" do
+    case_data = load_case("g001_normal_included_10_cash")
+    actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
+    actual["status"] = "failed"
+
+    result = described_class.call(case_data, actual)
+
+    expect(result).not_to be_pass
+    expect(result.diffs).to include(hash_including(path: "status", severity: "FAIL"))
   end
 
   it "compares non-receipt failures by status and processing error code" do

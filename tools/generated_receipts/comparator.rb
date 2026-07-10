@@ -260,14 +260,19 @@ module GeneratedReceipts
         path: path,
         expected: expected_value,
         actual: actual_value,
-        severity: fail_path?(path) ? "FAIL" : "WARN"
+        severity: fail_path?(path, expected_value, actual_value) ? "FAIL" : "WARN"
       }
     end
 
-    def fail_path?(path)
+    def fail_path?(path, expected_value, actual_value)
       return true if non_receipt_case? && %w[status processing_error_code].include?(path)
+      return unsafe_status_difference?(expected_value, actual_value) if path == "status"
 
       FAIL_PATHS.include?(path)
+    end
+
+    def unsafe_status_difference?(expected_status, actual_status)
+      expected_status != "completed" || actual_status != "review_needed"
     end
   end
 end
