@@ -75,8 +75,11 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
     }.merge(overrides)
   end
 
-  def patch_receipt(receipt, attributes)
-    patch receipt_path(receipt), params: { receipt: attributes }
+  def patch_receipt(receipt, attributes = nil, include_lock_version: true, **keyword_attributes)
+    attributes = attributes ? attributes.merge(keyword_attributes) : keyword_attributes
+    submitted_attributes = include_lock_version ? { lock_version: receipt.lock_version }.merge(attributes) : attributes
+
+    patch receipt_path(receipt), params: { receipt: submitted_attributes }
   end
 
   describe 'post-update calculation input' do
@@ -629,6 +632,22 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include(I18n.t('receipts.form.errors.stale_edit'))
         expect(receipt.reload.memo).to eq('別タブで保存済み')
+      end
+    end
+
+    it 'lock_versionを省略した保存を拒否してDB値を維持する' do
+      receipt = create_completed_receipt
+
+      patch_receipt(
+        receipt,
+        { memo: 'versionなしの更新' },
+        include_lock_version: false
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('receipts.form.errors.stale_edit'))
+        expect(receipt.reload.memo).not_to eq('versionなしの更新')
       end
     end
 

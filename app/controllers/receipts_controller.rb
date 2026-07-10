@@ -632,7 +632,7 @@ class ReceiptsController < ApplicationController
   end
 
   def stale_edit_submission?(permitted)
-    return false unless permitted.key?("lock_version")
+    return true unless permitted.key?("lock_version")
 
     Integer(permitted["lock_version"].to_s, 10) != @receipt.lock_version
   rescue ArgumentError, TypeError

@@ -6534,8 +6534,18 @@ RSpec.describe 'Receipts', type: :request do
       }
     end
 
+    def patch_receipt(receipt, params:)
+      submitted_params = params.deep_dup
+      receipt_params = submitted_params[:receipt] || submitted_params['receipt']
+      if receipt_params && !receipt_params.key?(:lock_version) && !receipt_params.key?('lock_version')
+        receipt_params[:lock_version] = receipt.lock_version
+      end
+
+      patch receipt_path(receipt), params: submitted_params
+    end
+
     it 'レシートを更新できる' do
-      patch receipt_path(receipt), params: valid_update_params
+      patch_receipt receipt, params: valid_update_params
       receipt.reload
 
       aggregate_failures do
@@ -6570,7 +6580,7 @@ RSpec.describe 'Receipts', type: :request do
     it '更新ではmanual receipt counterを消費しない' do
       create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 50)
 
-      patch receipt_path(receipt), params: valid_update_params
+      patch_receipt receipt, params: valid_update_params
 
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
@@ -6588,7 +6598,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: valid_update_params
+      patch_receipt receipt, params: valid_update_params
       receipt.reload
 
       aggregate_failures do
@@ -6628,7 +6638,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        patch receipt_path(receipt), params: params
+        patch_receipt receipt, params: params
       end.not_to change { receipt.reload.receipt_items.count }
 
       aggregate_failures do
@@ -6649,7 +6659,7 @@ RSpec.describe 'Receipts', type: :request do
         }
       }
 
-      patch receipt_path(receipt), params: params
+      patch_receipt receipt, params: params
       receipt.reload
 
       aggregate_failures do
@@ -6672,7 +6682,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        patch receipt_path(receipt), params: params
+        patch_receipt receipt, params: params
       end.not_to change { receipt.reload.receipt_items.count }
 
       aggregate_failures do
@@ -6693,7 +6703,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        patch receipt_path(receipt), params: { receipt: { store_name: '更新後' } }
+        patch_receipt receipt, params: { receipt: { store_name: '更新後' } }
       end.not_to change { receipt.reload.updated_at }
 
       aggregate_failures do
@@ -6725,7 +6735,7 @@ RSpec.describe 'Receipts', type: :request do
         position_index: 0
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '更新後',
           receipt_items_attributes: {
@@ -6789,7 +6799,7 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       expect do
-        patch receipt_path(receipt), params: {
+        patch_receipt receipt, params: {
           receipt: {
             store_name: '削除後',
             receipt_items_attributes: {
@@ -6833,7 +6843,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: valid_update_params
+      patch_receipt receipt, params: valid_update_params
 
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
@@ -6846,7 +6856,7 @@ RSpec.describe 'Receipts', type: :request do
       cash = receipt.receipt_payments.create!(method: '現金', amount: 1_000)
       old_payment = receipt.receipt_payments.create!(method: '旧支払', amount: 200)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '支払更新後',
           receipt_payments_attributes: {
@@ -6894,7 +6904,7 @@ RSpec.describe 'Receipts', type: :request do
       )
       payment = receipt.receipt_payments.create!(method: '現金', amount: 1_000)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: 'サービス料追加後',
           receipt_items_attributes: {
@@ -6954,7 +6964,7 @@ RSpec.describe 'Receipts', type: :request do
       )
       payment = receipt.receipt_payments.create!(method: '現金', amount: 1_000)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: 'native engine サービス料追加後',
           receipt_items_attributes: {
@@ -7015,7 +7025,7 @@ RSpec.describe 'Receipts', type: :request do
       )
       payment = receipt.receipt_payments.create!(method: '現金', amount: 1_000)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: 'サービス料修正後',
           receipt_items_attributes: {
@@ -7064,7 +7074,7 @@ RSpec.describe 'Receipts', type: :request do
     it '通知OFFなら更新成功のredirect flashを表示しない' do
       user.update!(push_notification_enabled: false)
 
-      patch receipt_path(receipt), params: valid_update_params
+      patch_receipt receipt, params: valid_update_params
 
       follow_redirect!
       document = Nokogiri::HTML(response.body)
@@ -7077,7 +7087,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '不正なパラメータでは更新できない' do
-      patch receipt_path(receipt), params: invalid_update_params
+      patch_receipt receipt, params: invalid_update_params
       receipt.reload
 
       aggregate_failures do
@@ -7099,7 +7109,7 @@ RSpec.describe 'Receipts', type: :request do
         review_reasons: [ 'item_name_uncertain' ]
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: receipt.store_name,
           payment_method: 'cash',
@@ -7141,7 +7151,7 @@ RSpec.describe 'Receipts', type: :request do
         review_reasons: [ 'item_category_uncertain' ]
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: receipt.store_name,
           payment_method: 'cash',
@@ -7178,7 +7188,7 @@ RSpec.describe 'Receipts', type: :request do
         amount_calculation_profile: { 'existing' => 'profile' }
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '保護属性更新',
           total_amount: 100,
@@ -7216,7 +7226,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: 'raw_text保護属性更新',
           payment_method: 'cash',
@@ -7245,7 +7255,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '画像差し替えを含むvalidation失敗時もsigned_id errorにならず編集フォームに戻る' do
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像差し替え失敗',
           total_amount: 1500,
@@ -7272,7 +7282,7 @@ RSpec.describe 'Receipts', type: :request do
     it '画像差し替え時も再解析は実行せず編集保存する' do
       allow(ReceiptOcrJob).to receive(:perform_later)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像差し替え後',
           total_amount: 2100,
@@ -7298,7 +7308,7 @@ RSpec.describe 'Receipts', type: :request do
       )
       user.update!(keep_receipt_images: false)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像差し替え保持OFF',
           total_amount: 2100,
@@ -7320,7 +7330,7 @@ RSpec.describe 'Receipts', type: :request do
     it '画像差し替え時は解析失敗処理も実行しない' do
       allow(ReceiptOcrJob).to receive(:perform_later)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像差し替え失敗なし',
           total_amount: 2200,
@@ -7342,7 +7352,7 @@ RSpec.describe 'Receipts', type: :request do
       receipt.image.attach(uploaded_image)
       user.update!(storage_limit_bytes: receipt.image.blob.byte_size)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像差し替え容量OK',
           total_amount: 2200,
@@ -7360,7 +7370,7 @@ RSpec.describe 'Receipts', type: :request do
     it '画像差し替え時に容量上限を超える場合は更新しない' do
       user.update!(storage_limit_bytes: 1)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像差し替え容量NG',
           total_amount: 2200,
@@ -7379,7 +7389,7 @@ RSpec.describe 'Receipts', type: :request do
     it '画像差し替え時に全体storage hard stopを超える場合は更新しない' do
       allow(Storage).to receive(:global_quota_can_add?).and_return(false)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像差し替え全体容量NG',
           total_amount: 2200,
@@ -7399,7 +7409,7 @@ RSpec.describe 'Receipts', type: :request do
       receipt.image.attach(uploaded_image)
       old_blob = receipt.image.blob
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像削除後',
           total_amount: 2200,
@@ -7421,7 +7431,7 @@ RSpec.describe 'Receipts', type: :request do
       receipt.image.attach(uploaded_image)
       old_blob = receipt.image.blob
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像削除失敗',
           total_amount: 2200,
@@ -7442,7 +7452,7 @@ RSpec.describe 'Receipts', type: :request do
       receipt.image.attach(uploaded_image)
       old_blob = receipt.image.blob
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像差し替え優先',
           total_amount: 2200,
@@ -7463,7 +7473,7 @@ RSpec.describe 'Receipts', type: :request do
       receipt.image.attach(uploaded_image)
       expect(user.storage_used_bytes).to be_positive
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '画像削除容量反映',
           total_amount: 2200,
@@ -7481,7 +7491,7 @@ RSpec.describe 'Receipts', type: :request do
     it '画像差し替えなし更新時は再解析を実行しない' do
       allow(ReceiptOcrJob).to receive(:perform_later)
 
-      patch receipt_path(receipt), params: valid_update_params
+      patch_receipt receipt, params: valid_update_params
       receipt.reload
 
       aggregate_failures do
@@ -7498,7 +7508,7 @@ RSpec.describe 'Receipts', type: :request do
         processing_error_message: 'OCR service timeout'
       )
 
-      patch receipt_path(receipt), params: valid_update_params
+      patch_receipt receipt, params: valid_update_params
       receipt.reload
 
       aggregate_failures do
@@ -7526,7 +7536,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '確認済みレシート',
           payment_method: 'cash',
@@ -7568,7 +7578,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '明細整合レシート',
           payment_method: 'cash',
@@ -7609,7 +7619,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '税額整合レシート',
           payment_method: 'cash',
@@ -7656,7 +7666,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '税内訳整合レシート',
           payment_method: 'cash',
@@ -7697,7 +7707,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: 'warning確認レシート',
           payment_method: 'cash',
@@ -7738,7 +7748,7 @@ RSpec.describe 'Receipts', type: :request do
         review_reasons: [ 'item_name_uncertain' ]
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '明細確認済み',
           payment_method: 'cash',
@@ -7781,7 +7791,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '単体確認済み',
           payment_method: 'cash',
@@ -7821,7 +7831,7 @@ RSpec.describe 'Receipts', type: :request do
         review_reasons: [ 'item_name_uncertain' ]
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: 'まだ未確認',
           payment_method: 'cash',
@@ -7860,7 +7870,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '明細更新後',
           payment_method: 'cash',
@@ -7909,7 +7919,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '0円レシート',
           payment_method: 'cash',
@@ -7960,7 +7970,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '1円レシート',
           payment_method: 'cash',
@@ -8022,7 +8032,7 @@ RSpec.describe 'Receipts', type: :request do
         description: '10%対象'
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '税内訳つき',
           payment_method: 'cash',
@@ -8085,7 +8095,7 @@ RSpec.describe 'Receipts', type: :request do
         description: '10%対象'
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '解析済み',
           payment_method: 'cash',
@@ -8139,7 +8149,7 @@ RSpec.describe 'Receipts', type: :request do
         original.call(**kwargs)
       end
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '丸め設定更新後',
           payment_method: 'cash',
@@ -8203,7 +8213,7 @@ RSpec.describe 'Receipts', type: :request do
       )
       receipt.receipt_payments.create!(method: 'nanaco支払', amount: 1_139)
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: 'サンプルコンビニ 更新後',
           payment_method: 'e_money',
@@ -8290,7 +8300,7 @@ RSpec.describe 'Receipts', type: :request do
         description: '8%対象'
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '外税更新後',
           payment_method: 'cash',
@@ -8344,7 +8354,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '割引率更新',
           payment_method: 'cash',
@@ -8388,7 +8398,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '小数数量更新後',
           payment_method: 'cash',
@@ -8431,7 +8441,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '単位だけ更新',
           payment_method: 'cash',
@@ -8473,7 +8483,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '個数商品更新',
           payment_method: 'cash',
@@ -8513,7 +8523,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '数量空欄更新',
           payment_method: 'cash',
@@ -8552,7 +8562,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '量り売り更新',
           payment_method: 'cash',
@@ -8593,7 +8603,7 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '未知単位更新',
           payment_method: 'cash',
@@ -8622,7 +8632,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '明細なし編集保存時は入力金額を尊重する' do
-      patch receipt_path(receipt), params: {
+      patch_receipt receipt, params: {
         receipt: {
           store_name: '明細なし更新',
           payment_method: 'cash',
@@ -8648,7 +8658,7 @@ RSpec.describe 'Receipts', type: :request do
       other_user = create(:user, email: 'update_other@example.com')
       other_receipt = create(:receipt, user: other_user, store_name: '他人更新前', total_amount: 800, payment_method: 'cash', status: 'completed')
 
-      patch receipt_path(other_receipt), params: valid_update_params
+      patch_receipt other_receipt, params: valid_update_params
 
       expect(response).to have_http_status(:not_found)
     end
@@ -8666,7 +8676,7 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       expect do
-        patch receipt_path(receipt), params: {
+        patch_receipt receipt, params: {
           receipt: {
             store_name: '不正明細更新',
             receipt_items_attributes: {
@@ -8700,7 +8710,7 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       expect do
-        patch receipt_path(receipt), params: {
+        patch_receipt receipt, params: {
           receipt: {
             store_name: '不正調整更新',
             receipt_adjustments_attributes: {
@@ -8729,7 +8739,7 @@ RSpec.describe 'Receipts', type: :request do
       other_payment = other_receipt.receipt_payments.create!(method: 'cash', amount: 800)
 
       expect do
-        patch receipt_path(receipt), params: {
+        patch_receipt receipt, params: {
           receipt: {
             store_name: '不正支払更新',
             receipt_payments_attributes: {
@@ -8757,7 +8767,7 @@ RSpec.describe 'Receipts', type: :request do
       end
 
       it 'ログイン画面へリダイレクトされる' do
-        patch receipt_path(receipt), params: valid_update_params
+        patch_receipt receipt, params: valid_update_params
 
         expect(response).to redirect_to(new_user_session_path)
       end

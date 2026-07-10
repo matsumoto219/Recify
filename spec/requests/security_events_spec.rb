@@ -251,7 +251,7 @@ RSpec.describe 'Security events', type: :request do
       patch receipt_path(receipt),
             params: {
               authenticity_token: 'raw-csrf-token-should-not-be-saved',
-              receipt: { store_name: 'After CSRF' }
+              receipt: { lock_version: receipt.lock_version, store_name: 'After CSRF' }
             }
     }.to change(SecurityEvent.where(event_type: 'csrf_failure'), :count).by(1)
 
@@ -288,6 +288,7 @@ RSpec.describe 'Security events', type: :request do
       patch receipt_path(receipt),
             params: {
               receipt: {
+                lock_version: receipt.lock_version,
                 store_name: 'Allowed Update',
                 user_id: other_user.id,
                 public_id: 'forged-public-id',
@@ -333,6 +334,7 @@ RSpec.describe 'Security events', type: :request do
       patch receipt_path(receipt),
             params: {
               receipt: {
+                lock_version: receipt.lock_version,
                 store_name: 'Allowed Amount Update',
                 amount_calculation_profile: { selected_candidate_status: 'forged' },
                 review_reasons: [ 'forged_reason' ],
@@ -392,6 +394,7 @@ RSpec.describe 'Security events', type: :request do
       patch receipt_path(receipt),
             params: {
               receipt: {
+                lock_version: receipt.lock_version,
                 store_name: 'After Nested Edit',
                 receipt_items_attributes: {
                   '0' => {
