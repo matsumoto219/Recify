@@ -107,6 +107,7 @@ module Analysis
         return result
       end
 
+      verify_audit_writable!
       result = nil
 
       ReceiptAnalysisRun.transaction do
@@ -133,7 +134,6 @@ module Analysis
         mark_receipt_processing!
 
         result = Result.new(run: run, enqueued_job: job_class, retry_type: retry_type)
-        record_audit!(result)
       end
 
       if result&.failure?
@@ -143,7 +143,19 @@ module Analysis
 
       return result if result.failure?
 
-      result.enqueued_job.perform_later(run_id: result.run.id)
+      begin
+        ReceiptAnalysisRuns.enqueue(result.run, job_class: result.enqueued_job)
+      rescue ReceiptAnalysisRuns::EnqueueError
+        result = failure(
+          :analysis_enqueue_failed,
+          "analysis job enqueue failed",
+          run: result.run
+        )
+        record_audit!(result)
+        return result
+      end
+
+      record_audit!(result)
       result
     end
 
@@ -309,6 +321,13 @@ module Analysis
         after_state: audit_after_state(result),
         request: request
       )
+    end
+
+    def verify_audit_writable!
+      AuditLog.transaction(requires_new: true) do
+        record_audit!(Result.new(enqueued_job: job_class, retry_type: retry_type))
+        raise ActiveRecord::Rollback
+      end
     end
 
     def audit_action

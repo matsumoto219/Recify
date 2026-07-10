@@ -72,8 +72,8 @@ class ReceiptBatchUploadService
 
     return failure(validation_errors) if validation_errors.any?
 
-    enqueue_analysis_jobs(created_receipts)
-    success(created_receipts)
+    enqueue_errors = enqueue_analysis_jobs(created_receipts)
+    success(created_receipts, errors: enqueue_errors)
   end
 
   def storage_quota_available?
@@ -97,6 +97,8 @@ class ReceiptBatchUploadService
   end
 
   def enqueue_analysis_jobs(receipts)
+    errors = []
+
     receipts.each do |receipt|
       result = ReceiptAnalysisRuns.start(
         receipt: receipt,
@@ -115,12 +117,16 @@ class ReceiptBatchUploadService
         "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{user.id} image_attached=#{receipt.image.attached?}"
       )
 
-      ReceiptOcrJob.perform_later(run_id: result.run.id)
+      ReceiptAnalysisRuns.enqueue(result.run, job_class: ReceiptOcrJob)
+    rescue ReceiptAnalysisRuns::EnqueueError
+      errors << I18n.t("receipts.batch_upload.errors.analysis_enqueue_failed")
     end
+
+    errors.uniq
   end
 
-  def success(created_receipts)
-    Result.new(created_receipts:, errors: [])
+  def success(created_receipts, errors: [])
+    Result.new(created_receipts:, errors: errors)
   end
 
   def failure(errors)

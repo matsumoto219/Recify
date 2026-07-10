@@ -65,6 +65,22 @@ RSpec.describe ReceiptOcrJob, type: :job do
       end
     end
 
+    it '後続Jobのenqueue失敗時はrunとreceiptをfailedへ補償する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:ai))
+      allow(ReceiptAiEnrichmentJob).to receive(:perform_later).and_raise(StandardError, 'queue unavailable')
+
+      expect do
+        described_class.perform_now(run_id: run.id)
+      end.to raise_error(ReceiptAnalysisRuns::EnqueueError)
+
+      aggregate_failures do
+        expect(run.reload).to have_attributes(status: 'failed', error_code: 'analysis_enqueue_failed')
+        expect(receipt.reload).to have_attributes(status: 'failed', processing_error_code: 'analysis_enqueue_failed')
+      end
+    end
+
     it 'skippedなら後続Jobをenqueueしない' do
       run = create(:receipt_analysis_run)
       allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:skipped, skip_reason: :terminal_run))

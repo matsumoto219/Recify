@@ -890,6 +890,48 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
+    it 'enqueue失敗時はrunとreceiptをfailedへ補償し、失敗auditだけを残す' do
+      allow(ReceiptOcrJob).to receive(:perform_later).and_raise(StandardError, 'queue unavailable')
+
+      expect do
+        result = described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: 'enqueue failure retry',
+          request: request_context,
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('analysis_enqueue_failed')
+        end
+      end.to change(AuditLog, :count).by(1)
+
+      run = ReceiptAnalysisRun.order(:id).last
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(run).to have_attributes(
+          status: 'failed',
+          error_stage: 'enqueue',
+          error_code: 'analysis_enqueue_failed'
+        )
+        expect(receipt.reload).to have_attributes(
+          status: 'failed',
+          processing_error_code: 'analysis_enqueue_failed'
+        )
+        expect(audit_log).to have_attributes(
+          action: 'receipt_analysis.full_reanalyze',
+          outcome: 'failed',
+          error_code: 'analysis_enqueue_failed'
+        )
+        expect(AuditLog.where(action: 'receipt_analysis.full_reanalyze', outcome: 'succeeded')).to be_empty
+      end
+    end
+
     it 'audit log作成に失敗した場合はrun作成とenqueueを行わない' do
       allow(AuditLogs).to receive(:record_admin_action!).and_raise(ActiveRecord::RecordInvalid)
       run_count = ReceiptAnalysisRun.count

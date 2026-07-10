@@ -2,6 +2,7 @@ module ReceiptAnalysisRuns
   Error = Class.new(StandardError)
   InvalidTransition = Class.new(Error)
   TerminalRunError = Class.new(Error)
+  EnqueueError = Class.new(Error)
 
   StartResult = Struct.new(:run, :created, keyword_init: true) do
     def created?
@@ -28,6 +29,10 @@ module ReceiptAnalysisRuns
         request_reason: request_reason,
         parent_run: parent_run
       )
+    end
+
+    def enqueue(run, job_class:)
+      Enqueuer.call(run, job_class: job_class)
     end
 
     def start_stage(run, stage, at: Time.current, provider: nil, model: nil)

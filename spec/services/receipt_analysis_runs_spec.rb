@@ -103,6 +103,34 @@ RSpec.describe ReceiptAnalysisRuns do
     end
   end
 
+  describe '.enqueue' do
+    it 'enqueue失敗時はrunとprocessing receiptをfailedへ補償して安全な例外を返す' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = described_class.start(receipt:, source: 'upload').run
+      allow(ReceiptOcrJob).to receive(:perform_later)
+        .and_raise(StandardError, 'Bearer sk-secret https://ocr.example.test/operation/123')
+
+      expect do
+        described_class.enqueue(run, job_class: ReceiptOcrJob)
+      end.to raise_error(ReceiptAnalysisRuns::EnqueueError, 'analysis job enqueue failed')
+
+      aggregate_failures do
+        expect(run.reload).to have_attributes(
+          status: 'failed',
+          error_stage: 'enqueue',
+          error_code: 'analysis_enqueue_failed',
+          error_message: 'analysis_enqueue_failed'
+        )
+        expect(receipt.reload).to have_attributes(
+          status: 'failed',
+          processing_error_code: 'analysis_enqueue_failed',
+          processing_error_message: I18n.t('receipts.processing_errors.unexpected_failure')
+        )
+        expect(run.error_message).not_to include('sk-secret', 'ocr.example.test')
+      end
+    end
+  end
+
   describe 'stage tracking' do
     it '同じstageの実行claimは最初の1回だけ成功する' do
       run = described_class.start(receipt:, source: 'upload').run

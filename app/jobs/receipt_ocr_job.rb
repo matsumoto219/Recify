@@ -9,9 +9,9 @@ class ReceiptOcrJob < ApplicationJob
 
     case result.next_step
     when :ai
-      ReceiptAiEnrichmentJob.perform_later(run_id: run.id)
+      ReceiptAnalysisRuns.enqueue(run, job_class: ReceiptAiEnrichmentJob)
     when :finalize
-      ReceiptFinalizeJob.perform_later(run_id: run.id)
+      ReceiptAnalysisRuns.enqueue(run, job_class: ReceiptFinalizeJob)
     end
   end
 end

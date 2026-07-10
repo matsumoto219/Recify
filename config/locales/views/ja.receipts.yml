@@ -254,6 +254,7 @@ ja:
         quota_exceeded: 選択した画像の合計サイズがストレージ容量の上限を超えています。
         global_hard_stop: 現在、保存容量の上限に達しているため、新しい画像をアップロードできません。時間をおいて再度お試しください。
         usage_limit_exceeded: 本日のアップロード上限に達しました。時間をおいてから、もう一度お試しください。
+        analysis_enqueue_failed: レシート画像は保存されましたが、解析を開始できませんでした。時間をおいて再試行してください。
     processing_errors:
       image_error: 画像の読み込みに失敗しました。画像を変更して再試行するか、手動入力で続行してください。
       ocr_error: OCR処理に失敗しました。画像を変更して再試行できます。手動入力で続行することも可能です。
@@ -281,6 +282,7 @@ ja:
       ai_invalid_response: AI補完を現在利用できません。OCR結果を確認・修正してください。
       ai_api_error: AI補完を現在利用できません。OCR結果を確認・修正してください。
       usage_limit_exceeded: 本日の解析上限に達しました。時間をおいてから、もう一度お試しください。
+      analysis_enqueue_failed: 解析を開始できませんでした。時間をおいて再試行してください。
     processing_error_card:
       failed_title: 処理失敗
       attention_title: 処理に関する注意

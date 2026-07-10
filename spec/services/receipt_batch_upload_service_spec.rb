@@ -74,6 +74,29 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
     end
   end
 
+  it 'OCR jobのenqueue失敗時は作成済みreceiptとrunをfailedへ補償する' do
+    allow(ReceiptOcrJob).to receive(:perform_later).and_raise(StandardError, 'queue unavailable')
+
+    result = described_class.call(user:, files: [ uploaded_receipt_fixture ])
+    receipt = user.receipts.sole
+    run = receipt.receipt_analysis_runs.sole
+
+    aggregate_failures do
+      expect(result).not_to be_success
+      expect(result.created_receipts).to contain_exactly(receipt)
+      expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.analysis_enqueue_failed'))
+      expect(receipt.reload).to have_attributes(
+        status: 'failed',
+        processing_error_code: 'analysis_enqueue_failed'
+      )
+      expect(run.reload).to have_attributes(
+        status: 'failed',
+        error_stage: 'enqueue',
+        error_code: 'analysis_enqueue_failed'
+      )
+    end
+  end
+
   it '成功時にfile数でbatch_files_per_dayを消費する' do
     files = [
       uploaded_receipt_fixture,

@@ -80,6 +80,7 @@ en:
       ai_invalid_response: "AI assistance is currently unavailable. Please review and edit the OCR results."
       ai_api_error: "AI assistance is currently unavailable. Please review and edit the OCR results."
       usage_limit_exceeded: "You have reached today's analysis limit. Please try again later."
+      analysis_enqueue_failed: "The analysis could not be started. Please try again later."
   users:
     display:
       guest_name: "Guest user"

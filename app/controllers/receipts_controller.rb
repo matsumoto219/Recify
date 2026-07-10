@@ -128,9 +128,11 @@ class ReceiptsController < ApplicationController
     end
 
     if saved
-      enqueue_analysis_job(@receipt, source: "upload", requested_by_user: current_user)
-
-      redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.enqueued"))
+      if enqueue_analysis_job(@receipt, source: "upload", requested_by_user: current_user)
+        redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.enqueued"))
+      else
+        redirect_to receipts_path, alert: t("flash.receipts.analysis_enqueue_failed")
+      end
     else
       record_invalid_receipt_upload_security_event(uploaded_receipt_image, @receipt.errors)
       Rails.logger.warn(
@@ -461,14 +463,17 @@ class ReceiptsController < ApplicationController
       Rails.logger.info(
         "[ReceiptAnalysis] skip_enqueue_existing_run receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id}"
       )
-      return
+      return true
     end
 
     Rails.logger.info(
       "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id} image_attached=#{receipt.image.attached?}"
     )
 
-    ReceiptOcrJob.perform_later(run_id: result.run.id)
+    ReceiptAnalysisRuns.enqueue(result.run, job_class: ReceiptOcrJob)
+    true
+  rescue ReceiptAnalysisRuns::EnqueueError
+    false
   end
 
   def temporary_notice_options(message)
@@ -531,6 +536,8 @@ class ReceiptsController < ApplicationController
         end
 
       redirect_to receipts_path, **temporary_notice_options(notice_message)
+    elsif result.created_receipts.present?
+      redirect_to receipts_path, alert: result.errors.to_sentence
     else
       record_invalid_batch_upload_security_events(uploaded_receipt_images, result.errors)
       Rails.logger.warn(

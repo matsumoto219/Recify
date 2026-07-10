@@ -7,6 +7,6 @@ class ReceiptAiEnrichmentJob < ApplicationJob
     run = ReceiptAnalysisRun.find(run_id)
     result = ReceiptAnalysisPipeline.run_ai(run)
 
-    ReceiptFinalizeJob.perform_later(run_id: run.id) if result.next_step == :finalize
+    ReceiptAnalysisRuns.enqueue(run, job_class: ReceiptFinalizeJob) if result.next_step == :finalize
   end
 end
