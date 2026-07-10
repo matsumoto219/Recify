@@ -149,7 +149,15 @@ module SystemSettings
   }.freeze
 
   UnknownKeyError = Class.new(KeyError)
-  ValidationError = Class.new(StandardError)
+
+  class ValidationError < StandardError
+    attr_reader :details
+
+    def initialize(message = nil, details: {})
+      @details = details.to_h.symbolize_keys.freeze
+      super(message)
+    end
+  end
 
   Definition = Struct.new(
     :key,
@@ -698,11 +706,17 @@ module SystemSettings
       base_retry_delay = values.fetch("external_services.ai.base_retry_delay_seconds")
       max_retry_delay = values.fetch("external_services.ai.max_retry_delay_seconds")
 
-      raise ValidationError, AI_TIMEOUT_ORDER_ERROR if open_timeout > read_timeout
-      raise ValidationError, AI_RETRY_DELAY_ORDER_ERROR if base_retry_delay > max_retry_delay
+      if open_timeout > read_timeout
+        raise dependency_validation_error(AI_TIMEOUT_ORDER_ERROR, required_seconds: open_timeout)
+      end
+      if base_retry_delay > max_retry_delay
+        raise dependency_validation_error(AI_RETRY_DELAY_ORDER_ERROR, required_seconds: base_retry_delay)
+      end
 
       estimated_elapsed = ((open_timeout + read_timeout) * (max_retries + 1)) + (max_retry_delay * max_retries)
-      raise ValidationError, AI_ELAPSED_BUDGET_ERROR if estimated_elapsed > max_elapsed
+      if estimated_elapsed > max_elapsed
+        raise dependency_validation_error(AI_ELAPSED_BUDGET_ERROR, required_seconds: estimated_elapsed.ceil)
+      end
     end
 
     def validate_ocr_runtime_tuning!(definition, value)
@@ -719,9 +733,15 @@ module SystemSettings
       base_retry_delay = values.fetch("external_services.ocr.base_retry_delay_seconds")
       max_retry_delay = values.fetch("external_services.ocr.max_retry_delay_seconds")
 
-      raise ValidationError, OCR_TIMEOUT_BUDGET_ERROR if request_timeout > max_elapsed
-      raise ValidationError, OCR_POLL_INTERVAL_ORDER_ERROR if poll_interval > max_poll_interval
-      raise ValidationError, OCR_RETRY_DELAY_ORDER_ERROR if base_retry_delay > max_retry_delay
+      if request_timeout > max_elapsed
+        raise dependency_validation_error(OCR_TIMEOUT_BUDGET_ERROR, required_seconds: request_timeout)
+      end
+      if poll_interval > max_poll_interval
+        raise dependency_validation_error(OCR_POLL_INTERVAL_ORDER_ERROR, required_seconds: poll_interval)
+      end
+      if base_retry_delay > max_retry_delay
+        raise dependency_validation_error(OCR_RETRY_DELAY_ORDER_ERROR, required_seconds: base_retry_delay)
+      end
 
       estimated_elapsed = ocr_poll_sleep_budget(
         max_poll_attempts: max_poll_attempts,
@@ -729,7 +749,23 @@ module SystemSettings
         poll_backoff_factor: poll_backoff_factor,
         max_poll_interval: max_poll_interval
       ) + (request_timeout * (max_retries + 1))
-      raise ValidationError, OCR_ELAPSED_BUDGET_ERROR if estimated_elapsed > max_elapsed
+      if estimated_elapsed > max_elapsed
+        raise dependency_validation_error(OCR_ELAPSED_BUDGET_ERROR, required_seconds: estimated_elapsed.ceil)
+      end
+    end
+
+    def dependency_validation_error(code, required_seconds:)
+      ValidationError.new(
+        code,
+        details: { required_seconds: display_validation_number(required_seconds) }
+      )
+    end
+
+    def display_validation_number(value)
+      decimal = BigDecimal(value.to_s)
+      return decimal.to_i if decimal.frac.zero?
+
+      decimal.to_s("F")
     end
 
     def numeric_values_for(keys)

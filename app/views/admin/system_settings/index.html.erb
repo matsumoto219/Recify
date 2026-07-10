@@ -41,7 +41,9 @@
               <td class="px-3 py-3 token-text-muted <%= admin_table_cell_classes(type: :status, extra_class: "font-mono text-xs") %>"><%= record[:value_type] %></td>
               <td class="px-3 py-3 token-text-base <%= admin_table_cell_classes(type: :long_text, extra_class: "font-mono text-xs") %>"><%= record[:current_value].inspect %></td>
               <td class="px-3 py-3 token-text-muted <%= admin_table_cell_classes(type: :long_text, extra_class: "font-mono text-xs") %>"><%= record[:default_value].inspect %></td>
-              <td class="px-3 py-3 token-text-base <%= admin_table_cell_classes(type: :status) %>"><%= record[:source] %></td>
+              <td class="px-3 py-3 token-text-base <%= admin_table_cell_classes(type: :status) %>">
+                <%= t("admin.system_settings.sources.#{record[:source]}", default: record[:source]) %>
+              </td>
               <td class="px-3 py-3 token-text-base <%= admin_table_cell_classes(type: :status) %>"><%= record[:risk_level] %></td>
               <td class="px-3 py-3 <%= admin_table_cell_classes(type: :action) %>">
                 <%= link_to t("admin.system_settings.index.table.detail"), admin_system_setting_path(record[:key]), class: "font-semibold token-text-brand hover:underline" %>

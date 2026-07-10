@@ -167,6 +167,8 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('limits.snapshot_ai_normalized_items_max')
         expect(response.body).to include('limits.api_requests_per_day')
         expect(response.body).to include(admin_system_setting_path('feature.receipt_logo_display_enabled'))
+        expect(response.body).to include('管理者設定')
+        expect(response.body).to include('アプリ既定値')
         expect(response.body).not_to include('SENTRY_DSN')
         expect(response.body).not_to include('WEBAUTHN_RP_ID')
         expect(response.body).not_to include('AZURE_OCR_ENDPOINT')
@@ -333,6 +335,25 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(note.text).to include('実行中の解析には反映されません')
         expect(response.body).to include('パスキー再認証')
         expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it 'AI整数設定へ入力範囲・既定値・参照元と整数キーボード指定を表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_system_setting_path('external_services.ai.read_timeout_seconds')
+
+      document = Nokogiri::HTML(response.body)
+      input = document.at_css('input[name="value"]')
+      hint = document.at_css('[data-system-setting-input-hint]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(input['inputmode']).to eq('numeric')
+        expect(hint.text).to include('15', '900', '120', 'アプリ既定値')
+        expect(response.body).not_to include('>default<')
       end
     end
 
@@ -1123,7 +1144,7 @@ RSpec.describe 'Admin system settings', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include('(open timeout + read timeout) × (retry回数 + 1)')
+        expect(response.body).to include('最大処理時間を950秒以上')
         expect(document.at_css('input[name="value"]')['value']).to eq('300')
         expect(document.at_css('textarea[name="reason"]').text.strip).to eq('extend AI read timeout')
         expect(document.at_css('input[name="confirm"][type="checkbox"]')['checked']).to eq('checked')

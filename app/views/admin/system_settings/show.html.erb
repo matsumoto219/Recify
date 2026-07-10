@@ -116,7 +116,7 @@
       </div>
       <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.source") %></dt>
-        <dd class="min-w-0 max-w-full break-words <%= setting_meta_value_class %> font-semibold [overflow-wrap:anywhere]"><%= @record[:source] %></dd>
+        <dd class="min-w-0 max-w-full break-words <%= setting_meta_value_class %> font-semibold [overflow-wrap:anywhere]"><%= form_presenter.source_label %></dd>
       </div>
       <div class="<%= setting_card_class %>">
         <dt class="text-xs font-semibold token-text-muted"><%= t("admin.system_settings.show.current.updated_by") %></dt>
@@ -184,6 +184,18 @@
       <%= form_with url: admin_system_setting_path(@record[:key]), method: :patch, local: true, class: "space-y-4" do |form| %>
         <% value_field = form_presenter.value_field_render(form: form) %>
         <%= render value_field.partial, **value_field.locals %>
+
+        <% if form_presenter.numeric_field? %>
+          <p class="min-w-0 max-w-full break-words text-xs leading-relaxed token-text-muted [overflow-wrap:anywhere]" data-system-setting-input-hint>
+            <%= t(
+                  "admin.system_settings.show.update.numeric_hint",
+                  min: @record[:min],
+                  max: @record[:max],
+                  default_value: @record[:default_value],
+                  source: form_presenter.source_label
+                ) %>
+          </p>
+        <% end %>
 
         <%= render "shared/ui/form/textarea_field",
               f: form,

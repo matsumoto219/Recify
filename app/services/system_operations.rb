@@ -18,6 +18,7 @@ module SystemOperations
     :receipt_moderation_result,
     :error_code,
     :error_message,
+    :error_details,
     keyword_init: true
   ) do
     def success?

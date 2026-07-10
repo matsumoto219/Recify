@@ -63,6 +63,17 @@ module Admin
       editable? && record[:source].to_s == "db"
     end
 
+    def source_label
+      I18n.t(
+        "admin.system_settings.sources.#{record[:source]}",
+        default: record[:source].to_s
+      )
+    end
+
+    def numeric_field?
+      %w[integer duration decimal percentage].include?(record[:value_type].to_s)
+    end
+
     def value_field_render(form:)
       case record[:value_type].to_s
       when "boolean"
@@ -129,6 +140,7 @@ module Admin
           min: record[:min],
           max: record[:max],
           step: 1,
+          inputmode: :numeric,
           required: true,
           size: :dense,
           text_align: :left,
@@ -145,6 +157,7 @@ module Admin
           min: record[:min],
           max: record[:max],
           step: :any,
+          inputmode: :decimal,
           required: true,
           size: :dense,
           text_align: :left,

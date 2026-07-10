@@ -94,6 +94,7 @@ class Admin::SystemSettingsController < Admin::BaseController
   def failure_message(result)
     t(
       "admin.system_settings.messages.failure.#{result.error_code}",
+      **result.error_details.to_h.symbolize_keys,
       default: t("admin.system_settings.messages.failed", error_code: result.error_code)
     )
   end

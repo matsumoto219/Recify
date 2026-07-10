@@ -1234,6 +1234,9 @@ ja:
         title: 本画面では直接実行しない操作
         description: 以下の操作は、専用画面、専用画面または運用手順で扱います。この画面では実行フォームを提供しません。
     system_settings:
+      sources:
+        db: 管理者設定
+        default: アプリ既定値
       index:
         title: システム設定
         description: 管理対象として定義された設定一覧
@@ -1301,6 +1304,7 @@ ja:
           confirm_label: 内容と影響範囲を確認しました。
           submit: 設定を更新
           reset: 既定値に戻す
+          numeric_hint: "入力範囲: %{min}〜%{max} / 既定値: %{default_value} / 現在の参照元: %{source}"
         audit_logs:
           title: 監査ログ
           description: この設定に関連する監査ログを確認できます。
@@ -1320,13 +1324,13 @@ ja:
           analysis_run_retention_order: 解析run保持期間は failed >= default >= short の関係を維持してください。
           ocr_raw_response_retention: ocr_raw_response_retention_days を analysis_runs_failed_days より長くできません。raw OCR JSONの保持期間を伸ばすには、先に analysis_runs_failed_days を同等以上に変更してください。
           amount_limit_relationship: 金額上限の大小関係を維持してください。receipt_total_amount_max は明細合計、調整額、支払い額、税額以上にし、receipt_item_line_total_max は receipt_item_price_max 以上にしてください。
-          external_service_ai_timeout_order: AIのopen timeoutを上げるには、先にread timeoutを同じ秒数以上へ変更してください。open timeoutはread timeout以下にしてください。
-          external_service_ai_retry_delay_order: AIのbase retry delayを上げるには、先にmax retry delayを同じ秒数以上へ変更してください。
-          external_service_ai_elapsed_budget: AIの最大処理時間が不足しています。max elapsedを「(open timeout + read timeout) × (retry回数 + 1) + max retry delay × retry回数」秒以上へ変更するか、timeout・retry・delayを下げてください。
-          external_service_ocr_timeout_budget: OCRのrequest timeoutを上げるには、先にmax elapsedを同じ秒数以上へ変更してください。
-          external_service_ocr_poll_interval_order: OCRのpoll intervalを上げるには、先にmax poll intervalを同じ秒数以上へ変更してください。
-          external_service_ocr_retry_delay_order: OCRのbase retry delayを上げるには、先にmax retry delayを同じ秒数以上へ変更してください。
-          external_service_ocr_elapsed_budget: OCRの最大処理時間が不足しています。max elapsedをpolling待機時間とrequest retry時間の合計以上へ変更するか、poll回数・interval・request timeout・retryを下げてください。
+          external_service_ai_timeout_order: "AIのopen timeoutを上げるには、先にread timeoutを%{required_seconds}秒以上へ変更してください。"
+          external_service_ai_retry_delay_order: "AIのbase retry delayを上げるには、先にmax retry delayを%{required_seconds}秒以上へ変更してください。"
+          external_service_ai_elapsed_budget: "AIの最大処理時間が不足しています。先に最大処理時間を%{required_seconds}秒以上へ変更するか、timeout・retry・delayを下げてください。"
+          external_service_ocr_timeout_budget: "OCRのrequest timeoutを上げるには、先にmax elapsedを%{required_seconds}秒以上へ変更してください。"
+          external_service_ocr_poll_interval_order: "OCRのpoll intervalを上げるには、先にmax poll intervalを%{required_seconds}秒以上へ変更してください。"
+          external_service_ocr_retry_delay_order: "OCRのbase retry delayを上げるには、先にmax retry delayを%{required_seconds}秒以上へ変更してください。"
+          external_service_ocr_elapsed_budget: "OCRの最大処理時間が不足しています。先にmax elapsedを%{required_seconds}秒以上へ変更するか、poll回数・interval・request timeout・retryを下げてください。"
     users:
       common:
         yes_label: はい

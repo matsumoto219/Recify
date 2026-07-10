@@ -70,9 +70,16 @@ RSpec.describe "External service tuning SystemSettings" do
     end
 
     it "全試行時間見積りがmax elapsedを超える設定を拒否する" do
+      error = nil
+
       expect do
         SystemSettings.cast_update_value("external_services.ai.read_timeout_seconds", 300)
-      end.to raise_error(SystemSettings::ValidationError, SystemSettings::AI_ELAPSED_BUDGET_ERROR)
+      end.to raise_error(SystemSettings::ValidationError) { |raised_error| error = raised_error }
+
+      aggregate_failures do
+        expect(error.message).to eq(SystemSettings::AI_ELAPSED_BUDGET_ERROR)
+        expect(error.details).to include(required_seconds: 950)
+      end
     end
 
     it "max elapsedを先に上げれば長いread timeoutを許可する" do
@@ -99,9 +106,16 @@ RSpec.describe "External service tuning SystemSettings" do
     end
 
     it "poll intervalがmax poll intervalを超える設定を拒否する" do
+      error = nil
+
       expect do
         SystemSettings.cast_update_value("external_services.ocr.poll_interval_seconds", 4)
-      end.to raise_error(SystemSettings::ValidationError, SystemSettings::OCR_POLL_INTERVAL_ORDER_ERROR)
+      end.to raise_error(SystemSettings::ValidationError) { |raised_error| error = raised_error }
+
+      aggregate_failures do
+        expect(error.message).to eq(SystemSettings::OCR_POLL_INTERVAL_ORDER_ERROR)
+        expect(error.details).to include(required_seconds: 4)
+      end
     end
 
     it "base retry delayがmax retry delayを超える設定を拒否する" do

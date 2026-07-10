@@ -12,7 +12,8 @@ RSpec.describe Admin::SystemSettingFormPresenter do
       min: nil,
       max: nil,
       allowed_values: nil,
-      requires_confirmation: false
+      requires_confirmation: false,
+      source: 'default'
     }.merge(attributes)
   end
 
@@ -90,6 +91,28 @@ RSpec.describe Admin::SystemSettingFormPresenter do
       end
     end
 
+    it 'integerとdurationへ整数用inputmodeを設定する' do
+      %w[integer duration].each do |value_type|
+        field = described_class.new(
+          record: record(value_type: value_type, current_value: 120),
+          reauthenticated: true
+        ).value_field_render(form: form)
+
+        expect(field.locals[:inputmode]).to eq(:numeric)
+      end
+    end
+
+    it 'decimalとpercentageへ小数用inputmodeを設定する' do
+      %w[decimal percentage].each do |value_type|
+        field = described_class.new(
+          record: record(value_type: value_type, current_value: 1.5),
+          reauthenticated: true
+        ).value_field_render(form: form)
+
+        expect(field.locals[:inputmode]).to eq(:decimal)
+      end
+    end
+
     it 'builds textarea for maintenance message bodies' do
       %w[ui.maintenance_notice_body maintenance.body].each do |key|
         field = described_class.new(
@@ -103,6 +126,24 @@ RSpec.describe Admin::SystemSettingFormPresenter do
           expect(field.locals[:rows]).to eq(5)
           expect(field.locals[:html_options]).to eq(maxlength: 1000)
         end
+      end
+    end
+  end
+
+  describe '#source_label' do
+    it '内部sourceを管理画面向け文言へ変換する' do
+      default_presenter = described_class.new(
+        record: record(value_type: 'integer', current_value: 120, source: 'default'),
+        reauthenticated: true
+      )
+      db_presenter = described_class.new(
+        record: record(value_type: 'integer', current_value: 120, source: 'db'),
+        reauthenticated: true
+      )
+
+      aggregate_failures do
+        expect(default_presenter.source_label).to eq('アプリ既定値')
+        expect(db_presenter.source_label).to eq('管理者設定')
       end
     end
   end

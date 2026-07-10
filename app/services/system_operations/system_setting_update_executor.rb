@@ -64,7 +64,8 @@ module SystemOperations
         after_state: {},
         audit_log: audit_log,
         error_code: error_code_for(e),
-        error_message: e.message
+        error_message: e.message,
+        error_details: error_details_for(e)
       )
     end
 
@@ -198,6 +199,12 @@ module SystemOperations
       return error.message if error.is_a?(SystemSettings::ValidationError) && error.message.present?
 
       "system_setting_update_failed"
+    end
+
+    def error_details_for(error)
+      return error.details if error.respond_to?(:details)
+
+      {}
     end
 
     def failed_target_uid
