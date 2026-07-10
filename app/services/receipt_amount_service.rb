@@ -513,7 +513,11 @@ class ReceiptAmountService
       amount_price_present: value_present?(price),
       amount_quantity_present: value_present?(quantity),
       amount_line_total_present: value_present?(line_total),
-      amount_discount_amount_present: value_present?(discount_amount)
+      amount_discount_amount_present: explicit_input_presence(
+        i,
+        :amount_discount_amount_present,
+        discount_amount
+      )
     }
   end
 
@@ -703,6 +707,13 @@ class ReceiptAmountService
     end
 
     obj.respond_to?(key) ? obj.public_send(key) : default
+  end
+
+  def explicit_input_presence(value, flag_key, field_value)
+    flag = fetch_value(value, flag_key)
+    return flag if flag == true || flag == false
+
+    value_present?(field_value)
   end
 
   def to_i(v)

@@ -56,13 +56,17 @@ module Amounts
     end
 
     def manual_input_line_total_for(item)
-      original_line_total = to_i(fetch_value(item, :original_line_total))
-      return original_line_total if manual_discount_input?(item) && original_line_total.positive?
-
       if manual_countable_unit_price_input?(item)
         unit_total = countable_unit_line_total(item)
+        return unit_total if manual_discount_input?(item)
+
+        original_line_total = to_i(fetch_value(item, :original_line_total))
         return normalized_saved_line_total_for(item, unit_total) || unit_total
       end
+
+
+      original_line_total = to_i(fetch_value(item, :original_line_total))
+      return original_line_total if manual_discount_input?(item) && original_line_total.positive?
 
       line_total_value = fetch_value(item, :line_total)
       return to_i(line_total_value) if value_present?(line_total_value)

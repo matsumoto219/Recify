@@ -107,13 +107,17 @@ class ReceiptEditSaveInputBuilder
       next if destroyed?(attributes)
 
       existing = id && existing_by_id[id]
-      serialized_record(existing, fields).merge(attributes.except("_destroy"))
+      merged = serialized_record(existing, fields).merge(attributes.except("_destroy"))
+      apply_item_input_presence!(merged, attributes) if association_name == :receipt_items
+      merged
     end
 
     unsubmitted_records = existing_records.filter_map do |record|
       next if referenced_ids.include?(record.id.to_s)
 
-      serialized_record(record, fields)
+      serialized = serialized_record(record, fields)
+      apply_item_input_presence!(serialized, {}) if association_name == :receipt_items
+      serialized
     end
 
     submitted_records + unsubmitted_records
@@ -141,5 +145,14 @@ class ReceiptEditSaveInputBuilder
 
   def destroyed?(attributes)
     ActiveModel::Type::Boolean.new.cast(attributes["_destroy"])
+  end
+
+  def apply_item_input_presence!(item, submitted_attributes)
+    item["amount_discount_amount_present"] =
+      if submitted_attributes.key?("discount_rate")
+        false
+      else
+        item["discount_amount"].present?
+      end
   end
 end

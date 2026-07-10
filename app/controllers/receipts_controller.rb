@@ -1082,11 +1082,14 @@ class ReceiptsController < ApplicationController
   end
 
   def apply_amount_calculation!(permitted, context:)
-    clear_amounts = clear_amounts_for_deleted_receipt_items?(permitted, context)
+    change_set = receipt_edit_save_change_set(permitted, context)
+    clear_amounts = clear_amounts_for_deleted_receipt_items?(permitted, context) || change_set&.derived_purchase_inputs_changed?
     receipt_tax_details = clear_amounts ? [] : amount_receipt_tax_details(context)
     result = calculate_receipt_amounts(permitted, context, clear_amounts, receipt_tax_details)
+    tax_details_recalculated = false
     if recalculate_tax_details_after_manual_item_update?(permitted, result, clear_amounts)
       result = calculate_receipt_amounts(permitted, context, clear_amounts, [])
+      tax_details_recalculated = true
     end
 
     resolved = result[:resolved]
@@ -1097,7 +1100,9 @@ class ReceiptsController < ApplicationController
     permitted["amount_calculation_profile"] = ReceiptAmountService.calculation_profile_snapshot(result)
     # 明細の quantity / line_total を計算結果で上書き（複数行対応）
     apply_item_totals!(permitted, result.dig(:computed, :items))
-    permitted["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(result[:tax_details])
+    if replace_receipt_tax_details?(context, change_set, tax_details_recalculated: tax_details_recalculated)
+      permitted["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(result[:tax_details])
+    end
     reset_receipt_edit_save_input!
     result
   end
@@ -1411,9 +1416,27 @@ class ReceiptsController < ApplicationController
     @receipt_edit_save_input
   end
 
+  def receipt_edit_save_change_set(permitted, context)
+    return unless context == :edit_save
+    return unless @receipt&.persisted?
+
+    if @receipt_edit_save_change_set_params_id != permitted.object_id
+      @receipt_edit_save_change_set = ReceiptEditSaveChangeSet.call(receipt: @receipt, permitted: permitted)
+      @receipt_edit_save_change_set_params_id = permitted.object_id
+    end
+
+    @receipt_edit_save_change_set
+  end
+
+  def replace_receipt_tax_details?(context, change_set, tax_details_recalculated:)
+    context != :edit_save || change_set&.purchase_amounts_changed? || tax_details_recalculated
+  end
+
   def reset_receipt_edit_save_input!
     @receipt_edit_save_input = nil
     @receipt_edit_save_input_params_id = nil
+    @receipt_edit_save_change_set = nil
+    @receipt_edit_save_change_set_params_id = nil
   end
 
   def clear_review_flags_for_edited_items!(permitted)
