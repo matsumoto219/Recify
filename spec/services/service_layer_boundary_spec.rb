@@ -37,9 +37,15 @@ RSpec.describe 'Service layer child implementation boundary' do
     },
     {
       name: 'ExternalServices',
-      child_reference: /\bExternalServices::(?:StatusStore|StatusSnapshot|ErrorDetail|DebugStateSwitcher)\b/,
+      child_reference: /\bExternalServices::(?:StatusStore|StatusSnapshot|ErrorDetail|DebugStateSwitcher|RuntimeConfig)\b/,
       parent_paths: %w[app/services/external_services.rb],
       internal_globs: %w[app/services/external_services/**/*.rb]
+    },
+    {
+      name: 'ReceiptAnalysisRuns',
+      child_reference: /\bReceiptAnalysisRuns::RuntimeConfigSnapshot\b/,
+      parent_paths: %w[app/services/receipt_analysis_runs.rb],
+      internal_globs: %w[app/services/receipt_analysis_runs/**/*.rb]
     },
     {
       name: 'SecurityEvents',
