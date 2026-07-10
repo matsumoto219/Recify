@@ -206,11 +206,23 @@
                 html_options: { checked: form_presenter.confirmation_checked? } %>
         <% end %>
 
-        <%= render "shared/ui/actions/button",
-              label: t("admin.system_settings.show.update.submit"),
-              type: "submit",
-              size: :compact,
-              icon: "save" %>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <%= render "shared/ui/actions/button",
+                label: t("admin.system_settings.show.update.submit"),
+                type: "submit",
+                size: :compact,
+                icon: "save" %>
+
+          <% if form_presenter.reset_available? %>
+            <%= render "shared/ui/actions/button",
+                  label: t("admin.system_settings.show.update.reset"),
+                  type: "submit",
+                  variant: :secondary,
+                  size: :compact,
+                  icon: "restart_alt",
+                  html_options: { formaction: admin_system_setting_reset_path(@record[:key]) } %>
+          <% end %>
+        </div>
       <% end %>
     <% end %>
   <% end %>

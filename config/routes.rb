@@ -16,6 +16,10 @@ Rails.application.routes.draw do
     patch "system_settings/:key",
           to: "system_settings#update",
           constraints: { key: /[^\/]+/ }
+    patch "system_settings/:key/reset",
+          to: "system_settings#reset",
+          as: :system_setting_reset,
+          constraints: { key: /[^\/]+/ }
     resources :audit_logs, only: %i[index show]
     resources :ip_blocks, only: %i[index show] do
       post :unblock, on: :member

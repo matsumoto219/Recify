@@ -44,6 +44,41 @@ class Admin::SystemSettingsController < Admin::BaseController
     end
   end
 
+  def reset
+    @record = Admin.system_setting(key: params[:key])
+    raise_not_found if @record.blank?
+
+    unless admin_passkey_reauthenticated?
+      redirect_to new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path(@record[:key])),
+                  alert: t("admin.system_settings.messages.reauthentication_required"),
+                  status: :see_other
+      return
+    end
+
+    if update_params[:reason].to_s.strip.blank?
+      render_update_failure(t("admin.system_settings.messages.reason_required"))
+      return
+    end
+
+    result = SystemOperations.reset_setting(
+      key: @record[:key],
+      actor: current_user,
+      reason: update_params[:reason],
+      request: request,
+      reauthentication: admin_reauthentication_context,
+      confirmation: update_params[:confirm]
+    )
+
+    if result.success?
+      redirect_to admin_system_setting_path(@record[:key]),
+                  notice: t("admin.system_settings.messages.reset"),
+                  status: :see_other
+    else
+      @record = Admin.system_setting(key: params[:key])
+      render_update_failure(failure_message(result))
+    end
+  end
+
   private
 
   def filter_params

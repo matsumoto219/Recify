@@ -21,6 +21,25 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
   end
 
   describe '.call' do
+    it '既定値と同じ通常保存もDB overrideとして維持する' do
+      result = described_class.call(
+        key: 'feature.receipt_logo_display_enabled',
+        value: 'false',
+        actor: actor,
+        reason: 'pin current default explicitly',
+        request: request,
+        reauthentication: reauthentication
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemSettings.fetch('feature.receipt_logo_display_enabled')).to have_attributes(
+          current_value: false,
+          source: 'db'
+        )
+      end
+    end
+
     it 'editable keyを作成し、updated_by_userとsuccess auditを保存する' do
       result = described_class.call(
         key: 'feature.receipt_logo_display_enabled',

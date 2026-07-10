@@ -54,6 +54,17 @@ module SystemOperations
       )
     end
 
+    def reset_setting(key:, actor:, reason:, request:, reauthentication:, confirmation: nil)
+      SystemSettingResetExecutor.call(
+        key: key,
+        actor: actor,
+        reason: reason,
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: confirmation
+      )
+    end
+
     def execute_user_operation(operation:, user:, actor:, reason:, request:, reauthentication:, confirmation:)
       UserOperationExecutor.call(
         operation: operation,

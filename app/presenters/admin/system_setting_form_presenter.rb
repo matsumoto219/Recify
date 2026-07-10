@@ -59,6 +59,10 @@ module Admin
       ActiveModel::Type::Boolean.new.cast(form_values[:confirm])
     end
 
+    def reset_available?
+      editable? && record[:source].to_s == "db"
+    end
+
     def value_field_render(form:)
       case record[:value_type].to_s
       when "boolean"

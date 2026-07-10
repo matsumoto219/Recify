@@ -1300,6 +1300,7 @@ ja:
           disabled: 無効
           confirm_label: 内容と影響範囲を確認しました。
           submit: 設定を更新
+          reset: 既定値に戻す
         audit_logs:
           title: 監査ログ
           description: この設定に関連する監査ログを確認できます。
@@ -1308,8 +1309,10 @@ ja:
         reauthentication_required: 設定変更にはパスキーによる再認証が必要です。
         reason_required: 変更理由を入力してください。
         updated: 設定を更新しました。
+        reset: 設定をアプリ既定値へ戻しました。
         failed: "設定を更新できませんでした: %{error_code}"
         failure:
+          setting_already_default: この設定はすでにアプリ既定値を使用しています。
           receipt_items_snapshot_limit: receipt_items_per_receipt の最大値を上げるには、先に snapshot OCR/AI 上限を同等以上に変更してください。
           store_name_casing_snapshot_ocr_lines_limit: store_name_casing_context_lines_max を上げるには、先に snapshot_ocr_lines_max を同等以上に変更してください。
           snapshot_ocr_lines_store_name_casing_limit: snapshot_ocr_lines_max を store_name_casing_context_lines_max 未満にできません。snapshot_ocr_lines_max を下げるには、先に store_name_casing_context_lines_max を同等以下に変更してください。

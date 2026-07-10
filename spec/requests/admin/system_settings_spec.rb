@@ -734,6 +734,29 @@ RSpec.describe 'Admin system settings', type: :request do
       end
     end
 
+    it 'DB overrideがある場合だけ既定値へ戻す操作を表示する' do
+      admin = create(:user, :admin)
+      create(
+        :system_setting,
+        key: 'feature.receipt_logo_display_enabled',
+        value: SystemSettings.stored_value(true),
+        updated_by_user: admin
+      )
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      get admin_system_setting_path('feature.receipt_logo_display_enabled')
+
+      document = Nokogiri::HTML(response.body)
+      reset_button = document.at_css("button[formaction=\"#{admin_system_setting_reset_path('feature.receipt_logo_display_enabled')}\"]")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(reset_button).to be_present
+        expect(reset_button.text).to include(I18n.t('admin.system_settings.show.update.reset'))
+      end
+    end
+
     it 'お知らせタイトルはtext fieldで表示する' do
       admin = create(:user, :admin)
       sign_in admin
@@ -1319,6 +1342,79 @@ RSpec.describe 'Admin system settings', type: :request do
             }
 
       expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe 'PATCH /admin/system_settings/:key/reset' do
+    it 'admin以外には404を返す' do
+      user = create(:user)
+      sign_in user
+
+      patch admin_system_setting_reset_path('feature.receipt_logo_display_enabled'),
+            params: { reason: 'unauthorized reset' }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it 'fresh reauthなしではresetしない' do
+      admin = create(:user, :admin)
+      setting = create(
+        :system_setting,
+        key: 'feature.receipt_logo_display_enabled',
+        value: SystemSettings.stored_value(true),
+        updated_by_user: admin
+      )
+      sign_in admin
+
+      patch admin_system_setting_reset_path(setting.key), params: { reason: 'reset without reauth' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path(setting.key)))
+        expect(setting.reload).to be_persisted
+      end
+    end
+
+    it '理由と確認を伴ってhigh-risk overrideを既定値へ戻す' do
+      admin = create(:user, :admin)
+      setting = create(
+        :system_setting,
+        key: 'external_services.ai.max_elapsed_seconds',
+        value: SystemSettings.stored_value(1200),
+        updated_by_user: admin
+      )
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      patch admin_system_setting_reset_path(setting.key),
+            params: { reason: 'restore runtime default', confirm: '1' }
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path(setting.key))
+        expect(flash[:notice]).to include(I18n.t('admin.system_settings.messages.reset'))
+        expect(SystemSetting.find_by(key: setting.key)).to be_nil
+        expect(AuditLog.last).to have_attributes(action: 'system_settings.reset', outcome: 'succeeded')
+      end
+    end
+
+    it '理由なしでは入力内容を保持してresetしない' do
+      admin = create(:user, :admin)
+      setting = create(
+        :system_setting,
+        key: 'feature.receipt_logo_display_enabled',
+        value: SystemSettings.stored_value(true),
+        updated_by_user: admin
+      )
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      patch admin_system_setting_reset_path(setting.key),
+            params: { value: 'true', reason: ' ', confirm: '1' }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('admin.system_settings.messages.reason_required'))
+        expect(setting.reload).to be_persisted
+      end
     end
   end
 end
