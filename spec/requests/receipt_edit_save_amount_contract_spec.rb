@@ -629,4 +629,71 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
   end
+
+  describe 'strict numeric input' do
+    it 'scientific notationのpriceを別の整数へ変換せず拒否する' do
+      receipt = create_completed_receipt
+      item = create_item(receipt)
+
+      patch_receipt(
+        receipt,
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, price: '1e2', line_total: '100')
+        }
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(item.reload.price).to eq(100)
+        expect(item.line_total).to eq(100)
+        expect(receipt.reload.total_amount).to eq(100)
+      end
+    end
+
+    it 'invalid tax_rateを非課税へ変換せず拒否する' do
+      receipt = create_completed_receipt
+      item = create_item(receipt)
+
+      patch_receipt(
+        receipt,
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, tax_rate: 'abc')
+        }
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(item.reload.tax_rate).to eq(BigDecimal('0.1'))
+        expect(receipt.reload.tax_amount).to eq(9)
+      end
+    end
+
+    it 'invalid discount_rateを黙って削除せず拒否する' do
+      receipt = create_completed_receipt(total_amount: 90, subtotal_amount: 82, tax_amount: 8)
+      item = create_item(
+        receipt,
+        original_line_total: 100,
+        discount_amount: 10,
+        discount_rate: BigDecimal('0.1'),
+        line_total: 90
+      )
+
+      patch_receipt(
+        receipt,
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, discount_rate: 'abc', line_total: '90')
+        }
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(item.reload.discount_rate).to eq(BigDecimal('0.1'))
+        expect(item.line_total).to eq(90)
+        expect(receipt.reload.total_amount).to eq(90)
+      end
+    end
+  end
 end

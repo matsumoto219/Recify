@@ -113,8 +113,17 @@ class ReceiptsController < ApplicationController
   def create
     rebuild_blank_item_row_after_failure = blank_new_receipt_item_rows_submitted?
     rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
-    create_params = normalized_receipt_params.to_h
     @receipt = current_user.receipts.new
+    begin
+      create_params = normalized_receipt_params.to_h
+    rescue ReceiptUserNumericInput::InvalidValue
+      render_invalid_numeric_input(
+        template: :new,
+        rebuild_blank_item_row_after_failure: true,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
 
     if manual_child_count_limit_exceeded?(create_params)
       render_manual_child_count_limit_exceeded(
@@ -216,7 +225,15 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    update_params = normalized_receipt_params.to_h
+    begin
+      update_params = normalized_receipt_params.to_h
+    rescue ReceiptUserNumericInput::InvalidValue
+      render_invalid_numeric_input(
+        template: :edit,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
     if stale_edit_submission?(update_params)
       render_stale_edit_conflict
       return
@@ -586,6 +603,15 @@ class ReceiptsController < ApplicationController
     render template, status: :unprocessable_content, formats: :html
   end
 
+  def render_invalid_numeric_input(template:, rebuild_blank_item_row_after_failure: false, rebuild_blank_adjustment_row_after_failure: false)
+    @receipt.errors.add(:base, t("receipts.form.errors.invalid_numeric_input"))
+    build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
+    build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+    prepare_receipt_form_presenter
+    flash.now[:alert] = @receipt.errors.full_messages
+    render template, status: :unprocessable_content, formats: :html
+  end
+
   def render_nested_child_conflict(rebuild_blank_adjustment_row_after_failure: false)
     @receipt.errors.add(:base, t("receipts.form.errors.nested_child_conflict"))
     build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
@@ -698,7 +724,7 @@ class ReceiptsController < ApplicationController
     if purchased_at_submitted
       permitted["purchased_at"] = build_purchased_at(purchased_on, purchased_time)
     end
-    normalize_receipt_item_tax_rates!(permitted)
+    normalize_receipt_numeric_inputs!(permitted)
     normalize_receipt_item_quantity_units!(permitted)
     normalize_receipt_adjustment_attributes!(permitted)
     prune_blank_new_receipt_items!(permitted)
@@ -864,13 +890,33 @@ class ReceiptsController < ApplicationController
     nil
   end
 
-  def normalize_receipt_item_tax_rates!(permitted)
-    items_attributes = permitted["receipt_items_attributes"]
-    return if items_attributes.blank?
+  def normalize_receipt_numeric_inputs!(permitted)
+    normalize_numeric_fields!(permitted, %w[total_amount subtotal_amount tax_amount], :integer)
+    normalize_numeric_fields!(permitted, %w[tax_rate], :decimal)
 
-    items_attributes.each_value do |item_attributes|
-      raw_tax_rate = item_attributes["tax_rate"]
-      item_attributes["tax_rate"] = normalize_tax_rate(raw_tax_rate)
+    items_attributes = permitted["receipt_items_attributes"]
+    items_attributes&.each_value do |item_attributes|
+      normalize_numeric_fields!(item_attributes, %w[price line_total], :integer)
+      normalize_numeric_fields!(item_attributes, %w[quantity], :decimal)
+      normalize_numeric_fields!(item_attributes, %w[tax_rate], :percentage)
+      normalize_numeric_fields!(item_attributes, %w[discount_rate], :decimal)
+    end
+
+    permitted["receipt_adjustments_attributes"]&.each_value do |adjustment_attributes|
+      normalize_numeric_fields!(adjustment_attributes, %w[amount], :integer)
+      normalize_numeric_fields!(adjustment_attributes, %w[tax_rate], :percentage)
+    end
+
+    permitted["receipt_payments_attributes"]&.each_value do |payment_attributes|
+      normalize_numeric_fields!(payment_attributes, %w[amount], :integer)
+    end
+  end
+
+  def normalize_numeric_fields!(attributes, fields, parser)
+    fields.each do |field|
+      next unless attributes.key?(field)
+
+      attributes[field] = ReceiptUserNumericInput.public_send(parser, attributes[field])
     end
   end
 
@@ -892,14 +938,6 @@ class ReceiptsController < ApplicationController
     end
   end
 
-  def normalize_tax_rate(raw_tax_rate)
-    return nil if raw_tax_rate.blank?
-
-    BigDecimal(raw_tax_rate.to_s) / 100
-  rescue ArgumentError
-    nil
-  end
-
   def normalize_receipt_adjustment_attributes!(permitted)
     adjustments_attributes = permitted["receipt_adjustments_attributes"]
     return if adjustments_attributes.blank?
@@ -908,7 +946,6 @@ class ReceiptsController < ApplicationController
 
     adjustments_attributes.each_value do |adjustment_attributes|
       adjustment_attributes["kind"] = ReceiptAdjustment.normalize_kind(adjustment_attributes["kind"])
-      adjustment_attributes["tax_rate"] = normalize_tax_rate(adjustment_attributes["tax_rate"])
       adjustment_attributes["sign"] = manual_adjustment_sign(
         kind: adjustment_attributes["kind"],
         requested_sign: adjustment_attributes["sign"]
