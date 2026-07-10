@@ -1,6 +1,15 @@
 module ExternalServices
   DebugSwitchNotAvailableError = Class.new(StandardError)
 
+  class RuntimeConfigUnavailableError < StandardError
+    attr_reader :error_code
+
+    def initialize
+      @error_code = "external_service_runtime_config_unavailable"
+      super(error_code)
+    end
+  end
+
   class << self
     def services
       StatusStore::SERVICES
@@ -135,6 +144,20 @@ module ExternalServices
       when :ai
         ReceiptAiEnrichmentService.available?
       end
+    end
+
+    def runtime_config_snapshot
+      RuntimeConfig.load
+    rescue StandardError => e
+      Rails.logger.error("[ExternalServices] runtime_config_unavailable class=#{e.class}")
+      raise RuntimeConfigUnavailableError
+    end
+
+    def deserialize_runtime_config_snapshot(value)
+      RuntimeConfig.deserialize(value)
+    rescue StandardError => e
+      Rails.logger.error("[ExternalServices] runtime_config_snapshot_invalid class=#{e.class}")
+      raise RuntimeConfigUnavailableError
     end
 
     private

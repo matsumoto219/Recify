@@ -72,6 +72,33 @@ module SystemSettings
     external_services.degraded_failure_threshold
     external_services.down_failure_threshold
   ].freeze
+  AI_RUNTIME_TUNING_KEYS = %w[
+    external_services.ai.open_timeout_seconds
+    external_services.ai.read_timeout_seconds
+    external_services.ai.max_elapsed_seconds
+    external_services.ai.max_retries
+    external_services.ai.base_retry_delay_seconds
+    external_services.ai.max_retry_delay_seconds
+  ].freeze
+  OCR_RUNTIME_TUNING_KEYS = %w[
+    external_services.ocr.request_timeout_seconds
+    external_services.ocr.max_elapsed_seconds
+    external_services.ocr.max_poll_attempts
+    external_services.ocr.poll_interval_seconds
+    external_services.ocr.poll_backoff_factor
+    external_services.ocr.max_poll_interval_seconds
+    external_services.ocr.max_retries
+    external_services.ocr.base_retry_delay_seconds
+    external_services.ocr.max_retry_delay_seconds
+  ].freeze
+  EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS = (AI_RUNTIME_TUNING_KEYS + OCR_RUNTIME_TUNING_KEYS).freeze
+  AI_TIMEOUT_ORDER_ERROR = "external_service_ai_timeout_order".freeze
+  AI_RETRY_DELAY_ORDER_ERROR = "external_service_ai_retry_delay_order".freeze
+  AI_ELAPSED_BUDGET_ERROR = "external_service_ai_elapsed_budget".freeze
+  OCR_TIMEOUT_BUDGET_ERROR = "external_service_ocr_timeout_budget".freeze
+  OCR_POLL_INTERVAL_ORDER_ERROR = "external_service_ocr_poll_interval_order".freeze
+  OCR_RETRY_DELAY_ORDER_ERROR = "external_service_ocr_retry_delay_order".freeze
+  OCR_ELAPSED_BUDGET_ERROR = "external_service_ocr_elapsed_budget".freeze
   SECURITY_EVENT_RETENTION_KEYS_BY_SEVERITY = {
     "critical" => "retention.security_events_critical_days",
     "high" => "retention.security_events_high_days",
@@ -444,6 +471,7 @@ module SystemSettings
       validate_storage_warning_threshold_relationships!(definition, value)
       validate_security_event_retention_order!(definition, value)
       validate_external_service_status_threshold_relationship!(definition, value)
+      validate_external_service_runtime_tuning!(definition, value)
     end
 
     def validate_receipt_items_snapshot_dependency!(definition, value)
@@ -621,6 +649,75 @@ module SystemSettings
       return if values.fetch("external_services.degraded_failure_threshold") < values.fetch("external_services.down_failure_threshold")
 
       raise ValidationError, EXTERNAL_SERVICE_STATUS_THRESHOLD_RELATION_ERROR
+    end
+
+    def validate_external_service_runtime_tuning!(definition, value)
+      if AI_RUNTIME_TUNING_KEYS.include?(definition.key)
+        validate_ai_runtime_tuning!(definition, value)
+      elsif OCR_RUNTIME_TUNING_KEYS.include?(definition.key)
+        validate_ocr_runtime_tuning!(definition, value)
+      end
+    end
+
+    def validate_ai_runtime_tuning!(definition, value)
+      values = numeric_values_for(AI_RUNTIME_TUNING_KEYS)
+      values[definition.key] = numeric_value(value)
+
+      open_timeout = values.fetch("external_services.ai.open_timeout_seconds")
+      read_timeout = values.fetch("external_services.ai.read_timeout_seconds")
+      max_elapsed = values.fetch("external_services.ai.max_elapsed_seconds")
+      max_retries = values.fetch("external_services.ai.max_retries").to_i
+      base_retry_delay = values.fetch("external_services.ai.base_retry_delay_seconds")
+      max_retry_delay = values.fetch("external_services.ai.max_retry_delay_seconds")
+
+      raise ValidationError, AI_TIMEOUT_ORDER_ERROR if open_timeout > read_timeout
+      raise ValidationError, AI_RETRY_DELAY_ORDER_ERROR if base_retry_delay > max_retry_delay
+
+      estimated_elapsed = ((open_timeout + read_timeout) * (max_retries + 1)) + (max_retry_delay * max_retries)
+      raise ValidationError, AI_ELAPSED_BUDGET_ERROR if estimated_elapsed > max_elapsed
+    end
+
+    def validate_ocr_runtime_tuning!(definition, value)
+      values = numeric_values_for(OCR_RUNTIME_TUNING_KEYS)
+      values[definition.key] = numeric_value(value)
+
+      request_timeout = values.fetch("external_services.ocr.request_timeout_seconds")
+      max_elapsed = values.fetch("external_services.ocr.max_elapsed_seconds")
+      max_poll_attempts = values.fetch("external_services.ocr.max_poll_attempts").to_i
+      poll_interval = values.fetch("external_services.ocr.poll_interval_seconds")
+      poll_backoff_factor = values.fetch("external_services.ocr.poll_backoff_factor")
+      max_poll_interval = values.fetch("external_services.ocr.max_poll_interval_seconds")
+      max_retries = values.fetch("external_services.ocr.max_retries").to_i
+      base_retry_delay = values.fetch("external_services.ocr.base_retry_delay_seconds")
+      max_retry_delay = values.fetch("external_services.ocr.max_retry_delay_seconds")
+
+      raise ValidationError, OCR_TIMEOUT_BUDGET_ERROR if request_timeout > max_elapsed
+      raise ValidationError, OCR_POLL_INTERVAL_ORDER_ERROR if poll_interval > max_poll_interval
+      raise ValidationError, OCR_RETRY_DELAY_ORDER_ERROR if base_retry_delay > max_retry_delay
+
+      estimated_elapsed = ocr_poll_sleep_budget(
+        max_poll_attempts: max_poll_attempts,
+        poll_interval: poll_interval,
+        poll_backoff_factor: poll_backoff_factor,
+        max_poll_interval: max_poll_interval
+      ) + (request_timeout * (max_retries + 1))
+      raise ValidationError, OCR_ELAPSED_BUDGET_ERROR if estimated_elapsed > max_elapsed
+    end
+
+    def numeric_values_for(keys)
+      values_for(keys).transform_values { |value| numeric_value(value) }
+    end
+
+    def numeric_value(value)
+      BigDecimal(value.to_s)
+    rescue ArgumentError, TypeError
+      raise ValidationError, "invalid_decimal"
+    end
+
+    def ocr_poll_sleep_budget(max_poll_attempts:, poll_interval:, poll_backoff_factor:, max_poll_interval:)
+      max_poll_attempts.times.sum do |index|
+        [ poll_interval * (poll_backoff_factor**index), max_poll_interval ].min
+      end
     end
 
     def override_integer_value(override)

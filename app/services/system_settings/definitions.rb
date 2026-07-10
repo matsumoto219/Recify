@@ -227,6 +227,156 @@ module SystemSettings
         max: 20
       ),
       Definition.new(
+        key: "external_services.ai.open_timeout_seconds",
+        category: "external_service_tuning",
+        value_type: "integer",
+        default: 10,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 60
+      ),
+      Definition.new(
+        key: "external_services.ai.read_timeout_seconds",
+        category: "external_service_tuning",
+        value_type: "integer",
+        default: 120,
+        editable: true,
+        risk_level: "high",
+        min: 15,
+        max: 900
+      ),
+      Definition.new(
+        key: "external_services.ai.max_elapsed_seconds",
+        category: "external_service_tuning",
+        value_type: "integer",
+        default: 600,
+        editable: true,
+        risk_level: "high",
+        min: 60,
+        max: 1200
+      ),
+      Definition.new(
+        key: "external_services.ai.max_retries",
+        category: "external_service_tuning",
+        value_type: "integer",
+        default: 2,
+        editable: true,
+        risk_level: "high",
+        min: 0,
+        max: 3
+      ),
+      Definition.new(
+        key: "external_services.ai.base_retry_delay_seconds",
+        category: "external_service_tuning",
+        value_type: "decimal",
+        default: 1.0,
+        editable: true,
+        risk_level: "high",
+        min: 0.1,
+        max: 30.0
+      ),
+      Definition.new(
+        key: "external_services.ai.max_retry_delay_seconds",
+        category: "external_service_tuning",
+        value_type: "decimal",
+        default: 10.0,
+        editable: true,
+        risk_level: "high",
+        min: 0.1,
+        max: 120.0
+      ),
+      Definition.new(
+        key: "external_services.ocr.request_timeout_seconds",
+        category: "external_service_tuning",
+        value_type: "integer",
+        default: 30,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 300
+      ),
+      Definition.new(
+        key: "external_services.ocr.max_elapsed_seconds",
+        category: "external_service_tuning",
+        value_type: "integer",
+        default: 180,
+        editable: true,
+        risk_level: "high",
+        min: 30,
+        max: 1200
+      ),
+      Definition.new(
+        key: "external_services.ocr.max_poll_attempts",
+        category: "external_service_tuning",
+        value_type: "integer",
+        default: 20,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 300
+      ),
+      Definition.new(
+        key: "external_services.ocr.poll_interval_seconds",
+        category: "external_service_tuning",
+        value_type: "decimal",
+        default: 1.0,
+        editable: true,
+        risk_level: "high",
+        min: 0.25,
+        max: 30.0
+      ),
+      Definition.new(
+        key: "external_services.ocr.poll_backoff_factor",
+        category: "external_service_tuning",
+        value_type: "decimal",
+        default: 1.5,
+        editable: true,
+        risk_level: "high",
+        min: 1.0,
+        max: 5.0
+      ),
+      Definition.new(
+        key: "external_services.ocr.max_poll_interval_seconds",
+        category: "external_service_tuning",
+        value_type: "decimal",
+        default: 3.0,
+        editable: true,
+        risk_level: "high",
+        min: 0.25,
+        max: 120.0
+      ),
+      Definition.new(
+        key: "external_services.ocr.max_retries",
+        category: "external_service_tuning",
+        value_type: "integer",
+        default: 2,
+        editable: true,
+        risk_level: "high",
+        min: 0,
+        max: 3
+      ),
+      Definition.new(
+        key: "external_services.ocr.base_retry_delay_seconds",
+        category: "external_service_tuning",
+        value_type: "decimal",
+        default: 0.5,
+        editable: true,
+        risk_level: "high",
+        min: 0.1,
+        max: 30.0
+      ),
+      Definition.new(
+        key: "external_services.ocr.max_retry_delay_seconds",
+        category: "external_service_tuning",
+        value_type: "decimal",
+        default: 10.0,
+        editable: true,
+        risk_level: "high",
+        min: 0.1,
+        max: 120.0
+      ),
+      Definition.new(
         key: "storage.keep_receipt_images_default",
         category: "storage_policy",
         value_type: "boolean",
