@@ -1335,6 +1335,64 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'final result summary保存失敗時はReceipt保存をrollbackしてrunとともにfailedへ倒す' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+      original_total = receipt.total_amount
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, successful_ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+      allow(ReceiptAnalysisRuns).to receive(:record_final_result).and_raise('summary write failed')
+
+      expect { described_class.run_finalize(run) }.to raise_error('summary write failed')
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.total_amount).to eq(original_total)
+        expect(receipt.receipt_items).to be_empty
+        expect(run.reload.status).to eq('failed')
+        expect(run.final_result_summary).to be_blank
+      end
+    end
+
+    it 'run succeeded保存失敗時もReceiptとfinal summaryをrollbackしてfailedへ倒す' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      decision = finalize_decision(:ai_success)
+      original_total = receipt.total_amount
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      ReceiptAnalysisRuns.record_ai_normalized_result(run, successful_ai_result)
+      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+      allow(ReceiptAnalysisRuns).to receive(:succeed).and_raise('run terminal write failed')
+
+      expect { described_class.run_finalize(run) }.to raise_error('run terminal write failed')
+
+      aggregate_failures do
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.total_amount).to eq(original_total)
+        expect(receipt.receipt_items).to be_empty
+        expect(run.reload.status).to eq('failed')
+        expect(run.final_result_summary).to be_blank
+      end
+    end
+
     it 'BuildParams snapshotに購入時刻fallbackのsafe metadataを保存する' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)

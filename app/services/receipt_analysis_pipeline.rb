@@ -143,10 +143,7 @@ class ReceiptAnalysisPipeline
       decision = finalize_decision_from_run
       return fail_missing_snapshot!("finalize_decision_missing", error_stage: "finalize") unless decision
 
-      self.class.finalize(receipt: receipt, decision: decision, run: run)
-      receipt.reload
-      ReceiptAnalysisRuns.record_final_result(run, receipt: receipt)
-      ReceiptAnalysisRuns.succeed(run)
+      persist_finalize_result!(decision)
 
       Result.new(
         finalize_decision: decision,
@@ -158,6 +155,15 @@ class ReceiptAnalysisPipeline
   private
 
   attr_reader :run, :receipt
+
+  def persist_finalize_result!(decision)
+    ReceiptAnalysisRun.transaction do
+      self.class.finalize(receipt: receipt, decision: decision, run: run)
+      receipt.reload
+      ReceiptAnalysisRuns.record_final_result(run, receipt: receipt)
+      ReceiptAnalysisRuns.succeed(run)
+    end
+  end
 
   def terminal_run?
     !ReceiptAnalysisRun::ACTIVE_STATUSES.include?(run.status)
