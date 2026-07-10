@@ -27,12 +27,19 @@ export default class extends Controller {
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this)
     this.handleOnline = this.handleOnline.bind(this)
     this.handleBeforeStreamRender = this.handleBeforeStreamRender.bind(this)
+    this.handleCableMutations = this.handleCableMutations.bind(this)
 
     document.addEventListener('turbo:load', this.handleTurboLoad)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     document.addEventListener('visibilitychange', this.handleVisibilityChange)
     document.addEventListener('turbo:before-stream-render', this.handleBeforeStreamRender)
     window.addEventListener('online', this.handleOnline)
+    this.cableObserver = new MutationObserver(this.handleCableMutations)
+    this.cableObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['connected'],
+      subtree: true
+    })
 
     this.queueImmediateSync()
   }
@@ -44,6 +51,8 @@ export default class extends Controller {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange)
     document.removeEventListener('turbo:before-stream-render', this.handleBeforeStreamRender)
     window.removeEventListener('online', this.handleOnline)
+    this.cableObserver?.disconnect()
+    this.cableObserver = null
     this.stopPolling({ abort: true })
     this.clearIndexRefreshTimer()
   }
@@ -82,6 +91,13 @@ export default class extends Controller {
 
   handleOnline () {
     this.queueImmediateSync()
+  }
+
+  handleCableMutations (mutations) {
+    const reconnected = mutations.some(({ target }) => {
+      return target.matches?.('turbo-cable-stream-source[connected]')
+    })
+    if (reconnected) this.queueImmediateSync()
   }
 
   handleBeforeStreamRender (event) {
