@@ -39,16 +39,6 @@ module Usage::Limits
     end
 
     def mark_analysis_run_blocked!(run:, stage:)
-      receipt = run.receipt
-      if receipt.processing?
-        receipt.update!(
-          status: "failed",
-          processing_error_code: ANALYSIS_ERROR_CODE,
-          processing_error_message: ANALYSIS_ERROR_CODE,
-          review_reasons: []
-        )
-      end
-
       ReceiptAnalysisRuns.fail(
         run,
         error_stage: stage.to_s,

@@ -227,16 +227,18 @@ module ReceiptAnalysisRuns
     end
 
     def fail(error_stage:, error_code:, error_message: nil, error_metadata: nil, at: Time.current)
-      failed_run = terminate!(
-        "failed",
-        at: at,
-        error_stage: error_stage,
-        error_code: error_code,
-        error_message: error_message,
-        error_metadata: error_metadata
-      )
-      sync_processing_receipt_failure!(failed_run)
-      failed_run
+      ReceiptAnalysisRun.transaction do
+        failed_run = terminate!(
+          "failed",
+          at: at,
+          error_stage: error_stage,
+          error_code: error_code,
+          error_message: error_message,
+          error_metadata: error_metadata
+        )
+        sync_processing_receipt_failure!(failed_run)
+        failed_run
+      end
     end
 
     def supersede(at: Time.current)

@@ -131,6 +131,49 @@ RSpec.describe ReceiptAnalysisRuns do
     end
   end
 
+  describe '.fail' do
+    it 'receiptのfailed更新が失敗した場合はrun終端もrollbackする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = described_class.start(receipt:, source: 'upload').run
+      allow(run).to receive(:receipt).and_return(receipt)
+      allow(receipt).to receive(:update!).and_wrap_original do |original, *args, **kwargs|
+        attributes = args.first || kwargs
+        raise ActiveRecord::StatementInvalid, 'forced receipt update failure' if attributes[:status] == 'failed'
+
+        original.call(*args, **kwargs)
+      end
+
+      expect do
+        described_class.fail(run, error_stage: 'ocr', error_code: 'unexpected_error')
+      end.to raise_error(ActiveRecord::StatementInvalid, 'forced receipt update failure')
+
+      aggregate_failures do
+        expect(run.reload).to have_attributes(status: 'queued', error_code: nil)
+        expect(receipt.reload).to have_attributes(status: 'processing', processing_error_code: nil)
+      end
+    end
+
+    it 'runのfailed更新が失敗した場合はreceiptを変更しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = described_class.start(receipt:, source: 'upload').run
+      allow(run).to receive(:update!).and_wrap_original do |original, *args, **kwargs|
+        attributes = args.first || kwargs
+        raise ActiveRecord::StatementInvalid, 'forced run update failure' if attributes[:status] == 'failed'
+
+        original.call(*args, **kwargs)
+      end
+
+      expect do
+        described_class.fail(run, error_stage: 'ocr', error_code: 'unexpected_error')
+      end.to raise_error(ActiveRecord::StatementInvalid, 'forced run update failure')
+
+      aggregate_failures do
+        expect(run.reload).to have_attributes(status: 'queued', error_code: nil)
+        expect(receipt.reload).to have_attributes(status: 'processing', processing_error_code: nil)
+      end
+    end
+  end
+
   describe 'stage tracking' do
     it '同じstageの実行claimは最初の1回だけ成功する' do
       run = described_class.start(receipt:, source: 'upload').run
