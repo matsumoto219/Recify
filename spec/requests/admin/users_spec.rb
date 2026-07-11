@@ -418,6 +418,7 @@ RSpec.describe 'Admin users', type: :request do
 
       document = Nokogiri::HTML(response.body)
       textareas = document.css('textarea')
+      limit_value_input = document.at_css('input[name="value"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -425,6 +426,7 @@ RSpec.describe 'Admin users', type: :request do
         expect(response.body).to include('ユーザー別上限の変更')
         expect(response.body).to include('name="key"')
         expect(response.body).to include('name="value"')
+        expect(limit_value_input['inputmode']).to eq('numeric')
         expect(response.body).to include('UPDATE USER LIMIT')
         expect(response.body).to include(force_two_factor_reset_operation_admin_user_path(user))
         expect(response.body).to include('2要素認証リセット')

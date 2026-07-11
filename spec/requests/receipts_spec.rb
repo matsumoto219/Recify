@@ -1381,6 +1381,7 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       form = document.at_css('[data-controller~="receipt-form"]')
+      item_row = document.at_css('[data-receipt-form-target="itemRow"]')
       adjustment_template = Nokogiri::HTML.fragment(document.at_css('template[data-receipt-form-target="adjustmentTemplate"]')&.inner_html.to_s)
       payment_template = Nokogiri::HTML.fragment(document.at_css('template[data-receipt-form-target="paymentTemplate"]')&.inner_html.to_s)
 
@@ -1394,6 +1395,13 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.at_css('[data-receipt-form-target="priceInput"]')['max']).to eq('320')
         expect(adjustment_template.at_css('[data-receipt-form-target="adjustmentAmountInput"]')['max']).to eq('220')
         expect(payment_template.at_css('[data-receipt-form-target="paymentAmountInput"]')['max']).to eq('430')
+        expect(item_row.at_css('[data-receipt-form-target="quantityInput"]')['inputmode']).to eq('numeric')
+        expect(item_row.at_css('[data-receipt-form-target="priceInput"]')['inputmode']).to eq('numeric')
+        expect(item_row.at_css('[data-receipt-form-target="discountRateInput"]')['inputmode']).to eq('decimal')
+        expect(item_row.at_css('[data-receipt-form-target="taxRateInput"]')['inputmode']).to eq('decimal')
+        expect(adjustment_template.at_css('[data-receipt-form-target="adjustmentAmountInput"]')['inputmode']).to eq('numeric')
+        expect(adjustment_template.at_css('[data-receipt-form-target="adjustmentTaxRateInput"]')['inputmode']).to eq('decimal')
+        expect(payment_template.at_css('[data-receipt-form-target="paymentAmountInput"]')['inputmode']).to eq('numeric')
       end
     end
 

@@ -70,7 +70,6 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
   end
 
   describe 'GET /admin/receipt_analysis_cleanup' do
-
     it '文字が混在するlimitを別の件数へ変換せず入力値付きで再表示する' do
       admin = create(:user, :admin)
       sign_in admin
@@ -83,6 +82,8 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(input['value']).to eq('12abc')
+        expect(input['inputmode']).to eq('numeric')
+        expect(document.at_css('input[name="retention_limit"]')['inputmode']).to eq('numeric')
         expect(response.body).to include(I18n.t('admin.receipt_analysis_cleanup.messages.invalid_limit'))
       end
     end
