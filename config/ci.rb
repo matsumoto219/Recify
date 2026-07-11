@@ -1,6 +1,8 @@
 # Run using bin/ci
 
 CI.run do
+  step "Workspace: duplicate files", "bin/check_duplicate_files"
+
   step "Setup", "bin/setup --skip-server"
 
   step "Style: Ruby", "bin/rubocop"

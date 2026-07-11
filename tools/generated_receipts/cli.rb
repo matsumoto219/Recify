@@ -2,6 +2,7 @@
 
 require "fileutils"
 require "json"
+require_relative "../duplicate_files"
 require_relative "../generated_receipts"
 
 module GeneratedReceipts
@@ -15,6 +16,7 @@ module GeneratedReceipts
     end
 
     def call
+      DuplicateFiles.verify_repository!(root: File.expand_path("../..", __dir__))
       write_text = argv.include?("--write-text")
       write_images = argv.include?("--write-images")
       case_paths = Dir[File.join(CASES_DIR, "*.json")].sort
@@ -37,6 +39,8 @@ module GeneratedReceipts
 
       abort "#{failures.size} generated receipt case(s) failed validation" if failures.any?
       puts "#{case_paths.size} generated receipt case(s) passed"
+    rescue DuplicateFiles::Error => error
+      abort error.message
     end
 
     private

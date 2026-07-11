@@ -98,6 +98,9 @@ jobs:
         with:
           bundler-cache: true
 
+      - name: Check for duplicate workspace files
+        run: bin/check_duplicate_files
+
       - name: Prepare test database
         run: bin/rails db:test:prepare
 

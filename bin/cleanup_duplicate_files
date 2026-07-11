@@ -1,0 +1,34 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../tools/duplicate_files"
+
+unless ARGV.empty? || ARGV == [ "--apply" ]
+  warn "Usage: bin/cleanup_duplicate_files [--apply]"
+  exit 2
+end
+
+begin
+  apply = ARGV == [ "--apply" ]
+  root = File.expand_path("..", __dir__)
+  scanner = DuplicateFiles::Scanner.for_repository(root: root)
+  result = DuplicateFiles::Cleaner.new(scanner: scanner).call(apply: apply)
+
+  if result.entries.empty?
+    puts "No duplicate-like files found in the Git-managed workspace."
+    exit 0
+  end
+
+  puts DuplicateFiles::Reporter.render(result.entries)
+  puts "Safe byte-identical candidates: #{result.safe_paths.size}"
+  puts "Unsafe candidates: #{result.unsafe_paths.size}"
+
+  if apply
+    puts "Deleted byte-identical duplicates: #{result.deleted_paths.size}"
+  else
+    puts "Dry run only. Re-run with --apply to delete the safe candidates."
+  end
+rescue DuplicateFiles::UnsafeCleanupError, DuplicateFiles::ScanError => error
+  warn error.message
+  exit 1
+end

@@ -1,0 +1,21 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../tools/duplicate_files"
+
+begin
+  root = File.expand_path("..", __dir__)
+  provider_root = DuplicateFiles::FileProviderDetector.new(root: root).call
+
+  if provider_root
+    warn "WARNING: repository is under a macOS File Provider-managed directory: #{provider_root}"
+    warn "Move the repository to a non-synced location such as ~/Developer before release."
+  end
+
+  scanner = DuplicateFiles::Scanner.for_repository(root: root)
+  DuplicateFiles::Guard.new(scanner: scanner).verify!
+  puts "No duplicate-like files found in the Git-managed workspace."
+rescue DuplicateFiles::DetectedError, DuplicateFiles::ScanError => error
+  warn error.message
+  exit 1
+end

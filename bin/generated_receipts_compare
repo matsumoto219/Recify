@@ -20,6 +20,13 @@ end.parse!(ARGV)
 
 abort "--execute is required to run Recify comparison" unless options[:execute]
 
+require_relative "../tools/duplicate_files"
+begin
+  DuplicateFiles.verify_repository!(root: File.expand_path("..", __dir__))
+rescue DuplicateFiles::Error => error
+  abort error.message
+end
+
 require_relative "../config/environment"
 require_relative "../tools/generated_receipts"
 
