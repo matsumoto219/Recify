@@ -230,6 +230,20 @@ RSpec.describe SystemSettings do
         expect(values.fetch('limits.receipt_items_per_receipt')).to be <= values.fetch('limits.snapshot_ai_normalized_items_max')
       end
     end
+
+    it '依存関係を持つ全設定の既定値を実validationで受け入れる' do
+      dependency_keys = described_class::SETTING_DEPENDENCY_LOCK_GROUPS.values.flatten.uniq
+
+      aggregate_failures do
+        dependency_keys.each do |key|
+          definition = described_class.definition_for(key)
+
+          expect {
+            described_class.cast_update_value(key, definition.default)
+          }.not_to raise_error, "#{key} default should satisfy its dependency group"
+        end
+      end
+    end
   end
 
   describe '.value_for' do

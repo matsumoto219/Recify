@@ -119,6 +119,51 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
     end
   end
 
+  it "依存値を安全な順番でresetすれば詰まずに全て既定値へ戻せる" do
+    create(
+      :system_setting,
+      key: "external_services.ai.max_elapsed_seconds",
+      value: SystemSettings.stored_value(1200),
+      updated_by_user: actor
+    )
+    create(
+      :system_setting,
+      key: "external_services.ai.read_timeout_seconds",
+      value: SystemSettings.stored_value(300),
+      updated_by_user: actor
+    )
+
+    read_result = described_class.call(
+      key: "external_services.ai.read_timeout_seconds",
+      actor: actor,
+      reason: "restore dependent timeout first",
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: "1"
+    )
+    elapsed_result = described_class.call(
+      key: "external_services.ai.max_elapsed_seconds",
+      actor: actor,
+      reason: "restore elapsed budget second",
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: "1"
+    )
+
+    aggregate_failures do
+      expect(read_result).to be_success
+      expect(elapsed_result).to be_success
+      expect(SystemSettings.fetch("external_services.ai.read_timeout_seconds")).to have_attributes(
+        current_value: 120,
+        source: "default"
+      )
+      expect(SystemSettings.fetch("external_services.ai.max_elapsed_seconds")).to have_attributes(
+        current_value: 600,
+        source: "default"
+      )
+    end
+  end
+
   it "DB overrideがないresetを成功扱いにしない" do
     result = described_class.call(
       key: "feature.receipt_logo_display_enabled",
