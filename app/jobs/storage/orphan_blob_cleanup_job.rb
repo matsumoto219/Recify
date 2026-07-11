@@ -62,7 +62,7 @@ module Storage
     def log_purge_failure(blob, error)
       Rails.logger.error(
         "[Storage::OrphanBlobCleanupJob] failed blob_id=#{blob&.id} " \
-        "error_class=#{error.class} message=#{error.message}"
+        "error_class=#{error.class} message=#{SecurityEvents.sanitize_exception_message(error.message)}"
       )
     end
 

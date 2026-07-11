@@ -134,6 +134,40 @@ RSpec.describe Storage::OrphanBlobCleanupJob, type: :job do
       )
     end
 
+    it 'purge失敗時のログからsecret・storage情報・個人情報を除去する' do
+      orphan = create_blob(byte_size: 12.kilobytes, created_at: 3.days.ago)
+      sensitive_message =
+        'Bearer cleanup-secret blob_key=raw-storage-key ' \
+        'storage_url=/rails/active_storage/blobs/redirect/signed-secret/receipt.jpg ' \
+        'endpoint=https://storage.example.test/operation/123 ' \
+        'provider_raw_response=raw-provider-receipt ' \
+        'file=/Users/example/private/receipt.jpg user@example.com'
+      messages = []
+      allow(Rails.logger).to receive(:error) { |message| messages << message }
+      allow_any_instance_of(ActiveStorage::Blob).to receive(:purge)
+        .and_raise(StandardError, sensitive_message)
+
+      result = described_class.perform_now(dry_run: false)
+      logged_message = messages.join('\n')
+
+      aggregate_failures do
+        expect(result).to include(purged_count: 0, failed_count: 1)
+        expect(logged_message).to include(
+          "[Storage::OrphanBlobCleanupJob] failed blob_id=#{orphan.id}",
+          'error_class=StandardError'
+        )
+        expect(logged_message).not_to include(
+          'cleanup-secret',
+          'raw-storage-key',
+          'signed-secret',
+          'storage.example.test',
+          'raw-provider-receipt',
+          '/Users/example/private/receipt.jpg',
+          'user@example.com'
+        )
+      end
+    end
+
     it 'Storage親入口からorphan blob scanを実行する' do
       scan = {
         count: 0,

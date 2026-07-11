@@ -243,6 +243,39 @@ RSpec.describe GuestUserCleanupJob, type: :job do
         expect(Rails.logger).to have_received(:error).with(include("[GuestUserCleanupJob] failed user_id=#{failed_guest.id}"))
       end
     end
+
+    it '削除失敗時のログからsecret・storage情報・個人情報を除去する' do
+      failed_guest = create_old_guest
+      sensitive_message =
+        'Bearer cleanup-secret blob_key=raw-storage-key ' \
+        'storage_url=/rails/active_storage/blobs/redirect/signed-secret/receipt.jpg ' \
+        'endpoint=https://storage.example.test/operation/123 ' \
+        'provider_raw_response=raw-provider-receipt ' \
+        'file=/Users/example/private/receipt.jpg user@example.com'
+      messages = []
+      allow(Rails.logger).to receive(:error) { |message| messages << message }
+      allow_any_instance_of(User).to receive(:destroy!).and_raise(StandardError, sensitive_message)
+
+      result = described_class.perform_now
+      logged_message = messages.join('\n')
+
+      aggregate_failures do
+        expect(result).to eq(deleted_count: 0, failed_count: 1)
+        expect(logged_message).to include(
+          "[GuestUserCleanupJob] failed user_id=#{failed_guest.id}",
+          'error_class=StandardError'
+        )
+        expect(logged_message).not_to include(
+          'cleanup-secret',
+          'raw-storage-key',
+          'signed-secret',
+          'storage.example.test',
+          'raw-provider-receipt',
+          '/Users/example/private/receipt.jpg',
+          'user@example.com'
+        )
+      end
+    end
   end
 
   def create_old_guest

@@ -114,6 +114,34 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
       end
     end
 
+    it 'purge失敗の返却payloadからsecret・storage情報・個人情報を除去する' do
+      receipt = purgeable_receipt
+      sensitive_message =
+        'Bearer cleanup-secret blob_key=raw-storage-key ' \
+        'storage_url=/rails/active_storage/blobs/redirect/signed-secret/receipt.jpg ' \
+        'endpoint=https://storage.example.test/operation/123 ' \
+        'provider_raw_response=raw-provider-receipt ' \
+        'file=/Users/example/private/receipt.jpg user@example.com'
+      allow(Storage::AttachmentPurger).to receive(:call).and_raise(StandardError, sensitive_message)
+
+      result = described_class.call(dry_run: false)
+      serialized_errors = result.fetch(:errors).to_json
+
+      aggregate_failures do
+        expect(result).to include(purged_count: 0, failed_count: 1)
+        expect(result.dig(:errors, 0, :error_class)).to eq('StandardError')
+        expect(serialized_errors).not_to include(
+          'cleanup-secret',
+          'raw-storage-key',
+          'signed-secret',
+          'storage.example.test',
+          'raw-provider-receipt',
+          '/Users/example/private/receipt.jpg',
+          'user@example.com'
+        )
+      end
+    end
+
     it 'SystemSettingsの保持日数でpurge対象を変更できる' do
       create(:system_setting, key: 'retention.receipt_images_days', value: SystemSettings.stored_value(30))
       too_new = purgeable_receipt(image_purge_eligible_at: 29.days.ago)

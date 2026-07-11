@@ -107,7 +107,7 @@ module Storage
         receipt_id: receipt&.id,
         receipt_public_id: receipt&.public_id,
         error_class: error.class.name,
-        error_message: error.message
+        error_message: SecurityEvents.sanitize_exception_message(error.message)
       }
     end
 

@@ -150,6 +150,24 @@ RSpec.describe SecurityEvents::MetadataSanitizer do
     end
   end
 
+  it '例外文言内のstorage keyとローカルファイルパスをredactする' do
+    text =
+      'blob_key=raw-storage-key active_storage_key=another-storage-key ' \
+      'file=/Users/example/private/receipt.jpg backup=C:\\Users\\example\\receipt.png'
+
+    sanitized = described_class.sanitize_exception_text(text)
+
+    aggregate_failures do
+      expect(sanitized).to include('[FILTERED]')
+      expect(sanitized).not_to include(
+        'raw-storage-key',
+        'another-storage-key',
+        '/Users/example/private/receipt.jpg',
+        'C:\\Users\\example\\receipt.png'
+      )
+    end
+  end
+
   it '配列とhashの保存量を制限する' do
     metadata = described_class.call(
       list: Array.new(60) { |index| index },

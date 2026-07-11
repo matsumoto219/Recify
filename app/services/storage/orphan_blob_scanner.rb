@@ -60,8 +60,6 @@ module Storage
     def sample_blob(blob)
       {
         id: blob.id,
-        key: blob.key,
-        filename: blob.filename.to_s,
         content_type: blob.content_type,
         byte_size: blob.byte_size,
         created_at: blob.created_at&.iso8601

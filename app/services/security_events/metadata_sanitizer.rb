@@ -25,6 +25,15 @@ module SecurityEvents
       service[_-]?url|variant[_-]?url|rails[_-]?(?:blob|storage)[_-]?path
     /ix
     STORAGE_URL_PATTERN = %r{(?:/rails/active_storage/|/rails/active_storage/blobs/|/rails/active_storage/representations/)}i
+    STORAGE_SECRET_ASSIGNMENT_PATTERN = /
+      (blob[_-]?key|active[_-]?storage[_-]?key|signed[_-]?(?:id|blob[_-]?id)|
+      variation[_-]?key|encoded[_-]?(?:key|token)|service[_-]?url|variant[_-]?url)
+      (["'\s:=]+)
+      ([^"',\s};&]+)
+    /ix
+    UNIX_ABSOLUTE_PATH_PATTERN = %r{/(?:[^/\s"'<>]+/)*[^/\s"'<>]+}
+    WINDOWS_ABSOLUTE_PATH_PATTERN = /[A-Za-z]:\\(?:[^\\\s"'<>]+\\)*[^\\\s"'<>]+/
+    FILESYSTEM_PATH_PATTERN = Regexp.union(UNIX_ABSOLUTE_PATH_PATTERN, WINDOWS_ABSOLUTE_PATH_PATTERN)
     SENSITIVE_KEY_PATTERN = Regexp.union(
       SecurityEvent::SENSITIVE_KEY_PATTERN,
       STORAGE_KEY_PATTERN,
@@ -65,11 +74,13 @@ module SecurityEvents
       sanitized.gsub!(EMAIL_PATTERN, "[REDACTED_EMAIL]")
       sanitized.gsub!(AUTH_HEADER_PATTERN) { "#{$1} [FILTERED]" }
       sanitized.gsub!(SECRET_ASSIGNMENT_PATTERN) { "#{$1}#{$2}[FILTERED]" }
+      sanitized.gsub!(STORAGE_SECRET_ASSIGNMENT_PATTERN) { "#{$1}#{$2}[FILTERED]" }
       if redact_provider_details
         sanitized.gsub!(PROVIDER_SENSITIVE_TEXT_PATTERN) { "#{$1}#{$2}[FILTERED]" }
       end
       sanitized = Recify::ActiveStorageLogRedactor.redact(sanitized)
       sanitized.gsub!(URL_PATTERN, "[FILTERED_URL]") if redact_provider_details
+      sanitized.gsub!(FILESYSTEM_PATH_PATTERN, "[FILTERED_PATH]") if redact_provider_details
       sanitized.gsub!(LONG_SECRET_PATTERN, "[FILTERED_SECRET]")
       sanitized = visible_control_chars(sanitized)
 

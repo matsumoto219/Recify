@@ -46,11 +46,26 @@ RSpec.describe Storage::OrphanBlobScanner do
         expect(result[:blob_ids]).not_to include(new_orphan.id, attached.id)
         expect(result[:sample].first).to include(
           id: old_orphan.id,
-          filename: 'old.jpg',
           byte_size: 12.kilobytes
         )
         expect(result[:created_before]).to eq(48.hours.ago.iso8601)
         expect(result[:older_than_seconds]).to eq(48.hours.to_i)
+      end
+    end
+
+    it 'sample payloadへblob keyと元ファイル名を含めない' do
+      orphan = create_blob(
+        byte_size: 12.kilobytes,
+        created_at: 3.days.ago,
+        filename: 'user@example.com-receipt.jpg'
+      )
+
+      result = described_class.call
+      sample = result.fetch(:sample).first
+
+      aggregate_failures do
+        expect(sample).not_to include(:key, :filename)
+        expect(sample.to_json).not_to include(orphan.key, 'user@example.com-receipt.jpg')
       end
     end
 

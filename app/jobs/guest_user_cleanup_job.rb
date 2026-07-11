@@ -53,7 +53,8 @@ class GuestUserCleanupJob < ApplicationJob
 
   def log_destroy_failure(user, error)
     Rails.logger.error(
-      "[GuestUserCleanupJob] failed user_id=#{user.id} error_class=#{error.class} message=#{error.message}"
+      "[GuestUserCleanupJob] failed user_id=#{user.id} error_class=#{error.class} " \
+      "message=#{SecurityEvents.sanitize_exception_message(error.message)}"
     )
   end
 
