@@ -22,7 +22,6 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
   end
 
   describe '.call' do
-
     it '不正な整数表現を別の上限値として保存しない' do
       %w[1e2 12abc abc12 1.5].each do |value|
         result = described_class.call(

@@ -204,7 +204,6 @@ RSpec.describe 'Admin announcements', type: :request do
   end
 
   describe 'POST /admin/announcements' do
-
     it 'priorityの混在文字列を別の整数として保存しない' do
       admin = create(:user, :admin)
       sign_in admin

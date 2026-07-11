@@ -88,7 +88,7 @@ RSpec.describe "Analysis run status sync Stimulus controller" do
       process.stdout.write(JSON.stringify(delays))
     JAVASCRIPT
 
-    expect(result).to eq([15000, 30000, 60000, 60000, 60000])
+    expect(result).to eq([ 15000, 30000, 60000, 60000, 60000 ])
   end
 
   it "honors Retry-After without polling faster than the local backoff" do
