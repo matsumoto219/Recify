@@ -149,6 +149,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(root['data-analysis-run-status-sync-url-value']).to eq(status_admin_receipt_analysis_runs_path)
+        expect(root['data-analysis-run-status-sync-refresh-on-terminal-value']).to be_nil
         expect(root['data-analysis-run-status-sync-interval-value']).to eq('5000')
         expect(active_row['data-analysis-run-status-sync-terminal']).to eq('false')
         expect(terminal_row['data-analysis-run-status-sync-terminal']).to eq('true')
@@ -641,6 +642,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(root['data-analysis-run-status-sync-url-value']).to eq(status_admin_receipt_analysis_runs_path)
+        expect(root['data-analysis-run-status-sync-refresh-on-terminal-value']).to eq('true')
         expect(row['data-analysis-run-status-sync-terminal']).to eq('false')
         expect(row.at_css('[data-analysis-run-status-sync-field="run_status"]')).to be_present
         expect(row.at_css('[data-analysis-run-status-sync-field="receipt_status"]')).to be_present

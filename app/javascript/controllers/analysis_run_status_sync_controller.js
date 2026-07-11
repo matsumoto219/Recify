@@ -4,7 +4,10 @@ export default class extends Controller {
   static targets = ['row']
   static values = {
     url: String,
-    interval: { type: Number, default: 5000 }
+    interval: { type: Number, default: 5000 },
+    slowInterval: { type: Number, default: 15000 },
+    maxBackoff: { type: Number, default: 60000 },
+    refreshOnTerminal: { type: Boolean, default: false }
   }
 
   connect () {
@@ -15,6 +18,10 @@ export default class extends Controller {
     this.syncInFlight = false
     this.pollingPaused = false
     this.authenticationRequired = false
+    this.permanentFailure = false
+    this.consecutiveFailures = 0
+    this.retryAfterMilliseconds = null
+    this.terminalRefreshTimer = null
 
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this)
@@ -33,6 +40,7 @@ export default class extends Controller {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange)
     window.removeEventListener('online', this.handleOnline)
     this.stopPolling({ abort: true })
+    this.clearTerminalRefreshTimer()
   }
 
   rowTargetConnected () {
@@ -46,6 +54,7 @@ export default class extends Controller {
   handleBeforeCache () {
     this.pollingPaused = true
     this.stopPolling({ abort: true })
+    this.clearTerminalRefreshTimer()
   }
 
   handleVisibilityChange () {
@@ -55,7 +64,7 @@ export default class extends Controller {
       return
     }
 
-    if (this.authenticationRequired) return
+    if (this.authenticationRequired || this.permanentFailure) return
 
     this.pollingPaused = false
     this.queueImmediateSync()
@@ -116,11 +125,27 @@ export default class extends Controller {
         this.pausePolling()
         return
       }
-      if (!response.ok) return
+      if (response.status === 429) {
+        this.registerRateLimit(response)
+        return
+      }
+      if (response.status >= 500) {
+        this.registerTemporaryFailure()
+        return
+      }
+      if (!response.ok) {
+        this.permanentFailure = true
+        this.pausePolling()
+        return
+      }
 
+      this.resetBackoff()
       this.applyPayload(await response.json())
     } catch (error) {
-      if (error.name !== 'AbortError') console.warn('[AnalysisRunStatusSync] sync failed')
+      if (error.name !== 'AbortError') {
+        this.registerTemporaryFailure()
+        console.warn('[AnalysisRunStatusSync] sync failed')
+      }
     } finally {
       if (this.abortController === controller) this.abortController = null
       this.syncInFlight = false
@@ -147,6 +172,7 @@ export default class extends Controller {
       row.dataset.analysisRunStatusSyncStateRevision = String(state.state_revision || 0)
 
       if (state.terminal) this.markTerminal(row)
+      if (state.terminal) this.queueTerminalRefresh()
     })
   }
 
@@ -180,7 +206,7 @@ export default class extends Controller {
     this.pollTimer = window.setTimeout(() => {
       this.pollTimer = null
       this.syncNow()
-    }, this.intervalValue)
+    }, this.nextPollDelay())
   }
 
   stopPolling ({ abort = false } = {}) {
@@ -210,5 +236,58 @@ export default class extends Controller {
 
     window.clearTimeout(this.pollTimer)
     this.pollTimer = null
+  }
+
+  queueTerminalRefresh () {
+    if (!this.refreshOnTerminalValue || this.terminalRefreshTimer) return
+
+    this.stopPolling()
+    this.terminalRefreshTimer = window.setTimeout(() => {
+      this.terminalRefreshTimer = null
+      if (!this.connected) return
+
+      Turbo.visit(window.location.href, { action: 'replace' })
+    }, 0)
+  }
+
+  clearTerminalRefreshTimer () {
+    if (!this.terminalRefreshTimer) return
+
+    window.clearTimeout(this.terminalRefreshTimer)
+    this.terminalRefreshTimer = null
+  }
+
+  registerRateLimit (response) {
+    this.consecutiveFailures += 1
+    const localDelay = this.temporaryFailureDelay()
+    const retryAfterSeconds = Number(response.headers.get('Retry-After'))
+    const retryAfterDelay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+      ? retryAfterSeconds * 1000
+      : 0
+
+    this.retryAfterMilliseconds = Math.max(retryAfterDelay, localDelay)
+  }
+
+  registerTemporaryFailure () {
+    this.consecutiveFailures += 1
+    this.retryAfterMilliseconds = this.temporaryFailureDelay()
+  }
+
+  temporaryFailureDelay () {
+    const exponent = Math.max(this.consecutiveFailures - 1, 0)
+
+    return Math.min(this.slowIntervalValue * (2 ** exponent), this.maxBackoffValue)
+  }
+
+  resetBackoff () {
+    this.consecutiveFailures = 0
+    this.retryAfterMilliseconds = null
+  }
+
+  nextPollDelay () {
+    const delay = this.retryAfterMilliseconds || this.intervalValue
+    this.retryAfterMilliseconds = null
+
+    return delay
   }
 }
