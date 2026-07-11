@@ -59,6 +59,8 @@ module Amounts
     end
 
     def payment_delta(candidate)
+      # 編集後の支払行は購入金額の根拠ではなく、候補確定後の照合証跡として扱う。
+      return 0 if context == :edit_save
       return 0 if payments.blank? || candidate.payment_amount_sum.nil?
 
       delta = candidate.payment_amount_sum.to_i - candidate.final_payment_total.to_i

@@ -233,6 +233,128 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
 
+    it 'サービス料をクーポンへ変更して購入合計と支払不一致を再計算する' do
+      receipt = create_completed_receipt(subtotal_amount: 200, tax_amount: 20, total_amount: 220)
+      item = create_item(receipt, price: 100, quantity: 2, line_total: 200)
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'service_charge',
+        label: 'サービス料',
+        amount: 20,
+        sign: 'surcharge',
+        source: 'manual',
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        description: '10%対象', rate: BigDecimal('0.1'), net_amount: 200, amount: 20
+      )
+      receipt.receipt_payments.create!(method: '現金', amount: 200)
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item)
+        },
+        receipt_adjustments_attributes: {
+          '0' => adjustment_attributes(adjustment, kind: 'coupon', sign: 'discount')
+        }
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(adjustment.reload.kind).to eq('coupon')
+        expect(adjustment.sign).to eq('discount')
+        expect(receipt.total_amount).to eq(180)
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('payment_amount_mismatch')
+        expect(receipt.receipt_tax_details.pluck(:net_amount, :amount)).to contain_exactly([ 164, 16 ])
+      end
+    end
+
+    it 'クーポンをサービス料へ変更して購入合計と税詳細を再計算する' do
+      receipt = create_completed_receipt(subtotal_amount: 164, tax_amount: 16, total_amount: 180)
+      item = create_item(receipt, price: 100, quantity: 2, line_total: 200)
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'coupon',
+        label: 'クーポン',
+        amount: 20,
+        sign: 'discount',
+        source: 'manual',
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(
+        description: '10%対象', rate: BigDecimal('0.1'), net_amount: 164, amount: 16
+      )
+      receipt.receipt_payments.create!(method: '現金', amount: 180)
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item)
+        },
+        receipt_adjustments_attributes: {
+          '0' => adjustment_attributes(
+            adjustment,
+            kind: 'service_charge',
+            label: 'サービス料',
+            sign: 'surcharge'
+          )
+        }
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(adjustment.reload.kind).to eq('service_charge')
+        expect(adjustment.sign).to eq('surcharge')
+        expect(receipt.total_amount).to eq(220)
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('payment_amount_mismatch')
+        expect(receipt.receipt_tax_details.pluck(:net_amount, :amount)).to contain_exactly([ 200, 20 ])
+      end
+    end
+
+    it '支払調整をクーポンへ変更して購入合計へ反映する' do
+      [
+        { kind: 'point_usage', label: 'ポイント利用' },
+        { kind: 'other', label: 'キャッシュレス還元' },
+        { kind: 'other', label: 'payment discount' }
+      ].each do |initial|
+        receipt = create_completed_receipt(subtotal_amount: 100, tax_amount: 0, total_amount: 100)
+        create_item(receipt, tax_rate: BigDecimal('0'), line_total: 100)
+        adjustment = receipt.receipt_adjustments.create!(
+          kind: initial[:kind],
+          label: initial[:label],
+          amount: 20,
+          sign: 'discount',
+          source: 'manual',
+          needs_review: false
+        )
+        receipt.receipt_payments.create!(method: '現金', amount: 80)
+
+        patch_receipt(
+          receipt,
+          receipt_adjustments_attributes: {
+            '0' => adjustment_attributes(
+              adjustment,
+              kind: 'coupon',
+              label: 'クーポン',
+              sign: 'discount',
+              tax_rate: '0'
+            )
+          }
+        )
+        receipt.reload
+
+        aggregate_failures initial[:label] do
+          expect(response).to redirect_to(receipt_path(receipt))
+          expect(adjustment.reload.kind).to eq('coupon')
+          expect(receipt.total_amount).to eq(80)
+          expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(80)
+        end
+      end
+    end
+
     it 'labelだけでeffectが変わる場合も古い税詳細を使わず再計算する' do
       receipt = create_completed_receipt(
         subtotal_amount: 82,

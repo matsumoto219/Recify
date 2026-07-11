@@ -5696,6 +5696,28 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to have_http_status(:success)
     end
 
+    it 'review状態をclient送信するhidden fieldを描画しない' do
+      receipt.receipt_items.create!(
+        confirmed_name: '確認対象商品',
+        price: 100,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 100,
+        needs_review: true,
+        review_reasons: [ 'item_name_uncertain' ]
+      )
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.css('input[name*="[needs_review]"]')).to be_empty
+        expect(document.css('input[name*="[review_reasons]"]')).to be_empty
+      end
+    end
+
     it '隔離中のレシートは編集できない' do
       quarantined_receipt = create(:receipt, :quarantined, user: user, status: 'review_needed')
 

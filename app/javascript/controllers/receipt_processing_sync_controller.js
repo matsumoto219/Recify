@@ -18,13 +18,15 @@ export default class extends Controller {
     this.syncInFlight = false
     this.syncAgain = false
     this.completedPollCount = 0
-    this.pollingPaused = false
+    this.pollingPaused = this.networkOffline()
     this.retryAfterMilliseconds = null
     this.indexRefreshTimer = null
+    this.syncFailureReported = false
 
     this.handleTurboLoad = this.handleTurboLoad.bind(this)
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this)
+    this.handleOffline = this.handleOffline.bind(this)
     this.handleOnline = this.handleOnline.bind(this)
     this.handleBeforeStreamRender = this.handleBeforeStreamRender.bind(this)
     this.handleCableMutations = this.handleCableMutations.bind(this)
@@ -33,6 +35,7 @@ export default class extends Controller {
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     document.addEventListener('visibilitychange', this.handleVisibilityChange)
     document.addEventListener('turbo:before-stream-render', this.handleBeforeStreamRender)
+    window.addEventListener('offline', this.handleOffline)
     window.addEventListener('online', this.handleOnline)
     this.cableObserver = new window.MutationObserver(this.handleCableMutations)
     this.cableObserver.observe(document.documentElement, {
@@ -50,6 +53,7 @@ export default class extends Controller {
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     document.removeEventListener('visibilitychange', this.handleVisibilityChange)
     document.removeEventListener('turbo:before-stream-render', this.handleBeforeStreamRender)
+    window.removeEventListener('offline', this.handleOffline)
     window.removeEventListener('online', this.handleOnline)
     this.cableObserver?.disconnect()
     this.cableObserver = null
@@ -68,7 +72,7 @@ export default class extends Controller {
   }
 
   handleTurboLoad () {
-    this.pollingPaused = false
+    this.pollingPaused = this.networkOffline()
     this.queueImmediateSync()
   }
 
@@ -85,11 +89,18 @@ export default class extends Controller {
       return
     }
 
-    this.pollingPaused = false
+    this.pollingPaused = this.networkOffline()
     this.queueImmediateSync()
   }
 
+  handleOffline () {
+    this.pollingPaused = true
+    this.stopPolling({ abort: true })
+  }
+
   handleOnline () {
+    this.pollingPaused = false
+    this.retryAfterMilliseconds = null
     this.queueImmediateSync()
   }
 
@@ -121,7 +132,7 @@ export default class extends Controller {
   }
 
   queueImmediateSync () {
-    if (!this.connected || this.pollingPaused || document.visibilityState === 'hidden' || !this.hasCardTarget) return
+    if (!this.connected || this.pollingPaused || this.networkOffline() || document.visibilityState === 'hidden' || !this.hasCardTarget) return
 
     this.clearImmediateTimer()
     if (this.syncInFlight) {
@@ -136,7 +147,7 @@ export default class extends Controller {
   }
 
   async syncNow () {
-    if (!this.connected || this.pollingPaused || document.visibilityState === 'hidden' || this.syncInFlight) return
+    if (!this.connected || this.pollingPaused || this.networkOffline() || document.visibilityState === 'hidden' || this.syncInFlight) return
 
     const cardStates = this.processingCardStates()
     if (cardStates.length === 0) {
@@ -183,10 +194,15 @@ export default class extends Controller {
       const body = await response.text()
       if (body.trim() !== '') Turbo.renderStreamMessage(body)
       this.completedPollCount += 1
+      this.syncFailureReported = false
     } catch (error) {
-      if (error.name !== 'AbortError') {
-        console.warn('[ReceiptProcessingSync] sync failed')
+      if (error.name === 'AbortError') return
+      if (this.networkOffline()) {
+        this.handleOffline()
+        return
       }
+
+      this.reportSyncFailure()
     } finally {
       if (this.requestAbortController === abortController) this.requestAbortController = null
       this.syncInFlight = false
@@ -217,7 +233,7 @@ export default class extends Controller {
   }
 
   scheduleNextPoll () {
-    if (!this.connected || this.pollingPaused || document.visibilityState === 'hidden' || !this.hasCardTarget) return
+    if (!this.connected || this.pollingPaused || this.networkOffline() || document.visibilityState === 'hidden' || !this.hasCardTarget) return
 
     this.clearPollTimer()
     this.pollTimer = window.setTimeout(() => {
@@ -309,5 +325,16 @@ export default class extends Controller {
     if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) return this.slowIntervalValue
 
     return Math.max(retryAfterSeconds * 1000, this.slowIntervalValue)
+  }
+
+  networkOffline () {
+    return window.navigator?.onLine === false
+  }
+
+  reportSyncFailure () {
+    if (this.syncFailureReported) return
+
+    this.syncFailureReported = true
+    console.warn('[ReceiptProcessingSync] sync failed')
   }
 }

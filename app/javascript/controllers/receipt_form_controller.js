@@ -181,6 +181,7 @@ export default class extends Controller {
       row.style.display = 'none'
       if (rowContainer !== row) rowContainer.style.display = 'none'
     } else {
+      row.style.display = 'none'
       rowContainer.remove()
     }
 
@@ -206,6 +207,7 @@ export default class extends Controller {
       row.style.display = 'none'
       if (rowContainer !== row) rowContainer.style.display = 'none'
     } else {
+      row.style.display = 'none'
       rowContainer.remove()
     }
 
@@ -286,6 +288,7 @@ export default class extends Controller {
       if (rowContainer !== row) rowContainer.style.display = 'none'
     } else {
       // 新規レコード → DOMから削除
+      row.style.display = 'none'
       rowContainer.remove()
     }
 
@@ -606,6 +609,11 @@ export default class extends Controller {
   }
 
   recalculate () {
+    if (!this.previewNumericInputsValid()) {
+      this.renderUnavailablePreview()
+      return
+    }
+
     let subtotalSum = 0
     let taxSum = 0
     let total = 0
@@ -615,8 +623,7 @@ export default class extends Controller {
     const externalTax = this.usesExternalTax()
 
     this.itemRowTargets.forEach((row) => {
-      // 削除済み（非表示）はスキップ
-      if (row.style.display === 'none') return
+      if (this.previewRowExcluded(row, 'destroyField')) return
 
       const quantityInput = row.querySelector('[data-receipt-form-target="quantityInput"]')
       const quantityUnitInput = row.querySelector('[data-receipt-form-target="quantityUnitInput"]')
@@ -630,7 +637,7 @@ export default class extends Controller {
       if (quantity <= 0) quantity = 1
       const price = this.clampNumber(this.parseIntegerInput(priceInput?.value), 0, this.receiptItemPriceMaxValue)
       const discountRatePercent = this.parseDiscountRateInput(discountRateInput?.value)
-      const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
+      const taxRatePercent = this.clampNumber(this.parseDecimalInput(taxRateInput?.value), 0, 100)
       const quantityUnit = quantityUnitInput?.value
 
       if (taxRatePercent > 0) {
@@ -672,7 +679,7 @@ export default class extends Controller {
     })
 
     this.adjustmentRowTargets.forEach((row) => {
-      if (row.style.display === 'none') return
+      if (this.previewRowExcluded(row, 'adjustmentDestroyField')) return
 
       this.syncAdjustmentSignForRow(row)
 
@@ -681,7 +688,7 @@ export default class extends Controller {
       const effect = this.adjustmentEffectForRow(row)
       const sign = this.adjustmentSignForRow(row)
       const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, this.receiptAdjustmentAmountMaxValue)
-      const taxRatePercent = this.clampNumber(parseFloat(taxRateInput?.value) || 0, 0, 100)
+      const taxRatePercent = this.clampNumber(this.parseDecimalInput(taxRateInput?.value), 0, 100)
       if (amount <= 0) return
 
       if (taxRatePercent > 0 && effect !== 'payment_adjustment') {
@@ -926,12 +933,7 @@ export default class extends Controller {
   }
 
   visiblePaymentRows () {
-    return this.paymentRowTargets.filter((row) => {
-      if (row.style.display === 'none') return false
-
-      const destroyField = row.querySelector('[data-receipt-form-target="paymentDestroyField"]')
-      return String(destroyField?.value ?? '') !== '1'
-    })
+    return this.paymentRowTargets.filter((row) => !this.previewRowExcluded(row, 'paymentDestroyField'))
   }
 
   syncPaymentAmountToFinal (event) {
@@ -946,7 +948,10 @@ export default class extends Controller {
     const firstInput = rows[0].querySelector('[data-receipt-form-target="paymentAmountInput"]')
     if (!firstInput) return
 
-    const nextFirstAmount = this.parseIntegerInput(firstInput.value) + delta
+    const firstAmount = this.parseIntegerInput(firstInput.value)
+    if (!Number.isFinite(firstAmount)) return
+
+    const nextFirstAmount = firstAmount + delta
 
     if (nextFirstAmount >= 0) {
       firstInput.value = nextFirstAmount
@@ -1258,48 +1263,42 @@ export default class extends Controller {
   }
 
   clampNumber (value, min, max) {
-    if (Number.isNaN(value)) return min
+    if (!Number.isFinite(value)) return min
     return Math.min(Math.max(value, min), max)
   }
 
   parseIntegerInput (value) {
-    const normalized = String(value ?? '')
-      .replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
-      .replace(/[^0-9-]/g, '')
-      .replace(/(?!^)-/g, '')
+    const normalized = this.normalizeNumericInputText(value)
+    if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)$/.test(normalized)) return Number.NaN
 
-    const parsedValue = Number.parseInt(normalized, 10)
-    return Number.isNaN(parsedValue) ? 0 : parsedValue
+    const parsedValue = Number(normalized.replace(/,/g, ''))
+    return Number.isSafeInteger(parsedValue) ? parsedValue : Number.NaN
   }
 
   parseDecimalInput (value) {
-    let normalized = String(value ?? '').replace(/[０-９]/g, (s) =>
-      String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
-    )
-
-    normalized = normalized
-      .replace(/．/g, '.')
-      .replace(/－/g, '-')
-      .replace(/，/g, ',')
+    let normalized = this.normalizeNumericInputText(value)
 
     const commaCount = (normalized.match(/,/g) || []).length
     if (!normalized.includes('.') && commaCount === 1) {
       normalized = normalized.replace(',', '.')
-    } else {
-      normalized = normalized.replace(/,/g, '')
     }
 
-    normalized = normalized
-      .replace(/[^0-9.-]/g, '')
-      .replace(/(?!^)-/g, '')
+    const integerComponent = '(?:\\d+|\\d{1,3}(?:,\\d{3})+)'
+    const decimalPattern = new RegExp(`^(?:${integerComponent}(?:\\.\\d*)?|\\.\\d+)$`)
+    if (!decimalPattern.test(normalized)) return Number.NaN
 
-    const parts = normalized.split('.')
-    if (parts.length > 2) {
-      normalized = parts[0] + '.' + parts.slice(1).join('')
-    }
+    const parsedValue = Number(normalized.replace(/,/g, ''))
+    return Number.isFinite(parsedValue) ? parsedValue : Number.NaN
+  }
 
-    const parsedValue = Number.parseFloat(normalized)
-    return Number.isNaN(parsedValue) ? 0 : parsedValue
+  normalizeNumericInputText (value) {
+    return String(value ?? '')
+      .trim()
+      .replace(/[０-９]/g, (character) => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
+      .replace(/＋/g, '+')
+      .replace(/－/g, '-')
+      .replace(/．/g, '.')
+      .replace(/，/g, ',')
   }
 
   parseDiscountRateInput (value) {
@@ -1307,6 +1306,117 @@ export default class extends Controller {
     if (rawValue === '') return null
 
     return this.parseDecimalInput(rawValue)
+  }
+
+  previewNumericInputsValid () {
+    const itemsValid = this.itemRowTargets.every((row) => {
+      if (this.previewRowExcluded(row, 'destroyField')) return true
+
+      const quantityInput = row.querySelector('[data-receipt-form-target="quantityInput"]')
+      const quantityUnitInput = row.querySelector('[data-receipt-form-target="quantityUnitInput"]')
+      const priceInput = row.querySelector('[data-receipt-form-target="priceInput"]')
+      const discountRateInput = row.querySelector('[data-receipt-form-target="discountRateInput"]')
+      const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
+      const quantity = this.previewInputValue(quantityInput, 'decimal')
+
+      return quantity !== null &&
+        this.previewValueInRange(quantity, { minimum: 0, maximum: 9999.999, exclusiveMinimum: true }) &&
+        (this.decimalQuantityUnit(quantityUnitInput?.value) || !Number.isFinite(quantity) || Number.isInteger(quantity)) &&
+        this.previewInputInRange(priceInput, 'integer', { minimum: 0, maximum: this.receiptItemPriceMaxValue }) &&
+        this.previewInputInRange(discountRateInput, 'decimal', { minimum: 0, maximum: 100 }) &&
+        this.previewInputInRange(taxRateInput, 'decimal', { minimum: 0, maximum: 100 })
+    })
+
+    if (!itemsValid) return false
+
+    const adjustmentsValid = this.adjustmentRowTargets.every((row) => {
+      if (this.previewRowExcluded(row, 'adjustmentDestroyField')) return true
+
+      const amountInput = row.querySelector('[data-receipt-form-target="adjustmentAmountInput"]')
+      const taxRateInput = row.querySelector('[data-receipt-form-target="adjustmentTaxRateInput"]')
+
+      return this.previewInputInRange(
+        amountInput,
+        'integer',
+        { minimum: 0, maximum: this.receiptAdjustmentAmountMaxValue }
+      ) && this.previewInputInRange(taxRateInput, 'decimal', { minimum: 0, maximum: 100 })
+    })
+
+    if (!adjustmentsValid) return false
+
+    return this.paymentRowTargets.every((row) => {
+      if (this.previewRowExcluded(row, 'paymentDestroyField')) return true
+
+      const amountInput = row.querySelector('[data-receipt-form-target="paymentAmountInput"]')
+      return this.previewInputInRange(
+        amountInput,
+        'integer',
+        { minimum: 0, maximum: this.receiptPaymentAmountMaxValue }
+      )
+    })
+  }
+
+  previewRowExcluded (row, destroyTarget) {
+    if (row.style.display === 'none') return true
+
+    const destroyField = row.querySelector(`[data-receipt-form-target="${destroyTarget}"]`)
+    return String(destroyField?.value ?? '') === '1'
+  }
+
+  previewInputInRange (input, parser, range) {
+    return this.previewValueInRange(this.previewInputValue(input, parser), range)
+  }
+
+  previewInputValue (input, parser) {
+    const rawValue = String(input?.value ?? '').trim()
+    if (rawValue === '') return null
+
+    return parser === 'integer'
+      ? this.parseIntegerInput(rawValue)
+      : this.parseDecimalInput(rawValue)
+  }
+
+  previewValueInRange (value, { minimum, maximum, exclusiveMinimum = false }) {
+    if (value === null) return true
+    if (!Number.isFinite(value)) return false
+    if (exclusiveMinimum ? value <= minimum : value < minimum) return false
+
+    return value <= maximum
+  }
+
+  renderUnavailablePreview () {
+    this.lastFinalPaymentTotal = null
+    this.previewAmountTargets().forEach((target) => this.renderUnavailableAmount(target))
+
+    if (this.hasTaxRateSummaryTarget) {
+      this.taxRateSummaryTarget.textContent = this.unsetLabelValue
+    }
+
+    this.paymentMismatchWarningTargets.forEach((warning) => warning.classList.add('hidden'))
+    this.syncPaymentAmountButtonTargets.forEach((button) => button.classList.add('hidden'))
+    this.syncPaymentSummaryLayout()
+  }
+
+  previewAmountTargets () {
+    return [
+      ...this.lineTotalDisplayTargets,
+      ...(this.hasTotalAmountTarget ? [this.totalAmountTarget] : []),
+      ...(this.hasSubtotalAmountTarget ? [this.subtotalAmountTarget] : []),
+      ...(this.hasTaxAmountTarget ? [this.taxAmountTarget] : []),
+      ...(this.hasPaymentAdjustmentAmountTarget ? [this.paymentAdjustmentAmountTarget] : []),
+      ...(this.hasFinalPaymentAmountTarget ? [this.finalPaymentAmountTarget] : []),
+      ...(this.hasPaymentAmountSumTarget ? [this.paymentAmountSumTarget] : []),
+      ...(this.hasPaymentReconciliationFinalAmountTarget ? [this.paymentReconciliationFinalAmountTarget] : []),
+      ...(this.hasPaymentDifferenceAmountTarget ? [this.paymentDifferenceAmountTarget] : [])
+    ]
+  }
+
+  renderUnavailableAmount (target) {
+    this.cancelAmountAnimation(target)
+    target.textContent = this.unsetLabelValue
+    target.title = this.unsetLabelValue
+    target.amountDisplayValue = Number.NaN
+    delete target.dataset.amountValue
   }
 
   animateAmount (target, nextValue) {

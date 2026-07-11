@@ -1325,6 +1325,32 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
+  it 'edit_saveでは変更前の支払額で購入金額候補を選ばない' do
+    result = call_amount_engine(
+      receipt: { subtotal_amount: 200, tax_amount: 20, total_amount: 220 },
+      items: [
+        { price: 100, quantity: 2, line_total: 200, tax_rate: BigDecimal('0.1') }
+      ],
+      adjustments: [
+        { kind: 'coupon', sign: 'discount', amount: 20, source: 'manual' }
+      ],
+      payments: [
+        { method: 'cash', amount: 200 }
+      ],
+      context: :edit_save
+    )
+
+    aggregate_failures do
+      # 支払行は購入金額の根拠ではなく、候補確定後の照合証跡として扱う。
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('items_as_tax_included/floor/per_tax_rate_group')
+      expect(result.dig(:amount_engine, :selected_candidate, :score_breakdown, :payment_delta)).to eq(0)
+      expect(result[:resolved]).to include(subtotal: 164, tax: 16, total: 180)
+      expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
+      expect(result[:review_reasons]).to include('payment_amount_mismatch')
+      expect(result[:needs_review]).to be(true)
+    end
+  end
+
   it 'resolved totalは購入合計、computed final_payment_totalは支払照合用として分けて返す' do
     result = call_amount_engine(
       receipt: { total_amount: 1_900 },

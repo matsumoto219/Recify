@@ -308,11 +308,9 @@
     <%= item_form.hidden_field :line_total,
           value: 0,
           data: line_total_data %>
-    <%= item_form.hidden_field :needs_review, value: false %>
   <% else %>
     <%= item_form.hidden_field :line_total,
           data: line_total_data %>
-    <%= item_form.hidden_field :needs_review %>
     <%= item_form.hidden_field :_destroy, value: false, data: { receipt_form_target: "destroyField" } %>
   <% end %>
     </div>
