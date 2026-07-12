@@ -351,6 +351,35 @@ RSpec.describe ServiceLayerBoundary::Scanner do
     end
   end
 
+  it "configとlibとRake taskをscan対象へ含める" do
+    with_scanner(
+      files: {
+        "config/initializers/private_worker.rb" => "Analysis::PrivateWorker.call\n",
+        "lib/report_export.rb" => "Analysis::PrivateWorker.call\n",
+        "lib/tasks/reports.rake" => <<~RAKE
+          task :report do
+            Analysis::PrivateWorker.call
+          end
+        RAKE
+      }
+    ) do |scanner|
+      target_paths = scanner.target_files.map { |path| path.relative_path_from(scanner.root).to_s }
+
+      aggregate_failures do
+        expect(target_paths).to include(
+          "config/initializers/private_worker.rb",
+          "lib/report_export.rb",
+          "lib/tasks/reports.rake"
+        )
+        expect(scanner.violations.map(&:source_path)).to contain_exactly(
+          "config/initializers/private_worker.rb",
+          "lib/report_export.rb",
+          "lib/tasks/reports.rake"
+        )
+      end
+    end
+  end
+
   it "新しいprivate child fileを手動constant登録なしで検査する" do
     with_scanner(
       files: {

@@ -157,8 +157,11 @@ RSpec.describe "Service layer child implementation boundary" do
     expect(scanner.violations).to be_empty, scanner.format_violations
   end
 
-  it "legacy exceptionをsource pathとconstantの完全一致で利用し続ける" do
+  it "legacy exceptionを残さない" do
+    exceptions = SERVICE_NAMESPACE_REGISTRY.values.flat_map { |entry| entry.fetch(:legacy_exceptions) }
     unused = scanner.unused_legacy_exceptions
+
+    expect(exceptions).to be_empty
     expect(unused).to be_empty, "Unused legacy exceptions:\n#{scanner.format_legacy_exceptions(unused)}"
   end
 end

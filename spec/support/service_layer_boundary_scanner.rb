@@ -17,6 +17,9 @@ module ServiceLayerBoundary
     app/policies/**/*.rb
     app/components/**/*.rb
     app/components/**/*.erb
+    config/**/*.rb
+    lib/**/*.rb
+    lib/**/*.rake
   ].freeze
 
   Reference = Data.define(:constant_name, :line, :lexical_namespace, :absolute)
