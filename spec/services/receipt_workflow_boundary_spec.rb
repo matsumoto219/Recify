@@ -65,4 +65,20 @@ RSpec.describe "Receipt workflow dependency boundary" do
 
     expect(references).to be_empty, references.join("\n")
   end
+
+  it "platform serviceとAI specialistからlegacy Pipelineへ逆依存しない" do
+    paths = [ Rails.root.join("app/services/external_services.rb") ] +
+      Rails.root.glob("app/services/external_services/**/*.rb") +
+      Rails.root.glob("app/services/ai/**/*.rb")
+    references = paths.select(&:file?).flat_map do |path|
+      source_path = path.relative_path_from(Rails.root).to_s
+      ServiceLayerBoundary::SourceAnalyzer.new(source_path: source_path)
+        .analyze(path.read)
+        .references
+        .select { |reference| reference.constant_name.start_with?("ReceiptAnalysisPipeline") }
+        .map { |reference| "#{source_path}:#{reference.line} -> #{reference.constant_name}" }
+    end
+
+    expect(references).to be_empty, references.join("\n")
+  end
 end

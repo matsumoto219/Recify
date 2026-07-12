@@ -222,9 +222,9 @@ module ExternalServices
     def operation_env_key(service)
       case service
       when :ocr
-        ReceiptAnalysisPipeline.ocr_enabled_env_key
+        ProductionEnvValidator::OCR_ENABLED_ENV_KEY
       when :ai
-        ReceiptAnalysisPipeline.ai_enabled_env_key
+        ProductionEnvValidator::AI_ENABLED_ENV_KEY
       end
     end
 

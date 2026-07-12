@@ -3,6 +3,11 @@
 require "rails_helper"
 
 RSpec.describe ProductionEnvValidator do
+  it "owns the receipt provider kill-switch environment keys" do
+    expect(described_class::OCR_ENABLED_ENV_KEY).to eq("RECEIPT_OCR_ENABLED")
+    expect(described_class::AI_ENABLED_ENV_KEY).to eq("RECEIPT_AI_ENABLED")
+  end
+
   let(:rails_config) do
     ActiveSupport::OrderedOptions.new.tap do |config|
       config.active_record = ActiveSupport::OrderedOptions.new

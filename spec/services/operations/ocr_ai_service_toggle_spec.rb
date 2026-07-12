@@ -93,14 +93,14 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
   end
 
   it 'ENV停止はenv sourceのdisabledとして扱う' do
-    with_env(ReceiptAnalysisPipeline::Config::OCR_ENABLED_ENV_KEY, 'false') do
+    with_env(ProductionEnvValidator::OCR_ENABLED_ENV_KEY, 'false') do
       snapshot = ExternalServices.snapshot(:ocr)
 
       aggregate_failures do
         expect(snapshot[:state]).to eq('down')
         expect(snapshot[:disabled]).to eq(true)
         expect(snapshot[:source]).to eq('env')
-        expect(snapshot[:reason]).to eq(ReceiptAnalysisPipeline::Config::OCR_ENABLED_ENV_KEY)
+        expect(snapshot[:reason]).to eq(ProductionEnvValidator::OCR_ENABLED_ENV_KEY)
       end
     end
   end

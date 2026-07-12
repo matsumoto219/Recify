@@ -1,7 +1,7 @@
 module Ai
   class AvailabilityChecker
     OPERATION_SETTING_KEY = "operations.ai_enabled".freeze
-    OPERATION_ENV_KEY = ReceiptAnalysisPipeline.ai_enabled_env_key
+    OPERATION_ENV_KEY = ProductionEnvValidator::AI_ENABLED_ENV_KEY
     PROVIDER_CONFIG = {
       "openai" => {
         api_key_env: "OPENAI_API_KEY",

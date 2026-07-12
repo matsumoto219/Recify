@@ -36,14 +36,6 @@ class ReceiptAnalysisPipeline
     def finalize_decision_from_snapshot(snapshot)
       Receipts::Processing.finalize_decision_from_snapshot(snapshot)
     end
-
-    def ocr_enabled_env_key
-      Config::OCR_ENABLED_ENV_KEY
-    end
-
-    def ai_enabled_env_key
-      Config::AI_ENABLED_ENV_KEY
-    end
   end
 
   def initialize(run)
