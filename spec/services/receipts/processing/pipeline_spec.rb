@@ -372,7 +372,7 @@ RSpec.describe Receipts::Processing::Pipeline do
     it 'OCR stageが既にclaim済みならproviderとusageへ再到達しない' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
-      ReceiptAnalysisRuns.claim_stage(run, 'ocr')
+      Receipts::Processing.claim_stage(run, 'ocr')
       allow(ReceiptOcrService).to receive(:call)
       allow(Usage).to receive(:ensure_ocr_job_within_limit!)
       allow(Usage).to receive(:consume_ocr_job!)
@@ -844,8 +844,8 @@ RSpec.describe Receipts::Processing::Pipeline do
     it 'AI stageが既にclaim済みならproviderとusageへ再到達しない' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
-      ReceiptAnalysisRuns.claim_stage(run, 'ai')
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.claim_stage(run, 'ai')
       allow(ReceiptAiEnrichmentService).to receive(:call)
       allow(Usage).to receive(:ensure_ai_job_within_limit!)
       allow(Usage).to receive(:consume_ai_job!)
@@ -957,7 +957,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         case_preserved_lines: [ 'TestStore', 'コーヒー 180', '合計 180', '現金' ]
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call) do |rehydrated_ocr_result, **_kwargs|
         expect(rehydrated_ocr_result[:case_preserved_lines]).to eq([ 'TestStore', 'コーヒー 180', '合計 180', '現金' ])
         successful_ai_result
@@ -976,7 +976,7 @@ RSpec.describe Receipts::Processing::Pipeline do
     it 'runtime config取得失敗時はAI providerを呼ばずrunを失敗させる' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
       allow(SystemSettings).to receive(:values_for).and_call_original
       allow(SystemSettings).to receive(:values_for)
         .with(SystemSettings::EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS)
@@ -1001,7 +1001,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
       create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call)
       allow(Usage).to receive(:consume_ai_job!)
 
@@ -1029,7 +1029,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         requested: 1
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
       allow(Usage).to receive(:ensure_ai_job_within_limit!).and_raise(quota_error)
       allow(ReceiptAiEnrichmentService).to receive(:call)
       allow(ExternalServices).to receive(:mark_failure!)
@@ -1058,17 +1058,17 @@ RSpec.describe Receipts::Processing::Pipeline do
         requested: 1
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
       allow(Usage).to receive(:ensure_ai_job_within_limit!).and_raise(quota_error)
-      allow(ReceiptAnalysisRuns).to receive(:fail)
-        .and_raise(ReceiptAnalysisRuns::TerminalRunError, 'already terminal')
+      allow(Receipts::Processing).to receive(:fail)
+        .and_raise(Receipts::Processing::TerminalRunError, 'already terminal')
 
       result = described_class.run_ai(run)
 
       aggregate_failures do
         expect(result.next_step).to eq(:skipped)
         expect(result.skip_reason).to eq(:usage_limit_exceeded)
-        expect(ReceiptAnalysisRuns).to have_received(:fail).with(
+        expect(Receipts::Processing).to have_received(:fail).with(
           run,
           error_stage: 'ai',
           error_code: 'usage_limit_exceeded',
@@ -1087,7 +1087,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         requested: 1
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(quota_error)
       allow(ExternalServices).to receive(:mark_failure!)
 
@@ -1108,7 +1108,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_raise(StandardError, 'AI prompt sk-test')
 
       expect { described_class.run_ai(run) }.to raise_error(StandardError, 'AI prompt sk-test')
@@ -1143,8 +1143,8 @@ RSpec.describe Receipts::Processing::Pipeline do
         }
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(failure_run, successful_ocr_result)
-      ReceiptAnalysisRuns.record_ocr_snapshot(not_receipt_run, weak_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(failure_run, successful_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(not_receipt_run, weak_ocr_result)
 
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(
         { success: false, error_code: 'analysis_missing_keys', receipt_attributes: {}, receipt_items_attributes: [] },
@@ -1194,7 +1194,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         }
       }
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, rich_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, rich_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_result)
 
       result = described_class.run_ai(run)
@@ -1253,7 +1253,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, rich_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, rich_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(timeout_ai_result)
 
       result = described_class.run_ai(run)
@@ -1281,7 +1281,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, rich_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, rich_ocr_result)
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return('invalid ai response')
 
       result = described_class.run_ai(run)
@@ -1349,11 +1349,11 @@ RSpec.describe Receipts::Processing::Pipeline do
     it 'finalize stageが既にclaim済みなら保存とbookkeepingへ再到達しない' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
-      ReceiptAnalysisRuns.record_finalize_decision(run, finalize_decision(:fail_receipt))
-      ReceiptAnalysisRuns.claim_stage(run, 'finalize')
+      Receipts::Processing.record_finalize_decision(run, finalize_decision(:fail_receipt))
+      Receipts::Processing.claim_stage(run, 'finalize')
       allow(described_class).to receive(:finalize)
-      allow(ReceiptAnalysisRuns).to receive(:record_final_result)
-      allow(ReceiptAnalysisRuns).to receive(:succeed)
+      allow(Receipts::Processing).to receive(:record_final_result)
+      allow(Receipts::Processing).to receive(:succeed)
 
       result = described_class.run_finalize(run)
 
@@ -1361,8 +1361,8 @@ RSpec.describe Receipts::Processing::Pipeline do
         expect(result.next_step).to eq(:skipped)
         expect(result.skip_reason).to eq(:stage_already_claimed)
         expect(described_class).not_to have_received(:finalize)
-        expect(ReceiptAnalysisRuns).not_to have_received(:record_final_result)
-        expect(ReceiptAnalysisRuns).not_to have_received(:succeed)
+        expect(Receipts::Processing).not_to have_received(:record_final_result)
+        expect(Receipts::Processing).not_to have_received(:succeed)
       end
     end
 
@@ -1371,9 +1371,9 @@ RSpec.describe Receipts::Processing::Pipeline do
       run = create(:receipt_analysis_run, receipt:)
       decision = finalize_decision(:ai_success)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, successful_ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, successful_ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -1381,7 +1381,7 @@ RSpec.describe Receipts::Processing::Pipeline do
           warning_inconsistencies: []
         )
       )
-      expect(ReceiptAnalysisRuns).to receive(:record_final_result).once.and_call_original
+      expect(Receipts::Processing).to receive(:record_final_result).once.and_call_original
 
       result = described_class.run_finalize(run)
 
@@ -1403,9 +1403,9 @@ RSpec.describe Receipts::Processing::Pipeline do
       decision = finalize_decision(:ai_success)
       original_total = receipt.total_amount
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, successful_ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, successful_ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -1413,7 +1413,7 @@ RSpec.describe Receipts::Processing::Pipeline do
           warning_inconsistencies: []
         )
       )
-      allow(ReceiptAnalysisRuns).to receive(:record_final_result).and_raise('summary write failed')
+      allow(Receipts::Processing).to receive(:record_final_result).and_raise('summary write failed')
 
       expect { described_class.run_finalize(run) }.to raise_error('summary write failed')
 
@@ -1432,9 +1432,9 @@ RSpec.describe Receipts::Processing::Pipeline do
       decision = finalize_decision(:ai_success)
       original_total = receipt.total_amount
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, successful_ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, successful_ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -1442,7 +1442,7 @@ RSpec.describe Receipts::Processing::Pipeline do
           warning_inconsistencies: []
         )
       )
-      allow(ReceiptAnalysisRuns).to receive(:succeed).and_raise('run terminal write failed')
+      allow(Receipts::Processing).to receive(:succeed).and_raise('run terminal write failed')
 
       expect { described_class.run_finalize(run) }.to raise_error('run terminal write failed')
 
@@ -1479,9 +1479,9 @@ RSpec.describe Receipts::Processing::Pipeline do
         }
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -1545,8 +1545,8 @@ RSpec.describe Receipts::Processing::Pipeline do
         { raw_text: '商品B', price: 100, quantity: 1, line_total: 100 }
       ]
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -1577,8 +1577,8 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result = successful_ocr_result.deep_dup
       ocr_result[:candidates][:items] = generated_ocr_items(101)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -1613,9 +1613,9 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result[:candidates][:items] = generated_ocr_items(1)
       ai_result = successful_ai_result.deep_merge(receipt_items_attributes: generated_ai_items(101))
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -1656,8 +1656,8 @@ RSpec.describe Receipts::Processing::Pipeline do
         )
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
 
       expect { described_class.run_finalize(run) }.not_to raise_error
 
@@ -1678,8 +1678,8 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result = successful_ocr_result.deep_dup
       ocr_result[:candidates][:items] = generated_ocr_items(201)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -1718,9 +1718,9 @@ RSpec.describe Receipts::Processing::Pipeline do
         )
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
 
       expect { described_class.run_finalize(run) }.not_to raise_error
 
@@ -1742,9 +1742,9 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result[:candidates][:items] = generated_ocr_items(1)
       ai_result = successful_ai_result.deep_merge(receipt_items_attributes: generated_ai_items(201))
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -1791,8 +1791,8 @@ RSpec.describe Receipts::Processing::Pipeline do
       )
       allow(ReceiptAmountService).to receive(:call).and_return(amount_result_with_exceeded_item)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
 
       expect {
         described_class.run_finalize(run)
@@ -1833,9 +1833,9 @@ RSpec.describe Receipts::Processing::Pipeline do
       ).deep_merge(resolved: { total: 501, subtotal: 501, tax: 0, tax_rate: BigDecimal('0') })
       allow(ReceiptAmountService).to receive(:call).and_return(amount_result_with_exceeded_total)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
 
       expect {
         described_class.run_finalize(run)
@@ -1863,8 +1863,8 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result = successful_ocr_result.deep_dup
       ocr_result[:candidates][:payments] = generated_payments(21)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -1898,8 +1898,8 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result = successful_ocr_result.deep_dup
       ocr_result[:candidates][:payments] = generated_payments(51)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -1932,8 +1932,8 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result = successful_ocr_result.deep_dup
       ocr_result[:candidates][:tax_details] = generated_tax_details(21)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -1967,8 +1967,8 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result = successful_ocr_result.deep_dup
       ocr_result[:candidates][:tax_details] = generated_tax_details(51)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -2001,9 +2001,9 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result = successful_ocr_result.deep_merge(lines: generated_adjustment_lines(51))
       ai_result = successful_ai_result.deep_merge(receipt_adjustments_attributes: generated_ai_adjustments(51))
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect {
@@ -2045,8 +2045,8 @@ RSpec.describe Receipts::Processing::Pipeline do
         )
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
 
       expect { described_class.run_finalize(run) }.not_to raise_error
 
@@ -2071,8 +2071,8 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result[:candidates][:adjustment_candidates] = generated_ocr_adjustment_candidates(101)
       expect(ReceiptAmountService).not_to receive(:call)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
 
       expect {
         described_class.run_finalize(run)
@@ -2107,9 +2107,9 @@ RSpec.describe Receipts::Processing::Pipeline do
         )
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
 
       expect { described_class.run_finalize(run) }.not_to raise_error
 
@@ -2133,9 +2133,9 @@ RSpec.describe Receipts::Processing::Pipeline do
       ai_result = successful_ai_result.deep_merge(receipt_adjustments_attributes: generated_ai_adjustments(101))
       expect(ReceiptAmountService).not_to receive(:call)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
 
       expect {
         described_class.run_finalize(run)
@@ -2160,9 +2160,9 @@ RSpec.describe Receipts::Processing::Pipeline do
       run = create(:receipt_analysis_run, receipt:)
       decision = finalize_decision(:ai_success)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, successful_ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, successful_ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -2195,7 +2195,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt = create(:receipt, :completed, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      ReceiptAnalysisRuns.fail(
+      Receipts::Processing.fail(
         run,
         error_stage: 'finalize',
         error_code: 'unexpected_error',
@@ -4391,8 +4391,8 @@ RSpec.describe Receipts::Processing::Pipeline do
       )
       captured_build_params_inputs = []
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result_with_raw)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result_with_raw)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result_with_raw)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result_with_raw)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -4461,7 +4461,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         }
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, snapshot_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, snapshot_ocr_result)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -4487,7 +4487,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -4512,7 +4512,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -4575,7 +4575,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         }
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, long_ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, long_ocr_result)
       allow(ReceiptAmountService).to receive(:call).and_return(
         amount_result(
           inconsistencies: [],
@@ -4617,7 +4617,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         receipt = create(:receipt, :processing, :with_image)
         run = create(:receipt_analysis_run, receipt:)
 
-        ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_fixture(fixture_name))
+        Receipts::Processing.record_ocr_snapshot(run, ocr_fixture(fixture_name))
 
         aggregate_failures(fixture_name) do
           expect do
@@ -4635,7 +4635,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         receipt = create(:receipt, :processing, :with_image)
         run = create(:receipt_analysis_run, receipt:)
 
-        ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_fixture(fixture_name))
+        Receipts::Processing.record_ocr_snapshot(run, ocr_fixture(fixture_name))
 
         aggregate_failures(fixture_name) do
           expect do

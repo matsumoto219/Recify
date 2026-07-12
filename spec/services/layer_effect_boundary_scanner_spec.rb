@@ -42,7 +42,7 @@ RSpec.describe LayerEffectBoundary::Scanner do
 
   it "workflow facade経由のmutationも検知する" do
     with_scanner(
-      "app/queries/admin/cleanup_query.rb" => "ReceiptAnalysisRuns.cleanup_stale(dry_run: true)\n"
+      "app/queries/admin/cleanup_query.rb" => "Receipts::Processing.cleanup_stale(dry_run: true)\n"
     ) do |scanner|
       effect = scanner.layer_effects.sole
       expect(effect.to_h).to include(effect: :workflow_mutation, method_name: :cleanup_stale)

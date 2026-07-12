@@ -1,4 +1,4 @@
-module ReceiptAnalysisRuns
+module Receipts::Processing::Runs
   class RuntimeConfigSnapshot
     METADATA_KEY = "external_service_runtime_config".freeze
     ORIGIN_METADATA_KEY = "external_service_runtime_config_origin".freeze

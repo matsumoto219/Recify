@@ -30,14 +30,14 @@ class Receipts::Processing::Pipeline
           ReceiptAiEnrichmentService.call(
             ocr_result,
             ai_name_completion_enabled: ai_name_completion_enabled,
-            runtime_config: ReceiptAnalysisRuns.external_service_runtime_config(run).ai,
+            runtime_config: Receipts::Processing.external_service_runtime_config(run).ai,
             capture_input: ai_input_capture_callback,
             before_provider_call: before_provider_call
           )
         end
 
-      ReceiptAnalysisRuns.record_ai_result(run, ai_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_ai_result(run, ai_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
 
       Result.new(ai_result: ai_result)
     end
@@ -47,7 +47,7 @@ class Receipts::Processing::Pipeline
     attr_reader :run, :ocr_result, :ai_name_completion_enabled, :before_provider_call
 
     def ai_input_capture_callback
-      ->(input) { ReceiptAnalysisRuns.record_ai_input(run, input) }
+      ->(input) { Receipts::Processing.record_ai_input(run, input) }
     end
 
     def ai_unavailable?

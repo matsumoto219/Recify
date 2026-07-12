@@ -1,4 +1,4 @@
-module ReceiptAnalysisRuns
+module Receipts::Processing::Runs
   class Enqueuer
     ERROR_CODE = "analysis_enqueue_failed".freeze
     ERROR_MESSAGE = ERROR_CODE

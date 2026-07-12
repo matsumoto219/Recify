@@ -40,7 +40,7 @@ class Receipts::Processing::Pipeline
     return cancel_and_skip(:not_processing) unless receipt.processing?
 
     with_run_failure do
-      return skipped_result(:stage_already_claimed) unless ReceiptAnalysisRuns.claim_stage(run, "ocr")
+      return skipped_result(:stage_already_claimed) unless Receipts::Processing.claim_stage(run, "ocr")
 
       mark_processing!
       if (disabled_snapshot = ocr_unavailable_snapshot)
@@ -78,7 +78,7 @@ class Receipts::Processing::Pipeline
     return cancel_and_skip(:not_processing) unless receipt.processing?
 
     with_run_failure do
-      return skipped_result(:stage_already_claimed) unless ReceiptAnalysisRuns.claim_stage(run, "ai")
+      return skipped_result(:stage_already_claimed) unless Receipts::Processing.claim_stage(run, "ai")
 
       ocr_result ||= ocr_result_from_snapshot
       return fail_missing_snapshot!("ocr_result_snapshot_missing", error_stage: "ai") if ocr_result.blank?
@@ -122,7 +122,7 @@ class Receipts::Processing::Pipeline
     return cancel_and_skip(:not_processing) unless receipt.processing?
 
     with_run_failure do
-      return skipped_result(:stage_already_claimed) unless ReceiptAnalysisRuns.claim_stage(run, "finalize")
+      return skipped_result(:stage_already_claimed) unless Receipts::Processing.claim_stage(run, "finalize")
 
       decision = finalize_decision_from_run
       return fail_missing_snapshot!("finalize_decision_missing", error_stage: "finalize") unless decision
@@ -144,8 +144,8 @@ class Receipts::Processing::Pipeline
     ReceiptAnalysisRun.transaction do
       self.class.finalize(receipt: receipt, decision: decision, run: run)
       receipt.reload
-      ReceiptAnalysisRuns.record_final_result(run, receipt: receipt)
-      ReceiptAnalysisRuns.succeed(run)
+      Receipts::Processing.record_final_result(run, receipt: receipt)
+      Receipts::Processing.succeed(run)
     end
   end
 
@@ -156,8 +156,8 @@ class Receipts::Processing::Pipeline
   def cancel_active_run
     return unless run.active?
 
-    ReceiptAnalysisRuns.cancel(run)
-  rescue ReceiptAnalysisRuns::TerminalRunError
+    Receipts::Processing.cancel(run)
+  rescue Receipts::Processing::TerminalRunError
     nil
   end
 
@@ -332,7 +332,7 @@ class Receipts::Processing::Pipeline
   end
 
   def record_finalize_decision(decision)
-    ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+    Receipts::Processing.record_finalize_decision(run, decision)
   end
 
   def finalize_decision_from_run
@@ -354,14 +354,14 @@ class Receipts::Processing::Pipeline
   end
 
   def fail_missing_snapshot!(error_code, error_stage:)
-    ReceiptAnalysisRuns.fail(
+    Receipts::Processing.fail(
       run,
       error_stage: error_stage,
       error_code: error_code,
       error_message: error_code
     )
     Result.new(next_step: :skipped, skip_reason: error_code.to_sym)
-  rescue ReceiptAnalysisRuns::TerminalRunError
+  rescue Receipts::Processing::TerminalRunError
     Result.new(next_step: :skipped, skip_reason: :terminal_run)
   end
 
@@ -372,8 +372,8 @@ class Receipts::Processing::Pipeline
       provider_error_detail: ocr_unavailable_detail(disabled_snapshot)
     )
     log_ocr_result(ocr_result)
-    ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
-    ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+    Receipts::Processing.record_ocr_result(run, ocr_result)
+    Receipts::Processing.record_ocr_snapshot(run, ocr_result)
 
     decision = finalize_decision(:fail_receipt, ocr_result: ocr_result, error_code: "ocr_disabled")
     record_finalize_decision(decision)
@@ -440,14 +440,14 @@ class Receipts::Processing::Pipeline
   end
 
   def usage_limit_blocked_result(stage)
-    ReceiptAnalysisRuns.fail(
+    Receipts::Processing.fail(
       run,
       error_stage: stage.to_s,
       error_code: "usage_limit_exceeded",
       error_message: "usage_limit_exceeded"
     )
     Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
-  rescue ReceiptAnalysisRuns::TerminalRunError
+  rescue Receipts::Processing::TerminalRunError
     Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
   end
 
@@ -648,14 +648,14 @@ class Receipts::Processing::Pipeline
   end
 
   def fail_run(error)
-    ReceiptAnalysisRuns.fail(
+    Receipts::Processing.fail(
       run,
       error_stage: run.stage.presence || "ocr",
       error_code: error_code_for(error),
       error_message: error.message,
       error_metadata: error_metadata_for(error)
     )
-  rescue ReceiptAnalysisRuns::TerminalRunError
+  rescue Receipts::Processing::TerminalRunError
     nil
   end
 

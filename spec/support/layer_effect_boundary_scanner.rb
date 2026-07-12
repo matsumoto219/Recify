@@ -74,28 +74,6 @@ module LayerEffectBoundary
         update_contact_request_status
         update_security_event_status
       ],
-      "ReceiptAnalysisRuns" => %i[
-        cancel
-        cleanup_expired
-        cleanup_stale
-        copy_retry_snapshots
-        enqueue
-        fail
-        finish_stage
-        record_ai_input
-        record_ai_normalized_result
-        record_ai_result
-        record_build_params_snapshot
-        record_final_result
-        record_finalize_decision
-        record_ocr_response_artifact
-        record_ocr_result
-        record_ocr_snapshot
-        start
-        start_stage
-        succeed
-        supersede
-      ],
       "Receipts::Processing" => %i[
         cancel
         claim_stage

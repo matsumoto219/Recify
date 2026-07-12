@@ -1,4 +1,4 @@
-module ReceiptAnalysisRuns
+module Receipts::Processing::Runs
   class Starter
     RUNTIME_CONFIG_ERROR_CODE = "runtime_config_unavailable".freeze
     SAFE_RECEIPT_FAILURE_MESSAGE_KEY = "receipts.processing_errors.unexpected_failure".freeze

@@ -1415,7 +1415,7 @@ class Receipts::Processing::Pipeline
     def record_build_params_snapshot(params)
       return if run.blank?
 
-      ReceiptAnalysisRuns.record_build_params_snapshot(run, params)
+      Receipts::Processing.record_build_params_snapshot(run, params)
     end
 
     def image_purge_candidate_attributes

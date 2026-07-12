@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptAnalysisRuns do
+RSpec.describe Receipts::Processing::Runs do
   include ActiveSupport::Testing::TimeHelpers
 
   def deep_json(value)
@@ -112,7 +112,7 @@ RSpec.describe ReceiptAnalysisRuns do
 
       expect do
         described_class.enqueue(run, job_class: ReceiptOcrJob)
-      end.to raise_error(ReceiptAnalysisRuns::EnqueueError, 'analysis job enqueue failed')
+      end.to raise_error(Receipts::Processing::Runs::EnqueueError, 'analysis job enqueue failed')
 
       aggregate_failures do
         expect(run.reload).to have_attributes(
@@ -225,7 +225,7 @@ RSpec.describe ReceiptAnalysisRuns do
 
       expect do
         described_class.start_stage(run, 'ocr')
-      end.to raise_error(ReceiptAnalysisRuns::InvalidTransition)
+      end.to raise_error(Receipts::Processing::Runs::InvalidTransition)
     end
 
     it 'terminal後の変更を拒否する' do
@@ -240,7 +240,7 @@ RSpec.describe ReceiptAnalysisRuns do
 
       expect do
         described_class.start_stage(run, 'ai')
-      end.to raise_error(ReceiptAnalysisRuns::TerminalRunError)
+      end.to raise_error(Receipts::Processing::Runs::TerminalRunError)
     end
 
     it 'runのerror_messageからsecret・endpoint・promptを除去する' do
@@ -481,8 +481,8 @@ RSpec.describe ReceiptAnalysisRuns do
       aggregate_failures do
         expect(SystemSettings.definition_for('limits.snapshot_ocr_items_max').max).to eq(max_receipt_items)
         expect(SystemSettings.definition_for('limits.snapshot_ai_normalized_items_max').max).to eq(max_receipt_items)
-        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_OCR_ITEMS).to eq(SystemSettings.definition_for('limits.snapshot_ocr_items_max').default)
-        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_AI_NORMALIZED_ITEMS).to eq(SystemSettings.definition_for('limits.snapshot_ai_normalized_items_max').default)
+        expect(Receipts::Processing::Runs::SnapshotBuilder::MAX_OCR_ITEMS).to eq(SystemSettings.definition_for('limits.snapshot_ocr_items_max').default)
+        expect(Receipts::Processing::Runs::SnapshotBuilder::MAX_AI_NORMALIZED_ITEMS).to eq(SystemSettings.definition_for('limits.snapshot_ai_normalized_items_max').default)
       end
     end
 
@@ -509,7 +509,7 @@ RSpec.describe ReceiptAnalysisRuns do
     it 'payment snapshot上限の設定可能最大値はreceipt_payments_per_receiptの最大値と同期する' do
       aggregate_failures do
         expect(SystemSettings.definition_for('limits.receipt_payments_per_receipt').max).to eq(100)
-        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_OCR_PAYMENTS).to eq(SystemSettings.definition_for('limits.receipt_payments_per_receipt').default)
+        expect(Receipts::Processing::Runs::SnapshotBuilder::MAX_OCR_PAYMENTS).to eq(SystemSettings.definition_for('limits.receipt_payments_per_receipt').default)
       end
     end
 
@@ -536,7 +536,7 @@ RSpec.describe ReceiptAnalysisRuns do
     it 'tax detail snapshot上限の設定可能最大値はreceipt_tax_details_per_receiptの最大値と同期する' do
       aggregate_failures do
         expect(SystemSettings.definition_for('limits.receipt_tax_details_per_receipt').max).to eq(100)
-        expect(ReceiptAnalysisRuns::SnapshotBuilder::MAX_OCR_TAX_DETAILS).to eq(SystemSettings.definition_for('limits.receipt_tax_details_per_receipt').default)
+        expect(Receipts::Processing::Runs::SnapshotBuilder::MAX_OCR_TAX_DETAILS).to eq(SystemSettings.definition_for('limits.receipt_tax_details_per_receipt').default)
       end
     end
 

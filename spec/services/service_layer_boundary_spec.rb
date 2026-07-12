@@ -146,18 +146,6 @@ RSpec.describe "Service layer child implementation boundary" do
       "ReceiptAnalysisProfiles",
       facade: "app/services/receipt_analysis_profiles.rb"
     ),
-    "receipt_analysis_runs" => registry_entry(
-      "receipt_analysis_runs",
-      "ReceiptAnalysisRuns",
-      facade: "app/services/receipt_analysis_runs.rb",
-      public_constants: %w[
-        ReceiptAnalysisRuns::EnqueueError
-        ReceiptAnalysisRuns::Error
-        ReceiptAnalysisRuns::InvalidTransition
-        ReceiptAnalysisRuns::StartResult
-        ReceiptAnalysisRuns::TerminalRunError
-      ]
-    ),
     "receipts" => registry_entry(
       "receipts",
       "Receipts",

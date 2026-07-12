@@ -1,4 +1,4 @@
-module ReceiptAnalysisRuns
+module Receipts::Processing::Runs
   class Tracker
     TERMINAL_STATUSES = %w[succeeded failed skipped superseded canceled].freeze
     STARTABLE_STAGES = %w[ocr ocr_validation ai finalize].freeze

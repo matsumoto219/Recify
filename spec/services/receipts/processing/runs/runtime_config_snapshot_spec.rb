@@ -1,11 +1,11 @@
 require "rails_helper"
 
-RSpec.describe ReceiptAnalysisRuns::RuntimeConfigSnapshot do
+RSpec.describe Receipts::Processing::Runs::RuntimeConfigSnapshot do
   let(:receipt) { create(:receipt) }
   let(:run) { create(:receipt_analysis_run, receipt:) }
 
   it "Starterでrunを作成した時点の設定を固定する" do
-    started_run = ReceiptAnalysisRuns.start(receipt:, source: "upload").run
+    started_run = Receipts::Processing::Runs.start(receipt:, source: "upload").run
     create(
       :system_setting,
       key: "external_services.ai.max_elapsed_seconds",
@@ -17,7 +17,7 @@ RSpec.describe ReceiptAnalysisRuns::RuntimeConfigSnapshot do
       value: SystemSettings.stored_value(300)
     )
 
-    snapshot = ReceiptAnalysisRuns.external_service_runtime_config(started_run.reload)
+    snapshot = Receipts::Processing::Runs.external_service_runtime_config(started_run.reload)
 
     aggregate_failures do
       expect(snapshot.ai.read_timeout_seconds).to eq(120)
@@ -29,8 +29,8 @@ RSpec.describe ReceiptAnalysisRuns::RuntimeConfigSnapshot do
   end
 
   it "新しいrunでは最新の設定を取得する" do
-    first_run = ReceiptAnalysisRuns.start(receipt:, source: "upload").run
-    first_snapshot = ReceiptAnalysisRuns.external_service_runtime_config(first_run)
+    first_run = Receipts::Processing::Runs.start(receipt:, source: "upload").run
+    first_snapshot = Receipts::Processing::Runs.external_service_runtime_config(first_run)
     create(
       :system_setting,
       key: "external_services.ai.max_elapsed_seconds",
@@ -41,9 +41,9 @@ RSpec.describe ReceiptAnalysisRuns::RuntimeConfigSnapshot do
       key: "external_services.ai.read_timeout_seconds",
       value: SystemSettings.stored_value(300)
     )
-    next_run = ReceiptAnalysisRuns.start(receipt: create(:receipt), source: "upload").run
+    next_run = Receipts::Processing::Runs.start(receipt: create(:receipt), source: "upload").run
 
-    second_snapshot = ReceiptAnalysisRuns.external_service_runtime_config(next_run)
+    second_snapshot = Receipts::Processing::Runs.external_service_runtime_config(next_run)
 
     aggregate_failures do
       expect(first_snapshot.ai.read_timeout_seconds).to eq(120)
@@ -52,7 +52,7 @@ RSpec.describe ReceiptAnalysisRuns::RuntimeConfigSnapshot do
   end
 
   it "legacy runは初回取得時の設定を互換保存し起点を明示する" do
-    snapshot = ReceiptAnalysisRuns.external_service_runtime_config(run)
+    snapshot = Receipts::Processing::Runs.external_service_runtime_config(run)
 
     aggregate_failures do
       expect(run.reload.metadata.fetch("external_service_runtime_config"))
@@ -66,7 +66,7 @@ RSpec.describe ReceiptAnalysisRuns::RuntimeConfigSnapshot do
     run.update!(metadata: { "external_service_runtime_config_origin" => "run_creation" })
     allow(ExternalServices).to receive(:runtime_config_snapshot)
 
-    expect { ReceiptAnalysisRuns.external_service_runtime_config(run) }
+    expect { Receipts::Processing::Runs.external_service_runtime_config(run) }
       .to raise_error(ExternalServices::RuntimeConfigUnavailableError)
     expect(ExternalServices).not_to have_received(:runtime_config_snapshot)
   end
@@ -75,7 +75,7 @@ RSpec.describe ReceiptAnalysisRuns::RuntimeConfigSnapshot do
     processing_receipt = create(:receipt, :processing, :with_image)
     allow(SystemSettings).to receive(:values_for).and_raise(ActiveRecord::ConnectionNotEstablished)
 
-    expect { ReceiptAnalysisRuns.start(receipt: processing_receipt, source: "upload") }
+    expect { Receipts::Processing::Runs.start(receipt: processing_receipt, source: "upload") }
       .to raise_error(ExternalServices::RuntimeConfigUnavailableError)
 
     aggregate_failures do

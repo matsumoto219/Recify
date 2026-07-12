@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptAnalysisRuns::OcrResponseArtifact do
+RSpec.describe Receipts::Processing::Runs::OcrResponseArtifact do
   let(:run) { create(:receipt_analysis_run, :running, attempt_number: 2) }
   let(:raw_body) do
     JSON.generate(

@@ -59,7 +59,7 @@ RSpec.describe 'service sanitizer boundary' do
   end
 
   it 'receipt analysis stored snapshotsからforbidden keyの値を除外する' do
-    snapshot = ReceiptAnalysisRuns::SnapshotBuilder.sanitized_stored_snapshot(forbidden_payload)
+    snapshot = Receipts::Processing::Runs::SnapshotBuilder.sanitized_stored_snapshot(forbidden_payload)
 
     aggregate_failures do
       expect(snapshot).to include('safe' => 'visible')

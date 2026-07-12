@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptAnalysisRuns::SnapshotBuilder do
+RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
   it 'build params snapshotにはraw source refsやdiagnosticsを含めず安全なownership contractだけを残す' do
     snapshot = described_class.build_params_snapshot(
       receipt_attributes: { total_amount: 100 },

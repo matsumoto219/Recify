@@ -1,4 +1,4 @@
-module ReceiptAnalysisRuns
+module Receipts::Processing::Runs
   class SnapshotBuilder
     OCR_SUMMARY_SCHEMA_VERSION = "receipt_analysis_run_ocr_summary_v1"
     OCR_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ocr_result_v1"

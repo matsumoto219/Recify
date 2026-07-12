@@ -25,14 +25,14 @@ class Receipts::Processing::Pipeline
         else
           ReceiptOcrService.call(
             receipt.image,
-            runtime_config: ReceiptAnalysisRuns.external_service_runtime_config(run).ocr,
+            runtime_config: Receipts::Processing.external_service_runtime_config(run).ocr,
             before_provider_call: before_provider_call,
             after_provider_success_response: ocr_response_artifact_callback
           )
         end
 
-      ReceiptAnalysisRuns.record_ocr_result(run, ocr_result)
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ocr_result(run, ocr_result)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
 
       Result.new(ocr_result: ocr_result)
     end
@@ -47,7 +47,7 @@ class Receipts::Processing::Pipeline
 
     def ocr_response_artifact_callback
       lambda do |raw_body, response:, provider:|
-        ReceiptAnalysisRuns.record_ocr_response_artifact(
+        Receipts::Processing.record_ocr_response_artifact(
           run,
           raw_body,
           provider: provider,

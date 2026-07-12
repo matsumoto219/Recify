@@ -5,12 +5,12 @@ RSpec.describe Receipts::Processing do
     it "legacy workflowのErrorとResult contractを同一objectで公開する" do
       aggregate_failures do
         expect(described_class::AnalysisError).to equal(Receipts::Processing::Pipeline::AnalysisError)
-        expect(described_class::EnqueueError).to equal(ReceiptAnalysisRuns::EnqueueError)
-        expect(described_class::Error).to equal(ReceiptAnalysisRuns::Error)
-        expect(described_class::InvalidTransition).to equal(ReceiptAnalysisRuns::InvalidTransition)
+        expect(described_class::EnqueueError).to equal(Receipts::Processing::Runs::EnqueueError)
+        expect(described_class::Error).to equal(Receipts::Processing::Runs::Error)
+        expect(described_class::InvalidTransition).to equal(Receipts::Processing::Runs::InvalidTransition)
         expect(described_class::Result).to equal(Receipts::Processing::Pipeline::Result)
-        expect(described_class::StartResult).to equal(ReceiptAnalysisRuns::StartResult)
-        expect(described_class::TerminalRunError).to equal(ReceiptAnalysisRuns::TerminalRunError)
+        expect(described_class::StartResult).to equal(Receipts::Processing::Runs::StartResult)
+        expect(described_class::TerminalRunError).to equal(Receipts::Processing::Runs::TerminalRunError)
       end
     end
   end
@@ -27,7 +27,7 @@ RSpec.describe Receipts::Processing do
   describe "run lifecycle facade" do
     it "run作成をlegacy Runsへ委譲する" do
       arguments = { receipt: instance_double(Receipt), source: "upload" }
-      allow(ReceiptAnalysisRuns).to receive(:start).with(**arguments).and_return(:result)
+      allow(Receipts::Processing::Runs).to receive(:start).with(**arguments).and_return(:result)
 
       expect(described_class.start(**arguments)).to eq(:result)
     end

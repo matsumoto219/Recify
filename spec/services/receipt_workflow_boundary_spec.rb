@@ -58,9 +58,9 @@ RSpec.describe "Receipt workflow dependency boundary" do
     expect(formatted).to be_empty, formatted.join("\n")
   end
 
-  it "ReceiptAnalysisRunsからProcessing private Pipelineへ逆依存しない" do
-    paths = [ Rails.root.join("app/services/receipt_analysis_runs.rb") ] +
-      Rails.root.glob("app/services/receipt_analysis_runs/**/*.rb")
+  it "Processing Runsからprivate Pipelineへ逆依存しない" do
+    paths = [ Rails.root.join("app/services/receipts/processing/runs.rb") ] +
+      Rails.root.glob("app/services/receipts/processing/runs/**/*.rb")
     references = paths.select(&:file?).flat_map do |path|
       source_path = path.relative_path_from(Rails.root).to_s
       ServiceLayerBoundary::SourceAnalyzer.new(source_path: source_path)

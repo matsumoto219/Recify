@@ -1,6 +1,6 @@
 require "stringio"
 
-module ReceiptAnalysisRuns
+module Receipts::Processing::Runs
   class OcrResponseArtifact
     CAPTURE_ENABLED_KEY = "analysis_artifact.ocr_raw_response_capture_enabled".freeze
     MAX_BYTES_KEY = SystemSettings::OCR_RAW_RESPONSE_MAX_BYTES_KEY

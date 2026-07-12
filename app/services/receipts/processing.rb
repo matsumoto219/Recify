@@ -63,91 +63,91 @@ module Receipts
       end
 
       def start(...)
-        ReceiptAnalysisRuns.start(...)
+        Runs.start(...)
       end
 
       def enqueue(...)
-        ReceiptAnalysisRuns.enqueue(...)
+        Runs.enqueue(...)
       end
 
       def start_stage(...)
-        ReceiptAnalysisRuns.start_stage(...)
+        Runs.start_stage(...)
       end
 
       def claim_stage(...)
-        ReceiptAnalysisRuns.claim_stage(...)
+        Runs.claim_stage(...)
       end
 
       def external_service_runtime_config(...)
-        ReceiptAnalysisRuns.external_service_runtime_config(...)
+        Runs.external_service_runtime_config(...)
       end
 
       def finish_stage(...)
-        ReceiptAnalysisRuns.finish_stage(...)
+        Runs.finish_stage(...)
       end
 
       def record_ocr_result(...)
-        ReceiptAnalysisRuns.record_ocr_result(...)
+        Runs.record_ocr_result(...)
       end
 
       def record_ocr_snapshot(...)
-        ReceiptAnalysisRuns.record_ocr_snapshot(...)
+        Runs.record_ocr_snapshot(...)
       end
 
       def record_ocr_response_artifact(...)
-        ReceiptAnalysisRuns.record_ocr_response_artifact(...)
+        Runs.record_ocr_response_artifact(...)
       end
 
       def record_ai_input(...)
-        ReceiptAnalysisRuns.record_ai_input(...)
+        Runs.record_ai_input(...)
       end
 
       def record_ai_result(...)
-        ReceiptAnalysisRuns.record_ai_result(...)
+        Runs.record_ai_result(...)
       end
 
       def record_ai_normalized_result(...)
-        ReceiptAnalysisRuns.record_ai_normalized_result(...)
+        Runs.record_ai_normalized_result(...)
       end
 
       def record_finalize_decision(...)
-        ReceiptAnalysisRuns.record_finalize_decision(...)
+        Runs.record_finalize_decision(...)
       end
 
       def record_build_params_snapshot(...)
-        ReceiptAnalysisRuns.record_build_params_snapshot(...)
+        Runs.record_build_params_snapshot(...)
       end
 
       def record_final_result(...)
-        ReceiptAnalysisRuns.record_final_result(...)
+        Runs.record_final_result(...)
       end
 
       def copy_retry_snapshots(...)
-        ReceiptAnalysisRuns.copy_retry_snapshots(...)
+        Runs.copy_retry_snapshots(...)
       end
 
       def succeed(...)
-        ReceiptAnalysisRuns.succeed(...)
+        Runs.succeed(...)
       end
 
       def fail(...)
-        ReceiptAnalysisRuns.fail(...)
+        Runs.fail(...)
       end
 
       def supersede(...)
-        ReceiptAnalysisRuns.supersede(...)
+        Runs.supersede(...)
       end
 
       def cancel(...)
-        ReceiptAnalysisRuns.cancel(...)
+        Runs.cancel(...)
       end
 
       def cleanup_stale(...)
-        ReceiptAnalysisRuns.cleanup_stale(...)
+        Runs.cleanup_stale(...)
       end
 
       def cleanup_expired(...)
-        ReceiptAnalysisRuns.cleanup_expired(...)
+        Runs.cleanup_expired(...)
       end
     end
   end

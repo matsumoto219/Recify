@@ -1,4 +1,4 @@
-module ReceiptAnalysisRuns
+module Receipts::Processing::Runs
   Error = Receipts::Processing::Error
   InvalidTransition = Receipts::Processing::InvalidTransition
   TerminalRunError = Receipts::Processing::TerminalRunError

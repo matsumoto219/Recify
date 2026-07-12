@@ -133,7 +133,7 @@ RSpec.describe 'Receipts::Processing::Pipeline status contract' do
   end
 
   def record_ocr_snapshot(run, ocr_result = successful_ocr_result)
-    ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
+    Receipts::Processing.record_ocr_snapshot(run, ocr_result)
   end
 
   def run_ai_and_finalize(ai_result, amount_result: no_amount_mismatch_result, ocr_result: successful_ocr_result)
