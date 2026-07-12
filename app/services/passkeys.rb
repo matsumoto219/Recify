@@ -42,15 +42,17 @@ module Passkeys
       webauthn_credential = WebAuthn::Credential.from_create(credential)
       webauthn_credential.verify(challenge, user_verification: true)
 
-      user.passkeys.create!(
-        credential_id: webauthn_credential.id,
-        public_key: webauthn_credential.public_key,
-        sign_count: webauthn_credential.sign_count || 0,
-        label: label,
-        transports: credential.dig("response", "transports") || [],
-        backup_eligible: webauthn_credential.backup_eligible? || false,
-        backed_up: webauthn_credential.backed_up? || false
-      )
+      user.with_lock do
+        user.passkeys.create!(
+          credential_id: webauthn_credential.id,
+          public_key: webauthn_credential.public_key,
+          sign_count: webauthn_credential.sign_count || 0,
+          label: label,
+          transports: credential.dig("response", "transports") || [],
+          backup_eligible: webauthn_credential.backup_eligible? || false,
+          backed_up: webauthn_credential.backed_up? || false
+        )
+      end
     end
 
     def authentication_options(user:)

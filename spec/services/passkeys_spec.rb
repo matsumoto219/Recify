@@ -135,6 +135,27 @@ RSpec.describe Passkeys do
         described_class.verify_registration(user: user, credential: credential, challenge: options.challenge)
       }.to raise_error(ActiveRecord::RecordInvalid)
     end
+
+    it 'WebAuthn検証後に別登録が上限を埋めてもuser lock内の再検証で超過させない' do
+      user = create(:user)
+      create_list(:passkey, Passkey::MAX_PER_USER - 1, user: user)
+      options = described_class.registration_options(user: user)
+      credential = client.create(challenge: options.challenge, rp_id: rp_id, user_verified: true)
+      allow(user).to receive(:with_lock).and_wrap_original do |original, &operation|
+        create(:passkey, user: user)
+        original.call(&operation)
+      end
+
+      expect do
+        described_class.verify_registration(
+          user: user,
+          credential: credential,
+          challenge: options.challenge
+        )
+      end.to raise_error(ActiveRecord::RecordInvalid)
+
+      expect(user.passkeys.reload.count).to eq(Passkey::MAX_PER_USER)
+    end
   end
 
   describe '.authentication_options' do
