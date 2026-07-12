@@ -478,6 +478,28 @@ RSpec.describe Ocr::Client do
         expect(client).not_to have_received(:sleep)
       end
     end
+
+    {
+      'plaintext HTTP' => 'http://example.cognitiveservices.azure.com/operations/123',
+      'localhost' => 'https://127.0.0.1/operations/123',
+      'metadata endpoint' => 'https://169.254.169.254/latest/meta-data',
+      'host suffix' => 'https://example.cognitiveservices.azure.com.attacker.example/operations/123',
+      'userinfo' => 'https://attacker.example@example.cognitiveservices.azure.com/operations/123',
+      'scheme relative URL' => '//example.cognitiveservices.azure.com/operations/123',
+      'different port' => 'https://example.cognitiveservices.azure.com:444/operations/123',
+      'fragment' => 'https://example.cognitiveservices.azure.com/operations/123#secret'
+    }.each do |description, untrusted_location|
+      it "#{description}のoperation-locationを拒否する" do
+        response = faraday_response(status: 202, headers: { 'operation-location' => untrusted_location })
+        connection = stub_connection_post(client, response)
+
+        expect do
+          client.send(:submit_request)
+        end.to raise_error(Ocr::OcrError, 'ocr_invalid_response')
+
+        expect(connection).to have_received(:post).once
+      end
+    end
   end
 
   describe 'runtime config' do
@@ -647,6 +669,34 @@ RSpec.describe Ocr::Client do
   describe '#poll_result' do
     let(:succeeded_poll_response) do
       faraday_response(status: 200, body: JSON.generate(succeeded_response))
+    end
+
+    it 'polling入口でも異なるoriginを拒否しAPI keyを送信しない' do
+      expect(Faraday).not_to receive(:get)
+      allow(client).to receive(:sleep)
+
+      expect do
+        client.send(:poll_result, 'https://attacker.example/operations/123')
+      end.to raise_error(Ocr::OcrError, 'ocr_invalid_response')
+
+      expect(client).not_to have_received(:sleep)
+    end
+
+    it '設定endpointと同一originのHTTPS operation-locationだけを許可する' do
+      poll_request = request_double
+      allow(Faraday).to receive(:get) do |url, &block|
+        block.call(poll_request)
+        succeeded_poll_response
+      end
+      allow(client).to receive(:sleep)
+
+      result = client.send(:poll_result, "#{operation_location}?api-version=2024-11-30")
+
+      aggregate_failures do
+        expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
+        expect(Faraday).to have_received(:get).once
+        expect(poll_request.headers['Ocp-Apim-Subscription-Key']).to eq('test-key')
+      end
     end
 
     it '202 AcceptedのRetry-Afterを初回poll sleepに使う' do
@@ -943,6 +993,15 @@ RSpec.describe Ocr::Client do
               phase: 'availability',
               provider_error_code: 'endpoint_invalid'
             )
+          }
+      end
+    end
+
+    it 'plaintext HTTP endpointを拒否する' do
+      with_env('AZURE_OCR_ENDPOINT' => 'http://example.cognitiveservices.azure.com', 'AZURE_OCR_API_KEY' => 'test-key') do
+        expect { client.send(:check_availability) }
+          .to raise_error(Ocr::OcrError, 'external_service_unavailable') { |error|
+            expect(error.provider_error_detail).to include(provider_error_code: 'endpoint_invalid')
           }
       end
     end

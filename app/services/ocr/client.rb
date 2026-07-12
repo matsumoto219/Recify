@@ -2,6 +2,7 @@ require "faraday"
 require "json"
 require "time"
 require "timeout"
+require "uri"
 
 module Ocr
   class Client
@@ -92,10 +93,11 @@ module Ocr
       raise OcrError, "ocr_invalid_response" if op_location.blank?
 
       @next_poll_retry_after = retry_after_from_headers(res.headers)
-      op_location
+      validated_operation_location(op_location)
     end
 
     def poll_result(op_location)
+      op_location = validated_operation_location(op_location)
       ensure_polling_metrics!
       @polling_started_at ||= monotonic_now
       @last_poll_status = nil
@@ -488,7 +490,7 @@ module Ocr
       ) if raw_endpoint.blank?
 
       uri = URI.parse(raw_endpoint)
-      return if uri.is_a?(URI::HTTP) && uri.host.present? && %w[http https].include?(uri.scheme)
+      return if valid_provider_endpoint_uri?(uri)
 
       raise_static_configuration_error(
         "external_service_unavailable",
@@ -501,6 +503,33 @@ module Ocr
         provider_error_code: "endpoint_invalid",
         provider_message_safe: "Azure OCR endpoint is invalid"
       )
+    end
+
+    def validated_operation_location(value)
+      uri = URI.parse(value.to_s)
+      endpoint_uri = URI.parse(ENV[ENDPOINT_ENV_KEY].to_s.strip)
+      valid =
+        uri.is_a?(URI::HTTPS) &&
+        uri.host.present? &&
+        uri.userinfo.blank? &&
+        uri.fragment.blank? &&
+        endpoint_uri.is_a?(URI::HTTPS) &&
+        uri.scheme == endpoint_uri.scheme &&
+        uri.host.casecmp?(endpoint_uri.host) &&
+        uri.port == endpoint_uri.port
+
+      raise OcrError, "ocr_invalid_response" unless valid
+
+      uri.to_s
+    rescue URI::InvalidURIError
+      raise OcrError, "ocr_invalid_response"
+    end
+
+    def valid_provider_endpoint_uri?(uri)
+      uri.is_a?(URI::HTTPS) &&
+        uri.host.present? &&
+        uri.userinfo.blank? &&
+        uri.fragment.blank?
     end
 
     def validate_api_key_configuration!
