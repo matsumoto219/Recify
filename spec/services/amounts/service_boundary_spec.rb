@@ -1,4 +1,5 @@
 require 'rails_helper'
+require_relative '../../support/application_structure_boundary_scanner'
 
 RSpec.describe 'Amount Engine service boundary' do
   TARGET_GLOBS = %w[
@@ -23,6 +24,22 @@ RSpec.describe 'Amount Engine service boundary' do
         next unless line.match?(AMOUNTS_CHILD_REFERENCE)
 
         "#{relative_path(path)}:#{line_number}: #{line.strip}"
+      end
+    end
+
+    expect(references).to be_empty, references.join("\n")
+  end
+
+  it 'Amounts child implementations do not depend back on the public facade' do
+    references = Rails.root.glob('app/services/amounts/**/*.rb').flat_map do |path|
+      analyzer = ApplicationStructureBoundary::RubyCallAnalyzer.new(
+        source_path: relative_path(path).to_s
+      ).analyze(path.read)
+
+      analyzer.calls.filter_map do |call|
+        next unless call.receiver_constant == 'ReceiptAmountService'
+
+        "#{call.source_path}:#{call.line}: #{call.source}"
       end
     end
 

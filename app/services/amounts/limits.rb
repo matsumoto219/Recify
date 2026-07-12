@@ -116,7 +116,7 @@ module Amounts::Limits
     end
 
     def amount_value(value)
-      ReceiptAmountService.parse_amount_or_nil(value)
+      Amounts::NumberParser.parse_amount_or_nil(value)
     rescue ArgumentError, TypeError
       nil
     end
