@@ -29,6 +29,7 @@ class Rack::Attack
   ADMIN_SERVICE_STATUS_PATH = %r{\A/admin/external_services/status(?:\z|[/?#])}.freeze
   RECEIPT_PROCESSING_CARDS_PATH = "/receipts/processing_cards".freeze
   ACTIVE_STORAGE_DIRECT_UPLOAD_PATH = "/rails/active_storage/direct_uploads"
+  ACTIVE_STORAGE_DOWNLOAD_PATH = %r{\A/rails/active_storage/(?:blobs|representations|disk)/}.freeze
   SCANNER_PATH = %r{
     (?:\A|/)(?:\.env|\.env\.[^/?#]+|\.git(?:/config)?|wp-login\.php|xmlrpc\.php|etc/passwd|windows/win\.ini|boot\.ini)(?:\z|[/?#])
     |\A/[^/?#\/]+\.php(?:\z|[?#])
@@ -75,6 +76,10 @@ class Rack::Attack
 
     def active_storage_direct_upload_probe?(request)
       request.post? && request.path.to_s == ACTIVE_STORAGE_DIRECT_UPLOAD_PATH
+    end
+
+    def active_storage_download_request?(request)
+      (request.get? || request.head?) && ACTIVE_STORAGE_DOWNLOAD_PATH.match?(request.path.to_s)
     end
 
     def json_request?(request)
@@ -165,6 +170,10 @@ class Rack::Attack
 
   throttle("receipts/processing_cards/ip", limit: 600, period: 5.minutes) do |request|
     request.ip if Rack::Attack.receipt_processing_cards_request?(request)
+  end
+
+  throttle("active_storage/downloads/ip", limit: 600, period: 5.minutes) do |request|
+    request.ip if Rack::Attack.active_storage_download_request?(request)
   end
 
   throttle("auth/sign_in/ip", limit: 20, period: 5.minutes) do |request|

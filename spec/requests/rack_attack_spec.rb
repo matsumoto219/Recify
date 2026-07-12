@@ -106,8 +106,40 @@ RSpec.describe 'Rack::Attack', type: :request do
       'auth/registration/ip',
       'auth/guest_sign_in/ip',
       'receipts/upload/ip',
-      'receipts/processing_cards/ip'
+      'receipts/processing_cards/ip',
+      'active_storage/downloads/ip'
     )
+  end
+
+  it 'Active Storage downloadを通常枠から分離して専用上限で保護する' do
+    request = Rack::Attack::Request.new(
+      Rack::MockRequest.env_for(
+        '/rails/active_storage/blobs/redirect/signed-id/file.jpg',
+        'REQUEST_METHOD' => 'GET',
+        'REMOTE_ADDR' => '203.0.113.42'
+      )
+    )
+    throttle = Rack::Attack.throttles.fetch('active_storage/downloads/ip')
+
+    aggregate_failures do
+      expect(Rack::Attack.throttleable_request?(request)).to be(false)
+      expect(Rack::Attack.active_storage_download_request?(request)).to be(true)
+      expect(throttle.limit).to eq(600)
+      expect(throttle.period).to eq(5.minutes)
+      expect(throttle.block.call(request)).to eq('203.0.113.42')
+    end
+  end
+
+  it 'Active Storage direct upload POSTはdownload専用枠へ含めない' do
+    request = Rack::Attack::Request.new(
+      Rack::MockRequest.env_for(
+        '/rails/active_storage/direct_uploads',
+        'REQUEST_METHOD' => 'POST',
+        'REMOTE_ADDR' => '203.0.113.43'
+      )
+    )
+
+    expect(Rack::Attack.active_storage_download_request?(request)).to be(false)
   end
 
   it 'processing card pollingを通常リクエスト枠から分離して専用上限で保護する' do
