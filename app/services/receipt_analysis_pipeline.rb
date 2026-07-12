@@ -1,7 +1,7 @@
 class ReceiptAnalysisPipeline
   LOG_TAG = "[ReceiptAnalysisPipeline]".freeze
-  FINALIZE_DECISION_SCHEMA_VERSION = "receipt_analysis_run_finalize_decision_v1"
-  FINALIZE_STRATEGIES = %w[fail_receipt ocr_only ai_fallback ai_success].freeze
+  FINALIZE_DECISION_SCHEMA_VERSION = Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
+  FINALIZE_STRATEGIES = Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES
 
   class AnalysisError < StandardError
     attr_reader :error_code, :metadata
@@ -34,7 +34,7 @@ class ReceiptAnalysisPipeline
     end
 
     def finalize_decision_from_snapshot(snapshot)
-      FinalizeDecision.from_snapshot(snapshot)
+      Receipts::Processing.finalize_decision_from_snapshot(snapshot)
     end
 
     def ocr_enabled_env_key
@@ -336,7 +336,7 @@ class ReceiptAnalysisPipeline
   end
 
   def finalize_decision(finalize_strategy, ocr_result: nil, ai_result: nil, error_code: nil, error_message: nil, receipt_attributes: {}, metadata: {})
-    FinalizeDecision.new(
+    Receipts::Processing::Contracts::FinalizeDecision.new(
       finalize_strategy: finalize_strategy.to_s,
       error_code: error_code,
       error_message: error_message,
@@ -352,7 +352,7 @@ class ReceiptAnalysisPipeline
   end
 
   def finalize_decision_from_run
-    self.class.finalize_decision_from_snapshot(run.metadata.to_h["finalize_decision"])
+    Receipts::Processing.finalize_decision_from_snapshot(run.metadata.to_h["finalize_decision"])
   end
 
   def ocr_result_from_snapshot

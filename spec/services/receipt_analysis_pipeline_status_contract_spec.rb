@@ -282,7 +282,7 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
       ].each do |strategy, error_code|
         receipt, = build_processing_run
         stub_amount_service
-        decision = ReceiptAnalysisPipeline::FinalizeDecision.new(
+        decision = Receipts::Processing::Contracts::FinalizeDecision.new(
           finalize_strategy: strategy,
           error_code: error_code,
           receipt_attributes: {},

@@ -29,7 +29,7 @@ RSpec.describe ReceiptAnalysisRuns do
   end
 
   def finalize_decision(strategy, **attributes)
-    ReceiptAnalysisPipeline::FinalizeDecision.new(
+    Receipts::Processing::Contracts::FinalizeDecision.new(
       {
         finalize_strategy: strategy.to_s,
         error_code: nil,

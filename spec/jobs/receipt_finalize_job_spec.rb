@@ -47,7 +47,7 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
     it '同じrunのFinalize Jobを再実行しても保存処理は1回だけにする' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
-      decision = ReceiptAnalysisPipeline::FinalizeDecision.new(
+      decision = Receipts::Processing::Contracts::FinalizeDecision.new(
         finalize_strategy: 'fail_receipt',
         error_code: 'ocr_api_error',
         receipt_attributes: {}
@@ -88,7 +88,7 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
           { index: 0, suggested_name: 'Short Dated Stock', category: 'other', needs_review: false }
         ]
       }
-      decision = ReceiptAnalysisPipeline::FinalizeDecision.new(
+      decision = Receipts::Processing::Contracts::FinalizeDecision.new(
         finalize_strategy: 'ai_success',
         ocr_result: ocr_result,
         ai_result: ai_result

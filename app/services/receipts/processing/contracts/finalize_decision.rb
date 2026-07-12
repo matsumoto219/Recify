@@ -1,5 +1,5 @@
-class ReceiptAnalysisPipeline
-  FinalizeDecision = Struct.new(
+module Receipts::Processing::Contracts
+  class FinalizeDecision < Struct.new(
     :finalize_strategy,
     :error_code,
     :error_message,
@@ -8,9 +8,9 @@ class ReceiptAnalysisPipeline
     :ai_result,
     :metadata,
     keyword_init: true
-  ) do
-    SCHEMA_VERSION = ReceiptAnalysisPipeline::FINALIZE_DECISION_SCHEMA_VERSION
-    STRATEGIES = ReceiptAnalysisPipeline::FINALIZE_STRATEGIES
+  )
+    SCHEMA_VERSION = "receipt_analysis_run_finalize_decision_v1"
+    STRATEGIES = %w[fail_receipt ocr_only ai_fallback ai_success].freeze
 
     def self.from_snapshot(snapshot)
       attributes = normalized_snapshot(snapshot)

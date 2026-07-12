@@ -5,12 +5,12 @@ module ReceiptAnalysisRuns
     AI_INPUT_SCHEMA_VERSION = "receipt_analysis_run_ai_input_v1"
     AI_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ai_result_v1"
     AI_NORMALIZED_RESULT_SCHEMA_VERSION = "receipt_analysis_run_ai_normalized_result_v1"
-    FINALIZE_DECISION_SCHEMA_VERSION = ReceiptAnalysisPipeline::FINALIZE_DECISION_SCHEMA_VERSION
+    FINALIZE_DECISION_SCHEMA_VERSION = Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
     BUILD_PARAMS_SCHEMA_VERSION = "receipt_analysis_run_build_params_v1"
     FINAL_RESULT_SCHEMA_VERSION = "receipt_analysis_run_final_result_v1"
     PROMPT_SCHEMA_VERSION = "recify_receipt_analysis_v1"
 
-    FINALIZE_STRATEGIES = ReceiptAnalysisPipeline::FINALIZE_STRATEGIES
+    FINALIZE_STRATEGIES = Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES
     FINALIZE_DECISION_RECEIPT_ATTRIBUTE_KEYS = %w[country_region].freeze
     FINALIZE_DECISION_METADATA_KEYS = %w[reason].freeze
 

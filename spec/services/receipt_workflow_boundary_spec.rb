@@ -15,7 +15,11 @@ RSpec.describe "Receipt workflow dependency boundary" do
       facade_path: "app/services/receipts/processing.rb",
       private_root: "app/services/receipts/processing",
       allowed_workflow_facades: [],
-      public_constants: []
+      public_constants: %w[
+        Receipts::Processing::Contracts::FinalizeDecision
+        Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
+        Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES
+      ]
     },
     "editing" => {
       namespace: "Receipts::Editing",
@@ -45,5 +49,20 @@ RSpec.describe "Receipt workflow dependency boundary" do
     formatted = scanner.analysis_issues.map { |issue| "#{issue.source_path}:#{issue.line}: #{issue.message}" }
 
     expect(formatted).to be_empty, formatted.join("\n")
+  end
+
+  it "ReceiptAnalysisRunsからlegacy Pipelineへ逆依存しない" do
+    paths = [ Rails.root.join("app/services/receipt_analysis_runs.rb") ] +
+      Rails.root.glob("app/services/receipt_analysis_runs/**/*.rb")
+    references = paths.select(&:file?).flat_map do |path|
+      source_path = path.relative_path_from(Rails.root).to_s
+      ServiceLayerBoundary::SourceAnalyzer.new(source_path: source_path)
+        .analyze(path.read)
+        .references
+        .select { |reference| reference.constant_name.start_with?("ReceiptAnalysisPipeline") }
+        .map { |reference| "#{source_path}:#{reference.line} -> #{reference.constant_name}" }
+    end
+
+    expect(references).to be_empty, references.join("\n")
   end
 end

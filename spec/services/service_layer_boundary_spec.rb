@@ -164,6 +164,16 @@ RSpec.describe "Service layer child implementation boundary" do
         ReceiptAnalysisRuns::TerminalRunError
       ]
     ),
+    "receipts" => registry_entry(
+      "receipts",
+      "Receipts",
+      public_constants: %w[
+        Receipts::Processing
+        Receipts::Processing::Contracts::FinalizeDecision
+        Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
+        Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES
+      ]
+    ),
     "recify" => registry_entry(
       "recify",
       "Recify",
