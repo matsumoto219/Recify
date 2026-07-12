@@ -305,6 +305,27 @@ RSpec.describe 'Error pages', type: :request do
         expect(response.body).not_to include('token=secret')
       end
     end
+
+    it '500 exceptionのmessageからcredential・URL・PII・filesystem pathを除去して記録する' do
+      messages = capture_error_page_logs(:error)
+      sensitive_message = [
+        'token=local-test-secret',
+        'person@example.test',
+        'https://example.test/private?token=local-test-secret',
+        '/Users/local/recify/private.json'
+      ].join(' ')
+      allow_any_instance_of(HomeController).to receive(:index).and_raise(RuntimeError, sensitive_message)
+
+      get root_path
+
+      log = messages.join("\n")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:internal_server_error)
+        expect(log).to include('[FILTERED]', '[REDACTED_EMAIL]', '[FILTERED_URL]', '[FILTERED_PATH]')
+        expect(log).not_to include('local-test-secret', 'person@example.test', 'example.test/private', 'private.json')
+      end
+    end
   end
 
   it '存在しないrouteはbranded 404になる' do

@@ -1460,7 +1460,7 @@ class ReceiptsController < ApplicationController
 
   def log_suspicious_search_query(query)
     Rails.logger.warn(
-      "[Receipts::SearchForm] suspicious_query user_id=#{current_user.id} query=#{query.inspect}"
+      "[Receipts::SearchForm] suspicious_query user_id=#{current_user.id} query_length=#{query.length}"
     )
   end
 end

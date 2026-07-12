@@ -100,7 +100,7 @@ class ErrorsController < ApplicationController
   end
 
   def truncated_exception_message(exception)
-    message = exception.message.to_s.gsub(/\s+/, " ").strip
+    message = SecurityEvents.sanitize_exception_message(exception.message).gsub(/\s+/, " ").strip
     message.length > 200 ? "#{message[0, 200]}..." : message
   end
 end

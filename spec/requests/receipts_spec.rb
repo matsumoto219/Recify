@@ -372,6 +372,24 @@ RSpec.describe 'Receipts', type: :request do
       expect(document.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
     end
 
+    it '不正パターンを含む検索語の本文をログへ記録しない' do
+      query = 'select person@example.test'
+      messages = []
+      allow(Rails.logger).to receive(:warn) { |message| messages << message.to_s }
+
+      get receipts_path(q: query)
+
+      log = messages.join("\n")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(log).to include('[Receipts::SearchForm] suspicious_query')
+        expect(log).to include("user_id=#{user.id}")
+        expect(log).to include("query_length=#{query.length}")
+        expect(log).not_to include(query, 'person@example.test')
+      end
+    end
+
     it '確定した不正date検索条件はHTMLで422を返す' do
       [
         'date>=2026-13-01',
