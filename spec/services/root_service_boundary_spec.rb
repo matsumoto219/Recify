@@ -21,9 +21,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_analysis_pipeline.rb" => { constant: "ReceiptAnalysisPipeline", role: :legacy_workflow, owner: "migrate to Receipts::Processing", remove_in_loop: 22 },
     "receipt_analysis_profiles.rb" => { constant: "ReceiptAnalysisProfiles", role: :public_facade, owner: "country analysis profile facade", remove_in_loop: nil },
     "receipt_analysis_runs.rb" => { constant: "ReceiptAnalysisRuns", role: :legacy_workflow, owner: "migrate to Receipts::Processing run lifecycle", remove_in_loop: 22 },
-    "receipt_edit_save_change_set.rb" => { constant: "ReceiptEditSaveChangeSet", role: :legacy_workflow, owner: "migrate to Receipts::Editing", remove_in_loop: 13 },
-    "receipt_edit_save_consistency_guard.rb" => { constant: "ReceiptEditSaveConsistencyGuard", role: :legacy_workflow, owner: "migrate to Receipts::Editing", remove_in_loop: 13 },
-    "receipt_edit_save_review_state.rb" => { constant: "ReceiptEditSaveReviewState", role: :legacy_workflow, owner: "migrate to Receipts::Editing", remove_in_loop: 13 },
     "receipt_ocr_service.rb" => { constant: "ReceiptOcrService", role: :public_facade, owner: "OCR specialist facade", remove_in_loop: nil },
     "review_reasons.rb" => { constant: "ReviewReasons", role: :domain_policy, owner: "review reason policy", remove_in_loop: nil },
     "security.rb" => { constant: "Security", role: :public_facade, owner: "security platform facade", remove_in_loop: nil },
@@ -58,9 +55,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_analysis_pipeline.rb" => %i[finalize_decision_from_snapshot run_ai run_finalize run_ocr],
     "receipt_analysis_profiles.rb" => %i[default fetch],
     "receipt_analysis_runs.rb" => %i[cancel claim_stage cleanup_expired cleanup_stale copy_retry_snapshots enqueue external_service_runtime_config fail record_ai_input record_ai_normalized_result record_ai_result record_build_params_snapshot record_final_result record_finalize_decision record_ocr_response_artifact record_ocr_result record_ocr_snapshot start succeed],
-    "receipt_edit_save_change_set.rb" => %i[call],
-    "receipt_edit_save_consistency_guard.rb" => %i[call],
-    "receipt_edit_save_review_state.rb" => %i[call item_review_state],
     "receipt_ocr_service.rb" => %i[available? call error_result],
     "review_reasons.rb" => %i[blocking_reasons_for_user group_by_source normalize normalize_ai_output_reasons review_reasons_for_user user_facing_reason? warning_reasons_for_user],
     "security.rb" => %i[ip_access_snapshot manual_ip_block manual_ip_unblock rack_attack_ban_reset record_ip_access_operation record_ip_rate_limit_action request_ip_snapshot],
@@ -95,9 +89,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_analysis_pipeline.rb" => %i[finalize finalize_decision_from_snapshot run_ai run_finalize run_ocr],
     "receipt_analysis_profiles.rb" => %i[default fetch for_country],
     "receipt_analysis_runs.rb" => %i[cancel claim_stage cleanup_expired cleanup_stale copy_retry_snapshots enqueue external_service_runtime_config fail finish_stage record_ai_input record_ai_normalized_result record_ai_result record_build_params_snapshot record_final_result record_finalize_decision record_ocr_response_artifact record_ocr_result record_ocr_snapshot start start_stage succeed supersede],
-    "receipt_edit_save_change_set.rb" => %i[call],
-    "receipt_edit_save_consistency_guard.rb" => %i[call],
-    "receipt_edit_save_review_state.rb" => %i[call item_review_state resolved_item_review_reasons],
     "receipt_ocr_service.rb" => %i[available? call error_result],
     "review_reasons.rb" => %i[blocking_reason? blocking_reasons_for_user group_by_source internal_processing_reasons known_reason? normalize normalize_ai_output_reasons normalize_allowed_reasons review_reasons_for_user source_for user_facing_reason? warning_reason? warning_reasons_for_user],
     "security.rb" => %i[ip_access_snapshot manual_ip_block manual_ip_unblock rack_attack_ban_reset record_ip_access_operation record_ip_action record_ip_rate_limit_action request_ip_snapshot],
@@ -121,9 +112,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_ai_enrichment_service.rb" => %i[call],
     "receipt_amount_service.rb" => %i[call],
     "receipt_analysis_pipeline.rb" => %i[run_ai run_finalize run_ocr],
-    "receipt_edit_save_change_set.rb" => %i[call],
-    "receipt_edit_save_consistency_guard.rb" => %i[call],
-    "receipt_edit_save_review_state.rb" => %i[call],
     "receipt_ocr_service.rb" => %i[call]
   }.freeze
 
@@ -135,9 +123,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     receipt_ai_enrichment_service.rb
     receipt_amount_service.rb
     receipt_analysis_pipeline.rb
-    receipt_edit_save_change_set.rb
-    receipt_edit_save_consistency_guard.rb
-    receipt_edit_save_review_state.rb
     receipt_ocr_service.rb
   ].freeze
 
@@ -169,7 +154,7 @@ RSpec.describe "root service and lifecycle status boundary" do
   INDIRECT_STATUS_OWNERS = {
     "app/controllers/receipts_controller.rb" => "legacy upload/manual/edit lifecycle owner; migrate in Loops 8/12/13/21",
     "app/services/receipt_analysis_pipeline/finalize_step.rb" => "final receipt status decision and persistence owner; migrate in Loops 14/18",
-    "app/services/receipt_edit_save_review_state.rb" => "edit status decision only; migrate in Loop 13"
+    "app/services/receipts/editing/review_state.rb" => "Receipts::Editing review status decision"
   }.freeze
 
   before(:context) do

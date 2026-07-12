@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptEditSaveReviewState do
+RSpec.describe Receipts::Editing::ReviewState do
   def resolve(receipt, permitted: {}, amount_reasons: [], child_review_remaining: false, nested_amount_inputs_submitted: false, item_inputs_submitted: false)
     described_class.call(
       receipt: receipt,

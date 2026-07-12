@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptEditSaveChangeSet do
+RSpec.describe Receipts::Editing::ChangeSet do
   let(:receipt) do
     create(
       :receipt,

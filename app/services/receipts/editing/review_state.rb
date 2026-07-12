@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ReceiptEditSaveReviewState
+class Receipts::Editing::ReviewState
   Result = Data.define(:review_reasons, :status)
   ItemResult = Data.define(:review_reasons, :needs_review)
   ITEM_REVIEW_FIELD_RULES = {

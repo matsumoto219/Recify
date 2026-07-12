@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ReceiptEditSaveChangeSet
+class Receipts::Editing::ChangeSet
   Result = Data.define(
     :item_amounts_changed,
     :purchase_adjustments_changed,

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ReceiptEditSaveConsistencyGuard
+class Receipts::Editing::ConsistencyGuard
   Result = Data.define(:fatal_errors, :review_reasons) do
     def consistent?
       fatal_errors.empty?

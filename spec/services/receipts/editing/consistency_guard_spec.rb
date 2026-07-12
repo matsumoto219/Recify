@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptEditSaveConsistencyGuard do
+RSpec.describe Receipts::Editing::ConsistencyGuard do
   def amount_result(overrides = {})
     {
       computed: {
