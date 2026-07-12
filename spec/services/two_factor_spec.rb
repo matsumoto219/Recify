@@ -1,6 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe TwoFactor do
+  uses_transaction '同じrecovery codeの並行検証を1回だけ成功させる'
+
   describe 'TOTP' do
     it 'secretを生成する' do
       secret = described_class.generate_totp_secret
@@ -164,6 +166,56 @@ RSpec.describe TwoFactor do
           described_class.verify_recovery_code(user: user, code: code)
         }.to raise_error(TwoFactor::VerificationError, 'recovery_code_invalid')
       end
+    end
+
+    it '同じrecovery codeの並行検証を1回だけ成功させる' do
+      email = "recovery-race-#{SecureRandom.hex(8)}@example.test"
+      user = create(:user, email: email)
+      code = described_class.generate_recovery_codes_for(user: user).first
+      mutex = Mutex.new
+      condition = ConditionVariable.new
+      update_arrivals = 0
+      update_barrier = proc do
+        mutex.synchronize do
+          update_arrivals += 1
+          if update_arrivals < 2
+            condition.wait(mutex, 0.5)
+          else
+            condition.broadcast
+          end
+        end
+      end
+      RecoveryCode.set_callback(:update, :before, update_barrier)
+
+      ready = Queue.new
+      start = Queue.new
+      results = Queue.new
+      threads = 2.times.map do
+        Thread.new do
+          ActiveRecord::Base.connection_pool.with_connection do
+            ready << true
+            start.pop
+            thread_user = User.find(user.id)
+            results << described_class.verify_recovery_code(user: thread_user, code: code)
+          rescue StandardError => error
+            results << error
+          end
+        end
+      end
+
+      2.times { ready.pop }
+      2.times { start << true }
+      threads.each(&:join)
+      outcomes = 2.times.map { results.pop }
+
+      aggregate_failures do
+        expect(outcomes.grep(RecoveryCode).size).to eq(1)
+        expect(outcomes.grep(TwoFactor::VerificationError).size).to eq(1)
+        expect(user.recovery_codes.where.not(used_at: nil).count).to eq(1)
+      end
+    ensure
+      RecoveryCode.skip_callback(:update, :before, update_barrier) if update_barrier
+      User.find_by(email: email)&.destroy!
     end
 
     it '再生成時に既存codeを削除して新規発行する' do

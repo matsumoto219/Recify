@@ -25,12 +25,14 @@ module TwoFactor
       end
 
       def verify(user:, code:)
-        recovery_code = user.recovery_codes.find_by!(
-          code_digest: digest(code),
-          used_at: nil
-        )
-        recovery_code.update!(used_at: Time.current)
-        recovery_code
+        RecoveryCode.transaction do
+          recovery_code = user.recovery_codes.lock.find_by!(
+            code_digest: digest(code),
+            used_at: nil
+          )
+          recovery_code.update!(used_at: Time.current)
+          recovery_code
+        end
       rescue ActiveRecord::RecordNotFound
         raise VerificationError, "recovery_code_invalid"
       end
