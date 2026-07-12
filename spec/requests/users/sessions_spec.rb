@@ -132,7 +132,7 @@ RSpec.describe 'User password sessions', type: :request do
     end
   end
 
-  it 'locked userは正しいpasswordでもnoticeなしで拒否される' do
+  it 'locked userはlock状態を明かさずnoticeなしで拒否される' do
     user = create(:user)
     user.lock_access!
 
@@ -143,7 +143,7 @@ RSpec.describe 'User password sessions', type: :request do
 
     aggregate_failures do
       expect(response).to have_http_status(:unprocessable_content)
-      expect(flash[:alert]).to eq(I18n.t('devise.failure.locked'))
+      expect(flash[:alert]).to eq(I18n.t('devise.failure.invalid', authentication_keys: 'メールアドレス'))
       expect(flash[:notice]).to be_nil
       expect(session[:pending_second_factor]).to be_blank
       expect(session[:user_session_version]).to be_blank
