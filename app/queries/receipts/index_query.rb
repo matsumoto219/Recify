@@ -49,7 +49,7 @@ module Receipts
     attr_reader :scope, :query, :sort, :per_page
 
     def sorted_scope
-      search_scope = query.present? ? scope.search(query) : scope
+      search_scope = SearchQuery.call(scope: scope, query: query)
 
       case sort
       when "oldest"
