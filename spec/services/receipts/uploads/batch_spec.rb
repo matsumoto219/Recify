@@ -170,8 +170,8 @@ RSpec.describe Receipts::Uploads::Batch, type: :service do
   it 'active runが既にあるreceiptはduplicate enqueueしない' do
     files = [ uploaded_receipt_fixture ]
     existing_run = instance_double(ReceiptAnalysisRun, id: 12_345)
-    allow(ReceiptAnalysisRuns).to receive(:start).and_return(
-      ReceiptAnalysisRuns::StartResult.new(run: existing_run, created: false)
+    allow(Receipts::Processing).to receive(:start).and_return(
+      Receipts::Processing::StartResult.new(run: existing_run, created: false)
     )
 
     result = described_class.call(user:, files:)
@@ -179,7 +179,7 @@ RSpec.describe Receipts::Uploads::Batch, type: :service do
     aggregate_failures do
       expect(result).to be_success
       expect(result.count).to eq(1)
-      expect(ReceiptAnalysisRuns).to have_received(:start).with(
+      expect(Receipts::Processing).to have_received(:start).with(
         receipt: user.receipts.order(:id).last,
         source: 'batch_upload',
         requested_by_user: user

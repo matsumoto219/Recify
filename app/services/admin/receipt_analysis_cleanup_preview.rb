@@ -56,7 +56,7 @@ module Admin
     attr_reader :stale_cutoff, :stale_limit, :retention_cutoff, :retention_limit
 
     def stale_preview
-      ReceiptAnalysisRuns.cleanup_stale(
+      Receipts::Processing.cleanup_stale(
         cutoff: stale_cutoff,
         limit: stale_limit,
         dry_run: true
@@ -64,7 +64,7 @@ module Admin
     end
 
     def retention_preview
-      ReceiptAnalysisRuns.cleanup_expired(
+      Receipts::Processing.cleanup_expired(
         cutoff: retention_cutoff,
         limit: retention_limit,
         dry_run: true

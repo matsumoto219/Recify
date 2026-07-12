@@ -7,13 +7,13 @@ RSpec.describe ReceiptAnalysisRunRetentionCleanupJob, type: :job do
     travel_to(Time.zone.parse('2026-05-23 10:00:00')) { example.run }
   end
 
-  it 'dry_run trueをdefaultにしてReceiptAnalysisRuns親入口を呼ぶ' do
+  it 'dry_run trueをdefaultにしてReceipts::Processing親入口を呼ぶ' do
     result = {
       dry_run: true,
       expired_count: 0,
       deleted_count: 0
     }
-    allow(ReceiptAnalysisRuns).to receive(:cleanup_expired).and_return(result)
+    allow(Receipts::Processing).to receive(:cleanup_expired).and_return(result)
     allow(Rails.logger).to receive(:info)
 
     expect { expect(described_class.perform_now).to eq(result) }
@@ -22,7 +22,7 @@ RSpec.describe ReceiptAnalysisRunRetentionCleanupJob, type: :job do
     audit_log = AuditLog.last
 
     aggregate_failures do
-      expect(ReceiptAnalysisRuns).to have_received(:cleanup_expired).with(
+      expect(Receipts::Processing).to have_received(:cleanup_expired).with(
         cutoff: Time.current,
         limit: 1000,
         dry_run: true
@@ -50,11 +50,11 @@ RSpec.describe ReceiptAnalysisRunRetentionCleanupJob, type: :job do
       expired_count: 2,
       deleted_count: 2
     }
-    allow(ReceiptAnalysisRuns).to receive(:cleanup_expired).and_return(result)
+    allow(Receipts::Processing).to receive(:cleanup_expired).and_return(result)
 
     expect(described_class.perform_now(cutoff: cutoff, limit: 10, dry_run: false)).to eq(result)
 
-    expect(ReceiptAnalysisRuns).to have_received(:cleanup_expired).with(
+    expect(Receipts::Processing).to have_received(:cleanup_expired).with(
       cutoff: cutoff,
       limit: 10,
       dry_run: false
@@ -78,7 +78,7 @@ RSpec.describe ReceiptAnalysisRunRetentionCleanupJob, type: :job do
       deleted_count: 0,
       records: records
     }
-    allow(ReceiptAnalysisRuns).to receive(:cleanup_expired).and_return(result)
+    allow(Receipts::Processing).to receive(:cleanup_expired).and_return(result)
 
     described_class.perform_now
 
@@ -107,7 +107,7 @@ RSpec.describe ReceiptAnalysisRunRetentionCleanupJob, type: :job do
 
   it 'cleanup失敗時にfailed auditを残して例外を再raiseする' do
     error = StandardError.new('boom')
-    allow(ReceiptAnalysisRuns).to receive(:cleanup_expired).and_raise(error)
+    allow(Receipts::Processing).to receive(:cleanup_expired).and_raise(error)
 
     expect do
       described_class.perform_now

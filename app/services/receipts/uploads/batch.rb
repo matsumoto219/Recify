@@ -100,7 +100,7 @@ class Receipts::Uploads::Batch
     errors = []
 
     receipts.each do |receipt|
-      result = ReceiptAnalysisRuns.start(
+      result = Receipts::Processing.start(
         receipt: receipt,
         source: "batch_upload",
         requested_by_user: user
@@ -117,8 +117,8 @@ class Receipts::Uploads::Batch
         "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{user.id} image_attached=#{receipt.image.attached?}"
       )
 
-      ReceiptAnalysisRuns.enqueue(result.run, job_class: ReceiptOcrJob)
-    rescue ReceiptAnalysisRuns::EnqueueError, ExternalServices::RuntimeConfigUnavailableError
+      Receipts::Processing.enqueue(result.run, job_class: ReceiptOcrJob)
+    rescue Receipts::Processing::EnqueueError, ExternalServices::RuntimeConfigUnavailableError
       errors << I18n.t("receipts.batch_upload.errors.analysis_enqueue_failed")
     end
 

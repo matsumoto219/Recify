@@ -456,7 +456,7 @@ class ReceiptsController < ApplicationController
   end
 
   def enqueue_analysis_job(receipt, source:, requested_by_user:)
-    result = ReceiptAnalysisRuns.start(
+    result = Receipts::Processing.start(
       receipt: receipt,
       source: source,
       requested_by_user: requested_by_user
@@ -473,9 +473,9 @@ class ReceiptsController < ApplicationController
       "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id} image_attached=#{receipt.image.attached?}"
     )
 
-    ReceiptAnalysisRuns.enqueue(result.run, job_class: ReceiptOcrJob)
+    Receipts::Processing.enqueue(result.run, job_class: ReceiptOcrJob)
     true
-  rescue ReceiptAnalysisRuns::EnqueueError, ExternalServices::RuntimeConfigUnavailableError
+  rescue Receipts::Processing::EnqueueError, ExternalServices::RuntimeConfigUnavailableError
     false
   end
 

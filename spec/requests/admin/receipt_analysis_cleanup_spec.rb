@@ -361,7 +361,7 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
         }
       )
       allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup).and_return(result)
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale)
+      allow(Receipts::Processing).to receive(:cleanup_stale)
 
       post admin_receipt_analysis_cleanup_stale_path,
            params: {
@@ -387,7 +387,7 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
             reauthenticated_at: kind_of(Time)
           )
         )
-        expect(ReceiptAnalysisRuns).not_to have_received(:cleanup_stale)
+        expect(Receipts::Processing).not_to have_received(:cleanup_stale)
         expect_no_cleanup_or_analysis_jobs
       end
     end

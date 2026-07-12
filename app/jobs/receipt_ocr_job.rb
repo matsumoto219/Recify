@@ -5,13 +5,13 @@ class ReceiptOcrJob < ApplicationJob
 
   def perform(run_id:)
     run = ReceiptAnalysisRun.find(run_id)
-    result = ReceiptAnalysisPipeline.run_ocr(run)
+    result = Receipts::Processing.run_ocr(run)
 
     case result.next_step
     when :ai
-      ReceiptAnalysisRuns.enqueue(run, job_class: ReceiptAiEnrichmentJob)
+      Receipts::Processing.enqueue(run, job_class: ReceiptAiEnrichmentJob)
     when :finalize
-      ReceiptAnalysisRuns.enqueue(run, job_class: ReceiptFinalizeJob)
+      Receipts::Processing.enqueue(run, job_class: ReceiptFinalizeJob)
     end
   end
 end

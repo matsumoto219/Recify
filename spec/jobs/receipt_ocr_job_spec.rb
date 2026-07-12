@@ -25,12 +25,12 @@ RSpec.describe ReceiptOcrJob, type: :job do
   describe '#perform' do
     it 'Pipeline親入口だけを呼び、AIが次ならAI Jobをenqueueする' do
       run = create(:receipt_analysis_run)
-      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:ai))
+      allow(Receipts::Processing).to receive(:run_ocr).and_return(pipeline_result(:ai))
 
       described_class.perform_now(run_id: run.id)
 
       aggregate_failures do
-        expect(ReceiptAnalysisPipeline).to have_received(:run_ocr).with(run)
+        expect(Receipts::Processing).to have_received(:run_ocr).with(run)
         expect(ReceiptAiEnrichmentJob).to have_been_enqueued.with(run_id: run.id)
         expect(ReceiptFinalizeJob).not_to have_been_enqueued
       end
@@ -38,11 +38,11 @@ RSpec.describe ReceiptOcrJob, type: :job do
 
     it 'Pipeline Resultのsuccess?ではなくnext_stepで後続Jobをenqueueする' do
       run = create(:receipt_analysis_run)
-      result = ReceiptAnalysisPipeline::Result.new(
+      result = Receipts::Processing::Result.new(
         ocr_result: { success: false },
         next_step: :ai
       )
-      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(result)
+      allow(Receipts::Processing).to receive(:run_ocr).and_return(result)
 
       described_class.perform_now(run_id: run.id)
 
@@ -55,7 +55,7 @@ RSpec.describe ReceiptOcrJob, type: :job do
 
     it 'finalizeが次ならFinalize Jobをenqueueする' do
       run = create(:receipt_analysis_run)
-      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:finalize))
+      allow(Receipts::Processing).to receive(:run_ocr).and_return(pipeline_result(:finalize))
 
       described_class.perform_now(run_id: run.id)
 
@@ -68,12 +68,12 @@ RSpec.describe ReceiptOcrJob, type: :job do
     it '後続Jobのenqueue失敗時はrunとreceiptをfailedへ補償する' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
-      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:ai))
+      allow(Receipts::Processing).to receive(:run_ocr).and_return(pipeline_result(:ai))
       allow(ReceiptAiEnrichmentJob).to receive(:perform_later).and_raise(StandardError, 'queue unavailable')
 
       expect do
         described_class.perform_now(run_id: run.id)
-      end.to raise_error(ReceiptAnalysisRuns::EnqueueError)
+      end.to raise_error(Receipts::Processing::EnqueueError)
 
       aggregate_failures do
         expect(run.reload).to have_attributes(status: 'failed', error_code: 'analysis_enqueue_failed')
@@ -83,7 +83,7 @@ RSpec.describe ReceiptOcrJob, type: :job do
 
     it 'skippedなら後続Jobをenqueueしない' do
       run = create(:receipt_analysis_run)
-      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).and_return(pipeline_result(:skipped, skip_reason: :terminal_run))
+      allow(Receipts::Processing).to receive(:run_ocr).and_return(pipeline_result(:skipped, skip_reason: :terminal_run))
 
       described_class.perform_now(run_id: run.id)
 
@@ -130,13 +130,13 @@ RSpec.describe ReceiptOcrJob, type: :job do
     end
 
     it '存在しないrunは安全にdiscardする' do
-      allow(ReceiptAnalysisPipeline).to receive(:run_ocr)
+      allow(Receipts::Processing).to receive(:run_ocr)
 
       expect do
         described_class.perform_now(run_id: -1)
       end.not_to raise_error
 
-      expect(ReceiptAnalysisPipeline).not_to have_received(:run_ocr)
+      expect(Receipts::Processing).not_to have_received(:run_ocr)
     end
 
     it 'run_id keyword以外の呼び出しは受け付けない' do
@@ -228,6 +228,6 @@ RSpec.describe ReceiptOcrJob, type: :job do
   private
 
   def pipeline_result(next_step, skip_reason: nil)
-    ReceiptAnalysisPipeline::Result.new(next_step: next_step, skip_reason: skip_reason)
+    Receipts::Processing::Result.new(next_step: next_step, skip_reason: skip_reason)
   end
 end

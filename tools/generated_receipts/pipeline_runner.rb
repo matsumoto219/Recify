@@ -40,18 +40,18 @@ module GeneratedReceipts
 
     def run_once
       receipt = build_receipt
-      run = ReceiptAnalysisRuns.start(receipt: receipt, source: "upload").run
-      ocr_execution = ReceiptAnalysisPipeline.run_ocr(run)
+      run = Receipts::Processing.start(receipt: receipt, source: "upload").run
+      ocr_execution = Receipts::Processing.run_ocr(run)
       ocr_result = ocr_execution.ocr_result
       ai_result = nil
       next_step = ocr_execution.next_step
 
       if next_step == :ai && run.reload.active?
-        ai_execution = ReceiptAnalysisPipeline.run_ai(run: run, ocr_result: ocr_result)
+        ai_execution = Receipts::Processing.run_ai(run: run, ocr_result: ocr_result)
         ai_result = ai_execution.ai_result
         next_step = ai_execution.next_step
       end
-      ReceiptAnalysisPipeline.run_finalize(run) if next_step == :finalize && run.reload.active?
+      Receipts::Processing.run_finalize(run) if next_step == :finalize && run.reload.active?
       receipt.reload
 
       {

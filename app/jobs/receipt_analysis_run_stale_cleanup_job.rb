@@ -6,7 +6,7 @@ class ReceiptAnalysisRunStaleCleanupJob < ApplicationJob
   SAMPLE_RUN_KEY_LIMIT = 20
 
   def perform(cutoff: 6.hours.ago, limit: DEFAULT_LIMIT, dry_run: true)
-    result = ReceiptAnalysisRuns.cleanup_stale(
+    result = Receipts::Processing.cleanup_stale(
       cutoff: cutoff,
       limit: limit,
       dry_run: dry_run

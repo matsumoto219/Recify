@@ -56,10 +56,10 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     receipt = create(:receipt, :processing, :with_image, user: user)
     run = create(:receipt_analysis_run, receipt: receipt)
     create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
-    ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+    Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
     allow(ReceiptAiEnrichmentService).to receive(:call)
 
-    result = ReceiptAnalysisPipeline.run_ai(run)
+    result = Receipts::Processing.run_ai(run)
 
     aggregate_failures do
       expect(result.next_step).to eq(:finalize)
@@ -145,7 +145,7 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     allow(ReceiptOcrService).to receive(:call)
     allow(Usage).to receive(:consume_ocr_job!)
 
-    result = ReceiptAnalysisPipeline.run_ocr(run)
+    result = Receipts::Processing.run_ocr(run)
     run.reload
 
     aggregate_failures do
@@ -184,11 +184,11 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     end
     receipt = create(:receipt, :processing, :with_image, user: user)
     run = create(:receipt_analysis_run, receipt: receipt)
-    ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+    Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
     allow(ReceiptAiEnrichmentService).to receive(:call)
     allow(Usage).to receive(:consume_ai_job!)
 
-    result = ReceiptAnalysisPipeline.run_ai(run)
+    result = Receipts::Processing.run_ai(run)
 
     aggregate_failures do
       expect(result.next_step).to eq(:finalize)
@@ -204,14 +204,14 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
   it 'OpenAI key未設定ではAI API未到達としてAI counterを消費しない' do
     receipt = create(:receipt, :processing, :with_image, user: user)
     run = create(:receipt_analysis_run, receipt: receipt)
-    ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+    Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
 
     with_env(
       'OPENAI_API_KEY' => nil,
       'OPENAI_AI_MODEL' => 'gpt-test',
       'AI_FALLBACK_PROVIDER' => nil
     ) do
-      result = ReceiptAnalysisPipeline.run_ai(run)
+      result = Receipts::Processing.run_ai(run)
 
       aggregate_failures do
         expect(result.next_step).to eq(:finalize)
@@ -232,14 +232,14 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
   it 'OpenAI model未設定ではAI API未到達としてAI counterを消費しない' do
     receipt = create(:receipt, :processing, :with_image, user: user)
     run = create(:receipt_analysis_run, receipt: receipt)
-    ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+    Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
 
     with_env(
       'OPENAI_API_KEY' => 'test-openai-key',
       'OPENAI_AI_MODEL' => nil,
       'AI_FALLBACK_PROVIDER' => nil
     ) do
-      result = ReceiptAnalysisPipeline.run_ai(run)
+      result = Receipts::Processing.run_ai(run)
 
       aggregate_failures do
         expect(result.next_step).to eq(:finalize)
@@ -259,7 +259,7 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
   it 'AI provider HTTP到達時はAI counterを消費する' do
     receipt = create(:receipt, :processing, :with_image, user: user)
     run = create(:receipt_analysis_run, receipt: receipt)
-    ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+    Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
     provider_client = double('ProviderClient')
     allow(Ai::ProviderRegistry).to receive(:fetch)
       .with('openai', runtime_config: an_instance_of(ExternalServices::RuntimeConfig::AIConfig))
@@ -280,7 +280,7 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
       'OPENAI_AI_MODEL' => 'gpt-test',
       'AI_FALLBACK_PROVIDER' => nil
     ) do
-      result = ReceiptAnalysisPipeline.run_ai(run)
+      result = Receipts::Processing.run_ai(run)
 
       aggregate_failures do
         expect(result.next_step).to eq(:finalize)
@@ -317,7 +317,7 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
       }
     end
 
-    result = ReceiptAnalysisPipeline.run_ocr(run)
+    result = Receipts::Processing.run_ocr(run)
     run.reload
 
     aggregate_failures do
@@ -341,7 +341,7 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
       'AZURE_OCR_ENDPOINT' => nil,
       'AZURE_OCR_API_KEY' => 'test-key'
     ) do
-      result = ReceiptAnalysisPipeline.run_ocr(run)
+      result = Receipts::Processing.run_ocr(run)
 
       aggregate_failures do
         expect(result.next_step).to eq(:finalize)
@@ -362,7 +362,7 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
       'AZURE_OCR_ENDPOINT' => 'https://example.cognitiveservices.azure.com',
       'AZURE_OCR_API_KEY' => nil
     ) do
-      result = ReceiptAnalysisPipeline.run_ocr(run)
+      result = Receipts::Processing.run_ocr(run)
 
       aggregate_failures do
         expect(result.next_step).to eq(:finalize)

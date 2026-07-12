@@ -52,7 +52,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_ai_enrichment_service.rb" => %i[available? call error_result provider_metrics],
     "receipt_amount_limits.rb" => %i[receipt_adjustment_amount_max receipt_item_line_total_max receipt_item_price_max receipt_payment_amount_max receipt_tax_amount_max receipt_total_amount_max violations_for],
     "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_summary warning_mismatch_codes],
-    "receipt_analysis_pipeline.rb" => %i[finalize_decision_from_snapshot run_ai run_finalize run_ocr],
+    "receipt_analysis_pipeline.rb" => %i[run_ai run_finalize run_ocr],
     "receipt_analysis_profiles.rb" => %i[default fetch],
     "receipt_analysis_runs.rb" => %i[cancel claim_stage cleanup_expired cleanup_stale copy_retry_snapshots enqueue external_service_runtime_config fail finish_stage record_ai_input record_ai_normalized_result record_ai_result record_build_params_snapshot record_final_result record_finalize_decision record_ocr_response_artifact record_ocr_result record_ocr_snapshot start start_stage succeed supersede],
     "receipt_ocr_service.rb" => %i[available? call error_result],

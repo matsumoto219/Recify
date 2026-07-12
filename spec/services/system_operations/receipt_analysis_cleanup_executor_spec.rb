@@ -22,7 +22,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
 
   describe '.call' do
     it '文字が混在するlimitでcleanupを実行しない' do
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale)
+      allow(Receipts::Processing).to receive(:cleanup_stale)
 
       result = described_class.call(
         operation: 'stale_cleanup',
@@ -37,14 +37,14 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
       aggregate_failures do
         expect(result).to be_failure
         expect(result.error_code).to eq('invalid_limit')
-        expect(ReceiptAnalysisRuns).not_to have_received(:cleanup_stale)
+        expect(Receipts::Processing).not_to have_received(:cleanup_stale)
         expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'invalid_limit')
       end
     end
 
     it 'stale_cleanupでcleanup_stale dry_run:falseを実行し、success auditを残す' do
       result_payload = stale_result(records: 25.times.map { |i| { run_key: "run-#{i}" } })
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale).and_return(result_payload)
+      allow(Receipts::Processing).to receive(:cleanup_stale).and_return(result_payload)
 
       result = described_class.call(
         operation: 'stale_cleanup',
@@ -60,7 +60,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
 
       aggregate_failures do
         expect(result).to be_success
-        expect(ReceiptAnalysisRuns).to have_received(:cleanup_stale).with(
+        expect(Receipts::Processing).to have_received(:cleanup_stale).with(
           cutoff: Time.zone.parse('2026-05-23 03:00'),
           limit: 100,
           dry_run: false
@@ -99,7 +99,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
         deleted_count: 2,
         records: [ { run_key: 'expired-1' }, { run_key: 'expired-2' } ]
       }
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_expired).and_return(result_payload)
+      allow(Receipts::Processing).to receive(:cleanup_expired).and_return(result_payload)
 
       result = described_class.call(
         operation: 'retention_cleanup',
@@ -115,7 +115,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
 
       aggregate_failures do
         expect(result).to be_success
-        expect(ReceiptAnalysisRuns).to have_received(:cleanup_expired).with(
+        expect(Receipts::Processing).to have_received(:cleanup_expired).with(
           cutoff: Time.current,
           limit: 1000,
           dry_run: false
@@ -132,7 +132,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
     end
 
     it 'reason blankは拒否し、cleanupを実行しない' do
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale)
+      allow(Receipts::Processing).to receive(:cleanup_stale)
 
       result = described_class.call(
         operation: 'stale_cleanup',
@@ -147,7 +147,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
       aggregate_failures do
         expect(result).to be_failure
         expect(result.error_code).to eq('reason_required')
-        expect(ReceiptAnalysisRuns).not_to have_received(:cleanup_stale)
+        expect(Receipts::Processing).not_to have_received(:cleanup_stale)
         expect(AuditLog.last).to have_attributes(
           action: 'receipt_analysis_runs.cleanup_stale.execute',
           outcome: 'failed',
@@ -157,7 +157,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
     end
 
     it 'reauthentication nilは拒否し、credential情報をauditに保存しない' do
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale)
+      allow(Receipts::Processing).to receive(:cleanup_stale)
 
       result = described_class.call(
         operation: 'stale_cleanup',
@@ -174,15 +174,15 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
       aggregate_failures do
         expect(result).to be_failure
         expect(result.error_code).to eq('reauthentication_required')
-        expect(ReceiptAnalysisRuns).not_to have_received(:cleanup_stale)
+        expect(Receipts::Processing).not_to have_received(:cleanup_stale)
         expect(audit_log.metadata).not_to include('reauthenticated' => true)
         expect(audit_log.metadata.to_json).not_to include('credential_id', 'challenge', 'public_key')
       end
     end
 
     it 'unknown operationは拒否し、cleanupを実行しない' do
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale)
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_expired)
+      allow(Receipts::Processing).to receive(:cleanup_stale)
+      allow(Receipts::Processing).to receive(:cleanup_expired)
 
       result = described_class.call(
         operation: 'unknown',
@@ -197,14 +197,14 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
       aggregate_failures do
         expect(result).to be_failure
         expect(result.error_code).to eq('unknown_operation')
-        expect(ReceiptAnalysisRuns).not_to have_received(:cleanup_stale)
-        expect(ReceiptAnalysisRuns).not_to have_received(:cleanup_expired)
+        expect(Receipts::Processing).not_to have_received(:cleanup_stale)
+        expect(Receipts::Processing).not_to have_received(:cleanup_expired)
         expect(AuditLog.last.action).to eq('system_operations.receipt_analysis_cleanup.unknown')
       end
     end
 
     it 'cleanup失敗時にfailed auditを残す' do
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale).and_raise(StandardError, 'boom')
+      allow(Receipts::Processing).to receive(:cleanup_stale).and_raise(StandardError, 'boom')
 
       result = described_class.call(
         operation: 'stale_cleanup',

@@ -111,7 +111,7 @@ module SystemOperations
 
       begin
         ReceiptAnalysisRun.transaction do
-          start_result = ReceiptAnalysisRuns.start(
+          start_result = Receipts::Processing.start(
             receipt: receipt,
             source: SOURCE,
             requested_by_user: actor,
@@ -150,8 +150,8 @@ module SystemOperations
       return result if result.failure?
 
       begin
-        ReceiptAnalysisRuns.enqueue(result.run, job_class: result.enqueued_job)
-      rescue ReceiptAnalysisRuns::EnqueueError
+        Receipts::Processing.enqueue(result.run, job_class: result.enqueued_job)
+      rescue Receipts::Processing::EnqueueError
         result = failure(
           :analysis_enqueue_failed,
           "analysis job enqueue failed",
@@ -192,7 +192,7 @@ module SystemOperations
     end
 
     def parent_finalize_decision
-      @parent_finalize_decision ||= ReceiptAnalysisPipeline.finalize_decision_from_snapshot(
+      @parent_finalize_decision ||= Receipts::Processing.finalize_decision_from_snapshot(
         parent_run&.metadata.to_h["finalize_decision"]
       )
     end
@@ -265,10 +265,10 @@ module SystemOperations
     def copy_retry_snapshots(run)
       case retry_type
       when "ai_retry"
-        ReceiptAnalysisRuns.copy_retry_snapshots(run, parent_run: parent_run, include_ocr: true)
+        Receipts::Processing.copy_retry_snapshots(run, parent_run: parent_run, include_ocr: true)
       when "finalize_retry"
         requirements = finalize_retry_snapshot_requirements
-        ReceiptAnalysisRuns.copy_retry_snapshots(
+        Receipts::Processing.copy_retry_snapshots(
           run,
           parent_run: parent_run,
           include_ocr: requirements[:ocr],

@@ -6,7 +6,7 @@ class ReceiptAnalysisRunRetentionCleanupJob < ApplicationJob
   SAMPLE_RUN_KEY_LIMIT = 20
 
   def perform(cutoff: Time.current, limit: DEFAULT_LIMIT, dry_run: true)
-    result = ReceiptAnalysisRuns.cleanup_expired(
+    result = Receipts::Processing.cleanup_expired(
       cutoff: cutoff,
       limit: limit,
       dry_run: dry_run

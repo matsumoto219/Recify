@@ -1995,8 +1995,8 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       existing_run = instance_double(ReceiptAnalysisRun, id: 12_345)
-      allow(ReceiptAnalysisRuns).to receive(:start).and_return(
-        ReceiptAnalysisRuns::StartResult.new(run: existing_run, created: false)
+      allow(Receipts::Processing).to receive(:start).and_return(
+        Receipts::Processing::StartResult.new(run: existing_run, created: false)
       )
 
       expect do
@@ -2005,7 +2005,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
-        expect(ReceiptAnalysisRuns).to have_received(:start).with(
+        expect(Receipts::Processing).to have_received(:start).with(
           receipt: Receipt.order(:id).last,
           source: 'upload',
           requested_by_user: user
@@ -9020,7 +9020,7 @@ RSpec.describe 'Receipts', type: :request do
     it 'stuck processing cleanupでfailed化されたレシートを削除できる' do
       stuck_receipt = create(:receipt, :with_image, :processing, user: user)
       stuck_receipt.update_columns(updated_at: 7.hours.ago)
-      ReceiptAnalysisRuns.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+      Receipts::Processing.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
 
       expect(stuck_receipt.reload.status).to eq('failed')
 

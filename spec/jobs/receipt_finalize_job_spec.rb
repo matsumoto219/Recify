@@ -10,21 +10,21 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
   describe '#perform' do
     it 'Pipeline親入口だけを呼ぶ' do
       run = create(:receipt_analysis_run)
-      allow(ReceiptAnalysisPipeline).to receive(:run_finalize)
+      allow(Receipts::Processing).to receive(:run_finalize)
 
       described_class.perform_now(run_id: run.id)
 
-      expect(ReceiptAnalysisPipeline).to have_received(:run_finalize).with(run)
+      expect(Receipts::Processing).to have_received(:run_finalize).with(run)
     end
 
     it '存在しないrunは安全にdiscardする' do
-      allow(ReceiptAnalysisPipeline).to receive(:run_finalize)
+      allow(Receipts::Processing).to receive(:run_finalize)
 
       expect do
         described_class.perform_now(run_id: -1)
       end.not_to raise_error
 
-      expect(ReceiptAnalysisPipeline).not_to have_received(:run_finalize)
+      expect(Receipts::Processing).not_to have_received(:run_finalize)
     end
 
     it 'run_id keyword以外の呼び出しは受け付けない' do
@@ -52,7 +52,7 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
         error_code: 'ocr_api_error',
         receipt_attributes: {}
       )
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_finalize_decision(run, decision)
       allow(ReceiptAnalysisPipeline).to receive(:finalize).and_call_original
 
       2.times { described_class.perform_now(run_id: run.id) }
@@ -94,9 +94,9 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
         ai_result: ai_result
       )
 
-      ReceiptAnalysisRuns.record_ocr_snapshot(run, ocr_result)
-      ReceiptAnalysisRuns.record_ai_normalized_result(run, ai_result)
-      ReceiptAnalysisRuns.record_finalize_decision(run, decision)
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_ai_normalized_result(run, ai_result)
+      Receipts::Processing.record_finalize_decision(run, decision)
       allow(ReceiptAmountService).to receive(:call).and_return(
         {
           resolved: { total: 0, subtotal: 0, tax: 0, tax_rate: nil },

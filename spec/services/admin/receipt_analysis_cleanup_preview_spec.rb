@@ -28,18 +28,18 @@ RSpec.describe Admin::ReceiptAnalysisCleanupPreview do
         deleted_count: 0,
         records: [ { run_key: 'expired-run' } ]
       }
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale).and_return(stale_result)
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_expired).and_return(retention_result)
+      allow(Receipts::Processing).to receive(:cleanup_stale).and_return(stale_result)
+      allow(Receipts::Processing).to receive(:cleanup_expired).and_return(retention_result)
 
       result = described_class.call(dry_run: false)
 
       aggregate_failures do
-        expect(ReceiptAnalysisRuns).to have_received(:cleanup_stale).with(
+        expect(Receipts::Processing).to have_received(:cleanup_stale).with(
           cutoff: 6.hours.ago,
           limit: 100,
           dry_run: true
         )
-        expect(ReceiptAnalysisRuns).to have_received(:cleanup_expired).with(
+        expect(Receipts::Processing).to have_received(:cleanup_expired).with(
           cutoff: Time.current,
           limit: 1000,
           dry_run: true
@@ -50,8 +50,8 @@ RSpec.describe Admin::ReceiptAnalysisCleanupPreview do
     end
 
     it 'cutoff / limitを安全に正規化する' do
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale).and_return({ dry_run: true, records: [] })
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_expired).and_return({ dry_run: true, records: [] })
+      allow(Receipts::Processing).to receive(:cleanup_stale).and_return({ dry_run: true, records: [] })
+      allow(Receipts::Processing).to receive(:cleanup_expired).and_return({ dry_run: true, records: [] })
 
       result = described_class.call(
         stale_cutoff: '2026-05-22T08:30',
@@ -61,12 +61,12 @@ RSpec.describe Admin::ReceiptAnalysisCleanupPreview do
       )
 
       aggregate_failures do
-        expect(ReceiptAnalysisRuns).to have_received(:cleanup_stale).with(
+        expect(Receipts::Processing).to have_received(:cleanup_stale).with(
           cutoff: Time.zone.parse('2026-05-22 08:30'),
           limit: 100,
           dry_run: true
         )
-        expect(ReceiptAnalysisRuns).to have_received(:cleanup_expired).with(
+        expect(Receipts::Processing).to have_received(:cleanup_expired).with(
           cutoff: Time.zone.parse('2026-05-23 09:15'),
           limit: 1000,
           dry_run: true
@@ -81,8 +81,8 @@ RSpec.describe Admin::ReceiptAnalysisCleanupPreview do
     end
 
     it '不正なcutoff / limitはdefaultへ戻す' do
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_stale).and_return({ dry_run: true, records: [] })
-      allow(ReceiptAnalysisRuns).to receive(:cleanup_expired).and_return({ dry_run: true, records: [] })
+      allow(Receipts::Processing).to receive(:cleanup_stale).and_return({ dry_run: true, records: [] })
+      allow(Receipts::Processing).to receive(:cleanup_expired).and_return({ dry_run: true, records: [] })
 
       described_class.call(
         stale_cutoff: 'not-a-time',
@@ -92,12 +92,12 @@ RSpec.describe Admin::ReceiptAnalysisCleanupPreview do
       )
 
       aggregate_failures do
-        expect(ReceiptAnalysisRuns).to have_received(:cleanup_stale).with(
+        expect(Receipts::Processing).to have_received(:cleanup_stale).with(
           cutoff: 6.hours.ago,
           limit: 100,
           dry_run: true
         )
-        expect(ReceiptAnalysisRuns).to have_received(:cleanup_expired).with(
+        expect(Receipts::Processing).to have_received(:cleanup_expired).with(
           cutoff: Time.current,
           limit: 1000,
           dry_run: true

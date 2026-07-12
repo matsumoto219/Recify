@@ -1111,7 +1111,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
 
     it 'transaction commit後かつintent audit永続化後にenqueueする' do
       test_transaction_depth = ReceiptAnalysisRun.connection.open_transactions
-      allow(ReceiptAnalysisRuns).to receive(:enqueue).and_wrap_original do |method, run, job_class:|
+      allow(Receipts::Processing).to receive(:enqueue).and_wrap_original do |method, run, job_class:|
         intent_audit = AuditLog.find_by(action: 'receipt_analysis.retry_requested')
 
         aggregate_failures do
@@ -1133,7 +1133,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
 
       aggregate_failures do
         expect(result).to be_success
-        expect(ReceiptAnalysisRuns).to have_received(:enqueue).once
+        expect(Receipts::Processing).to have_received(:enqueue).once
       end
     end
   end

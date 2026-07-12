@@ -83,9 +83,9 @@ module SystemOperations
     def execute_cleanup
       case operation
       when "stale_cleanup"
-        ReceiptAnalysisRuns.cleanup_stale(cutoff: cutoff, limit: normalized_limit, dry_run: false)
+        Receipts::Processing.cleanup_stale(cutoff: cutoff, limit: normalized_limit, dry_run: false)
       when "retention_cleanup"
-        ReceiptAnalysisRuns.cleanup_expired(cutoff: cutoff, limit: normalized_limit, dry_run: false)
+        Receipts::Processing.cleanup_expired(cutoff: cutoff, limit: normalized_limit, dry_run: false)
       end
     end
 

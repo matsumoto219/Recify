@@ -5,6 +5,6 @@ class ReceiptFinalizeJob < ApplicationJob
 
   def perform(run_id:)
     run = ReceiptAnalysisRun.find(run_id)
-    ReceiptAnalysisPipeline.run_finalize(run)
+    Receipts::Processing.run_finalize(run)
   end
 end
