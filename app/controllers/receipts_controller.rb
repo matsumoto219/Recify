@@ -793,19 +793,9 @@ class ReceiptsController < ApplicationController
 
   def normalized_receipt_params
     reset_receipt_edit_save_input!
-    permitted = receipt_params.to_h.deep_dup
+    form_class = @receipt.persisted? ? Receipts::EditForm : Receipts::ManualEntryForm
+    permitted = form_class.call(receipt: @receipt, attributes: receipt_params.to_h)
     permitted.delete("remove_image")
-
-    purchased_at_submitted = permitted.key?("purchased_on") || permitted.key?("purchased_time")
-    purchased_on = permitted.delete("purchased_on")
-    purchased_time = permitted.delete("purchased_time")
-
-    if purchased_at_submitted
-      permitted["purchased_at"] = build_purchased_at(purchased_on, purchased_time)
-    end
-    normalize_receipt_numeric_inputs!(permitted)
-    normalize_receipt_item_quantity_units!(permitted)
-    normalize_receipt_adjustment_attributes!(permitted)
     prune_blank_new_receipt_items!(permitted)
     prune_blank_new_receipt_adjustments!(permitted)
     prune_blank_new_receipt_payments!(permitted)
@@ -958,111 +948,6 @@ class ReceiptsController < ApplicationController
     attributes["image_purge_eligible_at"] = !keep_image && purge_eligible ? Time.current : nil
     attributes["image_purged_at"] = nil
     attributes["image_purged_reason"] = nil
-  end
-
-  def build_purchased_at(purchased_on, purchased_time)
-    return nil if purchased_on.blank?
-
-    datetime_text = [ purchased_on, purchased_time.presence ].compact.join(" ")
-    Time.zone.parse(datetime_text)
-  rescue ArgumentError, TypeError
-    nil
-  end
-
-  def normalize_receipt_numeric_inputs!(permitted)
-    normalize_numeric_fields!(permitted, %w[total_amount subtotal_amount tax_amount], :integer)
-    normalize_numeric_fields!(permitted, %w[tax_rate], :decimal)
-
-    items_attributes = permitted["receipt_items_attributes"]
-    items_attributes&.each_value do |item_attributes|
-      normalize_numeric_fields!(item_attributes, %w[price line_total], :integer)
-      normalize_numeric_fields!(item_attributes, %w[quantity], :decimal)
-      normalize_numeric_fields!(item_attributes, %w[tax_rate], :percentage)
-      normalize_numeric_fields!(item_attributes, %w[discount_rate], :decimal)
-    end
-
-    permitted["receipt_adjustments_attributes"]&.each_value do |adjustment_attributes|
-      normalize_numeric_fields!(adjustment_attributes, %w[amount], :integer)
-      normalize_numeric_fields!(adjustment_attributes, %w[tax_rate], :percentage)
-    end
-
-    permitted["receipt_payments_attributes"]&.each_value do |payment_attributes|
-      normalize_numeric_fields!(payment_attributes, %w[amount], :integer)
-    end
-  end
-
-  def normalize_numeric_fields!(attributes, fields, parser)
-    fields.each do |field|
-      next unless attributes.key?(field)
-
-      attributes[field] = Receipts::NumericInput.public_send(parser, attributes[field])
-    end
-  end
-
-  def normalize_receipt_item_quantity_units!(permitted)
-    items_attributes = permitted["receipt_items_attributes"]
-    return if items_attributes.blank?
-
-    items_attributes.each_value do |item_attributes|
-      raw_code = item_attributes["quantity_unit_code"]
-      code =
-        if raw_code.blank?
-          ReceiptQuantityUnit.default_code
-        else
-          ReceiptQuantityUnit.normalize(raw_code, default: nil)
-        end
-
-      code ||= raw_code.to_s
-      item_attributes["quantity_unit_code"] = code
-    end
-  end
-
-  def normalize_receipt_adjustment_attributes!(permitted)
-    adjustments_attributes = permitted["receipt_adjustments_attributes"]
-    return if adjustments_attributes.blank?
-
-    existing_adjustments = @receipt&.receipt_adjustments&.index_by { |adjustment| adjustment.id.to_s } || {}
-
-    adjustments_attributes.each_value do |adjustment_attributes|
-      adjustment_attributes["kind"] = ReceiptAdjustment.normalize_kind(adjustment_attributes["kind"])
-      adjustment_attributes["sign"] = manual_adjustment_sign(
-        kind: adjustment_attributes["kind"],
-        requested_sign: adjustment_attributes["sign"]
-      )
-
-      existing = existing_adjustments[adjustment_attributes["id"].to_s]
-      next if existing && !manual_adjustment_review_target_changed?(existing, adjustment_attributes)
-
-      adjustment_attributes["source"] = "manual"
-      adjustment_attributes["needs_review"] = false
-      adjustment_attributes["review_reasons"] = []
-    end
-  end
-
-  def manual_adjustment_review_target_changed?(adjustment, attributes)
-    changed_adjustment = adjustment.dup
-    changed_adjustment.assign_attributes(attributes.slice(*manual_adjustment_review_target_fields.map(&:to_s)))
-
-    manual_adjustment_review_target_fields.any? do |field|
-      attributes.key?(field.to_s) && changed_adjustment.public_send(field) != adjustment.public_send(field)
-    end
-  end
-
-  def manual_adjustment_review_target_fields
-    %i[kind label amount sign tax_rate]
-  end
-
-  def manual_adjustment_sign(kind:, requested_sign:)
-    kind = kind.to_s
-    requested_sign = requested_sign.to_s
-
-    if kind == "other"
-      return requested_sign if ReceiptAdjustment::SIGNS.include?(requested_sign)
-
-      return "surcharge"
-    end
-
-    ReceiptAdjustment.default_sign_for(kind)
   end
 
   def prune_blank_new_receipt_items!(permitted)
