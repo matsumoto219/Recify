@@ -395,7 +395,7 @@ RSpec.describe 'Admin dashboard', type: :request do
     it 'current法務文書が未同期の場合もadmin dashboardに警告を表示する' do
       admin = create(:user, :admin)
       sign_in admin
-      allow(LegalDocuments::CurrentStatus).to receive(:call).and_return(
+      allow(LegalDocuments).to receive(:current_status).and_return(
         LegalDocuments::CurrentStatus::Result.new(
           ready: false,
           locale: 'ja',

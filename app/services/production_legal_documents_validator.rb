@@ -5,6 +5,7 @@ require_relative "legal_documents/validation_error"
 require_relative "legal_documents/file_document"
 require_relative "legal_documents/repository"
 require_relative "legal_documents/verifier"
+require_relative "legal_documents"
 
 class ProductionLegalDocumentsValidator
   ValidationError = Class.new(StandardError)
@@ -24,7 +25,7 @@ class ProductionLegalDocumentsValidator
     end
   end
 
-  def initialize(database: false, verifier: LegalDocuments::Verifier.new)
+  def initialize(database: false, verifier: LegalDocuments)
     @database = database
     @verifier = verifier
   end

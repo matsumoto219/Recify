@@ -56,44 +56,8 @@ RSpec.describe "Service layer child implementation boundary" do
     "legal_documents" => registry_entry(
       "legal_documents",
       "LegalDocuments",
-      legacy_exceptions: [
-        {
-          source_path: "app/controllers/application_controller.rb",
-          referenced_constant: "LegalDocuments::CurrentStatus",
-          reason: "LegalDocuments親facade未整備の既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/controllers/legal_controller.rb",
-          referenced_constant: "LegalDocuments::Repository",
-          reason: "LegalDocuments親facade未整備の既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/controllers/legal_controller.rb",
-          referenced_constant: "LegalDocuments::ValidationError",
-          reason: "LegalDocuments child定義のdomain errorへの既存直接参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/queries/admin/dashboard.rb",
-          referenced_constant: "LegalDocuments::CurrentStatus",
-          reason: "LegalDocuments親facade未整備のcross-namespace既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/services/production_legal_documents_validator.rb",
-          referenced_constant: "LegalDocuments::Error",
-          reason: "専用validatorがLegalDocuments child errorを参照する既存経路",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/services/production_legal_documents_validator.rb",
-          referenced_constant: "LegalDocuments::Verifier",
-          reason: "専用validatorがLegalDocuments child verifierを参照する既存経路",
-          remove_in_loop: 22
-        }
-      ]
+      facade: "app/services/legal_documents.rb",
+      public_constants: %w[LegalDocuments::Error]
     ),
     "ocr" => registry_entry("ocr", "Ocr", facade: "app/services/receipt_ocr_service.rb"),
     "receipt_analysis_profiles" => registry_entry(

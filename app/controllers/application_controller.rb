@@ -181,7 +181,7 @@ class ApplicationController < ActionController::Base
   end
 
   def current_legal_documents_status
-    @current_legal_documents_status ||= LegalDocuments::CurrentStatus.call(locale: legal_consent_locale)
+    @current_legal_documents_status ||= LegalDocuments.current_status(locale: legal_consent_locale)
   end
 
   def enforce_user_session_version!

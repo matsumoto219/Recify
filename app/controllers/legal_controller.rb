@@ -32,13 +32,7 @@ class LegalController < ApplicationController
 
   def set_legal_document(document_type)
     @legal_document = LegalDocument.current!(document_type, locale: I18n.locale)
-    @legal_file_document = legal_document_repository.find!(
-      document_type: @legal_document.document_type,
-      version: @legal_document.version,
-      locale: @legal_document.locale
-    )
-
-    validate_legal_document_file!
+    @legal_file_document = LegalDocuments.synchronized_file_for!(legal_document: @legal_document)
   end
 
   def set_legal_document_versions(document_type)
@@ -61,24 +55,7 @@ class LegalController < ApplicationController
       locale: I18n.locale.to_s
     )
     @current_legal_document = LegalDocument.current!(document_type, locale: I18n.locale)
-    @legal_file_document = legal_document_repository.find!(
-      document_type: @legal_document.document_type,
-      version: @legal_document.version,
-      locale: @legal_document.locale
-    )
-
-    validate_legal_document_file!
-  end
-
-  def legal_document_repository
-    @legal_document_repository ||= LegalDocuments::Repository.new
-  end
-
-  def validate_legal_document_file!
-    return if @legal_file_document.source_path == @legal_document.source_path &&
-              @legal_file_document.content_digest == @legal_document.content_digest
-
-    raise LegalDocuments::ValidationError, "Legal document #{@legal_document.source_path} is not synchronized"
+    @legal_file_document = LegalDocuments.synchronized_file_for!(legal_document: @legal_document)
   end
 
   def legal_document_version_param

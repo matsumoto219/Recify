@@ -46,7 +46,7 @@ RSpec.describe Admin::Dashboard do
         .with(include_details: true)
         .and_return(external_services_snapshot)
       allow(Storage).to receive(:system_usage_snapshot).and_return(storage_snapshot)
-      allow(LegalDocuments::CurrentStatus).to receive(:call).with(locale: I18n.locale).and_return(legal_documents_status)
+      allow(LegalDocuments).to receive(:current_status).with(locale: I18n.locale).and_return(legal_documents_status)
       allow(Admin).to receive(:database_status_snapshot).and_return(database_status_snapshot)
       allow(ContactRequestMailer).to receive(:admin_notification_enabled?).and_return(true)
       create(:passkey, user: admin)

@@ -51,7 +51,7 @@ module Admin
         security: security_summary,
         external_services: ExternalServices.status_snapshot(include_details: true),
         storage: Storage.system_usage_snapshot,
-        legal_documents: LegalDocuments::CurrentStatus.call(locale: I18n.locale),
+        legal_documents: LegalDocuments.current_status(locale: I18n.locale),
         database_status: Admin.database_status_snapshot,
         system_operations: system_operations_summary(system_dashboard),
         locked_future_operations: system_dashboard.locked_future_operations
