@@ -1159,17 +1159,14 @@ class ReceiptsController < ApplicationController
       tax_details_recalculated = true
     end
 
-    resolved = result[:resolved]
-    permitted["subtotal_amount"] = resolved[:subtotal]
-    permitted["tax_amount"] = resolved[:tax]
-    permitted["total_amount"] = resolved[:total]
-    permitted["tax_rate"] = resolved[:tax_rate]
-    permitted["amount_calculation_profile"] = ReceiptAmountService.calculation_profile_snapshot(result)
-    # 明細の quantity / line_total を計算結果で上書き（複数行対応）
-    apply_item_totals!(permitted, result.dig(:computed, :items))
-    if replace_receipt_tax_details?(context, change_set, tax_details_recalculated: tax_details_recalculated)
-      permitted["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(result[:tax_details])
-    end
+    Receipts::Editing.apply_amount_result!(
+      receipt: @receipt,
+      attributes: permitted,
+      amount_result: result,
+      context: context,
+      change_set: change_set,
+      tax_details_recalculated: tax_details_recalculated
+    )
     reset_receipt_edit_save_input!
     result
   end
@@ -1194,51 +1191,6 @@ class ReceiptsController < ApplicationController
     Array(result[:blocking_inconsistencies]).map(&:to_sym).include?(:tax_detail_mismatch)
   end
 
-  def apply_item_totals!(permitted, calculated_items)
-    items_attributes = permitted["receipt_items_attributes"]
-    return if items_attributes.blank?
-
-    calculated_items = Array(calculated_items)
-    return if calculated_items.empty?
-
-    # 有効な明細（_destroy でないもの）のみ対象に順序対応
-    valid_item_attrs = items_attributes.values.reject do |item_attr|
-      item_attr.blank? || ActiveModel::Type::Boolean.new.cast(item_attr["_destroy"])
-    end
-
-    valid_item_attrs.each_with_index do |item_attr, index|
-      calc = calculated_items[index]
-      next if calc.blank?
-
-      quantity = calculated_item_value(calc, :quantity)
-      price = calculated_item_value(calc, :price)
-      line_total = calculated_item_value(calc, :line_total)
-      original_line_total = calculated_item_value(calc, :original_line_total)
-      discount_amount = calculated_item_value(calc, :discount_amount)
-      discount_rate = calculated_item_value(calc, :discount_rate)
-
-      item_attr["quantity"] = quantity if calculated_item_key?(calc, :quantity) && !quantity.nil?
-      item_attr["price"] = price if calculated_item_key?(calc, :price) && !price.nil?
-      item_attr["line_total"] = line_total if calculated_item_key?(calc, :line_total) && !line_total.nil?
-      item_attr["original_line_total"] = original_line_total unless original_line_total.nil?
-      item_attr["discount_amount"] = discount_amount if calculated_item_key?(calc, :discount_amount)
-      item_attr["discount_rate"] = discount_rate if calculated_item_key?(calc, :discount_rate)
-    end
-  end
-
-  def calculated_item_value(calculated_item, key)
-    return calculated_item[key] if calculated_item.key?(key)
-
-    calculated_item[key.to_s]
-  end
-
-  def calculated_item_key?(calculated_item, key)
-    calculated_item.key?(key) || calculated_item.key?(key.to_s)
-  end
-
-  def receipt_tax_detail_attributes(tax_details)
-    destroy_existing_receipt_tax_details + build_receipt_tax_detail_attributes(tax_details)
-  end
 
   def clear_processing_error_after_manual_update!(permitted)
     return unless @receipt.has_processing_error?
@@ -1370,26 +1322,6 @@ class ReceiptsController < ApplicationController
       ActiveModel::Type::Boolean.new.cast(item_attributes["needs_review"]) == false &&
       item_attributes.key?("review_reasons") &&
       Array(item_attributes["review_reasons"]).reject(&:blank?).empty?
-  end
-
-  def destroy_existing_receipt_tax_details
-    @receipt.receipt_tax_details.map do |tax_detail|
-      {
-        "id" => tax_detail.id,
-        "_destroy" => "1"
-      }
-    end
-  end
-
-  def build_receipt_tax_detail_attributes(tax_details)
-    Array(tax_details).map do |tax_detail|
-      {
-        "description" => tax_detail[:description],
-        "amount" => tax_detail[:amount],
-        "rate" => tax_detail[:rate],
-        "net_amount" => tax_detail[:net_amount]
-      }
-    end
   end
 
   def amount_receipt_items(permitted, context)
@@ -1552,10 +1484,6 @@ class ReceiptsController < ApplicationController
       receipt_payments: input.receipt_payments,
       amount_result: amount_result
     )
-  end
-
-  def replace_receipt_tax_details?(context, change_set, tax_details_recalculated:)
-    context != :edit_save || change_set&.purchase_amounts_changed? || tax_details_recalculated
   end
 
   def reset_receipt_edit_save_input!

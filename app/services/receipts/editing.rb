@@ -9,6 +9,10 @@ module Receipts
         ConsistencyGuard.call(...)
       end
 
+      def apply_amount_result!(...)
+        AmountResultApplicator.call(...)
+      end
+
       def review_state(...)
         ReviewState.call(...)
       end

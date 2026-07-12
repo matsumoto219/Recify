@@ -25,6 +25,23 @@ RSpec.describe Receipts::Editing do
     end
   end
 
+  describe ".apply_amount_result!" do
+    it "既存amount result applicator入口へ委譲する" do
+      arguments = {
+        receipt: :receipt,
+        attributes: :attributes,
+        amount_result: :amount_result,
+        context: :manual,
+        change_set: nil,
+        tax_details_recalculated: false
+      }
+      allow(Receipts::Editing::AmountResultApplicator).to receive(:call).and_return(:attributes)
+
+      expect(described_class.apply_amount_result!(**arguments)).to eq(:attributes)
+      expect(Receipts::Editing::AmountResultApplicator).to have_received(:call).with(**arguments)
+    end
+  end
+
   describe ".review_state" do
     it "既存review state入口へ委譲する" do
       arguments = {
