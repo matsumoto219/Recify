@@ -15,14 +15,17 @@ module Receipts
     TerminalRunError = Class.new(Error)
     EnqueueError = Class.new(Error)
 
-    Result = Struct.new(
+    Result = Data.define(
       :ocr_result,
       :ai_result,
       :finalize_decision,
       :next_step,
-      :skip_reason,
-      keyword_init: true
+      :skip_reason
     ) do
+      def initialize(ocr_result: nil, ai_result: nil, finalize_decision: nil, next_step: nil, skip_reason: nil)
+        super(ocr_result:, ai_result:, finalize_decision:, next_step:, skip_reason:)
+      end
+
       # Provider payload の成否を表す補助。Job の後続enqueue判定は next_step を使う。
       def success?
         result = ai_result || ocr_result
@@ -31,7 +34,11 @@ module Receipts
       end
     end
 
-    StartResult = Struct.new(:run, :created, keyword_init: true) do
+    StartResult = Data.define(:run, :created) do
+      def initialize(run:, created:)
+        super(run:, created:)
+      end
+
       def created?
         created == true
       end

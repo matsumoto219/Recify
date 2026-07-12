@@ -1,6 +1,49 @@
 require "rails_helper"
 
 RSpec.describe Receipts::Processing do
+  describe "public result contracts" do
+    it "Resultの省略keywordとsuccess判定をimmutable objectで維持する" do
+      result = described_class::Result.new(
+        ocr_result: { success: true },
+        next_step: :ai
+      )
+
+      aggregate_failures do
+        expect(result).to be_frozen
+        expect(result).to be_success
+        expect(result.to_h).to eq(
+          ocr_result: { success: true },
+          ai_result: nil,
+          finalize_decision: nil,
+          next_step: :ai,
+          skip_reason: nil
+        )
+        expect { result.next_step = :finalize }.to raise_error(NoMethodError)
+      end
+    end
+
+    it "AI resultをOCRより優先する既存success判定を維持する" do
+      result = described_class::Result.new(
+        ocr_result: { success: true },
+        ai_result: { success: false }
+      )
+
+      expect(result).not_to be_success
+    end
+
+    it "StartResultのcreated helperをimmutable objectで維持する" do
+      run = instance_double(ReceiptAnalysisRun)
+      result = described_class::StartResult.new(run: run, created: true)
+
+      aggregate_failures do
+        expect(result).to be_frozen
+        expect(result).to be_created
+        expect(result.to_h).to eq(run: run, created: true)
+        expect { result.created = false }.to raise_error(NoMethodError)
+      end
+    end
+  end
+
   describe "pipeline facade" do
     it "OCR stageをprivate Pipelineへ委譲する" do
       run = instance_double(ReceiptAnalysisRun)
