@@ -35,15 +35,7 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
     [ "app/services/system_operations/ip_access_operation_executor.rb", :record_ip_access_operation ] => 1
   }.freeze
 
-  SERVICE_RENDER_EXCEPTIONS = [
-    {
-      source_path: "app/services/external_services/status_snapshot.rb",
-      receiver_source: "renderer",
-      method_name: :render_to_string,
-      reason: "status payloadがview badge HTMLを生成する既存逆依存",
-      remove_in_loop: 15
-    }
-  ].freeze
+  SERVICE_RENDER_EXCEPTIONS = [].freeze
 
   before(:context) do
     @scanner = LayerEffectBoundary::Scanner.new(root: Rails.root)

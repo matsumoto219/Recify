@@ -16,14 +16,12 @@ RSpec.describe ExternalServices::StatusSnapshot do
   end
 
   describe '.call' do
-    it '初期状態ではupload可能な表示用payloadを返す' do
+    it '初期状態ではpresentationを含まないupload可能なraw payloadを返す' do
       payload = described_class.call
 
       aggregate_failures do
         expect(payload.dig(:ocr, :state)).to eq('ok')
-        expect(payload.dig(:ocr, :text)).to eq(I18n.t('shared.service_status.ok'))
-        expect(payload.dig(:ocr, :message)).to be_nil
-        expect(payload.dig(:ocr, :badge_html)).to be_nil
+        expect(payload.fetch(:ocr)).not_to include(:text, :message, :badge_html)
         expect(payload.dig(:ocr, :disabled)).to eq(false)
         expect(payload.dig(:ocr, :source)).to be_nil
         expect(payload.dig(:ai, :state)).to eq('ok')
@@ -118,7 +116,7 @@ RSpec.describe ExternalServices::StatusSnapshot do
         expect(payload.dig(:ocr, :rate_limited)).to be_nil
         expect(payload.dig(:ocr, :auth_error)).to be_nil
         expect(payload.dig(:ocr, :consecutive_failures)).to eq(3)
-        expect(payload.dig(:ocr, :message)).to eq(I18n.t('flash.receipts.ocr_unavailable'))
+        expect(payload.fetch(:ocr)).not_to include(:text, :message, :badge_html)
         expect(payload.dig(:upload, :allowed)).to eq(false)
         expect(payload.dig(:upload, :ocr_available)).to eq(false)
         expect(payload.dig(:notices, :ocr_down)).to eq(true)
@@ -138,7 +136,7 @@ RSpec.describe ExternalServices::StatusSnapshot do
         expect(payload.dig(:upload, :allowed)).to eq(false)
         expect(payload.dig(:notices, :ocr_down)).to eq(true)
         expect(payload.dig(:notices, :ai_down)).to eq(false)
-        expect(payload.dig(:ai, :message)).to be_nil
+        expect(payload.fetch(:ai)).not_to include(:text, :message, :badge_html)
       end
     end
 
@@ -212,7 +210,7 @@ RSpec.describe ExternalServices::StatusSnapshot do
 
       aggregate_failures do
         expect(payload.dig(:ai, :state)).to eq('down')
-        expect(payload.dig(:ai, :message)).to eq(I18n.t('receipts.new_upload.ai_down'))
+        expect(payload.fetch(:ai)).not_to include(:text, :message, :badge_html)
         expect(payload.dig(:upload, :allowed)).to eq(true)
         expect(payload.dig(:upload, :ocr_available)).to eq(true)
         expect(payload.dig(:notices, :ai_down)).to eq(true)
@@ -233,7 +231,7 @@ RSpec.describe ExternalServices::StatusSnapshot do
         expect(payload.dig(:upload, :allowed)).to eq(false)
         expect(payload.dig(:notices, :ocr_down)).to eq(true)
         expect(payload.dig(:notices, :ai_degraded)).to eq(false)
-        expect(payload.dig(:ai, :message)).to be_nil
+        expect(payload.fetch(:ai)).not_to include(:text, :message, :badge_html)
       end
     end
   end

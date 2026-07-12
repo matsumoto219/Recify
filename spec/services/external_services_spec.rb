@@ -198,10 +198,10 @@ RSpec.describe ExternalServices do
       payload = { upload: { allowed: true } }
 
       allow(ExternalServices::StatusSnapshot).to receive(:call)
-        .with(renderer: :renderer)
+        .with(include_details: true)
         .and_return(payload)
 
-      expect(described_class.status_snapshot(renderer: :renderer)).to eq(payload)
+      expect(described_class.status_snapshot(include_details: true)).to eq(payload)
     end
   end
 

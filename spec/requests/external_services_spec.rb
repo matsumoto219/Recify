@@ -48,7 +48,7 @@ RSpec.describe 'External services status', type: :request do
         expect(json.dig('ocr', 'message')).to eq(I18n.t('flash.receipts.ocr_unavailable'))
         expect(json.dig('ocr', 'badge_html')).to include(I18n.t('shared.service_status.down'))
         expect(json.dig('ai', 'state')).to eq('down')
-        expect(json.dig('ai', 'message')).to eq(I18n.t('receipts.new_upload.ai_down'))
+        expect(json.dig('ai', 'message')).to be_nil
         expect(json.dig('upload', 'allowed')).to eq(false)
         expect(json.dig('upload', 'ocr_available')).to eq(false)
       end
