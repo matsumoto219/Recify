@@ -1251,7 +1251,7 @@ class ReceiptsController < ApplicationController
   def rebuild_review_state_after_manual_update!(permitted, amount_result, consistency_guard: nil)
     return unless manual_review_state_rebuild_target?(permitted)
 
-    review_state = ReceiptEditSaveReviewState.call(
+    review_state = Receipts::Editing.review_state(
       receipt: @receipt,
       permitted: permitted,
       amount_result: amount_result,
@@ -1536,7 +1536,7 @@ class ReceiptsController < ApplicationController
     return unless @receipt&.persisted?
 
     if @receipt_edit_save_change_set_params_id != permitted.object_id
-      @receipt_edit_save_change_set = ReceiptEditSaveChangeSet.call(receipt: @receipt, permitted: permitted)
+      @receipt_edit_save_change_set = Receipts::Editing.change_set(receipt: @receipt, permitted: permitted)
       @receipt_edit_save_change_set_params_id = permitted.object_id
     end
 
@@ -1546,7 +1546,7 @@ class ReceiptsController < ApplicationController
   def receipt_edit_save_consistency_guard(permitted, amount_result)
     input = receipt_edit_save_input(permitted)
 
-    ReceiptEditSaveConsistencyGuard.call(
+    Receipts::Editing.check_consistency(
       receipt_items: input.receipt_items,
       receipt_adjustments: input.receipt_adjustments,
       receipt_payments: input.receipt_payments,
@@ -1577,7 +1577,7 @@ class ReceiptsController < ApplicationController
       item = existing_items[item_attributes["id"].to_s]
       next if item.blank?
 
-      state = ReceiptEditSaveReviewState.item_review_state(
+      state = Receipts::Editing.item_review_state(
         item: item,
         submitted_attributes: item_attributes
       )
