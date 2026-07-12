@@ -1,4 +1,4 @@
-require Rails.root.join("app/services/recify/active_storage_log_redactor").to_s
+require Rails.root.join("lib/recify/active_storage_log_redactor").to_s
 require "action_controller/log_subscriber"
 require "action_dispatch/log_subscriber"
 require "active_storage/log_subscriber"

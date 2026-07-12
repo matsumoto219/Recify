@@ -85,18 +85,6 @@ RSpec.describe "Service layer child implementation boundary" do
         Receipts::Processing::TerminalRunError
       ]
     ),
-    "recify" => registry_entry(
-      "recify",
-      "Recify",
-      legacy_exceptions: [
-        {
-          source_path: "app/services/security_events/metadata_sanitizer.rb",
-          referenced_constant: "Recify::ActiveStorageLogRedactor",
-          reason: "shared redactorの親facade未整備によるcross-namespace既存参照",
-          remove_in_loop: 22
-        }
-      ]
-    ),
     "security" => registry_entry(
       "security",
       "Security",
