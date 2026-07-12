@@ -65,7 +65,7 @@ module Receipts::Processing::Runs
 
       with_mutable_run do |locked_run|
         unless locked_run.stage == stage
-          raise InvalidTransition, "Cannot finish stage=#{stage} from stage=#{locked_run.stage}"
+          raise Receipts::Processing::InvalidTransition, "Cannot finish stage=#{stage} from stage=#{locked_run.stage}"
         end
 
         attrs = stage_finish_attributes(locked_run, stage, at: at)
@@ -323,7 +323,7 @@ module Receipts::Processing::Runs
 
     def normalize_stage!(stage, allowed:)
       normalized = stage.to_s
-      raise InvalidTransition, "Unknown stage=#{stage}" unless allowed.include?(normalized)
+      raise Receipts::Processing::InvalidTransition, "Unknown stage=#{stage}" unless allowed.include?(normalized)
 
       normalized
     end
@@ -331,7 +331,7 @@ module Receipts::Processing::Runs
     def ensure_not_terminal!(locked_run)
       return unless TERMINAL_STATUSES.include?(locked_run.status)
 
-      raise TerminalRunError, "ReceiptAnalysisRun id=#{locked_run.id} is already terminal status=#{locked_run.status}"
+      raise Receipts::Processing::TerminalRunError, "ReceiptAnalysisRun id=#{locked_run.id} is already terminal status=#{locked_run.status}"
     end
 
     def ensure_forward_transition!(locked_run, target_stage)
@@ -339,7 +339,7 @@ module Receipts::Processing::Runs
       target_index = stage_index(target_stage)
       return if target_index >= current_index
 
-      raise InvalidTransition, "Cannot move stage from #{locked_run.stage} to #{target_stage}"
+      raise Receipts::Processing::InvalidTransition, "Cannot move stage from #{locked_run.stage} to #{target_stage}"
     end
 
     def advanced_stage(locked_run, target_stage)

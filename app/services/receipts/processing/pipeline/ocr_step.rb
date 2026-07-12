@@ -34,7 +34,7 @@ class Receipts::Processing::Pipeline
       Receipts::Processing.record_ocr_result(run, ocr_result)
       Receipts::Processing.record_ocr_snapshot(run, ocr_result)
 
-      Result.new(ocr_result: ocr_result)
+      Receipts::Processing::Result.new(ocr_result: ocr_result)
     end
 
     private

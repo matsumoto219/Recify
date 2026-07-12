@@ -1,10 +1,4 @@
 module Receipts::Processing::Runs
-  Error = Receipts::Processing::Error
-  InvalidTransition = Receipts::Processing::InvalidTransition
-  TerminalRunError = Receipts::Processing::TerminalRunError
-  EnqueueError = Receipts::Processing::EnqueueError
-  StartResult = Receipts::Processing::StartResult
-
   STALE_ERROR_CODE = "analysis_stale_run".freeze
   STUCK_PROCESSING_TERMINAL_RUN_STATUSES = %w[
     succeeded

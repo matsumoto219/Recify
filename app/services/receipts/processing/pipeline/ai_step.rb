@@ -39,7 +39,7 @@ class Receipts::Processing::Pipeline
       Receipts::Processing.record_ai_result(run, ai_result)
       Receipts::Processing.record_ai_normalized_result(run, ai_result)
 
-      Result.new(ai_result: ai_result)
+      Receipts::Processing::Result.new(ai_result: ai_result)
     end
 
     private

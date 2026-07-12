@@ -21,7 +21,7 @@ module Receipts::Processing::Runs
       Rails.logger.error(
         "[ReceiptAnalysis] enqueue_failed run_id=#{run.id} job=#{job_class.name} error_class=#{error.class.name}"
       )
-      raise EnqueueError, "analysis job enqueue failed"
+      raise Receipts::Processing::EnqueueError, "analysis job enqueue failed"
     end
 
     private
@@ -34,7 +34,7 @@ module Receipts::Processing::Runs
         error_code: ERROR_CODE,
         error_message: ERROR_MESSAGE
       )
-    rescue TerminalRunError, ActiveRecord::RecordNotFound
+    rescue Receipts::Processing::TerminalRunError, ActiveRecord::RecordNotFound
       nil
     end
   end

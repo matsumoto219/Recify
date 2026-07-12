@@ -26,7 +26,7 @@ module Receipts::Processing::Runs
     def call
       receipt.with_lock do
         if (active_run = latest_active_run)
-          return StartResult.new(run: active_run, created: false)
+          return Receipts::Processing::StartResult.new(run: active_run, created: false)
         end
 
         runtime_config_metadata = RuntimeConfigSnapshot.metadata_for_new_run
@@ -41,13 +41,13 @@ module Receipts::Processing::Runs
           metadata: runtime_config_metadata
         )
 
-        StartResult.new(run: run, created: true)
+        Receipts::Processing::StartResult.new(run: run, created: true)
       end
     rescue ActiveRecord::RecordNotUnique
       active_run = latest_active_run
       raise unless active_run
 
-      StartResult.new(run: active_run, created: false)
+      Receipts::Processing::StartResult.new(run: active_run, created: false)
     rescue ExternalServices::RuntimeConfigUnavailableError
       fail_processing_receipt!
       raise

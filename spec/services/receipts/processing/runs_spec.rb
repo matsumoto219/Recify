@@ -112,7 +112,7 @@ RSpec.describe Receipts::Processing::Runs do
 
       expect do
         described_class.enqueue(run, job_class: ReceiptOcrJob)
-      end.to raise_error(Receipts::Processing::Runs::EnqueueError, 'analysis job enqueue failed')
+      end.to raise_error(Receipts::Processing::EnqueueError, 'analysis job enqueue failed')
 
       aggregate_failures do
         expect(run.reload).to have_attributes(
@@ -225,7 +225,7 @@ RSpec.describe Receipts::Processing::Runs do
 
       expect do
         described_class.start_stage(run, 'ocr')
-      end.to raise_error(Receipts::Processing::Runs::InvalidTransition)
+      end.to raise_error(Receipts::Processing::InvalidTransition)
     end
 
     it 'terminal後の変更を拒否する' do
@@ -240,7 +240,7 @@ RSpec.describe Receipts::Processing::Runs do
 
       expect do
         described_class.start_stage(run, 'ai')
-      end.to raise_error(Receipts::Processing::Runs::TerminalRunError)
+      end.to raise_error(Receipts::Processing::TerminalRunError)
     end
 
     it 'runのerror_messageからsecret・endpoint・promptを除去する' do

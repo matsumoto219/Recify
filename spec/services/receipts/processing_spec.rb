@@ -1,22 +1,8 @@
 require "rails_helper"
 
 RSpec.describe Receipts::Processing do
-  describe "public contracts" do
-    it "legacy workflowのErrorとResult contractを同一objectで公開する" do
-      aggregate_failures do
-        expect(described_class::AnalysisError).to equal(Receipts::Processing::Pipeline::AnalysisError)
-        expect(described_class::EnqueueError).to equal(Receipts::Processing::Runs::EnqueueError)
-        expect(described_class::Error).to equal(Receipts::Processing::Runs::Error)
-        expect(described_class::InvalidTransition).to equal(Receipts::Processing::Runs::InvalidTransition)
-        expect(described_class::Result).to equal(Receipts::Processing::Pipeline::Result)
-        expect(described_class::StartResult).to equal(Receipts::Processing::Runs::StartResult)
-        expect(described_class::TerminalRunError).to equal(Receipts::Processing::Runs::TerminalRunError)
-      end
-    end
-  end
-
   describe "pipeline facade" do
-    it "OCR stageをlegacy Pipelineへ委譲する" do
+    it "OCR stageをprivate Pipelineへ委譲する" do
       run = instance_double(ReceiptAnalysisRun)
       allow(Receipts::Processing::Pipeline).to receive(:run_ocr).with(run).and_return(:result)
 
@@ -35,7 +21,7 @@ RSpec.describe Receipts::Processing do
   end
 
   describe "run lifecycle facade" do
-    it "run作成をlegacy Runsへ委譲する" do
+    it "run作成をprivate Runsへ委譲する" do
       arguments = { receipt: instance_double(Receipt), source: "upload" }
       allow(Receipts::Processing::Runs).to receive(:start).with(**arguments).and_return(:result)
 

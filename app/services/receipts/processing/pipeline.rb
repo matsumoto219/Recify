@@ -3,8 +3,6 @@ class Receipts::Processing::Pipeline
   FINALIZE_DECISION_SCHEMA_VERSION = Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
   FINALIZE_STRATEGIES = Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES
 
-  AnalysisError = Receipts::Processing::AnalysisError
-
   class << self
     def run_ocr(run)
       new(run).run_ocr
@@ -59,13 +57,13 @@ class Receipts::Processing::Pipeline
 
       if decision
         record_finalize_decision(decision)
-        Result.new(
+        Receipts::Processing::Result.new(
           ocr_result: ocr_result,
           finalize_decision: decision,
           next_step: :finalize
         )
       else
-        Result.new(
+        Receipts::Processing::Result.new(
           ocr_result: ocr_result,
           next_step: :ai
         )
@@ -86,7 +84,7 @@ class Receipts::Processing::Pipeline
       decision = ai_gate_finalize_decision(ocr_result)
       if decision
         record_finalize_decision(decision)
-        return Result.new(
+        return Receipts::Processing::Result.new(
           ocr_result: ocr_result,
           finalize_decision: decision,
           next_step: :finalize
@@ -108,7 +106,7 @@ class Receipts::Processing::Pipeline
       decision = ai_finalize_decision(ocr_result, ai_result)
       record_finalize_decision(decision)
 
-      Result.new(
+      Receipts::Processing::Result.new(
         ocr_result: ocr_result,
         ai_result: ai_result,
         finalize_decision: decision,
@@ -129,7 +127,7 @@ class Receipts::Processing::Pipeline
 
       persist_finalize_result!(decision)
 
-      Result.new(
+      Receipts::Processing::Result.new(
         finalize_decision: decision,
         next_step: :done
       )
@@ -174,7 +172,7 @@ class Receipts::Processing::Pipeline
       "#{LOG_TAG} skipped receipt_id=#{receipt.id} run_id=#{run.id} status=#{run.status} reason=#{reason}"
     ) if reason == :terminal_run
 
-    Result.new(next_step: :skipped, skip_reason: reason)
+    Receipts::Processing::Result.new(next_step: :skipped, skip_reason: reason)
   end
 
   def with_run_failure
@@ -355,9 +353,9 @@ class Receipts::Processing::Pipeline
       error_code: error_code,
       error_message: error_code
     )
-    Result.new(next_step: :skipped, skip_reason: error_code.to_sym)
+    Receipts::Processing::Result.new(next_step: :skipped, skip_reason: error_code.to_sym)
   rescue Receipts::Processing::TerminalRunError
-    Result.new(next_step: :skipped, skip_reason: :terminal_run)
+    Receipts::Processing::Result.new(next_step: :skipped, skip_reason: :terminal_run)
   end
 
   def ocr_service_disabled_result(disabled_snapshot = ExternalServices.snapshot(:ocr))
@@ -373,7 +371,7 @@ class Receipts::Processing::Pipeline
     decision = finalize_decision(:fail_receipt, ocr_result: ocr_result, error_code: "ocr_disabled")
     record_finalize_decision(decision)
 
-    Result.new(
+    Receipts::Processing::Result.new(
       ocr_result: ocr_result,
       finalize_decision: decision,
       next_step: :finalize
@@ -441,9 +439,9 @@ class Receipts::Processing::Pipeline
       error_code: "usage_limit_exceeded",
       error_message: "usage_limit_exceeded"
     )
-    Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
+    Receipts::Processing::Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
   rescue Receipts::Processing::TerminalRunError
-    Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
+    Receipts::Processing::Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
   end
 
   def ai_name_completion_enabled?
