@@ -1343,26 +1343,10 @@ class ReceiptsController < ApplicationController
     end
 
     adjustments_attributes = permitted["receipt_adjustments_attributes"]
-    if adjustments_attributes.present?
-      return adjustments_attributes.values.reject do |adjustment_attributes|
-        ActiveModel::Type::Boolean.new.cast(adjustment_attributes["_destroy"])
-      end
-    end
+    return [] if adjustments_attributes.blank?
 
-    return [] unless context == :edit_save
-    return [] unless @receipt&.persisted?
-
-    @receipt.receipt_adjustments.map do |adjustment|
-      {
-        kind: adjustment.kind,
-        label: adjustment.label,
-        amount: adjustment.amount,
-        sign: adjustment.sign,
-        tax_rate: adjustment.tax_rate,
-        needs_review: adjustment.needs_review?,
-        review_reasons: adjustment.review_reasons,
-        source: adjustment.source
-      }
+    adjustments_attributes.values.reject do |adjustment_attributes|
+      ActiveModel::Type::Boolean.new.cast(adjustment_attributes["_destroy"])
     end
   end
 
@@ -1372,20 +1356,10 @@ class ReceiptsController < ApplicationController
     end
 
     payments_attributes = permitted["receipt_payments_attributes"]
-    if payments_attributes.present?
-      return payments_attributes.values.reject do |payment_attributes|
-        ActiveModel::Type::Boolean.new.cast(payment_attributes["_destroy"])
-      end
-    end
+    return [] if payments_attributes.blank?
 
-    return [] unless context == :edit_save
-    return [] unless @receipt&.persisted?
-
-    @receipt.receipt_payments.map do |payment|
-      {
-        method: payment.method,
-        amount: payment.amount
-      }
+    payments_attributes.values.reject do |payment_attributes|
+      ActiveModel::Type::Boolean.new.cast(payment_attributes["_destroy"])
     end
   end
 
