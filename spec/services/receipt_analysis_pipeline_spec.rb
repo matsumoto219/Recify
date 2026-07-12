@@ -431,6 +431,39 @@ RSpec.describe ReceiptAnalysisPipeline do
       end
     end
 
+    it 'OCR provider call前の利用上限超過はprovider failure扱いにせずskipする' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      quota_error = Usage::LimitExceeded.new(
+        key: 'ocr_jobs_per_day',
+        limit: 1,
+        used: 1,
+        requested: 1
+      )
+
+      allow(Usage).to receive(:ensure_ocr_job_within_limit!).and_raise(quota_error)
+      allow(ReceiptOcrService).to receive(:call)
+      allow(ExternalServices).to receive(:mark_failure!)
+
+      result = described_class.run_ocr(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:skipped)
+        expect(result.skip_reason).to eq(:usage_limit_exceeded)
+        expect(ReceiptOcrService).not_to have_received(:call)
+        expect(ExternalServices).not_to have_received(:mark_failure!)
+        expect(run.reload).to have_attributes(
+          status: 'failed',
+          error_stage: 'ocr',
+          error_code: 'usage_limit_exceeded'
+        )
+        expect(receipt.reload).to have_attributes(
+          status: 'failed',
+          processing_error_code: 'usage_limit_exceeded'
+        )
+      end
+    end
+
     it 'OCR成功時に設定ONならraw OCR response JSONをrun artifactへ保存する' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
@@ -1012,6 +1045,35 @@ RSpec.describe ReceiptAnalysisPipeline do
         expect(run.error_code).to eq('usage_limit_exceeded')
         expect(receipt.reload.status).to eq('failed')
         expect(receipt.processing_error_code).to eq('usage_limit_exceeded')
+      end
+    end
+
+    it '利用上限終端が別workerと競合してもusage limitのskip結果を維持する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      quota_error = Usage::LimitExceeded.new(
+        key: 'ai_jobs_per_day',
+        limit: 1,
+        used: 1,
+        requested: 1
+      )
+
+      ReceiptAnalysisRuns.record_ocr_snapshot(run, successful_ocr_result)
+      allow(Usage).to receive(:ensure_ai_job_within_limit!).and_raise(quota_error)
+      allow(ReceiptAnalysisRuns).to receive(:fail)
+        .and_raise(ReceiptAnalysisRuns::TerminalRunError, 'already terminal')
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:skipped)
+        expect(result.skip_reason).to eq(:usage_limit_exceeded)
+        expect(ReceiptAnalysisRuns).to have_received(:fail).with(
+          run,
+          error_stage: 'ai',
+          error_code: 'usage_limit_exceeded',
+          error_message: 'usage_limit_exceeded'
+        )
       end
     end
 
