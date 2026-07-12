@@ -12,6 +12,9 @@ RSpec.describe Security::ManualIpUnblocker do
   it '手動IP制限をrevokedに更新してcacheを消す' do
     block = create(:security_ip_block, ip_address: '8.8.8.8')
     Security::IpAccessRules.blocked?('8.8.8.8')
+    expect(Security::IpAccessOperationLock).to receive(:call)
+      .with(ip_address: IPAddr.new('8.8.8.8'))
+      .and_call_original
 
     result = described_class.call(
       ip_address: '8.8.8.8',

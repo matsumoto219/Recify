@@ -14,6 +14,9 @@ RSpec.describe Security::ManualIpBlocker do
 
   it '期限付きの手動IP制限を作成してcacheを消す' do
     Security::IpAccessRules.blocked?('8.8.8.8')
+    expect(Security::IpAccessOperationLock).to receive(:call)
+      .with(ip_address: IPAddr.new('8.8.8.8'))
+      .and_call_original
 
     result = described_class.call(
       ip_address: '8.8.8.8',

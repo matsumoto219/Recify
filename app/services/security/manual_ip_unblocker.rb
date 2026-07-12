@@ -26,17 +26,19 @@ module Security
     end
 
     def call
-      validate!
+      revoked_block = IpAccessOperationLock.call(ip_address: ip_address) do
+        validate!
+        block.update!(
+          status: "revoked",
+          revoked_at: Time.current,
+          revoked_by: revoked_by,
+          revoked_reason: reason
+        )
+        block
+      end
+      clear_ip_access_cache
 
-      block.update!(
-        status: "revoked",
-        revoked_at: Time.current,
-        revoked_by: revoked_by,
-        revoked_reason: reason
-      )
-      IpAccessRules.clear_cache!(ip_address)
-
-      Result.new(success: true, block: block, ip_address: ip_address)
+      Result.new(success: true, block: revoked_block, ip_address: ip_address)
     rescue Security::ValidationError => e
       Result.new(success: false, ip_address: ip_address, error_code: e.message)
     rescue ActiveRecord::RecordInvalid
@@ -64,6 +66,11 @@ module Security
 
       source_ip = IpAddress.normalize(source_security_event.ip_address)
       source_ip.present? && source_ip != ip_address
+    end
+
+    def clear_ip_access_cache
+      IpAccessRules.clear_cache!(ip_address)
+      ActiveRecord.after_all_transactions_commit { IpAccessRules.clear_cache!(ip_address) }
     end
   end
 end
