@@ -93,7 +93,12 @@ RSpec.describe "Service layer child implementation boundary" do
       public_constants: %w[Security::ValidationError]
     ),
     "security_events" => registry_entry("security_events", "SecurityEvents", facade: "app/services/security_events.rb"),
-    "storage" => registry_entry("storage", "Storage", facade: "app/services/storage.rb"),
+    "storage" => registry_entry(
+      "storage",
+      "Storage",
+      facade: "app/services/storage.rb",
+      public_constants: %w[Storage::QuotaExceeded]
+    ),
     "system_operations" => registry_entry("system_operations", "SystemOperations", facade: "app/services/system_operations.rb"),
     "system_settings" => registry_entry(
       "system_settings",

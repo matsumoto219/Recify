@@ -127,4 +127,27 @@ RSpec.describe Receipts::Editing::ManualCreator, type: :service do
       expect(Receipts::Processing).not_to have_received(:start)
     end
   end
+
+  it 'lock後のquota再判定で超過した画像を保存せずusageも消費しない' do
+    attributes['image'] = Rack::Test::UploadedFile.new(
+      Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
+      'image/jpeg'
+    )
+    allow(Storage).to receive(:with_quota_reservation)
+      .and_raise(Storage::QuotaExceeded.new(scope: :user))
+
+    result = described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      user: user,
+      items_missing: false
+    )
+
+    aggregate_failures do
+      expect(result).not_to be_saved
+      expect(result.receipt.errors).to be_of_kind(:image, :storage_quota_exceeded)
+      expect(result.receipt).not_to be_persisted
+      expect(UsageCounter.where(user: user, key: 'manual_receipts_per_day')).to be_empty
+    end
+  end
 end

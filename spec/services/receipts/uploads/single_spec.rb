@@ -70,6 +70,21 @@ RSpec.describe Receipts::Uploads::Single, type: :service do
     end
   end
 
+  it 'lock後のquota再判定で超過した場合はreceiptもusageも保存しない' do
+    allow(Storage).to receive(:with_quota_reservation)
+      .and_raise(Storage::QuotaExceeded.new(scope: :global))
+
+    result = described_class.call(user: user, image: uploaded_receipt_fixture)
+
+    aggregate_failures do
+      expect(result).not_to be_saved
+      expect(result.receipt.errors).to be_of_kind(:image, :storage_quota_exceeded)
+      expect(user.receipts.reload).to be_empty
+      expect(UsageCounter.where(user: user, key: 'receipt_uploads_per_day')).to be_empty
+      expect(Receipts::Processing).not_to have_received(:start)
+    end
+  end
+
   it 'lets the public usage limit error propagate without creating a receipt' do
     error = Usage::LimitExceeded.new(key: 'receipt_uploads_per_day', limit: 0, used: 0, requested: 1)
     allow(Usage).to receive(:consume_receipt_upload!).and_raise(error)

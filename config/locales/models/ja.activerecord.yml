@@ -178,6 +178,7 @@ ja:
               invalid_content_type: "はJPEG/PNG/WebP形式でアップロードしてください"
               file_too_large: "は%{max_size}以下にしてください"
               image_too_small: "は%{min_dimension}px以上の画像をアップロードしてください"
+              storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
               image_too_large: "は%{max_dimension}px以下の画像をアップロードしてください"
         passkey:
           attributes:

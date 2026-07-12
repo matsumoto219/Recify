@@ -27,6 +27,8 @@ class Receipts::Uploads::Batch
     create_receipts
   rescue Usage::LimitExceeded
     failure(I18n.t("receipts.batch_upload.errors.usage_limit_exceeded"))
+  rescue Storage::QuotaExceeded => error
+    failure(storage_quota_error_message(scope: error.scope))
   end
 
   private
@@ -41,22 +43,24 @@ class Receipts::Uploads::Batch
     created_receipts = []
     validation_errors = []
 
-    ActiveRecord::Base.transaction do
-      consume_batch_upload_limits!
+    Storage.with_quota_reservation(byte_size: total_upload_size, user: user) do
+      ActiveRecord::Base.transaction(requires_new: true) do
+        consume_batch_upload_limits!
 
-      files.each do |file|
-        receipt = user.receipts.new(
-          image: file,
-          status: "processing",
-          keep_image: user.effective_keep_receipt_images
-        )
+        files.each do |file|
+          receipt = user.receipts.new(
+            image: file,
+            status: "processing",
+            keep_image: user.effective_keep_receipt_images
+          )
 
-        unless receipt.save
-          validation_errors = receipt.errors.full_messages
-          raise ActiveRecord::Rollback
+          unless receipt.save
+            validation_errors = receipt.errors.full_messages
+            raise ActiveRecord::Rollback
+          end
+
+          created_receipts << receipt
         end
-
-        created_receipts << receipt
       end
     end
 
@@ -74,8 +78,8 @@ class Receipts::Uploads::Batch
     @total_upload_size ||= files.sum { |file| file.respond_to?(:size) ? file.size.to_i : 0 }
   end
 
-  def storage_quota_error_message
-    if !Storage.global_quota_can_add?(total_upload_size)
+  def storage_quota_error_message(scope: nil)
+    if scope == :global || !Storage.global_quota_can_add?(total_upload_size)
       I18n.t("receipts.batch_upload.errors.global_hard_stop")
     else
       I18n.t("receipts.batch_upload.errors.quota_exceeded")

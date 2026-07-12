@@ -62,6 +62,30 @@ RSpec.describe Admin::Operations::AnnouncementMutation do
         }.to raise_error(StandardError, "audit failed")
       }.not_to change(Announcement, :count)
     end
+
+    it "lock後のglobal quota再判定で超過した画像を保存せず監査成功を残さない" do
+      uploaded_image = Rack::Test::UploadedFile.new(
+        Rails.root.join("spec/fixtures/files/receipt_sample.jpg"),
+        "image/jpeg"
+      )
+      allow(Storage).to receive(:with_quota_reservation)
+        .and_raise(Storage::QuotaExceeded.new(scope: :global))
+
+      result = described_class.create(
+        attributes: attributes.merge("image" => uploaded_image),
+        actor: admin,
+        request: nil,
+        uploaded_image: uploaded_image,
+        security_context: { controller: "admin/announcements", action: "create" }
+      )
+
+      aggregate_failures do
+        expect(result).not_to be_saved
+        expect(result.announcement.errors).to be_of_kind(:image, :storage_quota_exceeded)
+        expect(Announcement).not_to exist(title: attributes.fetch("title"))
+        expect(AuditLog).not_to exist(action: "announcement.create")
+      end
+    end
   end
 
   describe ".update" do

@@ -63,18 +63,20 @@ module Receipts::Processing::Runs
       return skipped_result("too_large", byte_size:) if byte_size > self.class.max_bytes
       return skipped_result("global_storage_quota_exceeded", byte_size:) unless Storage.global_quota_can_add?(byte_size)
 
-      run.ocr_response_artifact.attach(
-        io: StringIO.new(body),
-        filename: filename_for(run),
-        content_type: CONTENT_TYPE,
-        identify: false,
-        metadata: {
-          "provider" => provider.to_s,
-          "model_id" => model_id.to_s.presence,
-          "captured_at" => at.iso8601,
-          "schema_version" => 1
-        }.compact
-      )
+      Storage.with_quota_reservation(byte_size: byte_size) do
+        run.ocr_response_artifact.attach(
+          io: StringIO.new(body),
+          filename: filename_for(run),
+          content_type: CONTENT_TYPE,
+          identify: false,
+          metadata: {
+            "provider" => provider.to_s,
+            "model_id" => model_id.to_s.presence,
+            "captured_at" => at.iso8601,
+            "schema_version" => 1
+          }.compact
+        )
+      end
 
       Result.new(
         saved: true,
@@ -83,6 +85,8 @@ module Receipts::Processing::Runs
         byte_size: byte_size,
         attachment: run.ocr_response_artifact
       )
+    rescue Storage::QuotaExceeded
+      skipped_result("global_storage_quota_exceeded", byte_size: byte_size)
     rescue StandardError => e
       Rails.logger.warn("[ReceiptAnalysisRuns::OcrResponseArtifact] capture_failed class=#{e.class}")
       skipped_result("capture_failed")

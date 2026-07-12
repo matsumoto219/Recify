@@ -1187,6 +1187,28 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it '事前判定後のlock内quota再判定で超過したavatarを保存しない' do
+      allow(Storage).to receive(:with_quota_reservation)
+        .and_raise(Storage::QuotaExceeded.new(scope: :global))
+
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: user.name,
+                avatar: avatar_upload
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload.avatar).not_to be_attached
+        expect(response.body).to include(
+          I18n.t('activerecord.errors.models.user.attributes.avatar.storage_quota_exceeded')
+        )
+      end
+    end
+
     it 'avatar差し替え時は既存blob分を差し引いて容量判定する' do
       user.avatar.attach(avatar_upload)
       user.update!(storage_limit_bytes: user.avatar.blob.byte_size)

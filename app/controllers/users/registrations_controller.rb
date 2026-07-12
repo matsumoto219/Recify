@@ -120,7 +120,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
           return
         end
 
-        resource_updated = resource.update_without_password(profile_params)
+        resource_updated = update_profile_with_quota(resource, profile_params)
         Storage.purge_attachment(resource.avatar) if resource_updated && remove_avatar_requested? && !profile_params[:avatar].present?
         resource_updated
       else
@@ -325,6 +325,21 @@ class Users::RegistrationsController < Devise::RegistrationsController
     else
       t("flash.storage.quota_exceeded")
     end
+  end
+
+  def update_profile_with_quota(resource, profile_params)
+    uploaded_avatar = profile_params[:avatar]
+    return resource.update_without_password(profile_params) if uploaded_avatar.blank?
+
+    excluding_blob = resource.avatar.blob if resource.avatar.attached?
+    Storage.with_quota_reservation(
+      byte_size: uploaded_avatar.size,
+      user: resource,
+      excluding_blob: excluding_blob
+    ) { resource.update_without_password(profile_params) }
+  rescue Storage::QuotaExceeded
+    resource.errors.add(:avatar, :storage_quota_exceeded)
+    false
   end
 
   def remove_avatar_requested?

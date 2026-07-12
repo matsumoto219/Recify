@@ -1,4 +1,13 @@
 module Storage
+  class QuotaExceeded < StandardError
+    attr_reader :scope
+
+    def initialize(scope:)
+      @scope = scope.to_sym
+      super("storage quota exceeded")
+    end
+  end
+
   class << self
     def purge_attachment(attachment)
       AttachmentPurger.call(attachment)
@@ -14,6 +23,10 @@ module Storage
 
     def global_quota_can_add?(...)
       GlobalQuota.can_add?(...)
+    end
+
+    def with_quota_reservation(byte_size:, user: nil, excluding_blob: nil, &operation)
+      QuotaReservation.call(byte_size:, user:, excluding_blob:, &operation)
     end
 
     def orphan_blob_scan(...)

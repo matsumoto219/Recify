@@ -38,13 +38,18 @@ class Receipts::Uploads::Single
   def save_with_usage!(receipt)
     saved = false
 
-    ActiveRecord::Base.transaction do
-      Usage.consume_receipt_upload!(user: user)
-      saved = receipt.save
-      raise ActiveRecord::Rollback unless saved
+    Storage.with_quota_reservation(byte_size: image.size, user: user) do
+      ActiveRecord::Base.transaction(requires_new: true) do
+        Usage.consume_receipt_upload!(user: user)
+        saved = receipt.save
+        raise ActiveRecord::Rollback unless saved
+      end
     end
 
     saved
+  rescue Storage::QuotaExceeded
+    receipt.errors.add(:image, :storage_quota_exceeded)
+    false
   end
 
   def enqueue_analysis(receipt)

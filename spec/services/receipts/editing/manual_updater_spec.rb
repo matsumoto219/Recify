@@ -71,4 +71,25 @@ RSpec.describe Receipts::Editing::ManualUpdater do
 
     expect(Usage).not_to have_received(:consume_manual_receipt!)
   end
+
+  it 'lock後のquota再判定で超過した画像差し替えを保存しない' do
+    uploaded_image = Rack::Test::UploadedFile.new(
+      Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
+      'image/jpeg'
+    )
+    allow(Storage).to receive(:with_quota_reservation)
+      .and_raise(Storage::QuotaExceeded.new(scope: :global))
+
+    result = described_class.call(
+      receipt: receipt,
+      attributes: { 'image' => uploaded_image },
+      items_missing: false
+    )
+
+    aggregate_failures do
+      expect(result).not_to be_saved
+      expect(result.receipt.errors).to be_of_kind(:image, :storage_quota_exceeded)
+      expect(receipt.reload.image).not_to be_attached
+    end
+  end
 end

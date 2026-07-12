@@ -26,12 +26,33 @@ class Receipts::Editing::ManualUpdater
       return result(saved: false)
     end
 
-    result(saved: receipt.update(attributes))
+    result(saved: persist_update)
   end
 
   private
 
   attr_reader :receipt, :attributes, :items_missing
+
+  def persist_update
+    return receipt.update(attributes) unless uploaded_image
+
+    Storage.with_quota_reservation(
+      byte_size: uploaded_image.size,
+      user: receipt.user,
+      excluding_blob: existing_image_blob
+    ) { receipt.update(attributes) }
+  rescue Storage::QuotaExceeded
+    receipt.errors.add(:image, :storage_quota_exceeded)
+    false
+  end
+
+  def uploaded_image
+    attributes["image"]
+  end
+
+  def existing_image_blob
+    receipt.image.blob if receipt.image.attached?
+  end
 
   def result(saved:)
     Result.new(receipt:, saved:, items_missing:)

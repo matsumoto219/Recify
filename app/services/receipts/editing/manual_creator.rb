@@ -26,8 +26,28 @@ class Receipts::Editing::ManualCreator
     receipt.status = attributes["review_reasons"].empty? ? "completed" : "review_needed"
     return result(saved: false) if items_missing
 
+    saved = persist_receipt
+
+    result(saved: saved)
+  end
+
+  private
+
+  attr_reader :receipt, :attributes, :user, :items_missing
+
+  def persist_receipt
+    return persist_with_usage unless uploaded_image
+
+    Storage.with_quota_reservation(byte_size: uploaded_image.size, user: user) { persist_with_usage }
+  rescue Storage::QuotaExceeded
+    receipt.errors.add(:image, :storage_quota_exceeded)
+    false
+  end
+
+  def persist_with_usage
     saved = false
-    ActiveRecord::Base.transaction do
+
+    ActiveRecord::Base.transaction(requires_new: true) do
       if receipt.valid?
         Usage.consume_manual_receipt!(user: user)
         saved = receipt.save
@@ -36,12 +56,12 @@ class Receipts::Editing::ManualCreator
       raise ActiveRecord::Rollback unless saved
     end
 
-    result(saved: saved)
+    saved
   end
 
-  private
-
-  attr_reader :receipt, :attributes, :user, :items_missing
+  def uploaded_image
+    attributes["image"]
+  end
 
   def result(saved:)
     Result.new(receipt:, saved:, items_missing:)

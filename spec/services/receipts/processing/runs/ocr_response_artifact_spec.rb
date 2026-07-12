@@ -90,6 +90,20 @@ RSpec.describe Receipts::Processing::Runs::OcrResponseArtifact do
       end
     end
 
+    it 'lock内のquota再判定で超過したJSONも保存しない' do
+      enable_capture!
+      allow(Storage).to receive(:with_quota_reservation)
+        .and_raise(Storage::QuotaExceeded.new(scope: :global))
+
+      result = described_class.capture(run, raw_body, provider: 'azure_document_intelligence')
+
+      aggregate_failures do
+        expect(result).to be_skipped
+        expect(result.reason).to eq('global_storage_quota_exceeded')
+        expect(run.reload.ocr_response_artifact).not_to be_attached
+      end
+    end
+
     it 'JSONとして壊れた文字列は保存しない' do
       enable_capture!
 
