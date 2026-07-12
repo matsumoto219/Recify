@@ -1,14 +1,9 @@
 module ReceiptAnalysisRuns
-  Error = Class.new(StandardError)
-  InvalidTransition = Class.new(Error)
-  TerminalRunError = Class.new(Error)
-  EnqueueError = Class.new(Error)
-
-  StartResult = Struct.new(:run, :created, keyword_init: true) do
-    def created?
-      created == true
-    end
-  end
+  Error = Receipts::Processing::Error
+  InvalidTransition = Receipts::Processing::InvalidTransition
+  TerminalRunError = Receipts::Processing::TerminalRunError
+  EnqueueError = Receipts::Processing::EnqueueError
+  StartResult = Receipts::Processing::StartResult
 
   STALE_ERROR_CODE = "analysis_stale_run".freeze
   STUCK_PROCESSING_TERMINAL_RUN_STATUSES = %w[

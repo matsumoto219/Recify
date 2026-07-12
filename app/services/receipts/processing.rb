@@ -1,12 +1,41 @@
 module Receipts
   module Processing
-    AnalysisError = ReceiptAnalysisPipeline::AnalysisError
-    EnqueueError = ReceiptAnalysisRuns::EnqueueError
-    Error = ReceiptAnalysisRuns::Error
-    InvalidTransition = ReceiptAnalysisRuns::InvalidTransition
-    Result = ReceiptAnalysisPipeline::Result
-    StartResult = ReceiptAnalysisRuns::StartResult
-    TerminalRunError = ReceiptAnalysisRuns::TerminalRunError
+    class AnalysisError < StandardError
+      attr_reader :error_code, :metadata
+
+      def initialize(error_code, message = nil, metadata: {})
+        @error_code = error_code
+        @metadata = metadata.to_h
+        super(message)
+      end
+    end
+
+    Error = Class.new(StandardError)
+    InvalidTransition = Class.new(Error)
+    TerminalRunError = Class.new(Error)
+    EnqueueError = Class.new(Error)
+
+    Result = Struct.new(
+      :ocr_result,
+      :ai_result,
+      :finalize_decision,
+      :next_step,
+      :skip_reason,
+      keyword_init: true
+    ) do
+      # Provider payload の成否を表す補助。Job の後続enqueue判定は next_step を使う。
+      def success?
+        result = ai_result || ocr_result
+
+        result&.dig(:success) == true
+      end
+    end
+
+    StartResult = Struct.new(:run, :created, keyword_init: true) do
+      def created?
+        created == true
+      end
+    end
 
     class << self
       def admin_retry_eligibility(...)

@@ -3,15 +3,7 @@ class ReceiptAnalysisPipeline
   FINALIZE_DECISION_SCHEMA_VERSION = Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
   FINALIZE_STRATEGIES = Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES
 
-  class AnalysisError < StandardError
-    attr_reader :error_code, :metadata
-
-    def initialize(error_code, message = nil, metadata: {})
-      @error_code = error_code
-      @metadata = metadata.to_h
-      super(message)
-    end
-  end
+  AnalysisError = Receipts::Processing::AnalysisError
 
   class << self
     def run_ocr(run)
