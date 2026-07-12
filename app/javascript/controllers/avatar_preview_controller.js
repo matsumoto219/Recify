@@ -113,15 +113,15 @@ export default class extends Controller {
     if (!this.hasImageTarget) return
 
     this.imageTarget.src = src
-    this.imageTarget.classList.remove('hidden')
+    this.imageTarget.classList.add('hidden')
     if (this.hasFallbackTarget) {
-      this.fallbackTarget.classList.add('hidden')
+      this.fallbackTarget.classList.remove('hidden')
     }
   }
 
   showFallback () {
     if (this.hasImageTarget) {
-      this.imageTarget.src = ''
+      this.imageTarget.removeAttribute('src')
       this.imageTarget.classList.add('hidden')
     }
     if (this.hasFallbackTarget) {

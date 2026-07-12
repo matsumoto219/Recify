@@ -41,7 +41,7 @@ function isAllowedReceiptImageFile (file) {
 
 // Connects to data-controller="receipt-image-card"
 export default class extends Controller {
-  static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'modalImage', 'fileName', 'dropOverlay', 'uploadError', 'removeImageField']
+  static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'previewTrigger', 'previewOverlay', 'modalImage', 'download', 'fileName', 'dropOverlay', 'uploadError', 'removeImageField']
   static values = {
     initiallyOpen: Boolean,
     collapseOnMobile: Boolean,
@@ -51,6 +51,7 @@ export default class extends Controller {
     storageUsedBytes: { type: Number, default: 0 },
     storageLimitBytes: { type: Number, default: 0 },
     storageExcludingBlobBytes: { type: Number, default: 0 },
+    unavailableImageLabel: String,
     reviewTarget: String
   }
 
@@ -60,8 +61,12 @@ export default class extends Controller {
     this.isOpen = this.defaultOpenStateForCurrentBreakpoint()
     this.objectUrl = null
     this.dragDepth = 0
+    this.imageIsAvailable = false
     this.modalElement = this.hasModalTarget ? this.modalTarget : null
     this.modalImageElement = this.hasModalImageTarget ? this.modalImageTarget : null
+    this.downloadHref = this.hasDownloadTarget ? this.downloadTarget.getAttribute('href') : null
+    this.downloadTabIndex = this.hasDownloadTarget ? this.downloadTarget.getAttribute('tabindex') : null
+    this.previewTriggerLabel = this.hasPreviewTriggerTarget ? this.previewTriggerTarget.getAttribute('aria-label') : null
     this.defaultUploadErrorMessage = this.hasUploadErrorTarget ? this.uploadErrorTarget.textContent.trim() : ''
     this.modalPlaceholder = document.createComment('receipt-image-modal-placeholder')
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
@@ -75,12 +80,15 @@ export default class extends Controller {
     this.handleKeydown = this.handleKeydown.bind(this)
     this.handleModalCloseClick = this.handleModalCloseClick.bind(this)
     this.handleModalPanelClick = this.handleModalPanelClick.bind(this)
+    this.handleModalImageLoad = this.handleModalImageLoad.bind(this)
+    this.handleModalImageError = this.handleModalImageError.bind(this)
     document.addEventListener('keydown', this.handleKeydown)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     document.addEventListener('click', this.handleReviewTargetClick)
     window.addEventListener('hashchange', this.handleReviewTargetHashChange)
     this.addBreakpointListener()
     this.addModalEventListeners()
+    this.syncInitialImageState()
     this.openFromReviewTargetHash()
   }
 
@@ -167,11 +175,14 @@ export default class extends Controller {
     this.objectUrl = URL.createObjectURL(file)
 
     if (this.hasPreviewImageTarget) {
+      this.prepareImageLoad()
       this.previewImageTarget.src = this.objectUrl
-      this.previewImageTarget.classList.remove('hidden')
+
+      const loadStateManaged = this.previewImageTarget.hasAttribute('data-image-load-state-target')
+      this.previewImageTarget.classList.toggle('hidden', loadStateManaged)
 
       // placeholder（親要素内のテキスト等）を非表示にする
-      const container = this.previewImageTarget.closest('.relative')
+      const container = loadStateManaged ? null : this.previewImageTarget.closest('.relative')
       if (container) {
         const texts = container.querySelectorAll('span, p')
         texts.forEach(el => el.classList.add('hidden'))
@@ -179,6 +190,7 @@ export default class extends Controller {
     }
 
     if (this.modalImageElement) {
+      this.modalImageElement.classList.add('hidden')
       this.modalImageElement.src = this.objectUrl
     }
   }
@@ -449,6 +461,7 @@ export default class extends Controller {
   }
 
   openModal () {
+    if (!this.imageIsAvailable) return
     if (!this.modalElement || !this.modalImageElement) return
     if (!this.modalElement.classList.contains('hidden')) return
 
@@ -480,7 +493,134 @@ export default class extends Controller {
       this.closeModal()
     }
 
+    this.restoreImageControlsForCache()
     this.sync()
+  }
+
+  imageAvailable () {
+    this.imageIsAvailable = true
+
+    if (this.hasPreviewTriggerTarget) {
+      this.previewTriggerTarget.disabled = false
+      this.previewTriggerTarget.setAttribute('aria-disabled', 'false')
+      if (this.previewTriggerLabel) this.previewTriggerTarget.setAttribute('aria-label', this.previewTriggerLabel)
+    }
+
+    if (this.hasPreviewOverlayTarget) {
+      this.previewOverlayTarget.classList.remove('hidden')
+    }
+
+    this.enableDownload()
+    this.syncModalImageAvailability()
+  }
+
+  imageUnavailable () {
+    this.imageIsAvailable = false
+
+    if (this.modalElement && !this.modalElement.classList.contains('hidden')) {
+      this.closeModal()
+    }
+
+    if (this.hasPreviewTriggerTarget) {
+      this.previewTriggerTarget.disabled = true
+      this.previewTriggerTarget.setAttribute('aria-disabled', 'true')
+      if (this.hasUnavailableImageLabelValue) {
+        this.previewTriggerTarget.setAttribute('aria-label', this.unavailableImageLabelValue)
+      }
+    }
+
+    if (this.hasPreviewOverlayTarget) {
+      this.previewOverlayTarget.classList.add('hidden')
+    }
+
+    if (this.modalImageElement) this.modalImageElement.classList.add('hidden')
+    this.disableDownload()
+  }
+
+  prepareImageLoad () {
+    this.imageIsAvailable = false
+
+    if (this.hasPreviewTriggerTarget) {
+      this.previewTriggerTarget.disabled = true
+      this.previewTriggerTarget.setAttribute('aria-disabled', 'true')
+    }
+
+    if (this.hasPreviewOverlayTarget) this.previewOverlayTarget.classList.add('hidden')
+    if (this.modalImageElement) this.modalImageElement.classList.add('hidden')
+    this.disableDownload()
+  }
+
+  syncInitialImageState () {
+    if (!this.hasPreviewImageTarget) return
+    if (!this.previewImageTarget.getAttribute('src')) return
+    if (!this.previewImageTarget.complete) return
+
+    if (this.previewImageTarget.naturalWidth > 0) {
+      this.imageAvailable()
+    } else {
+      this.imageUnavailable()
+    }
+  }
+
+  syncModalImageAvailability () {
+    if (!this.modalImageElement) return
+
+    const loaded = this.modalImageElement.complete && this.modalImageElement.naturalWidth > 0
+    this.modalImageElement.classList.toggle('hidden', !this.imageIsAvailable || !loaded)
+  }
+
+  handleModalImageLoad () {
+    this.syncModalImageAvailability()
+  }
+
+  handleModalImageError () {
+    this.imageUnavailable()
+  }
+
+  enableDownload () {
+    if (!this.hasDownloadTarget) return
+
+    if (this.downloadHref) this.downloadTarget.setAttribute('href', this.downloadHref)
+    if (this.downloadTabIndex === null) {
+      this.downloadTarget.removeAttribute('tabindex')
+    } else {
+      this.downloadTarget.setAttribute('tabindex', this.downloadTabIndex)
+    }
+    this.downloadTarget.setAttribute('aria-disabled', 'false')
+    this.downloadTarget.hidden = false
+    this.downloadTarget.classList.remove('hidden')
+  }
+
+  disableDownload () {
+    if (!this.hasDownloadTarget) return
+
+    const currentHref = this.downloadTarget.getAttribute('href')
+    if (currentHref) this.downloadHref = currentHref
+    this.downloadTarget.removeAttribute('href')
+    this.downloadTarget.setAttribute('tabindex', '-1')
+    this.downloadTarget.setAttribute('aria-disabled', 'true')
+    this.downloadTarget.hidden = true
+    this.downloadTarget.classList.add('hidden')
+  }
+
+  restoreImageControlsForCache () {
+    this.imageIsAvailable = false
+
+    if (this.hasPreviewTriggerTarget) {
+      this.previewTriggerTarget.disabled = true
+      this.previewTriggerTarget.setAttribute('aria-disabled', 'true')
+      if (this.previewTriggerLabel) this.previewTriggerTarget.setAttribute('aria-label', this.previewTriggerLabel)
+    }
+    if (this.hasPreviewOverlayTarget) this.previewOverlayTarget.classList.add('hidden')
+    if (this.modalImageElement) this.modalImageElement.classList.add('hidden')
+
+    if (this.hasDownloadTarget) {
+      if (this.downloadHref) this.downloadTarget.setAttribute('href', this.downloadHref)
+      this.downloadTarget.setAttribute('tabindex', '-1')
+      this.downloadTarget.setAttribute('aria-disabled', 'true')
+      this.downloadTarget.hidden = true
+      this.downloadTarget.classList.add('hidden')
+    }
   }
 
   handleModalCloseClick (event) {
@@ -508,6 +648,8 @@ export default class extends Controller {
     this.modalContainerElement?.addEventListener('click', this.handleModalCloseClick)
     this.modalCloseElement?.addEventListener('click', this.handleModalCloseClick)
     this.modalPanelElement?.addEventListener('click', this.handleModalPanelClick)
+    this.modalImageElement?.addEventListener('load', this.handleModalImageLoad)
+    this.modalImageElement?.addEventListener('error', this.handleModalImageError)
   }
 
   removeModalEventListeners () {
@@ -515,6 +657,8 @@ export default class extends Controller {
     this.modalContainerElement?.removeEventListener('click', this.handleModalCloseClick)
     this.modalCloseElement?.removeEventListener('click', this.handleModalCloseClick)
     this.modalPanelElement?.removeEventListener('click', this.handleModalPanelClick)
+    this.modalImageElement?.removeEventListener('load', this.handleModalImageLoad)
+    this.modalImageElement?.removeEventListener('error', this.handleModalImageError)
   }
 
   moveModalToBody () {

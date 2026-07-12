@@ -46,4 +46,17 @@ RSpec.describe "Receipt image card Stimulus controller" do
       expect(open_preview).not_to include("clearRemoveImageRequest")
     end
   end
+
+  it "disables image actions after a load failure and restores them only after a successful load" do
+    aggregate_failures do
+      expect(source).to include("imageUnavailable")
+      expect(source).to include("imageAvailable")
+      expect(source).to include("this.previewTriggerTarget.disabled = true")
+      expect(source).to include("this.downloadTarget.removeAttribute('href')")
+      expect(source).to include("this.downloadTarget.hidden = true")
+      expect(source).to include("this.previewTriggerTarget.setAttribute('aria-label', this.unavailableImageLabelValue)")
+      expect(source).to include("if (!this.imageIsAvailable) return")
+      expect(source).to include("this.restoreImageControlsForCache()")
+    end
+  end
 end

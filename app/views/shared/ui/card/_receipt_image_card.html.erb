@@ -48,7 +48,7 @@
   displayable_image = receipt.image if image_attachment&.persisted? && image_attachment.blob&.persisted?
   has_image = displayable_image.present?
   has_pending_image = raw_image_attached && !has_image
-  enable_controller = show_toggle || show_modal || show_upload
+  enable_controller = has_image || show_toggle || show_modal || show_upload
   storage_usage = local_assigns[:storage_usage]
   storage_used_bytes = storage_usage&.used_bytes.to_i
   storage_limit_bytes = storage_usage&.limit_bytes.to_i
@@ -76,7 +76,9 @@
       receipt_image_card_storage_limit_bytes_value: storage_limit_bytes,
       receipt_image_card_storage_excluding_blob_bytes_value: storage_excluding_blob_bytes,
       receipt_image_card_quota_exceeded_message_value: quota_exceeded_message,
-      receipt_image_card_review_target_value: review_target
+      receipt_image_card_unavailable_image_label_value: t("shared.receipt_image_card.unavailable"),
+      receipt_image_card_review_target_value: review_target,
+      action: "image-load-state:available->receipt-image-card#imageAvailable image-load-state:unavailable->receipt-image-card#imageUnavailable"
     }
   end
 %>
@@ -112,19 +114,43 @@
           <div class="mt-4 w-full flex justify-center">
             <% preview_tag = show_modal ? :button : :div %>
             <% preview_options = {
-              class: "group relative #{preview_width_class} #{preview_height_class} rounded-xl overflow-hidden image-preview-surface border #{show_modal ? 'ui-touch-control cursor-zoom-in text-left' : ''}"
+              class: "group relative #{preview_width_class} #{preview_height_class} rounded-xl overflow-hidden image-preview-surface border #{show_modal ? 'ui-touch-control cursor-zoom-in text-left' : ''}",
+              data: {
+                controller: "image-load-state",
+                action: "turbo:before-cache@document->image-load-state#beforeCache",
+                image_load_state_fallback_while_loading_value: false
+              },
+              aria: { busy: true }
             } %>
             <% if show_modal %>
               <% preview_options[:type] = "button" %>
-              <% preview_options[:data] = { action: "click->receipt-image-card#openModal" } %>
-              <% preview_options[:aria] = { label: t("shared.receipt_image_card.full_preview_aria") } %>
+              <% preview_options[:disabled] = true %>
+              <% preview_options[:data][:receipt_image_card_target] = "previewTrigger" %>
+              <% preview_options[:data][:action] = "#{preview_options[:data][:action]} click->receipt-image-card#openModal" %>
+              <% preview_options[:aria].merge!(label: t("shared.receipt_image_card.full_preview_aria"), disabled: true) %>
             <% end %>
             <%= content_tag preview_tag, **preview_options do %>
               <%= image_tag displayable_image,
-                    class: "w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105",
-                    data: { receipt_image_card_target: "previewImage" } %>
+                    alt: (show_modal ? "" : t("shared.receipt_image_card.preview_alt")),
+                    class: "hidden w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105",
+                    data: {
+                      receipt_image_card_target: "previewImage",
+                      image_load_state_target: "image",
+                      action: "load->image-load-state#imageLoaded error->image-load-state#imageFailed"
+                    } %>
 
-              <div class="absolute inset-0 image-preview-overlay opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+              <div
+                class="hidden absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center token-text-muted surface-card-bg-card-subtle"
+                data-image-load-state-target="fallback"
+                role="status"
+                aria-live="polite">
+                <span class="material-symbols-outlined text-4xl" aria-hidden="true">broken_image</span>
+                <p class="text-sm font-semibold token-text-base"><%= t("shared.receipt_image_card.unavailable") %></p>
+                <p class="text-xs token-text-muted"><%= t("shared.receipt_image_card.unavailable_hint") %></p>
+              </div>
+
+              <div class="hidden absolute inset-0 image-preview-overlay opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none"
+                   data-receipt-image-card-target="previewOverlay">
                 <div class="floating-action-button p-3 rounded-full flex items-center justify-center backdrop-blur-md">
                   <span class="material-symbols-outlined field-text">zoom_in</span>
                 </div>
@@ -137,8 +163,11 @@
             <div class="mt-3 flex justify-end">
               <%= link_to url_for(displayable_image),
                     download: displayable_image.filename.to_s,
-                    data: { turbo: false },
-                    class: "ui-touch-control inline-flex items-center gap-2 px-3 py-2 text-sm navigation-link image-preview-surface-hover rounded-lg transition-colors" do %>
+                    data: { turbo: false, receipt_image_card_target: "download" },
+                    aria: { disabled: true },
+                    hidden: true,
+                    tabindex: -1,
+                    class: "hidden ui-touch-control inline-flex items-center gap-2 px-3 py-2 text-sm navigation-link image-preview-surface-hover rounded-lg transition-colors" do %>
                 <span class="material-symbols-outlined text-sm">download</span>
                 <%= t("shared.receipt_image_card.download") %>
               <% end %>
@@ -267,7 +296,8 @@
               <span class="material-symbols-outlined">close</span>
             </button>
             <%= image_tag displayable_image,
-                  class: "block w-full max-h-[85vh] object-contain token-bg-input",
+                  alt: t("shared.receipt_image_card.preview_alt"),
+                  class: "hidden block w-full max-h-[85vh] object-contain token-bg-input",
                   data: { receipt_image_card_target: "modalImage" } %>
           </div>
         </div>

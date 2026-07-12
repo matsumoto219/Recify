@@ -59,6 +59,9 @@ ja:
       show_image: 画像を表示
       show_image_hint: コンパクト表示で確認できます
       full_preview_aria: 画像を全体表示
+      preview_alt: レシート画像
+      unavailable: 画像を表示できません
+      unavailable_hint: 画像の読み込みに失敗しました。
       download: ダウンロード
       unsaved_empty: 画像は保存されていません
       unsaved_hint: 画像を保存しない設定のため、プレビューは表示されません

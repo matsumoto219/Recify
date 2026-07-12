@@ -40,31 +40,38 @@
     font_size_class,
     extra_classes
   ].compact.join(" ")
+  avatar_image_data = {
+    image_load_state_target: "image",
+    action: "load->image-load-state#imageLoaded error->image-load-state#imageFailed",
+    avatar_image: true
+  }
+  avatar_fallback_data = {
+    image_load_state_target: "fallback",
+    avatar_fallback: true
+  }
+  if preview
+    avatar_image_data.merge!(avatar_preview_target: "image", persisted_url: avatar_url)
+    avatar_fallback_data.merge!(avatar_preview_target: "fallback", default_text: fallback_text)
+  end
 %>
 
 <div
   class="<%= avatar_classes %>"
   style="width: <%= size %>px; height: <%= size %>px;"
+  data-controller="image-load-state"
+  data-image-load-state-fallback-while-loading-value="true"
+  data-action="turbo:before-cache@document->image-load-state#beforeCache"
+  aria-busy="<%= avatar_url.present? %>"
   data-avatar>
-  <% if preview %>
-    <img
-      src="<%= avatar_url %>"
-      alt="<%= alt %>"
-      class="w-full h-full object-cover <%= avatar_url.present? ? '' : 'hidden' %>"
-      data-avatar-preview-target="image"
-      data-persisted-url="<%= avatar_url %>"
-      data-avatar-image>
-  <% elsif avatar_attached %>
-    <%= image_tag user.avatar,
+  <% if preview || avatar_attached %>
+    <%= tag.img src: avatar_url,
           alt: alt,
-          class: "w-full h-full object-cover",
-          data: { avatar_image: true } %>
+          class: "hidden w-full h-full object-cover",
+          data: avatar_image_data %>
   <% end %>
 
-  <% if preview || !avatar_attached %>
-    <span
-      class="<%= avatar_attached ? 'hidden' : '' %>"
-      data-avatar-fallback
-      <% if preview %> data-avatar-preview-target="fallback" data-default-text="<%= fallback_text %>"<% end %>><%= fallback_text %></span>
-  <% end %>
+  <%= tag.span fallback_text,
+        role: "img",
+        aria: { label: alt },
+        data: avatar_fallback_data %>
 </div>
