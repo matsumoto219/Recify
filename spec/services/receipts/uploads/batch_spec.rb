@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptBatchUploadService, type: :service do
+RSpec.describe Receipts::Uploads::Batch, type: :service do
   let(:user) { create(:user) }
 
   def uploaded_receipt_fixture(filename = 'receipt_sample.jpg', content_type = 'image/jpeg')
@@ -223,13 +223,13 @@ RSpec.describe ReceiptBatchUploadService, type: :service do
   end
 
   it '最大件数を超える場合は失敗する' do
-    files = Array.new(ReceiptBatchUploadService.max_files + 1) { uploaded_receipt_fixture }
+    files = Array.new(described_class.max_files + 1) { uploaded_receipt_fixture }
 
     result = described_class.call(user:, files:)
 
     aggregate_failures do
       expect(result).not_to be_success
-      expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.too_many', max: ReceiptBatchUploadService.max_files))
+      expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.too_many', max: described_class.max_files))
       expect(user.receipts.count).to eq(0)
       expect(ReceiptOcrJob).not_to have_received(:perform_later)
     end

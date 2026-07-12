@@ -1,4 +1,4 @@
-class ReceiptBatchUploadService
+class Receipts::Uploads::Batch
   DEFAULT_MAX_FILES = 5
   MAX_FILES = DEFAULT_MAX_FILES
   private_constant :MAX_FILES

@@ -2,11 +2,11 @@ module Receipts
   module Uploads
     class << self
       def batch(user:, files:)
-        ReceiptBatchUploadService.call(user: user, files: files)
+        Batch.call(user: user, files: files)
       end
 
       def max_files
-        ReceiptBatchUploadService.max_files
+        Batch.max_files
       end
     end
   end

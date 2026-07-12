@@ -21,7 +21,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_analysis_pipeline.rb" => { constant: "ReceiptAnalysisPipeline", role: :legacy_workflow, owner: "migrate to Receipts::Processing", remove_in_loop: 22 },
     "receipt_analysis_profiles.rb" => { constant: "ReceiptAnalysisProfiles", role: :public_facade, owner: "country analysis profile facade", remove_in_loop: nil },
     "receipt_analysis_runs.rb" => { constant: "ReceiptAnalysisRuns", role: :legacy_workflow, owner: "migrate to Receipts::Processing run lifecycle", remove_in_loop: 22 },
-    "receipt_batch_upload_service.rb" => { constant: "ReceiptBatchUploadService", role: :legacy_workflow, owner: "migrate to Receipts::Uploads", remove_in_loop: 12 },
     "receipt_edit_save_change_set.rb" => { constant: "ReceiptEditSaveChangeSet", role: :legacy_workflow, owner: "migrate to Receipts::Editing", remove_in_loop: 13 },
     "receipt_edit_save_consistency_guard.rb" => { constant: "ReceiptEditSaveConsistencyGuard", role: :legacy_workflow, owner: "migrate to Receipts::Editing", remove_in_loop: 13 },
     "receipt_edit_save_review_state.rb" => { constant: "ReceiptEditSaveReviewState", role: :legacy_workflow, owner: "migrate to Receipts::Editing", remove_in_loop: 13 },
@@ -59,7 +58,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_analysis_pipeline.rb" => %i[finalize_decision_from_snapshot run_ai run_finalize run_ocr],
     "receipt_analysis_profiles.rb" => %i[default fetch],
     "receipt_analysis_runs.rb" => %i[cancel claim_stage cleanup_expired cleanup_stale copy_retry_snapshots enqueue external_service_runtime_config fail record_ai_input record_ai_normalized_result record_ai_result record_build_params_snapshot record_final_result record_finalize_decision record_ocr_response_artifact record_ocr_result record_ocr_snapshot start succeed],
-    "receipt_batch_upload_service.rb" => %i[call max_files],
     "receipt_edit_save_change_set.rb" => %i[call],
     "receipt_edit_save_consistency_guard.rb" => %i[call],
     "receipt_edit_save_review_state.rb" => %i[call item_review_state],
@@ -97,7 +95,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_analysis_pipeline.rb" => %i[finalize finalize_decision_from_snapshot run_ai run_finalize run_ocr],
     "receipt_analysis_profiles.rb" => %i[default fetch for_country],
     "receipt_analysis_runs.rb" => %i[cancel claim_stage cleanup_expired cleanup_stale copy_retry_snapshots enqueue external_service_runtime_config fail finish_stage record_ai_input record_ai_normalized_result record_ai_result record_build_params_snapshot record_final_result record_finalize_decision record_ocr_response_artifact record_ocr_result record_ocr_snapshot start start_stage succeed supersede],
-    "receipt_batch_upload_service.rb" => %i[call max_files],
     "receipt_edit_save_change_set.rb" => %i[call],
     "receipt_edit_save_consistency_guard.rb" => %i[call],
     "receipt_edit_save_review_state.rb" => %i[call item_review_state resolved_item_review_reasons],
@@ -124,7 +121,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_ai_enrichment_service.rb" => %i[call],
     "receipt_amount_service.rb" => %i[call],
     "receipt_analysis_pipeline.rb" => %i[run_ai run_finalize run_ocr],
-    "receipt_batch_upload_service.rb" => %i[call],
     "receipt_edit_save_change_set.rb" => %i[call],
     "receipt_edit_save_consistency_guard.rb" => %i[call],
     "receipt_edit_save_review_state.rb" => %i[call],
@@ -139,7 +135,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     receipt_ai_enrichment_service.rb
     receipt_amount_service.rb
     receipt_analysis_pipeline.rb
-    receipt_batch_upload_service.rb
     receipt_edit_save_change_set.rb
     receipt_edit_save_consistency_guard.rb
     receipt_edit_save_review_state.rb
@@ -168,7 +163,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     [ "app/services/receipt_analysis_runs/tracker.rb", :analysis_run, "locked_run", :update!, %i[status stage] ] => 8,
     [ "app/services/receipt_analysis_runs/tracker.rb", :analysis_run, "run", :update!, %i[status stage] ] => 2,
     [ "app/services/receipt_analysis_runs/tracker.rb", :receipt, "receipt", :update!, [ :status ] ] => 2,
-    [ "app/services/receipt_batch_upload_service.rb", :receipt, "user.receipts", :new, [ :status ] ] => 1
+    [ "app/services/receipts/uploads/batch.rb", :receipt, "user.receipts", :new, [ :status ] ] => 1
   }.freeze
 
   INDIRECT_STATUS_OWNERS = {
