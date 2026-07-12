@@ -1,6 +1,20 @@
 module Receipts
   module Editing
+    class ConflictError < StandardError
+      attr_reader :attributes_key, :duplicate_ids
+
+      def initialize(attributes_key:, duplicate_ids:)
+        @attributes_key = attributes_key
+        @duplicate_ids = duplicate_ids
+        super("Duplicate nested child ids for #{attributes_key}")
+      end
+    end
+
     class << self
+      def build_input(...)
+        InputBuilder.call(...)
+      end
+
       def change_set(...)
         ChangeSet.call(...)
       end

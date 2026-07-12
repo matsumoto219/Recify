@@ -33,7 +33,7 @@ RSpec.describe "Receipt workflow dependency boundary" do
       facade_path: "app/services/receipts/editing.rb",
       private_root: "app/services/receipts/editing",
       allowed_workflow_facades: [],
-      public_constants: []
+      public_constants: %w[Receipts::Editing::ConflictError]
     }
   }.freeze
 

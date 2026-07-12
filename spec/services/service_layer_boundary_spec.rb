@@ -70,6 +70,7 @@ RSpec.describe "Service layer child implementation boundary" do
       "Receipts",
       public_constants: %w[
         Receipts::Editing
+        Receipts::Editing::ConflictError
         Receipts::Processing
         Receipts::Uploads
         Receipts::Uploads::Result

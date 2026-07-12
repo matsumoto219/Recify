@@ -1,6 +1,27 @@
 require "rails_helper"
 
 RSpec.describe Receipts::Editing do
+  describe ".build_input" do
+    it "既存input builder入口へ委譲する" do
+      allow(Receipts::Editing::InputBuilder).to receive(:call).and_return(:input)
+
+      expect(described_class.build_input(receipt: :receipt, permitted: :permitted)).to eq(:input)
+      expect(Receipts::Editing::InputBuilder).to have_received(:call).with(receipt: :receipt, permitted: :permitted)
+    end
+  end
+
+  describe Receipts::Editing::ConflictError do
+    it "duplicate child metadataを公開Errorへ保持する" do
+      error = described_class.new(attributes_key: "receipt_items_attributes", duplicate_ids: %w[7])
+
+      expect(error).to have_attributes(
+        attributes_key: "receipt_items_attributes",
+        duplicate_ids: %w[7],
+        message: "Duplicate nested child ids for receipt_items_attributes"
+      )
+    end
+  end
+
   describe ".change_set" do
     it "既存change set入口へ委譲する" do
       allow(Receipts::Editing::ChangeSet).to receive(:call).and_return(:change_set)

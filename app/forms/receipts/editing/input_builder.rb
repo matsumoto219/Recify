@@ -1,16 +1,6 @@
 # frozen_string_literal: true
 
 class Receipts::Editing::InputBuilder
-  class ConflictError < StandardError
-    attr_reader :attributes_key, :duplicate_ids
-
-    def initialize(attributes_key:, duplicate_ids:)
-      @attributes_key = attributes_key
-      @duplicate_ids = duplicate_ids
-      super("Duplicate nested child ids for #{attributes_key}")
-    end
-  end
-
   Result = Data.define(:receipt_items, :receipt_adjustments, :receipt_payments)
   NESTED_ATTRIBUTE_KEYS = %w[
     receipt_items_attributes
@@ -91,7 +81,7 @@ class Receipts::Editing::InputBuilder
       duplicate_ids = ids.tally.select { |_id, count| count > 1 }.keys
       next if duplicate_ids.empty?
 
-      raise ConflictError.new(attributes_key: attributes_key, duplicate_ids: duplicate_ids)
+      raise Receipts::Editing::ConflictError.new(attributes_key: attributes_key, duplicate_ids: duplicate_ids)
     end
   end
 

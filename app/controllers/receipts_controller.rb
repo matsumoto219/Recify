@@ -285,7 +285,7 @@ class ReceiptsController < ApplicationController
 
     begin
       receipt_edit_save_input(update_params)
-    rescue Receipts::Editing::InputBuilder::ConflictError
+    rescue Receipts::Editing::ConflictError
       render_nested_child_conflict(
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
@@ -1430,7 +1430,7 @@ class ReceiptsController < ApplicationController
 
   def receipt_edit_save_input(permitted)
     if @receipt_edit_save_input_params_id != permitted.object_id
-      @receipt_edit_save_input = Receipts::Editing::InputBuilder.call(receipt: @receipt, permitted: permitted)
+      @receipt_edit_save_input = Receipts::Editing.build_input(receipt: @receipt, permitted: permitted)
       @receipt_edit_save_input_params_id = permitted.object_id
     end
 

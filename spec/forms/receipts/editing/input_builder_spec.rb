@@ -81,7 +81,7 @@ RSpec.describe Receipts::Editing::InputBuilder do
           }
         }
       )
-    end.to raise_error(described_class::ConflictError) do |error|
+    end.to raise_error(Receipts::Editing::ConflictError) do |error|
       aggregate_failures do
         expect(error.attributes_key).to eq('receipt_items_attributes')
         expect(error.duplicate_ids).to eq([ item.id.to_s ])
