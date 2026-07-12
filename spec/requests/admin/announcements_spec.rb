@@ -236,8 +236,11 @@ RSpec.describe 'Admin announcements', type: :request do
              }
       }.to change(Announcement, :count).by(1)
         .and change(AnnouncementLink, :count).by(3)
+        .and change(AuditLog.where(action: 'announcement.create'), :count).by(1)
 
       announcement = Announcement.order(:created_at).last
+      audit_log = AuditLog.find_by!(action: 'announcement.create', target_id: announcement.id)
+      audit_json = audit_log.attributes.slice('metadata', 'before_state', 'after_state').to_json
 
       aggregate_failures do
         expect(response).to redirect_to(admin_announcement_path(announcement))
@@ -245,6 +248,34 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(announcement.created_by).to eq(admin)
         expect(announcement.updated_by).to eq(admin)
         expect(announcement.announcement_links.order(:position).pluck(:label)).to eq(%w[お問い合わせ 利用規約 外部])
+        expect(audit_log).to have_attributes(
+          actor_user: admin,
+          action: 'announcement.create',
+          target_type: 'Announcement',
+          target_id: announcement.id,
+          target_uid: announcement.public_id,
+          outcome: 'succeeded'
+        )
+        expect(audit_log.before_state).to eq({})
+        expect(audit_log.after_state).to include('status' => 'draft', 'kind' => 'release')
+        expect(audit_json).not_to include('公開前の下書き本文です。')
+      end
+    end
+
+    it 'AuditLogの保存に失敗した場合は作成をrollbackする' do
+      admin = create(:user, :admin)
+      sign_in admin
+      allow(AuditLogs).to receive(:record_admin_action!).and_raise(StandardError, 'audit failed')
+
+      expect {
+        expect {
+          post admin_announcements_path, params: { announcement: announcement_params }
+        }.not_to change(AnnouncementLink, :count)
+      }.not_to change(Announcement, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:internal_server_error)
+        expect(AuditLog).not_to exist(action: 'announcement.create')
       end
     end
 
@@ -788,20 +819,23 @@ RSpec.describe 'Admin announcements', type: :request do
       original_public_id = announcement.public_id
       sign_in admin
 
-      patch admin_announcement_path(announcement),
-            params: {
-              announcement: announcement_params(
-                title: '更新後のお知らせ',
-                status: 'published',
-                announcement_links_attributes: {
-                  '0' => { id: announcement.announcement_links.first.id.to_s, label: '', url: '', position: '0' },
-                  '1' => { label: '新しいリンク', url: '/privacy', position: '1' },
-                  '2' => { label: '', url: '', position: '2' }
-                }
-              )
-            }
+      expect {
+        patch admin_announcement_path(announcement),
+              params: {
+                announcement: announcement_params(
+                  title: '更新後のお知らせ',
+                  status: 'published',
+                  announcement_links_attributes: {
+                    '0' => { id: announcement.announcement_links.first.id.to_s, label: '', url: '', position: '0' },
+                    '1' => { label: '新しいリンク', url: '/privacy', position: '1' },
+                    '2' => { label: '', url: '', position: '2' }
+                  }
+                )
+              }
+      }.to change(AuditLog.where(action: 'announcement.update'), :count).by(1)
 
       announcement.reload
+      audit_log = AuditLog.find_by!(action: 'announcement.update', target_id: announcement.id)
 
       aggregate_failures do
         expect(response).to redirect_to(admin_announcement_path(announcement))
@@ -810,6 +844,35 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(announcement.public_id).to eq(original_public_id)
         expect(announcement.updated_by).to eq(admin)
         expect(announcement.announcement_links.pluck(:label)).to eq([ '新しいリンク' ])
+        expect(audit_log.before_state).to include('status' => 'draft')
+        expect(audit_log.after_state).to include('status' => 'draft', 'kind' => 'release')
+        expect(audit_log.metadata.to_json).not_to include('公開前の下書き本文です。')
+      end
+    end
+
+    it 'AuditLogの保存に失敗した場合は更新とnested link変更をrollbackする' do
+      admin = create(:user, :admin)
+      original_updater = create(:user)
+      announcement = create(:announcement, status: 'draft', title: '更新前', updated_by: original_updater)
+      link = create(:announcement_link, announcement: announcement, label: '更新前リンク', url: '/terms', position: 0)
+      sign_in admin
+      allow(AuditLogs).to receive(:record_admin_action!).and_raise(StandardError, 'audit failed')
+
+      patch admin_announcement_path(announcement),
+            params: {
+              announcement: announcement_params(
+                title: '更新後',
+                announcement_links_attributes: {
+                  '0' => { id: link.id.to_s, label: '更新後リンク', url: '/privacy', position: '0' }
+                }
+              )
+            }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:internal_server_error)
+        expect(announcement.reload).to have_attributes(title: '更新前', status: 'draft', updated_by: original_updater)
+        expect(link.reload).to have_attributes(label: '更新前リンク', url: '/terms')
+        expect(AuditLog).not_to exist(action: 'announcement.update')
       end
     end
 
@@ -1054,6 +1117,23 @@ RSpec.describe 'Admin announcements', type: :request do
       end
     end
 
+    it 'AuditLogの保存に失敗した場合は公開をrollbackする' do
+      admin = create(:user, :admin)
+      original_updater = create(:user)
+      announcement = create(:announcement, status: 'draft', published_at: nil, updated_by: original_updater)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      allow(AuditLogs).to receive(:record_admin_action!).and_raise(StandardError, 'audit failed')
+
+      patch publish_admin_announcement_path(announcement)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:internal_server_error)
+        expect(announcement.reload).to have_attributes(status: 'draft', published_at: nil, updated_by: original_updater)
+        expect(AuditLog).not_to exist(action: 'announcement.publish')
+      end
+    end
+
     it 'starts_atが未来なら公開後もLPにはまだ表示しない' do
       admin = create(:user, :admin)
       announcement = create(:announcement, status: 'draft', title: '予約中のお知らせ', starts_at: 1.day.from_now)
@@ -1167,6 +1247,23 @@ RSpec.describe 'Admin announcements', type: :request do
       patch archive_admin_announcement_path(announcement)
 
       expect(announcement.reload.status).to eq('archived')
+    end
+
+    it 'AuditLogの保存に失敗した場合はarchiveをrollbackする' do
+      admin = create(:user, :admin)
+      original_updater = create(:user)
+      announcement = create(:announcement, :published, updated_by: original_updater)
+      sign_in admin
+      stub_fresh_admin_reauthentication
+      allow(AuditLogs).to receive(:record_admin_action!).and_raise(StandardError, 'audit failed')
+
+      patch archive_admin_announcement_path(announcement)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:internal_server_error)
+        expect(announcement.reload).to have_attributes(status: 'published', updated_by: original_updater)
+        expect(AuditLog).not_to exist(action: 'announcement.archive')
+      end
     end
 
     it '未再認証adminはアーカイブできない' do

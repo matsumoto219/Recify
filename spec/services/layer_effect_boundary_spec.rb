@@ -4,7 +4,7 @@ require_relative "../support/layer_effect_boundary_scanner"
 RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
   ADMIN_MUTATION_EXCEPTIONS = {
     [ "app/controllers/admin/announcements_controller.rb", "@announcement", :status= ] => 4,
-    [ "app/controllers/admin/announcements_controller.rb", "@announcement", :save ] => 4
+    [ "app/controllers/admin/announcements_controller.rb", "@announcement", :save ] => 1
   }.freeze
 
   SYSTEM_OPERATION_CALLS = {

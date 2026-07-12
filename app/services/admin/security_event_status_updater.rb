@@ -22,25 +22,24 @@ module Admin
     def call
       return Result.new(security_event: security_event, updated: false, error_code: "invalid_status") unless valid_status?
 
-      before_state = state_snapshot
-
       security_event.with_lock do
+        before_state = state_snapshot
         apply_status!
         security_event.save!
-      end
 
-      AuditLogs.record_admin_action!(
-        actor: actor,
-        action: "admin.security_events.#{status}",
-        target: security_event,
-        target_uid: "security_event:#{security_event.id}",
-        reason: nil,
-        outcome: "succeeded",
-        metadata: audit_metadata,
-        before_state: before_state,
-        after_state: state_snapshot,
-        request: request
-      )
+        AuditLogs.record_admin_action!(
+          actor: actor,
+          action: "admin.security_events.#{status}",
+          target: security_event,
+          target_uid: "security_event:#{security_event.id}",
+          reason: nil,
+          outcome: "succeeded",
+          metadata: audit_metadata,
+          before_state: before_state,
+          after_state: state_snapshot,
+          request: request
+        )
+      end
 
       Result.new(security_event: security_event, updated: true)
     rescue ActiveRecord::RecordInvalid

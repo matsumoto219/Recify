@@ -87,6 +87,20 @@ RSpec.describe Announcement, type: :model do
       expect(announcement.public_id).to eq("ann_#{unique_random}")
     end
 
+    it '明示transaction内のDB unique index衝突時もretryできる' do
+      existing = create(:announcement)
+      unique_random = 'STUVWXYZabcdefgh'
+      announcement = build(:announcement, public_id: existing.public_id)
+
+      allow(SecureRandom).to receive(:base58).and_return(unique_random)
+
+      Announcement.transaction do
+        expect(announcement.save!(validate: false)).to be(true)
+      end
+
+      expect(announcement.public_id).to eq("ann_#{unique_random}")
+    end
+
     it 'titleは必須かつ120文字まで' do
       blank = build(:announcement, title: '')
       too_long = build(:announcement, title: 'a' * 121)

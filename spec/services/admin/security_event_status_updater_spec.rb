@@ -51,5 +51,39 @@ RSpec.describe Admin::SecurityEventStatusUpdater do
         expect(AuditLog).not_to exist(action: 'admin.security_events.unknown')
       end
     end
+
+    it 'AuditLogの保存に失敗した場合はstatus更新をrollbackする' do
+      admin = create(:user, :admin)
+      resolved_at = 1.hour.ago.change(usec: 0)
+      event = create(:security_event, resolved_at: resolved_at, ignored_at: nil)
+      allow(AuditLogs).to receive(:record_admin_action!).and_raise(StandardError, 'audit failed')
+
+      expect {
+        described_class.call(security_event: event, status: :ignored, actor: admin, request: nil)
+      }.to raise_error(StandardError, 'audit failed')
+
+      aggregate_failures do
+        expect(event.reload.resolved_at).to eq(resolved_at)
+        expect(event.ignored_at).to be_nil
+        expect(AuditLog).not_to exist(action: 'admin.security_events.ignored')
+      end
+    end
+
+    it 'AuditLog validation失敗時はstatus更新をrollbackして失敗Resultを返す' do
+      admin = create(:user, :admin)
+      event = create(:security_event)
+      audit_error = ActiveRecord::RecordInvalid.new(AuditLog.new)
+      allow(AuditLogs).to receive(:record_admin_action!).and_raise(audit_error)
+
+      result = described_class.call(security_event: event, status: :resolved, actor: admin, request: nil)
+
+      aggregate_failures do
+        expect(result).not_to be_updated
+        expect(result.error_code).to eq('record_invalid')
+        expect(event.reload.resolved_at).to be_nil
+        expect(event.ignored_at).to be_nil
+        expect(AuditLog).not_to exist(action: 'admin.security_events.resolved')
+      end
+    end
   end
 end

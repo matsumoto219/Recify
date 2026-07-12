@@ -126,7 +126,7 @@ class Announcement < ApplicationRecord
     retry_count = 0
 
     begin
-      yield
+      self.class.transaction(requires_new: true) { yield }
     rescue ActiveRecord::RecordNotUnique => e
       raise unless new_record? && public_id_collision_error?(e)
 

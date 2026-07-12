@@ -26,7 +26,7 @@ class Admin::AnnouncementsController < Admin::BaseController
     @announcement.created_by = current_user
     @announcement.updated_by = current_user
 
-    if @announcement.save
+    if save_announcement_with_audit(action: "announcement.create", before_state: {})
       purge_announcement_image_if_requested!
       redirect_to admin_announcement_path(@announcement), notice: t("admin.announcements.messages.created"), status: :see_other
     else
@@ -45,11 +45,12 @@ class Admin::AnnouncementsController < Admin::BaseController
   def update
     @announcement = find_announcement
     ensure_draft_editable!
+    before_state = announcement_audit_state
     @announcement.assign_attributes(announcement_params)
     @announcement.status = "draft"
     @announcement.updated_by = current_user
 
-    if @announcement.save
+    if save_announcement_with_audit(action: "announcement.update", before_state: before_state)
       purge_announcement_image_if_requested!
       redirect_to admin_announcement_path(@announcement), notice: t("admin.announcements.messages.updated"), status: :see_other
     else
@@ -70,17 +71,12 @@ class Admin::AnnouncementsController < Admin::BaseController
       return
     end
 
-    before_status = @announcement.status
+    before_state = announcement_audit_state
     @announcement.status = "published"
     @announcement.published_at ||= Time.current
     @announcement.updated_by = current_user
 
-    if @announcement.save
-      record_announcement_audit!(
-        action: "announcement.publish",
-        before_status: before_status,
-        after_status: @announcement.status
-      )
+    if save_announcement_with_audit(action: "announcement.publish", before_state: before_state)
       redirect_to admin_announcement_path(@announcement),
                   notice: t("admin.announcements.messages.published"),
                   status: :see_other
@@ -102,16 +98,11 @@ class Admin::AnnouncementsController < Admin::BaseController
       return
     end
 
-    before_status = @announcement.status
+    before_state = announcement_audit_state
     @announcement.status = "archived"
     @announcement.updated_by = current_user
 
-    if @announcement.save
-      record_announcement_audit!(
-        action: "announcement.archive",
-        before_status: before_status,
-        after_status: @announcement.status
-      )
+    if save_announcement_with_audit(action: "announcement.archive", before_state: before_state)
       redirect_to admin_announcement_path(@announcement),
                   notice: t("admin.announcements.messages.archived"),
                   status: :see_other
@@ -204,7 +195,22 @@ class Admin::AnnouncementsController < Admin::BaseController
     false
   end
 
-  def record_announcement_audit!(action:, before_status:, after_status:)
+  def save_announcement_with_audit(action:, before_state:)
+    saved = false
+
+    Announcement.transaction do
+      saved = @announcement.save
+      record_announcement_audit!(
+        action: action,
+        before_state: before_state,
+        after_state: announcement_audit_state
+      ) if saved
+    end
+
+    saved
+  end
+
+  def record_announcement_audit!(action:, before_state:, after_state:)
     AuditLogs.record_admin_action!(
       actor: current_user,
       action: action,
@@ -213,12 +219,21 @@ class Admin::AnnouncementsController < Admin::BaseController
       outcome: "succeeded",
       request: request,
       metadata: announcement_audit_metadata,
-      before_state: { status: before_status },
-      after_state: {
-        status: after_status,
-        published_at: @announcement.published_at
-      }
+      before_state: before_state,
+      after_state: after_state
     )
+  end
+
+  def announcement_audit_state
+    {
+      status: @announcement.status,
+      kind: @announcement.kind,
+      pinned: @announcement.pinned,
+      priority: @announcement.priority,
+      starts_at: @announcement.starts_at,
+      ends_at: @announcement.ends_at,
+      published_at: @announcement.published_at
+    }
   end
 
   def announcement_audit_metadata
