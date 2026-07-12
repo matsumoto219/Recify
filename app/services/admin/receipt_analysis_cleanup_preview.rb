@@ -1,7 +1,5 @@
 module Admin
   class ReceiptAnalysisCleanupPreview
-    class InvalidParameter < StandardError; end
-
     DEFAULT_STALE_LIMIT = 100
     MAX_STALE_LIMIT = 100
     DEFAULT_RETENTION_LIMIT = 1000
@@ -77,7 +75,7 @@ module Admin
 
       [ normalized, max ].min
     rescue UserNumericInput::InvalidValue
-      raise InvalidParameter, "#{field}_invalid"
+      raise Admin::ReceiptAnalysisCleanupInvalidParameter, "#{field}_invalid"
     end
 
     def normalize_time(value, fallback)

@@ -3,7 +3,7 @@ class Admin::ReceiptAnalysisCleanupController < Admin::BaseController
 
   def show
     @preview = Admin.receipt_analysis_cleanup_preview(**preview_params)
-  rescue Admin::ReceiptAnalysisCleanupPreview::InvalidParameter
+  rescue Admin::ReceiptAnalysisCleanupInvalidParameter
     @preview_input_values = preview_params.slice(:stale_limit, :retention_limit)
     @preview = Admin.receipt_analysis_cleanup_preview
     flash.now[:alert] = t("admin.receipt_analysis_cleanup.messages.invalid_limit")

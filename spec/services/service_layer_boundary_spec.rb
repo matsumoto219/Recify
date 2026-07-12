@@ -19,14 +19,9 @@ RSpec.describe "Service layer child implementation boundary" do
       "admin",
       "Admin",
       facade: "app/services/admin.rb",
-      public_constants: %w[Admin::Operations],
-      legacy_exceptions: [
-        {
-          source_path: "app/controllers/admin/receipt_analysis_cleanup_controller.rb",
-          referenced_constant: "Admin::ReceiptAnalysisCleanupPreview::InvalidParameter",
-          reason: "Admin facadeがchild queryの例外型をまだ公開していない既存参照",
-          remove_in_loop: 22
-        }
+      public_constants: %w[
+        Admin::Operations
+        Admin::ReceiptAnalysisCleanupInvalidParameter
       ]
     ),
     "ai" => registry_entry("ai", "Ai", facade: "app/services/receipt_ai_enrichment_service.rb"),

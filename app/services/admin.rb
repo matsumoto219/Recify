@@ -1,4 +1,6 @@
 module Admin
+  class ReceiptAnalysisCleanupInvalidParameter < StandardError; end
+
   class << self
     def receipt_analysis_runs(**filters)
       ReceiptAnalysisRunsQuery.call(**filters)
