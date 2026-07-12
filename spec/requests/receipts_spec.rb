@@ -9070,6 +9070,20 @@ RSpec.describe 'Receipts', type: :request do
       expect(response).to redirect_to(receipts_path)
     end
 
+    it 'purge jobをenqueueできなくても削除画像のblob/fileを残さない' do
+      receipt.image.attach(uploaded_image)
+      blob = receipt.image.blob
+      allow(ActiveStorage::PurgeJob).to receive(:perform_later).and_return(false)
+
+      delete receipt_path(receipt)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(ActiveStorage::Blob).not_to exist(blob.id)
+        expect(blob.service).not_to exist(blob.key)
+      end
+    end
+
     it '隔離中のレシートは削除できない' do
       quarantined_receipt = create(:receipt, :quarantined, :with_image, user: user, status: 'completed')
       blob_id = quarantined_receipt.image.blob.id

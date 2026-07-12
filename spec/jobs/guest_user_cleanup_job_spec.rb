@@ -231,6 +231,26 @@ RSpec.describe GuestUserCleanupJob, type: :job do
       end
     end
 
+    it 'purge jobをenqueueできなくてもavatarとreceipt imageのblob/fileを残さない' do
+      guest = create_old_guest
+      guest.avatar.attach(
+        io: File.open(Rails.root.join('spec/fixtures/files/receipt_sample.jpg')),
+        filename: 'avatar.jpg',
+        content_type: 'image/jpeg'
+      )
+      receipt = create(:receipt, :with_image, user: guest)
+      blobs = [ guest.avatar.blob, receipt.image.blob ]
+      allow(ActiveStorage::PurgeJob).to receive(:perform_later).and_return(false)
+
+      result = described_class.perform_now
+
+      aggregate_failures do
+        expect(result).to eq(deleted_count: 1, failed_count: 0)
+        expect(ActiveStorage::Blob.where(id: blobs.map(&:id))).to be_empty
+        expect(blobs).to all(satisfy { |blob| !blob.service.exist?(blob.key) })
+      end
+    end
+
     it 'max_recordsを上限にbatch処理する' do
       create_list(:user, 101, guest: true, last_sign_in_at: 8.days.ago)
 

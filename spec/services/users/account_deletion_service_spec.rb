@@ -32,6 +32,9 @@ RSpec.describe Users::AccountDeletionService do
     requested_run = create(:receipt_analysis_run, :admin_retry, receipt: external_receipt, requested_by_user: user)
     avatar_attachment_id = user.avatar.attachment.id
     receipt_image_attachment_id = receipt.image.attachment.id
+    blob_ids = [ user.avatar.blob.id, receipt.image.blob.id ]
+    blob_keys = [ user.avatar.blob.key, receipt.image.blob.key ]
+    allow(ActiveStorage::PurgeJob).to receive(:perform_later).and_return(false)
 
     result = described_class.call(user: user)
 
@@ -56,6 +59,8 @@ RSpec.describe Users::AccountDeletionService do
       expect(requested_run.reload.requested_by_user_id).to be_nil
       expect(ActiveStorage::Attachment.where(id: avatar_attachment_id)).not_to exist
       expect(ActiveStorage::Attachment.where(id: receipt_image_attachment_id)).not_to exist
+      expect(ActiveStorage::Blob.where(id: blob_ids)).to be_empty
+      expect(blob_keys).to all(satisfy { |key| !ActiveStorage::Blob.service.exist?(key) })
     end
   end
 
