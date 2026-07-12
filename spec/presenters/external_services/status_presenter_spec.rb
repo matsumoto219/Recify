@@ -27,10 +27,10 @@ RSpec.describe ExternalServices::StatusPresenter do
       expect(payload.dig(:ocr, :message)).to be_nil
       expect(payload.dig(:ai, :text)).to eq(I18n.t("shared.service_status.down"))
       expect(payload.dig(:ai, :message)).to eq(I18n.t("receipts.new_upload.ai_down"))
-      expect(payload.dig(:ocr, :badge_html)).to include("shared/ui/badge/service_status_badge")
-      expect(payload.dig(:ai, :badge_html)).to include("shared/ui/badge/service_status_badge")
+      expect(payload.dig(:ocr, :badge_html)).to include("external_services/status_badge")
+      expect(payload.dig(:ai, :badge_html)).to include("external_services/status_badge")
       expect(view_context).to have_received(:render_to_string).with(
-        partial: "shared/ui/badge/service_status_badge",
+        partial: "external_services/status_badge",
         formats: [ :html ],
         locals: {
           label: I18n.t("settings.index.services.ocr"),

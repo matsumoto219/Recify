@@ -59,7 +59,7 @@ class ExternalServices::StatusPresenter
     return unless render_badges?
 
     view_context.render_to_string(
-      partial: "shared/ui/badge/service_status_badge",
+      partial: "external_services/status_badge",
       formats: [ :html ],
       locals: {
         label: translate("settings.index.services.#{service}"),
