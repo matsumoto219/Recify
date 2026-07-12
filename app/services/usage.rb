@@ -74,10 +74,6 @@ module Usage
       Usage::Limits.ensure_ai_job_within_limit!(user: user)
     end
 
-    def mark_analysis_run_blocked!(run:, stage:)
-      Usage::Limits.mark_analysis_run_blocked!(run: run, stage: stage)
-    end
-
     def counter_summary_for(user:)
       Usage::Counters.summary_for(user: user)
     end

@@ -448,7 +448,14 @@ class ReceiptAnalysisPipeline
   end
 
   def usage_limit_blocked_result(stage)
-    Usage.mark_analysis_run_blocked!(run: run, stage: stage)
+    ReceiptAnalysisRuns.fail(
+      run,
+      error_stage: stage.to_s,
+      error_code: "usage_limit_exceeded",
+      error_message: "usage_limit_exceeded"
+    )
+    Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
+  rescue ReceiptAnalysisRuns::TerminalRunError
     Result.new(next_step: :skipped, skip_reason: :usage_limit_exceeded)
   end
 

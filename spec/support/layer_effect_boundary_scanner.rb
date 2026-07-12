@@ -113,7 +113,6 @@ module LayerEffectBoundary
         consume_ocr_job!
         consume_receipt_upload!
         consume_retry_operation!
-        mark_analysis_run_blocked!
       ]
     }.freeze
     ADMIN_MUTATION_METHODS = %i[

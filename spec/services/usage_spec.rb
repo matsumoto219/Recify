@@ -107,15 +107,6 @@ RSpec.describe Usage do
     end
   end
 
-  describe '.mark_analysis_run_blocked!' do
-    it 'Usage::Limitsへ委譲する' do
-      run = instance_double(ReceiptAnalysisRun)
-      allow(Usage::Limits).to receive(:mark_analysis_run_blocked!).with(run: run, stage: 'ocr').and_return(nil)
-
-      expect(described_class.mark_analysis_run_blocked!(run: run, stage: 'ocr')).to be_nil
-    end
-  end
-
   describe '.counter_summary_for' do
     it 'Usage::Countersへ委譲する' do
       summary = { 'receipt_uploads_per_day' => double('entry') }

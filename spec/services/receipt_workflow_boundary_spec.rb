@@ -81,4 +81,22 @@ RSpec.describe "Receipt workflow dependency boundary" do
 
     expect(references).to be_empty, references.join("\n")
   end
+
+  it "Usage policyからreceipt workflowのstatus ownerへ逆依存しない" do
+    paths = [ Rails.root.join("app/services/usage.rb") ] +
+      Rails.root.glob("app/services/usage/**/*.rb")
+    forbidden_prefixes = %w[ReceiptAnalysisPipeline ReceiptAnalysisRuns Receipts::Processing]
+    references = paths.select(&:file?).flat_map do |path|
+      source_path = path.relative_path_from(Rails.root).to_s
+      ServiceLayerBoundary::SourceAnalyzer.new(source_path: source_path)
+        .analyze(path.read)
+        .references
+        .select do |reference|
+          forbidden_prefixes.any? { |prefix| reference.constant_name.start_with?(prefix) }
+        end
+        .map { |reference| "#{source_path}:#{reference.line} -> #{reference.constant_name}" }
+    end
+
+    expect(references).to be_empty, references.join("\n")
+  end
 end
