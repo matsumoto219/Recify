@@ -40,6 +40,27 @@ RSpec.describe 'User security reauthentication', type: :request do
     end
   end
 
+  it '本人確認画面とvalidation失敗画面にSystemSettingsの有効期間を表示する' do
+    create(
+      :system_setting,
+      key: 'security.user_reauth_window_minutes',
+      value: SystemSettings.stored_value(10)
+    )
+    sign_in user
+
+    get new_settings_security_reauthentication_path
+    expect(response.body).to include('本人確認後10分間')
+    expect(response.body).not_to include('本人確認後5分間')
+
+    post settings_security_reauthentication_path, params: { password: 'wrong-local-secret' }
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include('本人確認後10分間')
+      expect(response.body).not_to include('本人確認後5分間')
+    end
+  end
+
   it '正しいpasswordで5分間のsession-bound本人確認を記録する' do
     sign_in user
     get new_settings_security_reauthentication_path(

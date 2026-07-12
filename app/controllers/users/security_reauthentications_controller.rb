@@ -11,6 +11,7 @@ class Users::SecurityReauthenticationsController < ApplicationController
 
   before_action :authenticate_user!
   before_action :ensure_security_management_allowed!
+  before_action :prepare_security_reauthentication_window
   before_action :set_no_store_headers
 
   def new
@@ -58,6 +59,11 @@ class Users::SecurityReauthenticationsController < ApplicationController
 
   def security_reauthentication_rate_limit_key
     [ "user", current_user&.id || "unknown", "ip", request.remote_ip ].join(":")
+  end
+
+  def prepare_security_reauthentication_window
+    @security_reauthentication_window_minutes =
+      security_reauthentication_window_duration.to_i / 1.minute.to_i
   end
 
   def set_no_store_headers

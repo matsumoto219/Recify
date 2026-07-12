@@ -22,7 +22,10 @@
               required: true,
               autocomplete: "current-password",
               class: "w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base" %>
-        <p class="text-xs token-text-muted"><%= t("settings.security.reauthentication.password_hint") %></p>
+        <p class="text-xs token-text-muted"><%= t(
+          "settings.security.reauthentication.password_hint",
+          count: @security_reauthentication_window_minutes
+        ) %></p>
       </div>
 
       <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

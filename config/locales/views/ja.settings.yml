@@ -112,7 +112,7 @@ ja:
         title: 本人確認
         subtitle: セキュリティ設定を変更するため、現在のパスワードを入力してください。
         password_label: 現在のパスワード
-        password_hint: 本人確認後5分間、セキュリティ設定を変更できます。
+        password_hint: 本人確認後%{count}分間、セキュリティ設定を変更できます。
         submit: 確認する
         submitting: 確認中...
         cancel: キャンセル
