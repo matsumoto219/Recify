@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptSearch::IndexQuery do
+RSpec.describe Receipts::IndexQuery do
   let(:user) { create(:user) }
 
   def call_query(scope: user.receipts, query: '', sort: nil, per_page: nil)

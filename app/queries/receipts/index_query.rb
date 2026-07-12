@@ -1,4 +1,4 @@
-module ReceiptSearch
+module Receipts
   class IndexQuery
     DEFAULT_SORT = "newest".freeze
     DEFAULT_PER_PAGE = 20
