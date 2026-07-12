@@ -318,8 +318,15 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    rebuild_review_state_after_manual_update!(update_params, amount_result, consistency_guard: consistency_guard)
-    clear_processing_error_after_manual_update!(update_params)
+    Receipts::Editing.prepare_update_state!(
+      receipt: @receipt,
+      attributes: update_params,
+      review_state_arguments: manual_review_state_arguments(
+        update_params,
+        amount_result,
+        consistency_guard: consistency_guard
+      )
+    )
 
     if manual_receipt_items_missing?(update_params, context: :edit_save)
       @receipt.assign_attributes(update_params)
@@ -1140,28 +1147,16 @@ class ReceiptsController < ApplicationController
   end
 
 
-  def clear_processing_error_after_manual_update!(permitted)
-    return unless @receipt.has_processing_error?
-
-    permitted["processing_error_code"] = nil
-    permitted["processing_error_message"] = nil
-    permitted["status"] = "completed" if @receipt.failed? && !permitted.key?("status")
-  end
-
-  def rebuild_review_state_after_manual_update!(permitted, amount_result, consistency_guard: nil)
+  def manual_review_state_arguments(permitted, amount_result, consistency_guard: nil)
     return unless manual_review_state_rebuild_target?(permitted)
 
-    review_state = Receipts::Editing.review_state(
-      receipt: @receipt,
-      permitted: permitted,
+    {
       amount_result: amount_result,
       consistency_review_reasons: consistency_guard&.review_reasons,
       child_review_remaining: manual_update_child_review_remaining?(permitted),
       nested_amount_inputs_submitted: manual_amount_inputs_changed?(permitted),
       item_inputs_submitted: item_inputs_submitted?
-    )
-    permitted["review_reasons"] = review_state.review_reasons
-    permitted["status"] = review_state.status
+    }
   end
 
   def manual_review_state_rebuild_target?(permitted)

@@ -151,9 +151,9 @@ RSpec.describe "root service and lifecycle status boundary" do
   }.freeze
 
   INDIRECT_STATUS_OWNERS = {
-    "app/controllers/receipts_controller.rb" => "legacy upload/manual/edit lifecycle owner; migrate in Loops 8/12/13/21",
-    "app/services/receipts/processing/pipeline/finalize_step.rb" => "final receipt status decision and persistence owner; split in Finalize loop",
-    "app/services/receipts/editing/review_state.rb" => "Receipts::Editing review status decision"
+    "app/services/receipts/processing/pipeline/finalize_step.rb" => "final receipt status decision and persistence owner",
+    "app/services/receipts/editing/review_state.rb" => "Receipts::Editing review status decision",
+    "app/services/receipts/editing/update_state.rb" => "manual update review status application and processing error cleanup"
   }.freeze
 
   before(:context) do
