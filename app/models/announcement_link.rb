@@ -1,6 +1,6 @@
 class AnnouncementLink < ApplicationRecord
   MAX_LINKS_PER_ANNOUNCEMENT = 3
-  ALLOWED_EXTERNAL_SCHEMES = %w[http https].freeze
+  ALLOWED_EXTERNAL_SCHEMES = %w[https].freeze
   CONTROL_CHARACTER_PATTERN = /[[:cntrl:]]/
 
   belongs_to :announcement

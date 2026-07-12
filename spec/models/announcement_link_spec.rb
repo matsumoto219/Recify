@@ -36,9 +36,8 @@ RSpec.describe AnnouncementLink, type: :model do
       end
     end
 
-    it 'http / https / 内部pathを許可する' do
+    it 'https / 内部pathを許可する' do
       allowed_urls = [
-        'http://example.com',
         'https://example.com/path',
         '/contact',
         '/terms',
@@ -55,6 +54,7 @@ RSpec.describe AnnouncementLink, type: :model do
 
     it '危険なschemeや曖昧なURLを拒否する' do
       rejected_urls = [
+        'http://example.com',
         'javascript:alert(1)',
         'data:text/html,<script>alert(1)</script>',
         'file:///etc/passwd',
@@ -79,7 +79,7 @@ RSpec.describe AnnouncementLink, type: :model do
       end
     end
 
-    it 'externalはhttp/https absolute URLならtrue、内部pathならfalseにする' do
+    it 'externalはhttps absolute URLならtrue、内部pathならfalseにする' do
       external_link = build(:announcement_link, url: 'https://example.com')
       internal_link = build(:announcement_link, url: '/contact')
 

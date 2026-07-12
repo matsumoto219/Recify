@@ -201,6 +201,19 @@ RSpec.describe 'Announcements', type: :request do
       end
     end
 
+    it '既存データに残るhttp外部リンクは公開画面へ表示しない' do
+      announcement = create(:announcement, :published)
+      link = create(:announcement_link, announcement: announcement, label: '安全でない外部リンク')
+      link.update_columns(url: 'http://example.test/plaintext')
+
+      get announcement_path(announcement)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(response.body).not_to include('http://example.test/plaintext', '安全でない外部リンク')
+      end
+    end
+
     it 'draft / archived / scheduled / expired は404にする' do
       draft = create(:announcement, status: 'draft')
       archived = create(:announcement, status: 'archived')
