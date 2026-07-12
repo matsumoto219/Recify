@@ -1,7 +1,5 @@
 class Ocr::ResponseParser
   MULTIPLE_RECEIPTS_REVIEW_REASON = "multiple_receipts_suspected"
-  PURCHASED_AT_NEARBY_TIME_OFFSETS = [ 1, -1, 2, -2 ].freeze
-  PURCHASED_AT_TIME_PATTERN = /(?<!\d)(\d{1,2})\s*[:：]\s*(\d{2})(?!\d)/.freeze
   ADJUSTMENT_MONEY_PATTERN = /[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?/.freeze
   ADJUSTMENT_SIGNED_MONEY_PATTERN = /(?:\A|[\s　])(?:[▲△]|[\-−]\s*)[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?/.freeze
   ADJUSTMENT_AMOUNT_ONLY_PATTERN = /\A\s*[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?\s*\z/.freeze
@@ -46,7 +44,11 @@ class Ocr::ResponseParser
         store_address: extract_store_address(parsed_response),                                                     # MerchantAddress は取得率にばらつきあり。取得値は住所として保存/表示する
         store_address_components: extract_store_address_components(parsed_response),
         store_phone_number: extract_store_phone_number(parsed_response),
-        purchased_at_text: normalize_purchased_at_text(extract_purchased_at_text(parsed_response, normalized_lines)),
+        purchased_at_text: Ocr::ResponseParser::PurchasedAtCandidateExtractor.call(
+          fields: extract_fields(parsed_response),
+          lines: normalized_lines,
+          profile: profile
+        ),
         total_amount: extract_total_amount(parsed_response, normalized_lines),
         subtotal_amount: extract_subtotal_amount(parsed_response, normalized_lines),
         tax_amount: extract_tax_amount(parsed_response, normalized_lines),
@@ -451,68 +453,6 @@ class Ocr::ResponseParser
       fields.dig("MerchantPhoneNumber", "valueString")
   rescue NoMethodError, TypeError
     nil
-  end
-
-  def extract_purchased_at_text(parsed_response, lines)
-    fields = extract_fields(parsed_response)
-    date = fields.dig("TransactionDate", "valueDate")
-    time = fields.dig("TransactionTime", "valueTime")
-    return [ date, time ].compact.join(" ") if date.present? || time.present?
-
-    extract_purchased_at_text_from_lines(lines)
-  end
-
-  def extract_purchased_at_text_from_lines(lines)
-    normalized_lines = Array(lines)
-    date_entry = normalized_lines.each_with_index.filter_map do |line, index|
-      date_text = extract_purchased_at_date_text(line)
-      { date_text: date_text, line: line, index: index } if date_text.present?
-    end.first
-
-    if date_entry.present?
-      time_text = extract_purchased_at_time_text(date_entry[:line]) ||
-        nearby_purchased_at_time_text(normalized_lines, date_entry[:index])
-      return [ date_entry[:date_text], time_text ].compact.join(" ")
-    end
-
-    normalized_lines.lazy.filter_map { |line| extract_purchased_at_time_text(line) }.first
-  end
-
-  def extract_purchased_at_date_text(line)
-    text = line.to_s
-    pattern = profile.ocr_purchased_at_date_patterns.find { |candidate| text.match?(candidate) }
-    return if pattern.blank?
-
-    text.match(pattern).to_s.gsub(/[[:space:]　]+/, "")
-  end
-
-  def nearby_purchased_at_time_text(lines, date_index)
-    PURCHASED_AT_NEARBY_TIME_OFFSETS.each do |offset|
-      index = date_index + offset
-      next if index.negative? || index >= lines.size
-
-      time_text = extract_purchased_at_time_text(lines[index])
-      return time_text if time_text.present?
-    end
-
-    nil
-  end
-
-  def extract_purchased_at_time_text(line)
-    match = line.to_s.match(PURCHASED_AT_TIME_PATTERN)
-    return if match.blank?
-
-    hour = match[1].to_i
-    minute = match[2].to_i
-    return if hour > 23 || minute > 59
-
-    "#{match[1]}:#{match[2]}"
-  end
-
-  def normalize_purchased_at_text(text)
-    return nil if text.blank?
-
-    text.to_s.gsub("/", "-")
   end
 
   def extract_total_amount(parsed_response, lines)
