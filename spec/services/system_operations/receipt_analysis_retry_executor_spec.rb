@@ -59,6 +59,8 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
 
       aggregate_failures do
         expect(result).to be_success
+        expect(result).to be_frozen
+        expect { result.retry_type = 'ocr_retry' }.to raise_error(NoMethodError)
         expect(result.retry_type).to eq('full_reanalyze')
         expect(result.enqueued_job).to eq(ReceiptOcrJob)
         expect(result.run).to be_persisted

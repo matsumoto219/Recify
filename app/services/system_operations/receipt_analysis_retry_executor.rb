@@ -4,7 +4,11 @@ module SystemOperations
     CONFIRMATION_TEXT = "RETRY ANALYSIS".freeze
     RETRY_TYPES = Receipts::Processing.admin_retry_types
 
-    Result = Struct.new(:run, :enqueued_job, :retry_type, :error_code, :error_message, keyword_init: true) do
+    Result = Data.define(:run, :enqueued_job, :retry_type, :error_code, :error_message) do
+      def initialize(run: nil, enqueued_job: nil, retry_type: nil, error_code: nil, error_message: nil)
+        super(run:, enqueued_job:, retry_type:, error_code:, error_message:)
+      end
+
       def success?
         error_code.blank?
       end
