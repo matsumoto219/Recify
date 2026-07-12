@@ -307,12 +307,11 @@ module SecurityEvents
     end
 
     def admin_burst_event_type(action)
-      case action
-      when "system_settings.update"
+      if action == "system_settings.update"
         "system_settings_change_burst"
-      when "admin.users.limit_update"
+      elsif action == "admin.users.limit_update"
         "user_limits_override_burst"
-      when *AuditLogs::RetentionPolicy::HIGH_RISK_ADMIN_ACTIONS
+      elsif AuditLogs.high_risk_admin_action?(action)
         "admin_high_risk_burst"
       end
     end

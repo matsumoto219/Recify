@@ -163,6 +163,21 @@ module AuditLogs
       )
     end
 
+    def retention_policy_summaries
+      RetentionPolicy.categories.map do |category|
+        {
+          category: category,
+          retention: RetentionPolicy.retention_for(category),
+          actions_count: RetentionPolicy.actions_for(category).size,
+          excluded: RetentionPolicy.excluded?(category)
+        }
+      end
+    end
+
+    def high_risk_admin_action?(action)
+      RetentionPolicy::HIGH_RISK_ADMIN_ACTIONS.include?(action.to_s)
+    end
+
     def sanitize(value)
       case value
       when Hash

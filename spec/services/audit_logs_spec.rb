@@ -1,6 +1,35 @@
 require 'rails_helper'
 
 RSpec.describe AuditLogs do
+  describe 'retention policy facade' do
+    it 'returns safe retention summaries without exposing the child policy' do
+      summaries = described_class.retention_policy_summaries
+
+      expect(summaries).to include(
+        hash_including(
+          category: :user_delete,
+          retention: nil,
+          actions_count: 1,
+          excluded: true
+        ),
+        hash_including(
+          category: :high_risk_admin,
+          retention: 365.days,
+          excluded: false
+        )
+      )
+    end
+
+    it 'classifies only explicit high-risk admin actions' do
+      aggregate_failures do
+        expect(described_class.high_risk_admin_action?('admin.users.lock')).to eq(true)
+        expect(described_class.high_risk_admin_action?(:'system_settings.update')).to eq(true)
+        expect(described_class.high_risk_admin_action?('admin.users.limit_update')).to eq(false)
+        expect(described_class.high_risk_admin_action?('unknown.action')).to eq(false)
+      end
+    end
+  end
+
   describe '.record_admin_action!' do
     it 'admin actionをrequest context付きで記録する' do
       actor = create(:user, :admin)

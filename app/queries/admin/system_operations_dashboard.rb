@@ -86,13 +86,14 @@ module Admin
     end
 
     def audit_log_retention_policies
-      AuditLogs::RetentionPolicy.categories.map do |category|
+      AuditLogs.retention_policy_summaries.map do |policy|
+        category = policy.fetch(:category)
         {
           category: category.to_s,
           label: retention_category_label(category),
-          retention: retention_label(category),
-          actions_count: AuditLogs::RetentionPolicy.actions_for(category).size,
-          excluded: AuditLogs::RetentionPolicy.excluded?(category)
+          retention: retention_label(policy),
+          actions_count: policy.fetch(:actions_count),
+          excluded: policy.fetch(:excluded)
         }
       end
     end
@@ -104,10 +105,10 @@ module Admin
       )
     end
 
-    def retention_label(category)
-      return I18n.t("admin.system_operations_dashboard.retention.excluded") if AuditLogs::RetentionPolicy.excluded?(category)
+    def retention_label(policy)
+      return I18n.t("admin.system_operations_dashboard.retention.excluded") if policy.fetch(:excluded)
 
-      retention = AuditLogs::RetentionPolicy.retention_for(category)
+      retention = policy.fetch(:retention)
       return "-" if retention.blank?
 
       I18n.t("admin.system_operations_dashboard.retention.days", count: retention / 1.day)

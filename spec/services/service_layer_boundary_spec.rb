@@ -30,21 +30,7 @@ RSpec.describe "Service layer child implementation boundary" do
     "audit_logs" => registry_entry(
       "audit_logs",
       "AuditLogs",
-      facade: "app/services/audit_logs.rb",
-      legacy_exceptions: [
-        {
-          source_path: "app/queries/admin/system_operations_dashboard.rb",
-          referenced_constant: "AuditLogs::RetentionPolicy",
-          reason: "AuditLogs facadeにretention policy参照APIが未整備の既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/services/security_events.rb",
-          referenced_constant: "AuditLogs::RetentionPolicy::HIGH_RISK_ADMIN_ACTIONS",
-          reason: "AuditLogs child定数へのcross-namespace既存参照",
-          remove_in_loop: 22
-        }
-      ]
+      facade: "app/services/audit_logs.rb"
     ),
     "bot_protection" => registry_entry("bot_protection", "BotProtection", facade: "app/services/bot_protection.rb"),
     "contact_requests" => registry_entry("contact_requests", "ContactRequests", facade: "app/services/contact_requests.rb"),
