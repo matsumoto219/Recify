@@ -42,7 +42,7 @@ RSpec.describe "root service and lifecycle status boundary" do
 
   EXTERNAL_METHODS = {
     "admin.rb" => %i[announcement_filter_options announcements audit_log_filter_options audit_logs contact_request contact_request_filter_options contact_requests dashboard database_status_snapshot ip_actions ip_block ip_block_filter_options ip_blocks legal_acceptance_status passkey_reauth_fresh? passkey_reauth_window_duration passkey_reauthenticated_at receipt receipt_analysis_cleanup_preview receipt_analysis_run_filter_options receipt_analysis_runs receipts security_event security_event_filter_options security_events system_operations_dashboard system_setting system_settings user users],
-    "analysis.rb" => %i[build_receipt_params detect_category enforce_ownership_consistency evaluate_receipt_signal money_token_matches normalize_compact_store_name_candidate normalize_receipt_items normalize_store_name_candidate ownership_review_reason_resolved? processing_error_category processing_error_mapping retry_confirmation_text retry_eligibility retry_receipt_analysis retry_types store_name_brand_candidate_from_legal_entity store_name_candidate_valid? store_name_customer_facing_heading_candidates store_name_descriptive_heading_line? store_name_isolated_logo_fragment? store_name_latin_logo_prefix_duplicate? store_name_legal_entity_name? store_name_message_line? store_name_operator_candidates store_name_operator_context_line? store_name_operator_legal_entity_candidate? tax_detail_line_evidence],
+    "analysis.rb" => %i[build_receipt_params detect_category enforce_ownership_consistency evaluate_receipt_signal money_token_matches normalize_compact_store_name_candidate normalize_receipt_items normalize_store_name_candidate ownership_review_reason_resolved? processing_error_category processing_error_mapping store_name_brand_candidate_from_legal_entity store_name_candidate_valid? store_name_customer_facing_heading_candidates store_name_descriptive_heading_line? store_name_isolated_logo_fragment? store_name_latin_logo_prefix_duplicate? store_name_legal_entity_name? store_name_message_line? store_name_operator_candidates store_name_operator_context_line? store_name_operator_legal_entity_candidate? tax_detail_line_evidence],
     "audit_logs.rb" => %i[cleanup_retention record_admin_action! record_system_action! sanitize],
     "bot_protection.rb" => %i[failure_result success_result turnstile_enabled? turnstile_site_key verify_turnstile],
     "contact_requests.rb" => %i[anonymizable_scope anonymize anonymized? category_options cleanup_retention contact_request_retention_days create email_digest retention_cutoff],
@@ -69,7 +69,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     "security_events.rb" => %i[cleanup_retention detect record! record_admin_audit_burst! record_csrf_failure! record_external_service_failure! record_invalid_upload! record_rate_limit! record_request_detections! record_suspicious_error! sanitize_exception_message sanitize_metadata sanitize_text],
     "sensitive_metadata_keys.rb" => %i[],
     "storage.rb" => %i[extract_image_dimensions global_quota global_quota_can_add? orphan_blob_scan purge_attachment purge_receipt_images system_usage_snapshot usage_calculator],
-    "system_operations.rb" => %i[execute_ip_access_operation execute_receipt_analysis_cleanup execute_receipt_analysis_retry execute_receipt_moderation_operation execute_user_operation receipt_analysis_retry_confirmation_text reset_setting update_setting update_user_limit user_limit_update_confirmation_text],
+    "system_operations.rb" => %i[execute_ip_access_operation execute_receipt_analysis_cleanup execute_receipt_analysis_retry execute_receipt_moderation_operation execute_user_operation receipt_analysis_retry_confirmation_text receipt_analysis_retry_eligibility receipt_analysis_retry_types reset_setting update_setting update_user_limit user_limit_update_confirmation_text],
     "system_settings.rb" => %i[audit_value cast_update_value definition_for definitions dependency_lock_groups_for enabled? fetch limit_for limits_for stored_value valid_key? validate_stored_value! value_for values_for],
     "two_factor.rb" => %i[confirm_totp_setup disable_totp_for prepare_totp_setup recovery_codes_status regenerate_recovery_codes_for totp_provisioning_uri totp_qr_svg verify_recovery_code verify_totp],
     "usage.rb" => %i[consume_ai_job! consume_batch_upload! consume_manual_receipt! consume_ocr_job! consume_receipt_upload! consume_retry_operation! counter_summary_for ensure_ai_job_within_limit! ensure_ocr_job_within_limit!],
@@ -107,7 +107,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     "security_events.rb" => EXTERNAL_METHODS.fetch("security_events.rb"),
     "sensitive_metadata_keys.rb" => %i[],
     "storage.rb" => EXTERNAL_METHODS.fetch("storage.rb"),
-    "system_operations.rb" => %i[execute_ip_access_operation execute_receipt_analysis_cleanup execute_receipt_analysis_retry execute_receipt_moderation_operation execute_user_operation receipt_analysis_retry_confirmation_text reset_setting update_setting update_user_limit user_limit_update_confirmation_text],
+    "system_operations.rb" => %i[execute_ip_access_operation execute_receipt_analysis_cleanup execute_receipt_analysis_retry execute_receipt_moderation_operation execute_user_operation receipt_analysis_retry_confirmation_text receipt_analysis_retry_eligibility receipt_analysis_retry_types reset_setting update_setting update_user_limit user_limit_update_confirmation_text],
     "system_settings.rb" => %i[audit_value cast_update_value definition_for definitions dependency_lock_groups_for editable? enabled? fetch limit_for limits_for rollout_enabled? source_for stored_value stored_value_for_update valid_key? validate_stored_value! value_for values_for],
     "two_factor.rb" => %i[confirm_totp_setup disable_totp_for generate_recovery_codes_for generate_totp_secret prepare_totp_setup recovery_code_digest recovery_codes_status regenerate_recovery_codes_for totp_provisioning_uri totp_qr_svg verify_recovery_code verify_totp verify_totp_setup],
     "usage.rb" => %i[consume_ai_job! consume_batch_upload! consume_manual_receipt! consume_ocr_job! consume_receipt_upload! consume_retry_operation! counter_summary_for effective_limit ensure_ai_job_within_limit! ensure_ocr_job_within_limit! limit_summary_for],
@@ -160,7 +160,7 @@ RSpec.describe "root service and lifecycle status boundary" do
 
   EXPECTED_STATUS_WRITE_FINGERPRINTS = {
     [ "app/controllers/receipts_controller.rb", :receipt, "@receipt", :status=, [ :status ] ] => 2,
-    [ "app/services/analysis/retry_service.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
+    [ "app/services/system_operations/receipt_analysis_retry_executor.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
     [ "app/services/receipt_analysis_pipeline.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
     [ "app/services/receipt_analysis_runs.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
     [ "app/services/receipt_analysis_runs/starter.rb", :analysis_run, "receipt.receipt_analysis_runs", :create!, %i[status stage] ] => 1,

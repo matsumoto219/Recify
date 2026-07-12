@@ -53,19 +53,19 @@ module Analysis
     end
 
     def retry_receipt_analysis(...)
-      RetryService.call(...)
+      SystemOperations.execute_receipt_analysis_retry(...)
     end
 
     def retry_eligibility(...)
-      RetryService.eligibility(...)
+      SystemOperations.receipt_analysis_retry_eligibility(...)
     end
 
     def retry_types
-      RetryService::RETRY_TYPES
+      SystemOperations.receipt_analysis_retry_types
     end
 
     def retry_confirmation_text
-      RetryService::CONFIRMATION_TEXT
+      SystemOperations.receipt_analysis_retry_confirmation_text
     end
 
     def store_name_customer_facing_heading_candidates(...)

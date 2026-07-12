@@ -1,5 +1,5 @@
-module Analysis
-  class RetryService
+module SystemOperations
+  class ReceiptAnalysisRetryExecutor
     SOURCE = "admin_retry".freeze
     CONFIRMATION_TEXT = "RETRY ANALYSIS".freeze
     RETRY_TYPES = %w[

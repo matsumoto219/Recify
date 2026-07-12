@@ -32,11 +32,19 @@ module SystemOperations
 
   class << self
     def execute_receipt_analysis_retry(...)
-      Analysis.retry_receipt_analysis(...)
+      ReceiptAnalysisRetryExecutor.call(...)
+    end
+
+    def receipt_analysis_retry_eligibility(...)
+      ReceiptAnalysisRetryExecutor.eligibility(...)
+    end
+
+    def receipt_analysis_retry_types
+      ReceiptAnalysisRetryExecutor::RETRY_TYPES
     end
 
     def receipt_analysis_retry_confirmation_text
-      Analysis.retry_confirmation_text
+      ReceiptAnalysisRetryExecutor::CONFIRMATION_TEXT
     end
 
     def execute_receipt_analysis_cleanup(operation:, actor:, reason:, cutoff:, limit:, request:, reauthentication:)

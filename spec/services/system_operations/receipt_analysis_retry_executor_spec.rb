@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe Analysis::RetryService do
+RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
   include ActiveJob::TestHelper
 
   let(:cache_store) { ActiveSupport::Cache::MemoryStore.new }
@@ -1526,6 +1526,6 @@ RSpec.describe Analysis::RetryService do
   end
 
   def retry_confirmation
-    Analysis::RetryService::CONFIRMATION_TEXT
+    SystemOperations::ReceiptAnalysisRetryExecutor::CONFIRMATION_TEXT
   end
 end
