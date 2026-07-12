@@ -107,7 +107,6 @@ module Analysis
         return result
       end
 
-      verify_audit_writable!
       result = nil
 
       begin
@@ -135,6 +134,7 @@ module Analysis
           mark_receipt_processing!
 
           result = Result.new(run: run, enqueued_job: job_class, retry_type: retry_type)
+          record_retry_requested_audit!(result)
         end
       rescue ExternalServices::RuntimeConfigUnavailableError
         result = failure(:runtime_config_unavailable, "runtime config is unavailable")
@@ -334,11 +334,31 @@ module Analysis
       )
     end
 
-    def verify_audit_writable!
-      AuditLog.transaction(requires_new: true) do
-        record_audit!(Result.new(enqueued_job: job_class, retry_type: retry_type))
-        raise ActiveRecord::Rollback
-      end
+    def record_retry_requested_audit!(result)
+      AuditLogs.record_admin_action!(
+        actor: actor,
+        action: "receipt_analysis.retry_requested",
+        target: receipt,
+        target_uid: receipt&.public_id,
+        reason: reason,
+        outcome: "succeeded",
+        metadata: {
+          retry_type: audit_retry_type,
+          intended_action: audit_action,
+          parent_run_key: parent_run&.run_key,
+          new_run_key: result.run&.run_key,
+          job_class: result.enqueued_job&.name,
+          source: SOURCE
+        }.merge(reauthentication_metadata),
+        before_state: audit_before_state,
+        after_state: {
+          receipt_status: receipt&.status,
+          new_run_key: result.run&.run_key,
+          new_run_status: result.run&.status,
+          enqueue_status: "pending"
+        },
+        request: request
+      )
     end
 
     def audit_action

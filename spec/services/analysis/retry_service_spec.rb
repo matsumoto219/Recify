@@ -52,9 +52,10 @@ RSpec.describe Analysis::RetryService do
           reauthentication: reauthentication_context,
           confirmation: retry_confirmation
         )
-      end.to change(AuditLog, :count).by(1)
+      end.to change(AuditLog, :count).by(2)
 
-      audit_log = AuditLog.last
+      intent_audit = AuditLog.find_by!(action: 'receipt_analysis.retry_requested')
+      audit_log = AuditLog.find_by!(action: 'receipt_analysis.full_reanalyze')
 
       aggregate_failures do
         expect(result).to be_success
@@ -74,6 +75,36 @@ RSpec.describe Analysis::RetryService do
         expect(ReceiptOcrJob).to have_been_enqueued.with(run_id: result.run.id)
         expect(enqueued_jobs.last[:args]).to eq([ { 'run_id' => result.run.id, '_aj_ruby2_keywords' => [ 'run_id' ] } ])
         expect(UsageCounter.find_by!(user: actor, key: 'retry_operations_per_day').used_count).to eq(1)
+        expect(intent_audit).to have_attributes(
+          actor_user: actor,
+          actor_kind: 'admin',
+          reason: '問い合わせ対応',
+          outcome: 'succeeded',
+          request_id: 'retry-request-id'
+        )
+        expect(intent_audit.metadata).to include(
+          'retry_type' => 'full_reanalyze',
+          'intended_action' => 'receipt_analysis.full_reanalyze',
+          'parent_run_key' => nil,
+          'new_run_key' => result.run.run_key,
+          'job_class' => 'ReceiptOcrJob',
+          'source' => 'admin_retry',
+          'reauthenticated' => true,
+          'reauthentication_method' => 'passkey'
+        )
+        expect(intent_audit.after_state).to include(
+          'receipt_status' => 'processing',
+          'new_run_key' => result.run.run_key,
+          'new_run_status' => 'queued',
+          'enqueue_status' => 'pending'
+        )
+        expect(intent_audit.attributes.to_json).not_to include(
+          'credential_id',
+          'public_key',
+          'challenge',
+          'raw_response',
+          'prompt'
+        )
         expect(audit_log).to have_attributes(
           actor_user: actor,
           actor_kind: 'admin',
@@ -924,7 +955,7 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
-    it 'enqueue失敗時はrunとreceiptをfailedへ補償し、失敗auditだけを残す' do
+    it 'enqueue失敗時はrunとreceiptをfailedへ補償し、intentと失敗auditを残す' do
       allow(ReceiptOcrJob).to receive(:perform_later).and_raise(StandardError, 'queue unavailable')
 
       expect do
@@ -942,10 +973,11 @@ RSpec.describe Analysis::RetryService do
           expect(result).to be_failure
           expect(result.error_code).to eq('analysis_enqueue_failed')
         end
-      end.to change(AuditLog, :count).by(1)
+      end.to change(AuditLog, :count).by(2)
 
       run = ReceiptAnalysisRun.order(:id).last
-      audit_log = AuditLog.last
+      intent_audit = AuditLog.find_by!(action: 'receipt_analysis.retry_requested')
+      audit_log = AuditLog.find_by!(action: 'receipt_analysis.full_reanalyze')
 
       aggregate_failures do
         expect(run).to have_attributes(
@@ -956,6 +988,10 @@ RSpec.describe Analysis::RetryService do
         expect(receipt.reload).to have_attributes(
           status: 'failed',
           processing_error_code: 'analysis_enqueue_failed'
+        )
+        expect(intent_audit.metadata).to include(
+          'new_run_key' => run.run_key,
+          'job_class' => 'ReceiptOcrJob'
         )
         expect(audit_log).to have_attributes(
           action: 'receipt_analysis.full_reanalyze',
@@ -999,8 +1035,14 @@ RSpec.describe Analysis::RetryService do
       end
     end
 
-    it 'audit log作成に失敗した場合はrun作成とenqueueを行わない' do
-      allow(AuditLogs).to receive(:record_admin_action!).and_raise(ActiveRecord::RecordInvalid)
+    it 'intent audit作成に失敗した場合はrunとcounterをrollbackし、enqueueしない' do
+      allow(AuditLogs).to receive(:record_admin_action!).and_wrap_original do |method, **kwargs|
+        if kwargs[:action] == 'receipt_analysis.retry_requested'
+          raise ActiveRecord::StatementInvalid, 'forced intent audit failure'
+        end
+
+        method.call(**kwargs)
+      end
       run_count = ReceiptAnalysisRun.count
 
       expect do
@@ -1012,12 +1054,86 @@ RSpec.describe Analysis::RetryService do
           reauthentication: reauthentication_context,
           confirmation: retry_confirmation
         )
-      end.to raise_error(ActiveRecord::RecordInvalid)
+      end.to raise_error(ActiveRecord::StatementInvalid, 'forced intent audit failure')
 
       aggregate_failures do
         expect(ReceiptAnalysisRun.count).to eq(run_count)
         expect(receipt.reload).to be_completed
+        expect(UsageCounter.where(user: actor, key: 'retry_operations_per_day')).to be_empty
         expect_no_analysis_job_enqueued
+        expect(AuditLog.where(action: 'receipt_analysis.retry_requested')).to be_empty
+      end
+    end
+
+    it 'outcome auditだけ失敗してもenqueue済みretryを追跡できるintent auditを残す' do
+      allow(AuditLogs).to receive(:record_admin_action!).and_wrap_original do |method, **kwargs|
+        if kwargs[:action] == 'receipt_analysis.full_reanalyze' && kwargs.dig(:metadata, :new_run_key).present?
+          raise ActiveRecord::RecordInvalid.new(AuditLog.new)
+        end
+
+        method.call(**kwargs)
+      end
+
+      expect do
+        described_class.call(
+          receipt: receipt,
+          actor: actor,
+          retry_type: :full_reanalyze,
+          reason: 'outcome audit failure retry',
+          request: request_context,
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+      end.to raise_error(ActiveRecord::RecordInvalid)
+
+      run = ReceiptAnalysisRun.order(:id).last
+      intent_audit = AuditLog.find_by!(action: 'receipt_analysis.retry_requested')
+
+      aggregate_failures do
+        expect(run).to have_attributes(status: 'queued', stage: 'queued')
+        expect(receipt.reload).to be_processing
+        expect(UsageCounter.find_by!(user: actor, key: 'retry_operations_per_day').used_count).to eq(1)
+        expect(ReceiptOcrJob).to have_been_enqueued.with(run_id: run.id)
+        expect(intent_audit).to have_attributes(
+          actor_user: actor,
+          reason: 'outcome audit failure retry',
+          outcome: 'succeeded'
+        )
+        expect(intent_audit.metadata).to include(
+          'intended_action' => 'receipt_analysis.full_reanalyze',
+          'new_run_key' => run.run_key,
+          'job_class' => 'ReceiptOcrJob',
+          'reauthenticated' => true
+        )
+        expect(AuditLog.where(action: 'receipt_analysis.full_reanalyze')).to be_empty
+      end
+    end
+
+    it 'transaction commit後かつintent audit永続化後にenqueueする' do
+      test_transaction_depth = ReceiptAnalysisRun.connection.open_transactions
+      allow(ReceiptAnalysisRuns).to receive(:enqueue).and_wrap_original do |method, run, job_class:|
+        intent_audit = AuditLog.find_by(action: 'receipt_analysis.retry_requested')
+
+        aggregate_failures do
+          expect(ReceiptAnalysisRun.connection.open_transactions).to eq(test_transaction_depth)
+          expect(intent_audit&.metadata).to include('new_run_key' => run.run_key)
+        end
+
+        method.call(run, job_class: job_class)
+      end
+
+      result = described_class.call(
+        receipt: receipt,
+        actor: actor,
+        retry_type: :full_reanalyze,
+        reason: 'enqueue order retry',
+        reauthentication: reauthentication_context,
+        confirmation: retry_confirmation
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(ReceiptAnalysisRuns).to have_received(:enqueue).once
       end
     end
   end

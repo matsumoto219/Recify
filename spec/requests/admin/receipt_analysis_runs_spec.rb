@@ -1452,12 +1452,21 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
              headers: {
                'HTTP_USER_AGENT' => 'Admin Retry Spec'
              }
-      end.to change(AuditLog, :count).by(1)
+      end.to change(AuditLog, :count).by(2)
 
-      audit_log = AuditLog.last
+      intent_audit = AuditLog.find_by!(action: 'receipt_analysis.retry_requested')
+      audit_log = AuditLog.find_by!(action: 'receipt_analysis.full_reanalyze')
 
       aggregate_failures do
         expect(response).to have_http_status(:redirect)
+        expect(intent_audit).to have_attributes(
+          actor_user: admin,
+          target_uid: parent_run.receipt.public_id,
+          reason: '監査ログ確認'
+        )
+        expect(intent_audit.request_id).to be_present
+        expect(intent_audit.user_agent).to eq('Admin Retry Spec')
+        expect(intent_audit.ip_address).to be_present
         expect(audit_log).to have_attributes(
           actor_user: admin,
           action: 'receipt_analysis.full_reanalyze',

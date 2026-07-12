@@ -14,6 +14,7 @@ module AuditLogs
       admin.ip_access.manual_unblock
       admin.ip_access.rack_attack_ban_reset
       admin.receipts.hard_delete
+      receipt_analysis.retry_requested
       receipt_analysis.full_reanalyze
       receipt_analysis.ocr_retry
       receipt_analysis.ai_retry
