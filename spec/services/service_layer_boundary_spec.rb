@@ -163,7 +163,6 @@ RSpec.describe "Service layer child implementation boundary" do
         ReceiptAnalysisRuns::TerminalRunError
       ]
     ),
-    "receipt_search" => registry_entry("receipt_search", "ReceiptSearch", facade: "app/services/receipt_search.rb"),
     "recify" => registry_entry(
       "recify",
       "Recify",
