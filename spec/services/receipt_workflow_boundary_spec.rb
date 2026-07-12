@@ -8,7 +8,7 @@ RSpec.describe "Receipt workflow dependency boundary" do
       facade_path: "app/services/receipts/uploads.rb",
       private_root: "app/services/receipts/uploads",
       allowed_workflow_facades: %w[processing],
-      public_constants: []
+      public_constants: %w[Receipts::Uploads::Result]
     },
     "processing" => {
       namespace: "Receipts::Processing",

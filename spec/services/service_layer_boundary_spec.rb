@@ -153,6 +153,7 @@ RSpec.describe "Service layer child implementation boundary" do
         Receipts::Editing
         Receipts::Processing
         Receipts::Uploads
+        Receipts::Uploads::Result
         Receipts::Processing::AnalysisError
         Receipts::Processing::Contracts::FinalizeDecision
         Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION

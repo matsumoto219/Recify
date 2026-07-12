@@ -3,16 +3,6 @@ class Receipts::Uploads::Batch
   MAX_FILES = DEFAULT_MAX_FILES
   private_constant :MAX_FILES
 
-  Result = Struct.new(:created_receipts, :errors, keyword_init: true) do
-    def success?
-      errors.blank?
-    end
-
-    def count
-      created_receipts.size
-    end
-  end
-
   def self.call(user:, files:)
     new(user:, files:).call
   end
@@ -126,10 +116,10 @@ class Receipts::Uploads::Batch
   end
 
   def success(created_receipts, errors: [])
-    Result.new(created_receipts:, errors: errors)
+    Receipts::Uploads::Result.new(created_receipts:, errors: errors)
   end
 
   def failure(errors)
-    Result.new(created_receipts: [], errors: Array(errors))
+    Receipts::Uploads::Result.new(created_receipts: [], errors: Array(errors))
   end
 end
