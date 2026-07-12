@@ -60,6 +60,46 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       }
     end
 
+    it 'ownership handoffへsource evidenceのexact attributesだけを渡す' do
+      evidence_attributes = {
+        source_provider: 'azure',
+        'source_field_path' => 'Items[0]',
+        source_line_index: 0,
+        'source_span_start' => 0,
+        source_span_end: 12,
+        raw_response: 'secret',
+        api_key: 'secret'
+      }
+      ocr_result[:candidates][:items][0].merge!(evidence_attributes)
+      ocr_result[:candidates][:payments][0].merge!(evidence_attributes.merge('source_field_path' => 'Payments[0]'))
+      ocr_result[:candidates][:tax_details][0].merge!(evidence_attributes.merge('source_field_path' => 'TaxDetails[0]'))
+      ownership_input = nil
+
+      allow(Analysis::ReceiptFactOwnershipResolver).to receive(:call).and_wrap_original do |method, **kwargs|
+        ownership_input = kwargs.deep_dup
+        method.call(**kwargs)
+      end
+
+      described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+      expected_item_evidence = {
+        source_provider: 'azure',
+        source_field_path: 'Items[0]',
+        source_line_index: 0,
+        source_span_start: 0,
+        source_span_end: 12
+      }
+
+      aggregate_failures do
+        expect(ownership_input[:items].first).to include(expected_item_evidence)
+        expect(ownership_input[:payments].first).to include(expected_item_evidence.merge(source_field_path: 'Payments[0]'))
+        expect(ownership_input[:tax_details].first).to include(expected_item_evidence.merge(source_field_path: 'TaxDetails[0]'))
+        expect(ownership_input.values_at(:items, :payments, :tax_details).flatten).to all(
+          satisfy { |attributes| !attributes.key?(:raw_response) && !attributes.key?(:api_key) }
+        )
+      end
+    end
+
     context 'AI結果なしの場合' do
       it 'receipt_attributesが正しく生成される' do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
