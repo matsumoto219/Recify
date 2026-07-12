@@ -208,28 +208,32 @@ module Receipts::Processing::Runs
       dry_run = normalize_boolean(dry_run)
       runs = expired_terminal_runs(cutoff:, limit:)
       records = runs.map { |run| expired_run_record(run) }
-      artifact_result = cleanup_expired_ocr_response_artifacts(dry_run: dry_run)
-      result = {
-        dry_run: dry_run,
-        cutoff: cutoff,
-        limit: limit,
-        expired_count: runs.size,
-        deleted_count: 0,
-        expired_artifact_count: artifact_result[:expired_artifact_count],
-        purged_artifact_count: artifact_result[:purged_artifact_count],
-        artifact_errors: artifact_result[:errors],
-        records: records
-      }
+      return cleanup_expired_preview(cutoff:, limit:, runs:, records:) if dry_run
 
-      return result if dry_run
+      ReceiptAnalysisRun.transaction(requires_new: true) do
+        artifact_result = cleanup_expired_ocr_response_artifacts(dry_run: false)
+        if artifact_result[:errors].present?
+          raise Receipts::Processing::Error, "ocr_response_artifact_cleanup_failed"
+        end
 
-      ids = records.map { |record| record[:id] }
-      purge_ocr_response_artifacts_for_run_ids(ids)
-      result[:deleted_count] = ReceiptAnalysisRun
-        .where(id: ids)
-        .where.not(status: ReceiptAnalysisRun::ACTIVE_STATUSES)
-        .delete_all
-      result
+        ids = ReceiptAnalysisRun
+          .where(id: records.map { |record| record[:id] })
+          .where.not(status: ReceiptAnalysisRun::ACTIVE_STATUSES)
+          .lock
+          .map(&:id)
+        purge_ocr_response_artifacts_for_run_ids(ids)
+        deleted_count = ReceiptAnalysisRun.where(id: ids).delete_all
+
+        cleanup_expired_result(
+          cutoff: cutoff,
+          limit: limit,
+          runs: runs,
+          records: records,
+          artifact_result: artifact_result,
+          deleted_count: deleted_count,
+          dry_run: false
+        )
+      end
     end
 
     private
@@ -244,13 +248,41 @@ module Receipts::Processing::Runs
       )
     end
 
+    def cleanup_expired_preview(cutoff:, limit:, runs:, records:)
+      cleanup_expired_result(
+        cutoff: cutoff,
+        limit: limit,
+        runs: runs,
+        records: records,
+        artifact_result: cleanup_expired_ocr_response_artifacts(dry_run: true),
+        deleted_count: 0,
+        dry_run: true
+      )
+    end
+
+    def cleanup_expired_result(cutoff:, limit:, runs:, records:, artifact_result:, deleted_count:, dry_run:)
+      {
+        dry_run: dry_run,
+        cutoff: cutoff,
+        limit: limit,
+        expired_count: runs.size,
+        deleted_count: deleted_count,
+        expired_artifact_count: artifact_result[:expired_artifact_count],
+        purged_artifact_count: artifact_result[:purged_artifact_count],
+        artifact_errors: artifact_result[:errors],
+        records: records
+      }
+    end
+
     def purge_ocr_response_artifacts_for_run_ids(ids)
       return if ids.blank?
 
       ActiveStorage::Attachment
         .where(record_type: "ReceiptAnalysisRun", name: "ocr_response_artifact", record_id: ids)
-        .includes(:blob)
-        .find_each(&:purge)
+        .includes(:blob, :record)
+        .find_each(&:destroy!)
+    rescue StandardError
+      raise Receipts::Processing::Error, "ocr_response_artifact_cleanup_failed"
     end
 
     def sanitized_finalize_decision_snapshot(parent_run)

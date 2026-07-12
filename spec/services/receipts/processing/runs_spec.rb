@@ -1,6 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Runs do
+  include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
 
   def deep_json(value)
@@ -1607,24 +1608,52 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
-    it 'expired run削除時にOCR response artifactもpurgeする' do
+    it 'expired run削除時にOCR response artifactをdetachしてpurgeをenqueueする' do
       expired = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
       expired.ocr_response_artifact.attach(
         io: StringIO.new(JSON.generate('status' => 'succeeded')),
         filename: "ocr_response_#{expired.run_key}_attempt01.json",
         content_type: 'application/json'
       )
-      blob_id = expired.ocr_response_artifact.blob.id
+      blob = expired.ocr_response_artifact.blob
+      blob_id = blob.id
       attachment_id = expired.ocr_response_artifact.attachment.id
 
-      result = described_class.cleanup_expired(cutoff: Time.current, dry_run: false)
+      result = nil
+      expect do
+        result = described_class.cleanup_expired(cutoff: Time.current, dry_run: false)
+      end.to have_enqueued_job(ActiveStorage::PurgeJob).with(blob)
 
       aggregate_failures do
         expect(result[:expired_count]).to eq(1)
         expect(result[:deleted_count]).to eq(1)
         expect(ReceiptAnalysisRun.exists?(expired.id)).to be(false)
         expect(ActiveStorage::Attachment.exists?(attachment_id)).to be(false)
-        expect(ActiveStorage::Blob.exists?(blob_id)).to be(false)
+        expect(ActiveStorage::Blob.exists?(blob_id)).to be(true)
+      end
+    end
+
+    it 'OCR response artifactのdetach失敗時はrunとartifactを残して例外にする' do
+      expired = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
+      expired.ocr_response_artifact.attach(
+        io: StringIO.new(JSON.generate('status' => 'succeeded')),
+        filename: "ocr_response_#{expired.run_key}_attempt01.json",
+        content_type: 'application/json'
+      )
+      attachment = expired.ocr_response_artifact.attachment
+      blob = expired.ocr_response_artifact.blob
+      allow_any_instance_of(ActiveStorage::Attachment).to receive(:destroy!)
+        .and_raise(ActiveRecord::RecordNotDestroyed.new('local detach failure', attachment))
+
+      expect do
+        described_class.cleanup_expired(cutoff: Time.current, dry_run: false)
+      end.to raise_error(Receipts::Processing::Error, 'ocr_response_artifact_cleanup_failed')
+
+      aggregate_failures do
+        expect(ReceiptAnalysisRun).to exist(expired.id)
+        expect(ActiveStorage::Attachment).to exist(attachment.id)
+        expect(ActiveStorage::Blob).to exist(blob.id)
+        expect(blob.service).to exist(blob.key)
       end
     end
 
@@ -1661,6 +1690,29 @@ RSpec.describe Receipts::Processing::Runs do
         expect(result[:expired_count]).to eq(0)
         expect(result[:deleted_count]).to eq(0)
         expect(ReceiptAnalysisRun.exists?(active.id)).to be(true)
+      end
+    end
+
+    it '候補取得後にactiveへ変わったrunは再検証してartifactも削除しない' do
+      run = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
+      run.ocr_response_artifact.attach(
+        io: StringIO.new(JSON.generate('status' => 'succeeded')),
+        filename: "ocr_response_#{run.run_key}_attempt01.json",
+        content_type: 'application/json'
+      )
+      allow(described_class).to receive(:expired_terminal_runs).and_wrap_original do |original, **arguments|
+        candidates = original.call(**arguments)
+        run.update_columns(status: 'queued', stage: 'queued')
+        candidates
+      end
+
+      result = described_class.cleanup_expired(cutoff: Time.current, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:expired_count]).to eq(1)
+        expect(result[:deleted_count]).to eq(0)
+        expect(ReceiptAnalysisRun).to exist(run.id)
+        expect(run.reload.ocr_response_artifact).to be_attached
       end
     end
 

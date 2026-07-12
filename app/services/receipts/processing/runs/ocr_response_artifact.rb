@@ -104,7 +104,7 @@ module Receipts::Processing::Runs
       return result if dry_run
 
       attachments.each do |attachment|
-        attachment.purge
+        attachment.destroy!
         result[:purged_artifact_count] += 1
       rescue StandardError => e
         result[:errors] << {
@@ -156,7 +156,7 @@ module Receipts::Processing::Runs
         .where(created_at: ..cutoff)
         .order(:created_at, :id)
         .limit(limit)
-        .includes(:blob)
+        .includes(:blob, :record)
         .to_a
     end
 

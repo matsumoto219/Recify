@@ -160,6 +160,41 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
       end
     end
 
+    it 'retention_cleanupのsuccess audit失敗時はrunとartifact/fileをrollbackする' do
+      run = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
+      run.ocr_response_artifact.attach(
+        io: StringIO.new(JSON.generate('status' => 'succeeded')),
+        filename: "ocr_response_#{run.run_key}_attempt01.json",
+        content_type: 'application/json'
+      )
+      attachment = run.ocr_response_artifact.attachment
+      blob = run.ocr_response_artifact.blob
+      allow(AuditLogs).to receive(:record_admin_action!).and_wrap_original do |original, **attributes|
+        raise ActiveRecord::RecordInvalid, AuditLog.new if attributes[:outcome] == 'succeeded'
+
+        original.call(**attributes)
+      end
+
+      result = described_class.call(
+        operation: 'retention_cleanup',
+        actor: actor,
+        reason: 'audit failure rollback',
+        cutoff: Time.current,
+        limit: 10,
+        request: request,
+        reauthentication: reauthentication
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(ReceiptAnalysisRun).to exist(run.id)
+        expect(ActiveStorage::Attachment).to exist(attachment.id)
+        expect(ActiveStorage::Blob).to exist(blob.id)
+        expect(blob.service).to exist(blob.key)
+        expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'cleanup_failed')
+      end
+    end
+
     it 'reason blankは拒否し、cleanupを実行しない' do
       allow(Receipts::Processing).to receive(:cleanup_stale)
 

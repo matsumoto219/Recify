@@ -132,4 +132,32 @@ RSpec.describe ReceiptAnalysisRunRetentionCleanupJob, type: :job do
       expect(audit_log.metadata).not_to have_key('error_message')
     end
   end
+
+  it 'cleanup成功後のaudit失敗時はrunとartifact/fileをrollbackする' do
+    run = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
+    run.ocr_response_artifact.attach(
+      io: StringIO.new(JSON.generate('status' => 'succeeded')),
+      filename: "ocr_response_#{run.run_key}_attempt01.json",
+      content_type: 'application/json'
+    )
+    attachment = run.ocr_response_artifact.attachment
+    blob = run.ocr_response_artifact.blob
+    allow(AuditLogs).to receive(:record_system_action!).and_wrap_original do |original, **attributes|
+      raise ActiveRecord::RecordInvalid, AuditLog.new if attributes[:outcome] == 'succeeded'
+
+      original.call(**attributes)
+    end
+
+    expect do
+      described_class.perform_now(cutoff: Time.current, dry_run: false)
+    end.to raise_error(ActiveRecord::RecordInvalid)
+
+    aggregate_failures do
+      expect(ReceiptAnalysisRun).to exist(run.id)
+      expect(ActiveStorage::Attachment).to exist(attachment.id)
+      expect(ActiveStorage::Blob).to exist(blob.id)
+      expect(blob.service).to exist(blob.key)
+      expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'cleanup_failed')
+    end
+  end
 end

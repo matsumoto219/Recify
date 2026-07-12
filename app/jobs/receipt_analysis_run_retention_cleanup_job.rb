@@ -6,14 +6,17 @@ class ReceiptAnalysisRunRetentionCleanupJob < ApplicationJob
   SAMPLE_RUN_KEY_LIMIT = 20
 
   def perform(cutoff: Time.current, limit: DEFAULT_LIMIT, dry_run: true)
-    result = Receipts::Processing.cleanup_expired(
-      cutoff: cutoff,
-      limit: limit,
-      dry_run: dry_run
-    )
+    result = nil
+    AuditLog.transaction do
+      result = Receipts::Processing.cleanup_expired(
+        cutoff: cutoff,
+        limit: limit,
+        dry_run: dry_run
+      )
+      record_audit!(result, cutoff: cutoff, limit: limit, dry_run: dry_run)
+    end
 
     log_completion(result)
-    record_audit!(result, cutoff: cutoff, limit: limit, dry_run: dry_run)
     result
   rescue StandardError => e
     record_failed_audit!(cutoff: cutoff, limit: limit, dry_run: dry_run, error: e)
