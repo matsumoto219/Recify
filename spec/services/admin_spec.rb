@@ -23,31 +23,4 @@ RSpec.describe Admin do
       expect(Admin::PasskeyReauthWindow).to have_received(:reauthenticated_at).with(reauthentication)
     end
   end
-
-  describe '.update_contact_request_status' do
-    it 'ContactRequestStatusUpdaterへ委譲する親入口である' do
-      contact_request = build_stubbed(:contact_request)
-      actor = build_stubbed(:user, :admin)
-      request = instance_double(ActionDispatch::Request)
-      result = Admin::Operations::ContactRequestStatusUpdater::Result.new(contact_request: contact_request, updated: true)
-
-      allow(Admin::Operations).to receive(:update_contact_request_status).and_return(result)
-
-      expect(
-        described_class.update_contact_request_status(
-          contact_request: contact_request,
-          status: 'in_progress',
-          actor: actor,
-          request: request
-        )
-      ).to eq(result)
-
-      expect(Admin::Operations).to have_received(:update_contact_request_status).with(
-        contact_request: contact_request,
-        status: 'in_progress',
-        actor: actor,
-        request: request
-      )
-    end
-  end
 end

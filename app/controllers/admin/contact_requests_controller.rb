@@ -14,7 +14,7 @@ class Admin::ContactRequestsController < Admin::BaseController
 
   def update
     contact_request = ContactRequest.find(params[:id])
-    result = Admin.update_contact_request_status(
+    result = Admin::Operations.update_contact_request_status(
       contact_request: contact_request,
       status: status_param,
       actor: current_user,

@@ -7,6 +7,11 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
     [ "app/controllers/admin/announcements_controller.rb", "@announcement", :save ] => 1
   }.freeze
 
+  ADMIN_OPERATION_CALLS = {
+    [ "app/controllers/admin/contact_requests_controller.rb", :update_contact_request_status ] => 1,
+    [ "app/controllers/admin/security_events_controller.rb", :update_security_event_status ] => 1
+  }.freeze
+
   SYSTEM_OPERATION_CALLS = {
     [ "app/controllers/admin/ip_blocks_controller.rb", :execute_ip_access_operation ] => 1,
     [ "app/controllers/admin/receipt_analysis_cleanup_controller.rb", :execute_receipt_analysis_cleanup ] => 1,
@@ -53,6 +58,14 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
     end.tally
 
     expect(actual).to eq(ADMIN_MUTATION_EXCEPTIONS)
+  end
+
+  it "routine Admin mutationをAdmin::Operationsのexact facade callへ限定する" do
+    actual = scanner.constant_calls("Admin::Operations", globs: "app/controllers/admin/**/*.rb").map do |effect|
+      [ effect.source_path, effect.method_name ]
+    end.tally
+
+    expect(actual).to eq(ADMIN_OPERATION_CALLS)
   end
 
   it "high-risk Admin操作をSystemOperationsのexact facade callへ限定する" do

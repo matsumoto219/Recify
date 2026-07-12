@@ -56,15 +56,6 @@ module Admin
       IpActionsQuery.call(**filters)
     end
 
-    def update_security_event_status(security_event:, status:, actor:, request:)
-      Operations.update_security_event_status(
-        security_event: security_event,
-        status: status,
-        actor: actor,
-        request: request
-      )
-    end
-
     def contact_requests(**filters)
       ContactRequestsQuery.call(**filters)
     end
@@ -83,15 +74,6 @@ module Admin
 
     def contact_request(id:)
       ContactRequestsQuery.find(id: id)
-    end
-
-    def update_contact_request_status(contact_request:, status:, actor:, request:)
-      Operations.update_contact_request_status(
-        contact_request: contact_request,
-        status: status,
-        actor: actor,
-        request: request
-      )
     end
 
     def users(**filters)

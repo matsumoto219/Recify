@@ -3,7 +3,7 @@ require_relative "../support/application_structure_boundary_scanner"
 
 RSpec.describe "root service and lifecycle status boundary" do
   ROOT_CLASSIFICATIONS = {
-    "admin.rb" => { constant: "Admin", role: :public_facade, owner: "admin read API and routine mutation facade", remove_in_loop: nil },
+    "admin.rb" => { constant: "Admin", role: :public_facade, owner: "admin read API and reauthentication policy facade", remove_in_loop: nil },
     "analysis.rb" => { constant: "Analysis", role: :public_facade, owner: "receipt analysis specialist facade", remove_in_loop: nil },
     "audit_logs.rb" => { constant: "AuditLogs", role: :public_facade, owner: "audit platform facade", remove_in_loop: nil },
     "bot_protection.rb" => { constant: "BotProtection", role: :public_facade, owner: "bot protection facade", remove_in_loop: nil },
@@ -41,7 +41,7 @@ RSpec.describe "root service and lifecycle status boundary" do
   }.freeze
 
   EXTERNAL_METHODS = {
-    "admin.rb" => %i[announcement_filter_options announcements audit_log_filter_options audit_logs contact_request contact_request_filter_options contact_requests dashboard database_status_snapshot ip_actions ip_block ip_block_filter_options ip_blocks legal_acceptance_status passkey_reauth_fresh? passkey_reauth_window_duration passkey_reauthenticated_at receipt receipt_analysis_cleanup_preview receipt_analysis_run_filter_options receipt_analysis_runs receipts security_event security_event_filter_options security_events system_operations_dashboard system_setting system_settings update_contact_request_status update_security_event_status user users],
+    "admin.rb" => %i[announcement_filter_options announcements audit_log_filter_options audit_logs contact_request contact_request_filter_options contact_requests dashboard database_status_snapshot ip_actions ip_block ip_block_filter_options ip_blocks legal_acceptance_status passkey_reauth_fresh? passkey_reauth_window_duration passkey_reauthenticated_at receipt receipt_analysis_cleanup_preview receipt_analysis_run_filter_options receipt_analysis_runs receipts security_event security_event_filter_options security_events system_operations_dashboard system_setting system_settings user users],
     "analysis.rb" => %i[build_receipt_params detect_category enforce_ownership_consistency evaluate_receipt_signal money_token_matches normalize_compact_store_name_candidate normalize_receipt_items normalize_store_name_candidate ownership_review_reason_resolved? processing_error_category processing_error_mapping retry_confirmation_text retry_eligibility retry_receipt_analysis retry_types store_name_brand_candidate_from_legal_entity store_name_candidate_valid? store_name_customer_facing_heading_candidates store_name_descriptive_heading_line? store_name_isolated_logo_fragment? store_name_latin_logo_prefix_duplicate? store_name_legal_entity_name? store_name_message_line? store_name_operator_candidates store_name_operator_context_line? store_name_operator_legal_entity_candidate? tax_detail_line_evidence],
     "audit_logs.rb" => %i[cleanup_retention record_admin_action! record_system_action! sanitize],
     "bot_protection.rb" => %i[failure_result success_result turnstile_enabled? turnstile_site_key verify_turnstile],

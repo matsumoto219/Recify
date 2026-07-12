@@ -84,7 +84,7 @@ class Admin::SecurityEventsController < Admin::BaseController
     security_event = SecurityEvent.find_by(id: params[:id])
     raise_not_found if security_event.blank?
 
-    result = Admin.update_security_event_status(
+    result = Admin::Operations.update_security_event_status(
       security_event: security_event,
       status: status,
       actor: current_user,
