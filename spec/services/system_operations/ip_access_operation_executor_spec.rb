@@ -110,6 +110,61 @@ RSpec.describe SystemOperations::IpAccessOperationExecutor do
     end
   end
 
+  it 'manual_ip_blockのsuccess audit失敗時はblockをrollbackする' do
+    allow(AuditLogs).to receive(:record_admin_action!).and_wrap_original do |original, **attributes|
+      raise ActiveRecord::RecordInvalid, AuditLog.new if attributes[:outcome] == 'succeeded'
+
+      original.call(**attributes)
+    end
+
+    result = described_class.call(
+      operation: 'manual_ip_block',
+      ip_address: '8.8.8.8',
+      actor: actor,
+      reason: 'audit failure rollback',
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: 'BLOCK IP',
+      source_security_event: security_event
+    )
+
+    aggregate_failures do
+      expect(result).to be_failure
+      expect(SecurityIpBlock.currently_effective_for_ip('8.8.8.8')).to be_empty
+      expect(Security.ip_blocked?('8.8.8.8')).to be(false)
+      expect(SecurityIpAction.where(ip_address: '8.8.8.8')).to be_empty
+      expect(AuditLog.last).to have_attributes(action: 'admin.ip_access.manual_block', outcome: 'failed')
+    end
+  end
+
+  it 'manual_ip_unblockのsuccess audit失敗時は解除をrollbackする' do
+    block = create(:security_ip_block, ip_address: '8.8.8.8')
+    allow(AuditLogs).to receive(:record_admin_action!).and_wrap_original do |original, **attributes|
+      raise ActiveRecord::RecordInvalid, AuditLog.new if attributes[:outcome] == 'succeeded'
+
+      original.call(**attributes)
+    end
+
+    result = described_class.call(
+      operation: 'manual_ip_unblock',
+      ip_address: '8.8.8.8',
+      actor: actor,
+      reason: 'audit failure rollback',
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: 'UNBLOCK IP',
+      source_security_event: security_event
+    )
+
+    aggregate_failures do
+      expect(result).to be_failure
+      expect(block.reload.status).to eq('active')
+      expect(Security.ip_blocked?('8.8.8.8')).to be(true)
+      expect(SecurityIpAction.where(ip_address: '8.8.8.8')).to be_empty
+      expect(AuditLog.last).to have_attributes(action: 'admin.ip_access.manual_unblock', outcome: 'failed')
+    end
+  end
+
   it 'rack_attack_ip_ban_resetを実行してAuditLogを保存する' do
     Rack::Attack::Fail2Ban.filter('scanner:8.8.8.8', maxretry: 1, findtime: 10.minutes, bantime: 30.minutes) { true }
 
@@ -140,6 +195,67 @@ RSpec.describe SystemOperations::IpAccessOperationExecutor do
         status: 'reset',
         actor_user: actor
       )
+    end
+  end
+
+  it 'Rack::Attack resetのintent audit失敗時はbanを解除しない' do
+    Rack::Attack::Fail2Ban.filter('scanner:8.8.8.8', maxretry: 1, findtime: 10.minutes, bantime: 30.minutes) { true }
+    allow(AuditLogs).to receive(:record_admin_action!).and_wrap_original do |original, **attributes|
+      if attributes[:action] == 'admin.ip_access.rack_attack_ban_reset_requested'
+        raise ActiveRecord::RecordInvalid, AuditLog.new
+      end
+
+      original.call(**attributes)
+    end
+
+    result = described_class.call(
+      operation: 'rack_attack_ip_ban_reset',
+      ip_address: '8.8.8.8',
+      actor: actor,
+      reason: 'intent audit failure',
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: 'RESET IP BAN',
+      source_security_event: security_event,
+      rack_attack_target: 'all'
+    )
+
+    aggregate_failures do
+      expect(result).to be_failure
+      expect(Security::RackAttackBanRegistry.banned_states('8.8.8.8').fetch('scanner')).to be(true)
+      expect(SecurityIpAction.where(ip_address: '8.8.8.8')).to be_empty
+      expect(AuditLog.last).to have_attributes(action: 'admin.ip_access.rack_attack_ban_reset', outcome: 'failed')
+    end
+  end
+
+  it 'Rack::Attack resetのoutcome audit失敗時もintentを残して適用済みとして返す' do
+    Rack::Attack::Fail2Ban.filter('scanner:8.8.8.8', maxretry: 1, findtime: 10.minutes, bantime: 30.minutes) { true }
+    allow(AuditLogs).to receive(:record_admin_action!).and_wrap_original do |original, **attributes|
+      if attributes[:action] == 'admin.ip_access.rack_attack_ban_reset' && attributes[:outcome] == 'succeeded'
+        raise ActiveRecord::RecordInvalid, AuditLog.new
+      end
+
+      original.call(**attributes)
+    end
+
+    result = described_class.call(
+      operation: 'rack_attack_ip_ban_reset',
+      ip_address: '8.8.8.8',
+      actor: actor,
+      reason: 'outcome audit failure',
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: 'RESET IP BAN',
+      source_security_event: security_event,
+      rack_attack_target: 'all'
+    )
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(Security::RackAttackBanRegistry.banned_states('8.8.8.8').values).to all(be(false))
+      expect(AuditLog.where(action: 'admin.ip_access.rack_attack_ban_reset_requested', outcome: 'succeeded')).to exist
+      expect(AuditLog.where(action: 'admin.ip_access.rack_attack_ban_reset', outcome: 'failed')).to exist
+      expect(SecurityIpAction.last).to have_attributes(action_type: 'rack_attack_ban_reset', status: 'reset')
     end
   end
 

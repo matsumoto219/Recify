@@ -51,16 +51,11 @@ module SystemOperations
     def call
       validate!
 
-      before_state = current_state
-      ip_access_result = execute_operation!
-      raise ValidationError, ip_access_result.error_code if ip_access_result.respond_to?(:failure?) && ip_access_result.failure?
-
-      after_state = current_state
-      audit_log = record_success_audit!(
-        result: ip_access_result,
-        before_state: before_state,
-        after_state: after_state
-      )
+      operation_result = execute_audited_operation!
+      before_state = operation_result.fetch(:before_state)
+      ip_access_result = operation_result.fetch(:ip_access_result)
+      after_state = operation_result.fetch(:after_state)
+      audit_log = operation_result.fetch(:audit_log)
       Security.record_ip_access_operation(
         operation: operation,
         result: ip_access_result,
@@ -138,6 +133,38 @@ module SystemOperations
       end
     end
 
+    def execute_audited_operation!
+      if manual_ip_operation?
+        SecurityIpBlock.transaction(requires_new: true) { execute_and_audit! }
+      else
+        execute_and_audit!
+      end
+    end
+
+    def execute_and_audit!
+      before_state = current_state
+      intent_audit = record_reset_intent_audit!(before_state) if rack_attack_reset?
+      ip_access_result = execute_operation!
+      if ip_access_result.respond_to?(:failure?) && ip_access_result.failure?
+        raise ValidationError, ip_access_result.error_code
+      end
+
+      after_state = current_state
+      audit_log = record_success_audit_with_fallback!(
+        result: ip_access_result,
+        before_state: before_state,
+        after_state: after_state,
+        intent_audit: intent_audit
+      )
+
+      {
+        before_state: before_state,
+        ip_access_result: ip_access_result,
+        after_state: after_state,
+        audit_log: audit_log
+      }
+    end
+
     def record_success_audit!(result:, before_state:, after_state:)
       AuditLogs.record_admin_action!(
         actor: actor,
@@ -149,6 +176,29 @@ module SystemOperations
         metadata: audit_metadata(result),
         before_state: before_state,
         after_state: after_state,
+        request: request
+      )
+    end
+
+    def record_success_audit_with_fallback!(result:, before_state:, after_state:, intent_audit:)
+      record_success_audit!(result: result, before_state: before_state, after_state: after_state)
+    rescue StandardError => error
+      raise unless rack_attack_reset? && intent_audit
+
+      record_failed_audit!(error)
+      intent_audit
+    end
+
+    def record_reset_intent_audit!(before_state)
+      AuditLogs.record_admin_action!(
+        actor: actor,
+        action: "admin.ip_access.rack_attack_ban_reset_requested",
+        target_uid: target_uid,
+        reason: reason,
+        outcome: "succeeded",
+        metadata: base_audit_metadata.merge(rack_attack_target: rack_attack_target),
+        before_state: before_state,
+        after_state: {},
         request: request
       )
     end
@@ -273,6 +323,14 @@ module SystemOperations
       return if (ip_address || raw_ip_address.to_s).blank?
 
       "ip:#{ip_address || raw_ip_address}"
+    end
+
+    def manual_ip_operation?
+      operation == "manual_ip_block" || operation == "manual_ip_unblock"
+    end
+
+    def rack_attack_reset?
+      operation == "rack_attack_ip_ban_reset"
     end
 
     def error_code_for(error)

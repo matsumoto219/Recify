@@ -12,6 +12,7 @@ module AuditLogs
       admin.users.session_revoke
       admin.ip_access.manual_block
       admin.ip_access.manual_unblock
+      admin.ip_access.rack_attack_ban_reset_requested
       admin.ip_access.rack_attack_ban_reset
       admin.receipts.hard_delete
       receipt_analysis.retry_requested
