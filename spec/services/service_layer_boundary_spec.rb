@@ -168,6 +168,7 @@ RSpec.describe "Service layer child implementation boundary" do
       "receipts",
       "Receipts",
       public_constants: %w[
+        Receipts::Editing
         Receipts::Processing
         Receipts::Uploads
         Receipts::Processing::Contracts::FinalizeDecision
