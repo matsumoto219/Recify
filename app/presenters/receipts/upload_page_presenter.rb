@@ -35,7 +35,7 @@ module Receipts
     end
 
     def file_count_limit
-      ReceiptBatchUploadService.max_files
+      Receipts::Uploads.max_files
     end
 
     def file_count_limit_message

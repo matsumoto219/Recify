@@ -1700,11 +1700,11 @@ RSpec.describe 'Receipts', type: :request do
         expect(upload_root['data-receipt-upload-storage-used-bytes-value']).to eq(user.storage_used_bytes.to_s)
         expect(upload_root['data-receipt-upload-storage-limit-bytes-value']).to eq(user.storage_limit_bytes.to_s)
         expect(upload_root['data-receipt-upload-quota-exceeded-message-value']).to eq(I18n.t('receipts.new_upload.js.quota_exceeded'))
-        expect(upload_root['data-receipt-upload-max-file-count-value']).to eq(ReceiptBatchUploadService.max_files.to_s)
-        expect(upload_root['data-receipt-upload-max-file-count-message-value']).to eq(I18n.t('receipts.new_upload.js.max_files', max: ReceiptBatchUploadService.max_files))
+        expect(upload_root['data-receipt-upload-max-file-count-value']).to eq(Receipts::Uploads.max_files.to_s)
+        expect(upload_root['data-receipt-upload-max-file-count-message-value']).to eq(I18n.t('receipts.new_upload.js.max_files', max: Receipts::Uploads.max_files))
         expect(upload_root['data-receipt-upload-selected-files-message-value']).to eq(I18n.t('receipts.new_upload.js.selected_files'))
         expect(upload_root['data-receipt-upload-preview-counter-message-value']).to eq(I18n.t('receipts.new_upload.js.preview_counter'))
-        expect(response.body).to include(I18n.t('receipts.new_upload.multiple_hint', max: ReceiptBatchUploadService.max_files))
+        expect(response.body).to include(I18n.t('receipts.new_upload.multiple_hint', max: Receipts::Uploads.max_files))
         expect(camera_input['accept']).to eq(expected_accept)
         expect(camera_input['capture']).to eq('environment')
         expect(camera_input['multiple']).to be_nil
@@ -2082,7 +2082,7 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include(I18n.t('receipts.batch_upload.errors.too_many', max: ReceiptBatchUploadService.max_files))
+        expect(response.body).to include(I18n.t('receipts.batch_upload.errors.too_many', max: Receipts::Uploads.max_files))
         expect(ReceiptOcrJob).not_to have_received(:perform_later)
       end
     end

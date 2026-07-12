@@ -36,7 +36,7 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     allow(ReceiptOcrService).to receive(:call)
 
     expect do
-      result = ReceiptBatchUploadService.call(user: user, files: [ uploaded_file ])
+      result = Receipts::Uploads.batch(user: user, files: [ uploaded_file ])
 
       aggregate_failures do
         expect(result).not_to be_success

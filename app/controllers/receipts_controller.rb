@@ -524,7 +524,7 @@ class ReceiptsController < ApplicationController
   end
 
   def handle_batch_upload
-    result = ReceiptBatchUploadService.call(
+    result = Receipts::Uploads.batch(
       user: current_user,
       files: uploaded_receipt_images
     )

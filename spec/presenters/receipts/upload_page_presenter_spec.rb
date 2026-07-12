@@ -58,12 +58,12 @@ RSpec.describe Receipts::UploadPagePresenter do
 
       aggregate_failures do
         expect(presenter).to be_ocr_available
-        expect(presenter.file_count_limit).to eq(ReceiptBatchUploadService.max_files)
+        expect(presenter.file_count_limit).to eq(Receipts::Uploads.max_files)
         expect(presenter.file_count_limit_message).to eq(
-          I18n.t('receipts.new_upload.js.max_files', max: ReceiptBatchUploadService.max_files)
+          I18n.t('receipts.new_upload.js.max_files', max: Receipts::Uploads.max_files)
         )
         expect(presenter.multiple_upload_hint).to eq(
-          I18n.t('receipts.new_upload.multiple_hint', max: ReceiptBatchUploadService.max_files)
+          I18n.t('receipts.new_upload.multiple_hint', max: Receipts::Uploads.max_files)
         )
         expect(presenter.storage_used_bytes).to eq(12)
         expect(presenter.storage_limit_bytes).to eq(34)
