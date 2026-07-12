@@ -1,6 +1,6 @@
 class Admin::ReceiptAnalysisRunsController < Admin::BaseController
-  RETRY_TYPES = Analysis.retry_types.freeze
-  RETRY_CONFIRMATION_TEXT = Analysis.retry_confirmation_text
+  RETRY_TYPES = Receipts::Processing.admin_retry_types.freeze
+  RETRY_CONFIRMATION_TEXT = SystemOperations.receipt_analysis_retry_confirmation_text
   OCR_RESPONSE_ARTIFACT_DOWNLOAD_VARIANTS = %w[raw pretty].freeze
   OCR_RESPONSE_ARTIFACT_PRETTY_JSON_OPTIONS = {
     indent: "\t",
@@ -86,7 +86,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
       confirmation: params[:confirmation]
     }
 
-    result = Analysis.retry_receipt_analysis(**retry_attributes)
+    result = SystemOperations.execute_receipt_analysis_retry(**retry_attributes)
 
     if result.success?
       redirect_to admin_receipt_analysis_run_path(result.run.run_key), notice: t("admin.receipt_analysis_runs.messages.accepted")

@@ -34,7 +34,7 @@ RSpec.describe 'Admin users', type: :request do
     expect(SystemOperations).not_to have_received(:update_setting)
     expect(SystemOperations).not_to have_received(:execute_user_operation)
     expect(SystemOperations).not_to have_received(:update_user_limit)
-    expect(Analysis).not_to have_received(:retry_receipt_analysis)
+    expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
   end
 
   def stub_fresh_admin_reauthentication
@@ -50,7 +50,7 @@ RSpec.describe 'Admin users', type: :request do
     allow(SystemOperations).to receive(:update_setting)
     allow(SystemOperations).to receive(:execute_user_operation)
     allow(SystemOperations).to receive(:update_user_limit)
-    allow(Analysis).to receive(:retry_receipt_analysis)
+    allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
   end
 
   describe 'GET /admin/users' do

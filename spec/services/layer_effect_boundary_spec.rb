@@ -16,6 +16,8 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
   SYSTEM_OPERATION_CALLS = {
     [ "app/controllers/admin/ip_blocks_controller.rb", :execute_ip_access_operation ] => 1,
     [ "app/controllers/admin/receipt_analysis_cleanup_controller.rb", :execute_receipt_analysis_cleanup ] => 1,
+    [ "app/controllers/admin/receipt_analysis_runs_controller.rb", :execute_receipt_analysis_retry ] => 1,
+    [ "app/controllers/admin/receipt_analysis_runs_controller.rb", :receipt_analysis_retry_confirmation_text ] => 1,
     [ "app/controllers/admin/receipts_controller.rb", :execute_receipt_moderation_operation ] => 1,
     [ "app/controllers/admin/security_events_controller.rb", :execute_ip_access_operation ] => 1,
     [ "app/controllers/admin/system_settings_controller.rb", :reset_setting ] => 1,

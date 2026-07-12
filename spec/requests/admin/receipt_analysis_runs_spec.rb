@@ -623,7 +623,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('ocr_time_candidate')
         expect(response.body).not_to include('_HORIZONTAL')
         expect(response.body).not_to include('sliders_horizontal')
-        expect(response.body).not_to include('Analysis.retry_receipt_analysis')
+        expect(response.body).not_to include('SystemOperations.execute_receipt_analysis_retry')
         expect(response.body).not_to include('name="retry_kind"')
         expect(response.body).not_to include('確認文字列 RETRY ANALYSIS')
       end
@@ -1203,7 +1203,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       admin = create(:user, :admin)
       run = create(:receipt_analysis_run, :succeeded)
       sign_in admin
-      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
 
       post retry_admin_receipt_analysis_run_path(run.run_key),
            params: {
@@ -1215,7 +1215,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(run.run_key)))
         expect(flash[:alert]).to include('パスキーによる再認証')
-        expect(Analysis).not_to have_received(:retry_receipt_analysis)
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
         expect(session.to_hash.to_json).not_to include('問い合わせ対応', 'full_reanalyze', 'RETRY ANALYSIS')
         expect_no_analysis_jobs_enqueued
       end
@@ -1233,7 +1233,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       )
       sign_in admin
       reauthenticate_admin_with_passkey!(admin)
-      allow(Analysis).to receive(:retry_receipt_analysis).and_return(result)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry).and_return(result)
 
       post retry_admin_receipt_analysis_run_path(parent_run.run_key),
            params: {
@@ -1245,7 +1245,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_run_path(parent_run.run_key))
         expect(flash[:alert]).to include('ocr_snapshot_missing')
-        expect(Analysis).to have_received(:retry_receipt_analysis)
+        expect(SystemOperations).to have_received(:execute_receipt_analysis_retry)
         expect_no_analysis_jobs_enqueued
       end
     end
@@ -1255,7 +1255,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       run = create(:receipt_analysis_run, :succeeded)
       sign_in admin
       reauthenticate_admin_with_passkey!(admin)
-      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
 
       post retry_admin_receipt_analysis_run_path(run.run_key),
            params: {
@@ -1267,7 +1267,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_run_path(run.run_key))
         expect(flash[:alert]).to include('再解析理由を入力してください')
-        expect(Analysis).not_to have_received(:retry_receipt_analysis)
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
         expect_no_analysis_jobs_enqueued
       end
     end
@@ -1277,7 +1277,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       run = create(:receipt_analysis_run, :succeeded)
       sign_in admin
       reauthenticate_admin_with_passkey!(admin)
-      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
 
       post retry_admin_receipt_analysis_run_path(run.run_key),
            params: {
@@ -1289,7 +1289,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_run_path(run.run_key))
         expect(flash[:alert]).to include('再解析の種類を選択してください')
-        expect(Analysis).not_to have_received(:retry_receipt_analysis)
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
         expect_no_analysis_jobs_enqueued
       end
     end
@@ -1299,7 +1299,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       run = create(:receipt_analysis_run, :succeeded)
       sign_in admin
       reauthenticate_admin_with_passkey!(admin)
-      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
 
       post retry_admin_receipt_analysis_run_path(run.run_key),
            params: {
@@ -1311,7 +1311,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_run_path(run.run_key))
         expect(flash[:alert]).to include('確認文字列')
-        expect(Analysis).not_to have_received(:retry_receipt_analysis)
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
         expect_no_analysis_jobs_enqueued
       end
     end
@@ -1321,7 +1321,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       run = create(:receipt_analysis_run, :succeeded)
       sign_in admin
       reauthenticate_admin_with_passkey!(admin)
-      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
 
       post retry_admin_receipt_analysis_run_path(run.run_key),
            params: {
@@ -1332,7 +1332,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_run_path(run.run_key))
         expect(flash[:alert]).to include('確認文字列')
-        expect(Analysis).not_to have_received(:retry_receipt_analysis)
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
         expect_no_analysis_jobs_enqueued
       end
     end
@@ -1341,7 +1341,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       admin = create(:user, :admin)
       run = create(:receipt_analysis_run, :succeeded)
       sign_in admin
-      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
 
       post retry_admin_receipt_analysis_run_path(run.run_key),
            params: {
@@ -1353,7 +1353,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(run.run_key)))
         expect(flash[:alert]).to include('パスキーによる再認証')
-        expect(Analysis).not_to have_received(:retry_receipt_analysis)
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
         expect(session.to_hash.to_json).not_to include('fresh reauth missing', 'full_reanalyze', 'RETRY ANALYSIS')
         expect_no_analysis_jobs_enqueued
       end
@@ -1363,7 +1363,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       admin = create(:user, :admin)
       run = create(:receipt_analysis_run, :succeeded)
       sign_in admin
-      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
 
       post retry_admin_receipt_analysis_run_path(run.run_key),
            params: {
@@ -1374,7 +1374,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_receipt_analysis_run_path(run.run_key)))
-        expect(Analysis).not_to have_received(:retry_receipt_analysis)
+        expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
         expect_no_analysis_jobs_enqueued
       end
     end
@@ -1390,7 +1390,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       )
       sign_in admin
       reauthenticate_admin_with_passkey!(admin)
-      allow(Analysis).to receive(:retry_receipt_analysis).and_return(result)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry).and_return(result)
 
       post retry_admin_receipt_analysis_run_path(parent_run.run_key),
            params: {
@@ -1401,7 +1401,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_receipt_analysis_run_path(new_run.run_key))
-        expect(Analysis).to have_received(:retry_receipt_analysis).with(
+        expect(SystemOperations).to have_received(:execute_receipt_analysis_retry).with(
           receipt: parent_run.receipt,
           parent_run: parent_run,
           actor: admin,

@@ -36,7 +36,7 @@ RSpec.describe 'Admin dashboard', type: :request do
 
     expect(enqueued_jobs.select { |job| forbidden_jobs.include?(job[:job]) }).to be_empty
     expect(SystemOperations).not_to have_received(:execute_receipt_analysis_cleanup)
-    expect(Analysis).not_to have_received(:retry_receipt_analysis)
+    expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
   end
 
   describe 'GET /admin' do
@@ -203,7 +203,7 @@ RSpec.describe 'Admin dashboard', type: :request do
       create(:contact_request, status: 'open', category: 'security')
       sign_in admin
       allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
-      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
       allow(ExternalServices).to receive(:status_snapshot).with(include_details: true).and_return(
         ocr: {
           state: 'down',
@@ -456,7 +456,7 @@ RSpec.describe 'Admin dashboard', type: :request do
       sign_in admin
       create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
       allow(SystemOperations).to receive(:execute_receipt_analysis_cleanup)
-      allow(Analysis).to receive(:retry_receipt_analysis)
+      allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
       allow(ExternalServices).to receive(:status_snapshot).and_return(
         ocr: { state: 'ok', text: I18n.t('shared.service_status.ok'), monitoring: false, checked_at: nil, next_check_at: nil },
         ai: { state: 'ok', text: I18n.t('shared.service_status.ok'), monitoring: false, checked_at: nil, next_check_at: nil },

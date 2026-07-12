@@ -29,7 +29,7 @@ RSpec.describe 'Admin audit logs', type: :request do
     analysis_jobs = [ ReceiptOcrJob, ReceiptAiEnrichmentJob, ReceiptFinalizeJob ]
 
     expect(enqueued_jobs.select { |job| analysis_jobs.include?(job[:job]) }).to be_empty
-    expect(Analysis).not_to have_received(:retry_receipt_analysis)
+    expect(SystemOperations).not_to have_received(:execute_receipt_analysis_retry)
   end
 
   describe 'GET /admin/audit_logs' do
@@ -263,7 +263,7 @@ RSpec.describe 'Admin audit logs', type: :request do
     admin = create(:user, :admin)
     log = create(:audit_log)
     sign_in admin
-    allow(Analysis).to receive(:retry_receipt_analysis)
+    allow(SystemOperations).to receive(:execute_receipt_analysis_retry)
 
     get admin_audit_logs_path
     get admin_audit_log_path(log)

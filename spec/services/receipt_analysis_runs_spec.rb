@@ -1435,11 +1435,11 @@ RSpec.describe ReceiptAnalysisRuns do
 
     it 'cleanup後にRetryService eligibilityのactive_run_existsが解除される' do
       run = create_stale_run(status: 'queued')
-      before_options = Analysis.retry_eligibility(receipt: run.receipt, parent_run: run).retry_options
+      before_options = Receipts::Processing.admin_retry_eligibility(receipt: run.receipt, parent_run: run).retry_options
 
       described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
 
-      after_options = Analysis.retry_eligibility(receipt: run.receipt.reload, parent_run: run.reload).retry_options
+      after_options = Receipts::Processing.admin_retry_eligibility(receipt: run.receipt.reload, parent_run: run.reload).retry_options
 
       aggregate_failures do
         expect(before_options).to all(include(possible: false, disabled_reason: 'active_run_exists'))
