@@ -19,6 +19,7 @@ RSpec.describe "Service layer child implementation boundary" do
       "admin",
       "Admin",
       facade: "app/services/admin.rb",
+      public_constants: %w[Admin::Operations],
       legacy_exceptions: [
         {
           source_path: "app/controllers/admin/receipt_analysis_cleanup_controller.rb",
