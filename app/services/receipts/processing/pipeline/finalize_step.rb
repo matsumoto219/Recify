@@ -1376,118 +1376,35 @@ class Receipts::Processing::Pipeline
     end
 
     def normalize_items_attributes(items)
-      Array(items).filter_map.with_index do |item, index|
-        symbolized =
-          if item.respond_to?(:with_indifferent_access)
-            item.with_indifferent_access
-          elsif item.respond_to?(:symbolize_keys)
-            item.symbolize_keys.with_indifferent_access
-          else
-            {}.with_indifferent_access
-          end
-
-        price = normalize_amount(symbolized[:price])
-        original_line_total = normalize_amount(symbolized[:original_line_total])
-        line_total = normalize_amount(symbolized[:line_total])
-        discount_amount = normalize_amount(symbolized[:discount_amount])
-        next if [ price, original_line_total, line_total, discount_amount ].compact.any?(&:negative?)
-        quantity_unit_code = ReceiptQuantityUnit.normalize(symbolized[:quantity_unit_code])
-
-        {
-          raw_text: symbolized[:raw_text].to_s,
-          suggested_name: symbolized[:suggested_name].presence,
-          confirmed_name: symbolized[:confirmed_name].presence,
-          category: symbolized[:category].presence,
-          price: price,
-          quantity: normalize_quantity(symbolized[:quantity]),
-          quantity_unit_code: quantity_unit_code,
-          product_code: symbolized[:product_code].presence,
-          tax_rate: normalize_tax_rate(symbolized[:tax_rate]),
-          original_line_total: original_line_total,
-          line_total: line_total,
-          discount_amount: discount_amount,
-          discount_rate: normalize_tax_rate(symbolized[:discount_rate]),
-          # item-level needs_review は前段で決めた値を保持し、この層では再判定しない。
-          needs_review: symbolized[:needs_review],
-          review_reasons: normalize_review_reasons(symbolized[:review_reasons]),
-          position_index: symbolized[:position_index] || index + 1,
-          confidence: normalize_confidence(symbolized[:confidence])
-        }
-      end
+      AttributeNormalizer.items(items)
     end
 
     def normalize_adjustments_attributes(adjustments)
-      Array(adjustments).filter_map.with_index do |adjustment, index|
-        symbolized =
-          if adjustment.respond_to?(:with_indifferent_access)
-            adjustment.with_indifferent_access
-          elsif adjustment.respond_to?(:symbolize_keys)
-            adjustment.symbolize_keys.with_indifferent_access
-          else
-            {}.with_indifferent_access
-          end
-
-        amount = normalize_amount(symbolized[:amount])
-        next unless amount&.positive?
-
-        kind = symbolized[:kind].to_s
-        sign = symbolized[:sign].to_s
-        source = symbolized[:source].to_s.presence || "ai"
-
-        {
-          kind: ReceiptAdjustment::KINDS.include?(kind) ? kind : "other",
-          label: symbolized[:label].to_s.strip.presence,
-          amount: amount.abs,
-          sign: ReceiptAdjustment::SIGNS.include?(sign) ? sign : "discount",
-          tax_rate: normalize_tax_rate(symbolized[:tax_rate]),
-          source: ReceiptAdjustment::SOURCES.include?(source) ? source : "ai",
-          source_text: symbolized[:source_text].to_s.strip.presence,
-          source_line_index: symbolized[:source_line_index],
-          confidence: normalize_confidence(symbolized[:confidence]),
-          needs_review: symbolized[:needs_review] == true,
-          review_reasons: normalize_review_reasons(symbolized[:review_reasons]),
-          position_index: symbolized[:position_index] || index + 1
-        }.compact
-      end
+      AttributeNormalizer.adjustments(adjustments)
     end
 
     def normalize_review_reasons(value)
-      Array(value).filter_map do |reason|
-        normalized = reason.to_s.strip
-        normalized.presence
-      end.uniq
+      AttributeNormalizer.review_reasons(value)
     end
 
     def normalize_amount(value)
-      ReceiptAmountService.parse_amount_or_nil(value)
+      AttributeNormalizer.amount(value)
     end
 
     def safe_calculated_amount(value)
-      amount = normalize_amount(value)
-      amount&.negative? ? nil : amount
+      AttributeNormalizer.safe_calculated_amount(value)
     end
 
     def normalize_quantity(value)
-      quantity = ReceiptAmountService.parse_quantity(value, default: BigDecimal("1"))
-
-      quantity.positive? ? quantity : BigDecimal("1")
+      AttributeNormalizer.quantity(value)
     end
 
     def normalize_tax_rate(value)
-      return nil if value.blank?
-
-      tax_rate = BigDecimal(value.to_s.delete("%"))
-      tax_rate > 1 ? tax_rate / 100 : tax_rate
-    rescue ArgumentError
-      nil
+      AttributeNormalizer.tax_rate(value)
     end
 
     def normalize_confidence(value)
-      return nil if value.blank?
-
-      BigDecimal(value.to_s)
-    rescue ArgumentError
-      nil
+      AttributeNormalizer.confidence(value)
     end
 
     def item_needs_review?(item_attributes)
