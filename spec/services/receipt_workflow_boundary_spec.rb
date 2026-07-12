@@ -37,6 +37,57 @@ RSpec.describe "Receipt workflow dependency boundary" do
     }
   }.freeze
 
+  PUBLIC_FACADE_METHODS = {
+    Receipts::Uploads => %i[
+      batch
+      max_files
+      single
+    ],
+    Receipts::Editing => %i[
+      apply_amount_result!
+      build_input
+      change_set
+      check_consistency
+      create_manual
+      item_review_state
+      prepare_update_state!
+      review_state
+      update_manual
+    ],
+    Receipts::Processing => %i[
+      admin_retry_decision
+      admin_retry_eligibility
+      admin_retry_types
+      cancel
+      claim_stage
+      cleanup_expired
+      cleanup_stale
+      copy_retry_snapshots
+      enqueue
+      external_service_runtime_config
+      fail
+      finalize_decision_from_snapshot
+      finish_stage
+      mark_processing!
+      record_ai_input
+      record_ai_normalized_result
+      record_ai_result
+      record_build_params_snapshot
+      record_final_result
+      record_finalize_decision
+      record_ocr_response_artifact
+      record_ocr_result
+      record_ocr_snapshot
+      run_ai
+      run_finalize
+      run_ocr
+      start
+      start_stage
+      succeed
+      supersede
+    ]
+  }.transform_values { |methods| methods.sort.freeze }.freeze
+
   before(:context) do
     @scanner = ReceiptWorkflowBoundary::Scanner.new(root: Rails.root, registry: WORKFLOW_REGISTRY)
   end
@@ -46,6 +97,14 @@ RSpec.describe "Receipt workflow dependency boundary" do
   it "workflow registryとZeitwerk catalogが一致する" do
     expect(scanner.registry_issues).to be_empty
     expect(scanner.catalog_issues).to be_empty
+  end
+
+  it "workflow facadeのpublic methodをexact inventory化する" do
+    actual = PUBLIC_FACADE_METHODS.to_h do |facade, _expected|
+      [ facade, facade.singleton_methods(false).sort ]
+    end
+
+    expect(actual).to eq(PUBLIC_FACADE_METHODS)
   end
 
   it "workflow間の許可依存だけを認める" do
