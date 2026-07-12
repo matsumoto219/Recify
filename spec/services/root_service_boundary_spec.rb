@@ -24,10 +24,8 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_batch_upload_service.rb" => { constant: "ReceiptBatchUploadService", role: :legacy_workflow, owner: "migrate to Receipts::Uploads", remove_in_loop: 12 },
     "receipt_edit_save_change_set.rb" => { constant: "ReceiptEditSaveChangeSet", role: :legacy_workflow, owner: "migrate to Receipts::Editing", remove_in_loop: 13 },
     "receipt_edit_save_consistency_guard.rb" => { constant: "ReceiptEditSaveConsistencyGuard", role: :legacy_workflow, owner: "migrate to Receipts::Editing", remove_in_loop: 13 },
-    "receipt_edit_save_input_builder.rb" => { constant: "ReceiptEditSaveInputBuilder", role: :legacy_form, owner: "migrate to app/forms/receipts/editing", remove_in_loop: 7 },
     "receipt_edit_save_review_state.rb" => { constant: "ReceiptEditSaveReviewState", role: :legacy_workflow, owner: "migrate to Receipts::Editing", remove_in_loop: 13 },
     "receipt_ocr_service.rb" => { constant: "ReceiptOcrService", role: :public_facade, owner: "OCR specialist facade", remove_in_loop: nil },
-    "receipt_user_numeric_input.rb" => { constant: "ReceiptUserNumericInput", role: :legacy_form, owner: "migrate to Receipts::NumericInput", remove_in_loop: 7 },
     "review_reasons.rb" => { constant: "ReviewReasons", role: :domain_policy, owner: "review reason policy", remove_in_loop: nil },
     "security.rb" => { constant: "Security", role: :public_facade, owner: "security platform facade", remove_in_loop: nil },
     "security_events.rb" => { constant: "SecurityEvents", role: :public_facade, owner: "security event facade", remove_in_loop: nil },
@@ -38,7 +36,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "two_factor.rb" => { constant: "TwoFactor", role: :public_facade, owner: "two-factor authentication facade", remove_in_loop: nil },
     "usage.rb" => { constant: "Usage", role: :public_facade, owner: "usage and limit facade", remove_in_loop: nil },
     "user_limits.rb" => { constant: "UserLimits", role: :domain_policy, owner: "user limit policy", remove_in_loop: nil },
-    "user_numeric_input.rb" => { constant: "UserNumericInput", role: :legacy_form, owner: "migrate to app/forms shared numeric parser", remove_in_loop: 7 },
     "user_sessions.rb" => { constant: "UserSessions", role: :public_facade, owner: "user session lifecycle facade", remove_in_loop: nil },
     "users.rb" => { constant: "Users", role: :public_facade, owner: "user account workflow facade", remove_in_loop: nil }
   }.freeze
@@ -65,10 +62,8 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_batch_upload_service.rb" => %i[call max_files],
     "receipt_edit_save_change_set.rb" => %i[call],
     "receipt_edit_save_consistency_guard.rb" => %i[call],
-    "receipt_edit_save_input_builder.rb" => %i[call],
     "receipt_edit_save_review_state.rb" => %i[call item_review_state],
     "receipt_ocr_service.rb" => %i[available? call error_result],
-    "receipt_user_numeric_input.rb" => %i[public_send],
     "review_reasons.rb" => %i[blocking_reasons_for_user group_by_source normalize normalize_ai_output_reasons review_reasons_for_user user_facing_reason? warning_reasons_for_user],
     "security.rb" => %i[ip_access_snapshot manual_ip_block manual_ip_unblock rack_attack_ban_reset record_ip_access_operation record_ip_rate_limit_action request_ip_snapshot],
     "security_events.rb" => %i[cleanup_retention detect record! record_admin_audit_burst! record_csrf_failure! record_external_service_failure! record_invalid_upload! record_rate_limit! record_request_detections! record_suspicious_error! sanitize_exception_message sanitize_metadata sanitize_text],
@@ -79,7 +74,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "two_factor.rb" => %i[confirm_totp_setup disable_totp_for prepare_totp_setup recovery_codes_status regenerate_recovery_codes_for totp_provisioning_uri totp_qr_svg verify_recovery_code verify_totp],
     "usage.rb" => %i[consume_ai_job! consume_batch_upload! consume_manual_receipt! consume_ocr_job! consume_receipt_upload! consume_retry_operation! counter_summary_for ensure_ai_job_within_limit! ensure_ocr_job_within_limit! mark_analysis_run_blocked!],
     "user_limits.rb" => %i[cast_value definitions effective_limit entry_for stored_value summary_for valid_key?],
-    "user_numeric_input.rb" => %i[decimal integer],
     "user_sessions.rb" => %i[cleanup_retention mark_revoked_for_user record_sign_in record_sign_out retention_cutoff summary_for touch_current],
     "users.rb" => %i[account_deletion_email_digest delete_account]
   }.freeze
@@ -106,10 +100,8 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_batch_upload_service.rb" => %i[call max_files],
     "receipt_edit_save_change_set.rb" => %i[call],
     "receipt_edit_save_consistency_guard.rb" => %i[call],
-    "receipt_edit_save_input_builder.rb" => %i[call],
     "receipt_edit_save_review_state.rb" => %i[call item_review_state resolved_item_review_reasons],
     "receipt_ocr_service.rb" => %i[available? call error_result],
-    "receipt_user_numeric_input.rb" => %i[decimal integer percentage],
     "review_reasons.rb" => %i[blocking_reason? blocking_reasons_for_user group_by_source internal_processing_reasons known_reason? normalize normalize_ai_output_reasons normalize_allowed_reasons review_reasons_for_user source_for user_facing_reason? warning_reason? warning_reasons_for_user],
     "security.rb" => %i[ip_access_snapshot manual_ip_block manual_ip_unblock rack_attack_ban_reset record_ip_access_operation record_ip_action record_ip_rate_limit_action request_ip_snapshot],
     "security_events.rb" => EXTERNAL_METHODS.fetch("security_events.rb"),
@@ -120,7 +112,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "two_factor.rb" => %i[confirm_totp_setup disable_totp_for generate_recovery_codes_for generate_totp_secret prepare_totp_setup recovery_code_digest recovery_codes_status regenerate_recovery_codes_for totp_provisioning_uri totp_qr_svg verify_recovery_code verify_totp verify_totp_setup],
     "usage.rb" => %i[consume_ai_job! consume_batch_upload! consume_manual_receipt! consume_ocr_job! consume_receipt_upload! consume_retry_operation! counter_summary_for effective_limit ensure_ai_job_within_limit! ensure_ocr_job_within_limit! limit_summary_for mark_analysis_run_blocked!],
     "user_limits.rb" => %i[cast_value definition_for definitions effective_limit entry_for override_for stored_value summary_for valid_key?],
-    "user_numeric_input.rb" => %i[decimal integer],
     "user_sessions.rb" => %i[active_for cleanup_retention mark_revoked_for_user record_sign_in record_sign_out retention_cutoff retention_days summary_for touch_current],
     "users.rb" => %i[account_deletion_email_digest delete_account]
   }.freeze
@@ -136,7 +127,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_batch_upload_service.rb" => %i[call],
     "receipt_edit_save_change_set.rb" => %i[call],
     "receipt_edit_save_consistency_guard.rb" => %i[call],
-    "receipt_edit_save_input_builder.rb" => %i[call],
     "receipt_edit_save_review_state.rb" => %i[call],
     "receipt_ocr_service.rb" => %i[call]
   }.freeze
@@ -152,11 +142,8 @@ RSpec.describe "root service and lifecycle status boundary" do
     receipt_batch_upload_service.rb
     receipt_edit_save_change_set.rb
     receipt_edit_save_consistency_guard.rb
-    receipt_edit_save_input_builder.rb
     receipt_edit_save_review_state.rb
     receipt_ocr_service.rb
-    receipt_user_numeric_input.rb
-    user_numeric_input.rb
   ].freeze
 
   ROOT_SERVICE_REGISTRY = ROOT_CLASSIFICATIONS.to_h do |file, classification|
