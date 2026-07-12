@@ -24,7 +24,7 @@ class ReceiptItem < ApplicationRecord
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 0,
-              less_than_or_equal_to: ->(_item) { ReceiptAmountLimits.receipt_item_price_max }
+              less_than_or_equal_to: ->(_item) { ReceiptAmountService.receipt_item_price_max }
             },
             allow_blank: true
   validates :line_total,
@@ -33,7 +33,7 @@ class ReceiptItem < ApplicationRecord
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 0,
-              less_than_or_equal_to: ->(_item) { ReceiptAmountLimits.receipt_item_line_total_max }
+              less_than_or_equal_to: ->(_item) { ReceiptAmountService.receipt_item_line_total_max }
             },
             allow_blank: true
 

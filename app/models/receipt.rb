@@ -143,7 +143,7 @@ class Receipt < ApplicationRecord
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 0,
-              less_than_or_equal_to: ->(_receipt) { ReceiptAmountLimits.receipt_total_amount_max }
+              less_than_or_equal_to: ->(_receipt) { ReceiptAmountService.receipt_total_amount_max }
             },
             allow_blank: true,
             unless: :allow_partial_ocr_data?
@@ -151,21 +151,21 @@ class Receipt < ApplicationRecord
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 0,
-              less_than_or_equal_to: ->(_receipt) { ReceiptAmountLimits.receipt_total_amount_max }
+              less_than_or_equal_to: ->(_receipt) { ReceiptAmountService.receipt_total_amount_max }
             },
             allow_blank: true
   validates :tax_amount,
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 0,
-              less_than_or_equal_to: ->(_receipt) { ReceiptAmountLimits.receipt_tax_amount_max }
+              less_than_or_equal_to: ->(_receipt) { ReceiptAmountService.receipt_tax_amount_max }
             },
             allow_blank: true
   validates :tip_amount,
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 0,
-              less_than_or_equal_to: ->(_receipt) { ReceiptAmountLimits.receipt_adjustment_amount_max }
+              less_than_or_equal_to: ->(_receipt) { ReceiptAmountService.receipt_adjustment_amount_max }
             },
             allow_blank: true
 

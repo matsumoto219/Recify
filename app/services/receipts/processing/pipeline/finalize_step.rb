@@ -445,7 +445,7 @@ class Receipts::Processing::Pipeline
     end
 
     def validate_amount_limits!(receipt_attributes:, items_attributes:, payments_attributes:, tax_details_attributes:, adjustments_attributes:)
-      violation = ReceiptAmountLimits.violations_for(
+      violation = ReceiptAmountService.violations_for(
         receipt: receipt_attributes,
         receipt_items: items_attributes,
         receipt_adjustments: adjustments_attributes,

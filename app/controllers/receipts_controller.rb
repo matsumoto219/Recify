@@ -812,7 +812,7 @@ class ReceiptsController < ApplicationController
   end
 
   def manual_amount_limit_violations(permitted, context:)
-    ReceiptAmountLimits.violations_for(
+    ReceiptAmountService.violations_for(
       receipt: amount_receipt(permitted, context, clear_amounts: false),
       receipt_items: amount_receipt_items(permitted, context),
       receipt_adjustments: amount_receipt_adjustments(permitted, context),

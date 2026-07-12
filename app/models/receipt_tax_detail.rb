@@ -10,13 +10,13 @@ class ReceiptTaxDetail < ApplicationRecord
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 0,
-              less_than_or_equal_to: ->(_tax_detail) { ReceiptAmountLimits.receipt_tax_amount_max }
+              less_than_or_equal_to: ->(_tax_detail) { ReceiptAmountService.receipt_tax_amount_max }
             }
   validates :net_amount,
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 0,
-              less_than_or_equal_to: ->(_tax_detail) { ReceiptAmountLimits.receipt_tax_amount_max }
+              less_than_or_equal_to: ->(_tax_detail) { ReceiptAmountService.receipt_tax_amount_max }
             }
   validate :tax_details_per_receipt_within_limit, on: :create
 

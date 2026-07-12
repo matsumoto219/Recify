@@ -57,7 +57,7 @@ class ReceiptAdjustment < ApplicationRecord
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 0,
-              less_than_or_equal_to: ->(_adjustment) { ReceiptAmountLimits.receipt_adjustment_amount_max }
+              less_than_or_equal_to: ->(_adjustment) { ReceiptAmountService.receipt_adjustment_amount_max }
             }
   validates :tax_rate,
             numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 },
