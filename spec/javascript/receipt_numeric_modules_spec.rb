@@ -92,4 +92,65 @@ RSpec.describe "Receipt numeric JavaScript modules" do
       "eased" => 0.875
     )
   end
+
+  it "formats signed amounts, payment differences, and tax rate summaries" do
+    result = run_module_script("amount_preview", <<~JAVASCRIPT)
+      process.stdout.write(JSON.stringify({
+        signedPositive: formatSignedAmount(1234.9),
+        signedNegative: formatSignedAmount(-1234.9),
+        zeroDifference: formatPaymentDifference(0),
+        positiveDifference: formatPaymentDifference(500),
+        noTaxRate: formatTaxRateSummary(new Set(), {
+          unsetLabel: 'Unset',
+          multipleTaxRatesLabel: 'Multiple tax rates'
+        }),
+        decimalTaxRate: formatTaxRateSummary(new Set([8.5]), {
+          unsetLabel: 'Unset',
+          multipleTaxRatesLabel: 'Multiple tax rates'
+        }),
+        multipleTaxRates: formatTaxRateSummary(new Set([8, 10]), {
+          unsetLabel: 'Unset',
+          multipleTaxRatesLabel: 'Multiple tax rates'
+        })
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "signedPositive" => "+¥1,234",
+      "signedNegative" => "-¥1,234",
+      "zeroDifference" => "¥0",
+      "positiveDifference" => "+¥500",
+      "noTaxRate" => "Unset",
+      "decimalTaxRate" => "8.5%",
+      "multipleTaxRates" => "Multiple tax rates"
+    )
+  end
+
+  it "rounds external tax per group and discounts with the configured mode" do
+    result = run_module_script("amount_preview", <<~JAVASCRIPT)
+      const taxGroups = new Map([[8, 101], [10, 105]])
+
+      process.stdout.write(JSON.stringify({
+        externalTaxFloor: externalTaxTotal(taxGroups, 'floor'),
+        externalTaxCeil: externalTaxTotal(taxGroups, 'ceil'),
+        externalTaxRound: externalTaxTotal(taxGroups, 'round'),
+        discountUnset: discountedLineTotal(101, null, 'floor'),
+        discountFull: discountedLineTotal(101, 100, 'floor'),
+        discountFloor: discountedLineTotal(101, 50, 'floor'),
+        discountCeil: discountedLineTotal(101, 50, 'ceil'),
+        discountRound: discountedLineTotal(101, 50, 'round')
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "externalTaxFloor" => 18,
+      "externalTaxCeil" => 20,
+      "externalTaxRound" => 19,
+      "discountUnset" => 101,
+      "discountFull" => 0,
+      "discountFloor" => 51,
+      "discountCeil" => 50,
+      "discountRound" => 50
+    )
+  end
 end

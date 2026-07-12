@@ -16,9 +16,13 @@ import {
 import {
   applyRounding,
   clampNumber,
+  discountedLineTotal,
   easeOutCubic,
+  externalTaxTotal,
   formatNumber,
-  formatTaxRate,
+  formatPaymentDifference,
+  formatSignedAmount,
+  formatTaxRateSummary,
   normalizeRoundingMode,
   roundLineAmount
 } from 'receipts/amount_preview'
@@ -1049,21 +1053,12 @@ export default class extends Controller {
     return this.applyRounding(value, this.roundingModeValue)
   }
 
-  applyDiscountRounding (value) {
-    return this.applyRounding(value, this.discountRoundingModeValue)
-  }
-
   formatSignedAmount (value) {
-    const amount = Math.floor(Math.abs(value))
-    const sign = value < 0 ? '-' : '+'
-
-    return `${sign}¥${this.formatNumber(amount)}`
+    return formatSignedAmount(value)
   }
 
   formatPaymentDifference (value) {
-    if (value === 0) return `¥${this.formatNumber(0)}`
-
-    return this.formatSignedAmount(value)
+    return formatPaymentDifference(value)
   }
 
   usesExternalTax () {
@@ -1071,13 +1066,7 @@ export default class extends Controller {
   }
 
   externalTaxTotal (taxGroups) {
-    let taxTotal = 0
-
-    taxGroups.forEach((groupLineTotal, taxRatePercent) => {
-      taxTotal += this.applyTaxRounding((groupLineTotal * taxRatePercent) / 100)
-    })
-
-    return taxTotal
+    return externalTaxTotal(taxGroups, this.roundingModeValue)
   }
 
   roundLineAmount (value) {
@@ -1093,10 +1082,7 @@ export default class extends Controller {
   }
 
   discountedLineTotalFor (originalLineTotal, discountRatePercent) {
-    if (discountRatePercent === null) return originalLineTotal
-
-    const discountAmount = this.applyDiscountRounding((originalLineTotal * discountRatePercent) / 100)
-    return Math.max(originalLineTotal - discountAmount, 0)
+    return discountedLineTotal(originalLineTotal, discountRatePercent, this.discountRoundingModeValue)
   }
 
   lineTotalFor ({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput }) {
@@ -1496,14 +1482,9 @@ export default class extends Controller {
   }
 
   formatTaxRateSummary (taxRates) {
-    if (taxRates.size === 0) return this.unsetLabelValue
-    if (taxRates.size > 1) return this.multipleTaxRatesLabelValue
-
-    const [taxRate] = Array.from(taxRates)
-    return `${this.formatTaxRate(taxRate)}%`
-  }
-
-  formatTaxRate (taxRate) {
-    return formatTaxRate(taxRate)
+    return formatTaxRateSummary(taxRates, {
+      unsetLabel: this.unsetLabelValue,
+      multipleTaxRatesLabel: this.multipleTaxRatesLabelValue
+    })
   }
 }

@@ -33,3 +33,41 @@ export function easeOutCubic (progress) {
 export function formatTaxRate (taxRate) {
   return Number.isInteger(taxRate) ? String(taxRate) : String(taxRate).replace(/\.0+$/, '')
 }
+
+export function formatSignedAmount (value) {
+  const amount = Math.floor(Math.abs(value))
+  const sign = value < 0 ? '-' : '+'
+
+  return `${sign}¥${formatNumber(amount)}`
+}
+
+export function formatPaymentDifference (value) {
+  if (value === 0) return `¥${formatNumber(0)}`
+
+  return formatSignedAmount(value)
+}
+
+export function externalTaxTotal (taxGroups, roundingMode) {
+  let taxTotal = 0
+
+  taxGroups.forEach((groupLineTotal, taxRatePercent) => {
+    taxTotal += applyRounding((groupLineTotal * taxRatePercent) / 100, roundingMode)
+  })
+
+  return taxTotal
+}
+
+export function discountedLineTotal (originalLineTotal, discountRatePercent, roundingMode) {
+  if (discountRatePercent === null) return originalLineTotal
+
+  const discountAmount = applyRounding((originalLineTotal * discountRatePercent) / 100, roundingMode)
+  return Math.max(originalLineTotal - discountAmount, 0)
+}
+
+export function formatTaxRateSummary (taxRates, { unsetLabel, multipleTaxRatesLabel }) {
+  if (taxRates.size === 0) return unsetLabel
+  if (taxRates.size > 1) return multipleTaxRatesLabel
+
+  const [taxRate] = Array.from(taxRates)
+  return `${formatTaxRate(taxRate)}%`
+}

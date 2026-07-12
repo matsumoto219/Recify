@@ -93,6 +93,36 @@ RSpec.describe "Receipt form Stimulus controller" do
     end
   end
 
+  it "passes receipt rounding modes and labels to the pure amount preview helpers" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        roundingModeValue: { value: 'ceil' },
+        discountRoundingModeValue: { value: 'floor' },
+        unsetLabelValue: { value: 'Unset' },
+        multipleTaxRatesLabelValue: { value: 'Multiple tax rates' }
+      })
+
+      process.stdout.write(JSON.stringify({
+        externalTax: controller.externalTaxTotal(new Map([[8, 101], [10, 105]])),
+        discountedLineTotal: controller.discountedLineTotalFor(101, 50),
+        signedAmount: controller.formatSignedAmount(-500),
+        zeroDifference: controller.formatPaymentDifference(0),
+        noTaxRate: controller.formatTaxRateSummary(new Set()),
+        multipleTaxRates: controller.formatTaxRateSummary(new Set([8, 10]))
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "externalTax" => 20,
+      "discountedLineTotal" => 51,
+      "signedAmount" => "-¥500",
+      "zeroDifference" => "¥0",
+      "noTaxRate" => "Unset",
+      "multipleTaxRates" => "Multiple tax rates"
+    )
+  end
+
   it "suspends and restores the preview without rewriting an invalid field" do
     result = run_controller_script(<<~JAVASCRIPT)
       const controller = Object.create(ReceiptFormController.prototype)
