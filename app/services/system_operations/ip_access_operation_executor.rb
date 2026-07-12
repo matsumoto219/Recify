@@ -37,7 +37,7 @@ module SystemOperations
     )
       @operation = operation.to_s
       @raw_ip_address = ip_address
-      @ip_address = Security::IpAddress.normalize(ip_address)
+      @ip_address = Security.normalize_ip_address(ip_address)
       @actor = actor
       @reason = reason.to_s.strip
       @request = request
@@ -45,7 +45,7 @@ module SystemOperations
       @confirmation = confirmation.to_s.strip
       @source_security_event = source_security_event
       @expires_at = expires_at
-      @rack_attack_target = rack_attack_target.to_s.presence || Security::RackAttackBanResetter::DEFAULT_TARGET
+      @rack_attack_target = rack_attack_target.to_s.presence || Security.rack_attack_default_target
     end
 
     def call
@@ -225,14 +225,14 @@ module SystemOperations
     def source_security_event_ip_mismatch?
       return false if source_security_event.blank?
 
-      source_ip = Security::IpAddress.normalize(source_security_event.ip_address)
+      source_ip = Security.normalize_ip_address(source_security_event.ip_address)
       source_ip.present? && source_ip != ip_address
     end
 
     def current_admin_ip_block_forbidden?
       return false unless operation == "manual_ip_block"
 
-      request_ip = Security::IpAddress.normalize(request&.remote_ip)
+      request_ip = Security.normalize_ip_address(request&.remote_ip)
       request_ip.present? && request_ip == ip_address
     end
 

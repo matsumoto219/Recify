@@ -13,6 +13,30 @@ module Security
       RequestIpSnapshot.call(...)
     end
 
+    def normalize_ip_address(value)
+      IpAddress.normalize(value)
+    end
+
+    def ip_address_blockable?(value)
+      IpAddress.blockable?(value)
+    end
+
+    def ip_address_non_blockable_reason(value)
+      IpAddress.non_blockable_reason(value)
+    end
+
+    def rack_attack_banned_states(ip_address)
+      RackAttackBanRegistry.banned_states(ip_address)
+    end
+
+    def rack_attack_default_target
+      RackAttackBanResetter::DEFAULT_TARGET
+    end
+
+    def ip_blocked?(ip_address)
+      IpAccessRules.blocked?(ip_address)
+    end
+
     def manual_ip_block(...)
       ManualIpBlocker.call(...)
     end

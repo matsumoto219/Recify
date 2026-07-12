@@ -51,7 +51,7 @@ class SecurityIpAction < ApplicationRecord
   private
 
   def normalize_ip_address
-    normalized = Security::IpAddress.normalize(ip_address)
+    normalized = Security.normalize_ip_address(ip_address)
     self.ip_address = normalized if normalized.present?
   end
 

@@ -89,51 +89,7 @@ RSpec.describe "Service layer child implementation boundary" do
       "security",
       "Security",
       facade: "app/services/security.rb",
-      public_constants: %w[Security::ValidationError],
-      legacy_exceptions: [
-        {
-          source_path: "app/models/security_ip_action.rb",
-          referenced_constant: "Security::IpAddress",
-          reason: "Security facadeにIP正規化APIが未整備の既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/models/security_ip_block.rb",
-          referenced_constant: "Security::IpAddress",
-          reason: "Security facadeにIP検証APIが未整備の既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/queries/admin/ip_actions_query.rb",
-          referenced_constant: "Security::IpAddress",
-          reason: "Security facadeにIP正規化APIが未整備のcross-namespace既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/queries/admin/ip_blocks_query.rb",
-          referenced_constant: "Security::IpAddress",
-          reason: "Security facadeにIP正規化APIが未整備のcross-namespace既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/queries/admin/ip_blocks_query.rb",
-          referenced_constant: "Security::RackAttackBanRegistry",
-          reason: "Security facadeにban診断APIが未整備のcross-namespace既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/services/system_operations/ip_access_operation_executor.rb",
-          referenced_constant: "Security::IpAddress",
-          reason: "Security facadeにIP正規化APIが未整備のcross-namespace既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/services/system_operations/ip_access_operation_executor.rb",
-          referenced_constant: "Security::RackAttackBanResetter::DEFAULT_TARGET",
-          reason: "Security child実装定数へのcross-namespace既存参照",
-          remove_in_loop: 22
-        }
-      ]
+      public_constants: %w[Security::ValidationError]
     ),
     "security_events" => registry_entry("security_events", "SecurityEvents", facade: "app/services/security_events.rb"),
     "storage" => registry_entry("storage", "Storage", facade: "app/services/storage.rb"),

@@ -132,7 +132,7 @@ class Rack::Attack
   end
 
   blocklist("manual/ip_blocks") do |request|
-    Security::IpAccessRules.blocked?(request.ip)
+    Security.ip_blocked?(request.ip)
   end
 
   blocklist("fail2ban/scanner_paths") do |request|

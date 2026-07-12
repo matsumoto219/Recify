@@ -28,14 +28,14 @@ class SecurityIpBlock < ApplicationRecord
 
   class << self
     def currently_effective_for_ip(ip_address)
-      normalized = Security::IpAddress.normalize(ip_address)
+      normalized = Security.normalize_ip_address(ip_address)
       return none if normalized.blank?
 
       currently_effective.where(ip_address: normalized)
     end
 
     def active_status_for_ip(ip_address)
-      normalized = Security::IpAddress.normalize(ip_address)
+      normalized = Security.normalize_ip_address(ip_address)
       return none if normalized.blank?
 
       active_status.where(ip_address: normalized)
@@ -57,7 +57,7 @@ class SecurityIpBlock < ApplicationRecord
   private
 
   def normalize_ip_address
-    normalized = Security::IpAddress.normalize(ip_address)
+    normalized = Security.normalize_ip_address(ip_address)
     self.ip_address = normalized if normalized.present?
   end
 
@@ -74,15 +74,15 @@ class SecurityIpBlock < ApplicationRecord
   end
 
   def ip_address_is_blockable
-    normalized = Security::IpAddress.normalize(ip_address)
+    normalized = Security.normalize_ip_address(ip_address)
     if normalized.blank?
       errors.add(:ip_address, :invalid)
       return
     end
 
-    return if Security::IpAddress.blockable?(normalized)
+    return if Security.ip_address_blockable?(normalized)
 
-    errors.add(:ip_address, Security::IpAddress.non_blockable_reason(normalized) || :invalid)
+    errors.add(:ip_address, Security.ip_address_non_blockable_reason(normalized) || :invalid)
   end
 
   def revocation_fields_are_consistent

@@ -14,7 +14,7 @@ module Admin
     end
 
     def initialize(ip_address:, limit: DEFAULT_LIMIT, offset: 0)
-      @ip_address = ::Security::IpAddress.normalize(ip_address)
+      @ip_address = ::Security.normalize_ip_address(ip_address)
       @limit = normalize_limit(limit)
       @offset = normalize_offset(offset)
     end

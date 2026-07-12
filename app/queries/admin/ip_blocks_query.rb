@@ -105,7 +105,7 @@ module Admin
       values = filter_values(@ip_address)
       return relation if values.blank?
 
-      normalized = values.filter_map { |value| ::Security::IpAddress.normalize(value) }
+      normalized = values.filter_map { |value| ::Security.normalize_ip_address(value) }
       return relation.none if normalized.blank?
 
       relation.where(ip_address: normalized)
@@ -128,7 +128,7 @@ module Admin
 
     def build_record(block, recent_counts)
       ip_address = block.ip_address.to_s
-      rack_attack_targets = ::Security::RackAttackBanRegistry.banned_states(ip_address)
+      rack_attack_targets = ::Security.rack_attack_banned_states(ip_address)
 
       {
         security_ip_block: block,
