@@ -20,6 +20,7 @@ RSpec.describe SystemSettings do
         'maintenance.title',
         'maintenance.body',
         'security.admin_passkey_reauth_window_minutes',
+        'security.user_reauth_window_minutes',
         'security_events.max_detections_per_request',
         'security_events.aggregation_window_minutes',
         'security_events.admin_burst_window_minutes',
@@ -1010,6 +1011,12 @@ RSpec.describe SystemSettings do
           described_class.cast_update_value('security.admin_passkey_reauth_window_minutes', '61')
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
+          described_class.cast_update_value('security.user_reauth_window_minutes', '0')
+        }.to raise_error(SystemSettings::ValidationError, 'below_min')
+        expect {
+          described_class.cast_update_value('security.user_reauth_window_minutes', '16')
+        }.to raise_error(SystemSettings::ValidationError, 'above_max')
+        expect {
           described_class.cast_update_value('limits.guest_storage_bytes', (2.gigabytes).to_s)
         }.to raise_error(SystemSettings::ValidationError, 'above_max')
         expect {
@@ -1885,6 +1892,16 @@ RSpec.describe SystemSettings do
         risk_level: 'high',
         min: 1,
         max: 60,
+        default: 5
+      )
+    end
+
+    it 'ユーザー本人再確認期間は延長幅を制限したhigh risk設定として扱う' do
+      expect(described_class.definition_for('security.user_reauth_window_minutes')).to have_attributes(
+        category: 'security',
+        risk_level: 'high',
+        min: 1,
+        max: 15,
         default: 5
       )
     end

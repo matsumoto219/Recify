@@ -294,6 +294,28 @@ RSpec.describe 'Admin system settings', type: :request do
       end
     end
 
+    it 'ユーザー本人再確認期間をhigh risk設定として表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path('security.user_reauth_window_minutes')
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include('security.user_reauth_window_minutes')
+        expect(response.body).to include('security')
+        expect(response.body).to include('high')
+        expect(response.body).to include('1')
+        expect(response.body).to include('15')
+        expect(response.body).to include('5')
+        expect(note.text).to include('延長は次回の本人確認から適用')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
+
     it 'OCR/AI運用停止設定をhigh risk設定として表示する' do
       admin = create(:user, :admin)
       sign_in admin
@@ -912,6 +934,34 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(flash[:alert]).to include('パスキーによる再認証')
         expect(SystemOperations).not_to have_received(:update_setting)
         expect(SystemSetting.find_by(key: 'feature.receipt_logo_display_enabled')).to be_nil
+      end
+    end
+
+    it 'freshなadmin passkey再認証と確認を経てユーザー本人再確認期間を更新する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      patch admin_system_setting_path('security.user_reauth_window_minutes'),
+            params: {
+              value: '10',
+              reason: 'account security window review',
+              confirm: '1'
+            }
+
+      setting = SystemSetting.find_by!(key: 'security.user_reauth_window_minutes')
+      audit_log = AuditLog.find_by!(
+        action: 'system_settings.update',
+        target_uid: 'security.user_reauth_window_minutes'
+      )
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path('security.user_reauth_window_minutes'))
+        expect(setting.value).to eq(SystemSettings.stored_value(10))
+        expect(setting.updated_by_user).to eq(admin)
+        expect(audit_log).to have_attributes(outcome: 'succeeded', actor_user: admin)
+        expect(audit_log.before_state).to include('value' => 5, 'source' => 'default')
+        expect(audit_log.after_state).to include('value' => 10, 'source' => 'db')
       end
     end
 

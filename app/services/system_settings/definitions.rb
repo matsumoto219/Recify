@@ -147,6 +147,16 @@ module SystemSettings
         max: 60
       ),
       Definition.new(
+        key: "security.user_reauth_window_minutes",
+        category: "security",
+        value_type: "integer",
+        default: 5,
+        editable: true,
+        risk_level: "high",
+        min: 1,
+        max: 15
+      ),
+      Definition.new(
         key: "security_events.max_detections_per_request",
         category: "security_event",
         value_type: "integer",

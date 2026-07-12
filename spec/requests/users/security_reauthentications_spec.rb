@@ -59,6 +59,7 @@ RSpec.describe 'User security reauthentication', type: :request do
         'method' => 'password'
       )
       expect(Time.zone.parse(context.fetch('authenticated_at'))).to be_within(1.second).of(Time.current)
+      expect(Time.zone.parse(context.fetch('expires_at'))).to be_within(1.second).of(5.minutes.from_now)
       expect(response.headers['Cache-Control']).to include('no-store')
     end
   end
@@ -87,6 +88,87 @@ RSpec.describe 'User security reauthentication', type: :request do
   end
 
   it 'TTL経過後はpasskey challengeを発行しない' do
+    sign_in user
+    mark_security_reauthentication_fresh!(user)
+
+    travel 6.minutes do
+      post settings_passkeys_options_path, as: :json
+    end
+
+    aggregate_failures do
+      expect(response).to have_http_status(:precondition_required)
+      expect(session[:security_reauthentication]).to be_blank
+      expect(session[:passkey_registration_challenge]).to be_blank
+    end
+  end
+
+  it 'SystemSettingsで15分にした場合は10分後もfreshにする' do
+    create(
+      :system_setting,
+      key: 'security.user_reauth_window_minutes',
+      value: SystemSettings.stored_value(15)
+    )
+    sign_in user
+    mark_security_reauthentication_fresh!(user)
+
+    travel 10.minutes do
+      post settings_passkeys_options_path, as: :json
+    end
+
+    aggregate_failures do
+      expect(response).to have_http_status(:ok)
+      expect(session[:security_reauthentication]).to be_present
+      expect(session[:passkey_registration_challenge]).to be_present
+    end
+  end
+
+  it 'window延長前に発行した本人確認を遡って延長しない' do
+    setting = create(
+      :system_setting,
+      key: 'security.user_reauth_window_minutes',
+      value: SystemSettings.stored_value(1)
+    )
+    sign_in user
+    mark_security_reauthentication_fresh!(user)
+    setting.update!(value: SystemSettings.stored_value(15))
+
+    travel 2.minutes do
+      post settings_passkeys_options_path, as: :json
+    end
+
+    aggregate_failures do
+      expect(response).to have_http_status(:precondition_required)
+      expect(session[:security_reauthentication]).to be_blank
+      expect(session[:passkey_registration_challenge]).to be_blank
+    end
+  end
+
+  it 'window短縮は発行済み本人確認へ即時適用する' do
+    setting = create(
+      :system_setting,
+      key: 'security.user_reauth_window_minutes',
+      value: SystemSettings.stored_value(15)
+    )
+    sign_in user
+    mark_security_reauthentication_fresh!(user)
+    setting.update!(value: SystemSettings.stored_value(1))
+
+    travel 2.minutes do
+      post settings_passkeys_options_path, as: :json
+    end
+
+    aggregate_failures do
+      expect(response).to have_http_status(:precondition_required)
+      expect(session[:security_reauthentication]).to be_blank
+      expect(session[:passkey_registration_challenge]).to be_blank
+    end
+  end
+
+  it '設定読込異常時は現行の5分へfail-safeする' do
+    allow(SystemSettings).to receive(:limit_for).and_call_original
+    allow(SystemSettings).to receive(:limit_for)
+      .with('security.user_reauth_window_minutes')
+      .and_raise(SystemSettings::ValidationError, 'invalid setting')
     sign_in user
     mark_security_reauthentication_fresh!(user)
 
