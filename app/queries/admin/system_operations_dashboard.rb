@@ -44,14 +44,13 @@ module Admin
       secrets_hidden
     ].freeze
 
-    Result = Struct.new(
+    Result = Data.define(
       :policy_items,
       :queues,
       :recurring_tasks,
       :audit_actions,
       :audit_log_retention_policies,
-      :locked_future_operations,
-      keyword_init: true
+      :locked_future_operations
     )
 
     class << self

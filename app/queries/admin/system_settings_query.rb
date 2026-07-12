@@ -1,6 +1,6 @@
 module Admin
   class SystemSettingsQuery
-    Result = Struct.new(:records, :total_count, keyword_init: true)
+    Result = Data.define(:records, :total_count)
     CATEGORY_ORDER = %w[
       operation
       security

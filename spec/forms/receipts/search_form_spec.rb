@@ -14,6 +14,7 @@ RSpec.describe Receipts::SearchForm do
         invalid_queries.each do |query|
           result = described_class.call(query)
 
+          expect(result).to be_frozen
           expect(result).not_to be_valid
           expect(result.error_code).to eq('invalid_search_query')
         end

@@ -6,7 +6,7 @@ module Admin
     MAX_LIMIT = 50
     SAMPLE_LIMIT = 10
 
-    Result = Struct.new(:records, :limit, :offset, :total_count, keyword_init: true)
+    Result = Data.define(:records, :limit, :offset, :total_count)
 
     class << self
       def call(**filters)

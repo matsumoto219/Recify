@@ -5,7 +5,7 @@ module Admin
     STATES = %w[active revoked expired].freeze
     RECENT_WINDOW = 24.hours
 
-    Result = Struct.new(:records, :limit, :offset, :total_count, keyword_init: true)
+    Result = Data.define(:records, :limit, :offset, :total_count)
 
     class << self
       def call(**filters)

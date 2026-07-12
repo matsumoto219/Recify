@@ -13,7 +13,7 @@ module Receipts
     ].freeze
     PER_PAGE_OPTIONS = [ 20, 50, 100 ].freeze
 
-    Result = Struct.new(:scope, :query, :sort, :per_page, :sanitized_params, keyword_init: true) do
+    Result = Data.define(:scope, :query, :sort, :per_page, :sanitized_params) do
       def pagination_params
         sanitized_params
       end

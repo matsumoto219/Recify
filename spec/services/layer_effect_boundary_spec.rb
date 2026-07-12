@@ -47,6 +47,21 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
     expect(scanner.layer_effects).to be_empty, scanner.layer_effects.map(&:to_h).join("\n")
   end
 
+  it "QueryとFormのResultをimmutable Data contractに限定する" do
+    result_contracts = %w[app/queries/**/*.rb app/forms/**/*.rb].flat_map do |glob|
+      Rails.root.glob(glob)
+    end.filter_map do |path|
+      constant_path = Rails.autoloaders.main.cpath_expected_at(path)
+      owner = constant_path&.safe_constantize
+      next unless owner&.const_defined?(:Result, false)
+
+      [ path.relative_path_from(Rails.root).to_s, owner.const_get(:Result, false) ]
+    end
+    mutable = result_contracts.reject { |_path, contract| contract < Data }.map(&:first)
+
+    expect(mutable).to be_empty, "Mutable Query/Form Result contracts:\n#{mutable.join("\n")}"
+  end
+
   it "Admin controllerの直接DB mutationをexact legacy fingerprintだけに限定する" do
     actual = scanner.admin_controller_mutations.map do |effect|
       [ effect.source_path, effect.receiver_source, effect.method_name ]

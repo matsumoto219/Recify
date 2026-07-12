@@ -14,7 +14,7 @@ module Admin
     ].freeze
     RECENT_WINDOW = 24.hours
 
-    Result = Struct.new(
+    Result = Data.define(
       :receipt_analysis,
       :cleanup,
       :audit,
@@ -25,8 +25,7 @@ module Admin
       :legal_documents,
       :database_status,
       :system_operations,
-      :locked_future_operations,
-      keyword_init: true
+      :locked_future_operations
     )
 
     class << self

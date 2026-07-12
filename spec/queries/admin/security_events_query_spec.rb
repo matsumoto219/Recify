@@ -8,7 +8,10 @@ RSpec.describe Admin::SecurityEventsQuery do
 
       result = described_class.call
 
-      expect(result.records.map { |record| record[:id] }).to eq([ newer.id, older.id ])
+      aggregate_failures do
+        expect(result).to be_frozen
+        expect(result.records.map { |record| record[:id] }).to eq([ newer.id, older.id ])
+      end
     end
 
     it 'event_type, severity, stateで絞り込める' do

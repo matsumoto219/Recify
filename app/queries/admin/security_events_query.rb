@@ -4,7 +4,7 @@ module Admin
     MAX_LIMIT = 100
     STATES = %w[open resolved ignored].freeze
 
-    Result = Struct.new(:records, :limit, :offset, :total_count, keyword_init: true)
+    Result = Data.define(:records, :limit, :offset, :total_count)
 
     class << self
       def call(**filters)

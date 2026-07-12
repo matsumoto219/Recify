@@ -2,7 +2,7 @@ module Receipts
   class SearchForm
     DATE_PATTERN = "\\d{4}[\\/-]\\d{2}[\\/-]\\d{2}".freeze
 
-    Result = Struct.new(:valid, :error_code, keyword_init: true) do
+    Result = Data.define(:valid, :error_code) do
       def valid?
         valid
       end

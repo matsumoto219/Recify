@@ -12,6 +12,7 @@ RSpec.describe Receipts::IndexQuery do
       result = call_query(sort: 'created_at;drop', per_page: '999')
 
       aggregate_failures do
+        expect(result).to be_frozen
         expect(result.sort).to eq('newest')
         expect(result.per_page).to eq(20)
         expect(result.sanitized_params).to eq({})
