@@ -1,6 +1,20 @@
 require 'rails_helper'
 
 RSpec.describe SystemOperations do
+  describe SystemOperations::Result do
+    it "省略keywordとhelperをimmutable objectで維持する" do
+      result = described_class.new(success: true, operation: "cleanup")
+
+      aggregate_failures do
+        expect(result).to be_frozen
+        expect(result).to be_success
+        expect(result).not_to be_failure
+        expect(result.to_h).to include(success: true, operation: "cleanup", error_code: nil)
+        expect { result.success = false }.to raise_error(NoMethodError)
+      end
+    end
+  end
+
   describe '.execute_receipt_analysis_retry' do
     it 'private retry executorへ委譲する' do
       allow(SystemOperations::ReceiptAnalysisRetryExecutor).to receive(:call).and_return(:accepted)

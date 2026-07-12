@@ -2,7 +2,7 @@ module SystemOperations
   Error = Class.new(StandardError)
   ValidationError = Class.new(Error)
 
-  Result = Struct.new(
+  Result = Data.define(
     :success,
     :operation,
     :cleanup_result,
@@ -18,9 +18,46 @@ module SystemOperations
     :receipt_moderation_result,
     :error_code,
     :error_message,
-    :error_details,
-    keyword_init: true
+    :error_details
   ) do
+    def initialize(
+      success: nil,
+      operation: nil,
+      cleanup_result: nil,
+      setting: nil,
+      value: nil,
+      before_state: nil,
+      after_state: nil,
+      audit_log: nil,
+      user_limit_override: nil,
+      ip_access_result: nil,
+      security_ip_block: nil,
+      receipt: nil,
+      receipt_moderation_result: nil,
+      error_code: nil,
+      error_message: nil,
+      error_details: nil
+    )
+      super(
+        success:,
+        operation:,
+        cleanup_result:,
+        setting:,
+        value:,
+        before_state:,
+        after_state:,
+        audit_log:,
+        user_limit_override:,
+        ip_access_result:,
+        security_ip_block:,
+        receipt:,
+        receipt_moderation_result:,
+        error_code:,
+        error_message:,
+        error_details:
+      )
+    end
+
     def success?
       success == true
     end
