@@ -52,22 +52,6 @@ module Analysis
       ReceiptItemNormalizer::AI_ALLOWED_KEYS
     end
 
-    def retry_receipt_analysis(...)
-      SystemOperations.execute_receipt_analysis_retry(...)
-    end
-
-    def retry_eligibility(...)
-      SystemOperations.receipt_analysis_retry_eligibility(...)
-    end
-
-    def retry_types
-      SystemOperations.receipt_analysis_retry_types
-    end
-
-    def retry_confirmation_text
-      SystemOperations.receipt_analysis_retry_confirmation_text
-    end
-
     def store_name_customer_facing_heading_candidates(...)
       StoreNameCandidateClassifier.customer_facing_heading_candidates(...)
     end
