@@ -2,7 +2,6 @@ class Admin::AnnouncementsController < Admin::BaseController
   LINK_FORM_ROWS = 3
   PUBLISHABLE_STATUS = "draft"
   ARCHIVABLE_STATUSES = %w[draft published].freeze
-  AUDIT_LINK_LIMIT = 3
 
   def index
     @filters = filter_params
@@ -21,16 +20,19 @@ class Admin::AnnouncementsController < Admin::BaseController
   end
 
   def create
-    @announcement = Announcement.new(announcement_params)
-    @announcement.status = "draft"
-    @announcement.created_by = current_user
-    @announcement.updated_by = current_user
+    result = Admin::Operations.create_announcement(
+      attributes: announcement_params,
+      actor: current_user,
+      request: request,
+      remove_image_requested: remove_image_requested?,
+      uploaded_image: uploaded_announcement_image,
+      security_context: announcement_security_context
+    )
+    @announcement = result.announcement
 
-    if save_announcement_with_audit(action: "announcement.create", before_state: {})
-      purge_announcement_image_if_requested!
+    if result.saved?
       redirect_to admin_announcement_path(@announcement), notice: t("admin.announcements.messages.created"), status: :see_other
     else
-      record_invalid_announcement_upload_security_event(uploaded_announcement_image, @announcement.errors)
       prepare_link_rows
       render :new, status: :unprocessable_entity
     end
@@ -45,16 +47,19 @@ class Admin::AnnouncementsController < Admin::BaseController
   def update
     @announcement = find_announcement
     ensure_draft_editable!
-    before_state = announcement_audit_state
-    @announcement.assign_attributes(announcement_params)
-    @announcement.status = "draft"
-    @announcement.updated_by = current_user
+    result = Admin::Operations.update_announcement(
+      announcement: @announcement,
+      attributes: announcement_params,
+      actor: current_user,
+      request: request,
+      remove_image_requested: remove_image_requested?,
+      uploaded_image: uploaded_announcement_image,
+      security_context: announcement_security_context
+    )
 
-    if save_announcement_with_audit(action: "announcement.update", before_state: before_state)
-      purge_announcement_image_if_requested!
+    if result.saved?
       redirect_to admin_announcement_path(@announcement), notice: t("admin.announcements.messages.updated"), status: :see_other
     else
-      record_invalid_announcement_upload_security_event(uploaded_announcement_image, @announcement.errors)
       prepare_link_rows
       render :edit, status: :unprocessable_entity
     end
@@ -71,12 +76,13 @@ class Admin::AnnouncementsController < Admin::BaseController
       return
     end
 
-    before_state = announcement_audit_state
-    @announcement.status = "published"
-    @announcement.published_at ||= Time.current
-    @announcement.updated_by = current_user
+    result = Admin::Operations.publish_announcement(
+      announcement: @announcement,
+      actor: current_user,
+      request: request
+    )
 
-    if save_announcement_with_audit(action: "announcement.publish", before_state: before_state)
+    if result.saved?
       redirect_to admin_announcement_path(@announcement),
                   notice: t("admin.announcements.messages.published"),
                   status: :see_other
@@ -98,11 +104,13 @@ class Admin::AnnouncementsController < Admin::BaseController
       return
     end
 
-    before_state = announcement_audit_state
-    @announcement.status = "archived"
-    @announcement.updated_by = current_user
+    result = Admin::Operations.archive_announcement(
+      announcement: @announcement,
+      actor: current_user,
+      request: request
+    )
 
-    if save_announcement_with_audit(action: "announcement.archive", before_state: before_state)
+    if result.saved?
       redirect_to admin_announcement_path(@announcement),
                   notice: t("admin.announcements.messages.archived"),
                   status: :see_other
@@ -195,103 +203,6 @@ class Admin::AnnouncementsController < Admin::BaseController
     false
   end
 
-  def save_announcement_with_audit(action:, before_state:)
-    saved = false
-
-    Announcement.transaction do
-      saved = @announcement.save
-      record_announcement_audit!(
-        action: action,
-        before_state: before_state,
-        after_state: announcement_audit_state
-      ) if saved
-    end
-
-    saved
-  end
-
-  def record_announcement_audit!(action:, before_state:, after_state:)
-    AuditLogs.record_admin_action!(
-      actor: current_user,
-      action: action,
-      target: @announcement,
-      target_uid: @announcement.public_id,
-      outcome: "succeeded",
-      request: request,
-      metadata: announcement_audit_metadata,
-      before_state: before_state,
-      after_state: after_state
-    )
-  end
-
-  def announcement_audit_state
-    {
-      status: @announcement.status,
-      kind: @announcement.kind,
-      pinned: @announcement.pinned,
-      priority: @announcement.priority,
-      starts_at: @announcement.starts_at,
-      ends_at: @announcement.ends_at,
-      published_at: @announcement.published_at
-    }
-  end
-
-  def announcement_audit_metadata
-    {
-      public_id: @announcement.public_id,
-      title: @announcement.title,
-      kind: @announcement.kind,
-      starts_at: @announcement.starts_at,
-      ends_at: @announcement.ends_at,
-      pinned: @announcement.pinned,
-      priority: @announcement.priority,
-      published_at: @announcement.published_at,
-      **announcement_audit_image_metadata,
-      links: announcement_audit_links
-    }
-  end
-
-  def announcement_audit_image_metadata
-    image_attached = @announcement.image.attached? && @announcement.image.blob&.persisted?
-    metadata = {
-      image_attached: image_attached,
-      image_alt_text_present: @announcement.image_alt_text.present?
-    }
-    return metadata unless image_attached
-
-    metadata.merge(
-      image_filename: @announcement.image.filename.to_s,
-      image_content_type: @announcement.image.blob.content_type,
-      image_byte_size: @announcement.image.blob.byte_size
-    )
-  end
-
-  def announcement_audit_links
-    @announcement.announcement_links.sort_by(&:position).first(AUDIT_LINK_LIMIT).map do |link|
-      {
-        position: link.position,
-        label: link.label,
-        external: link.external?,
-        url: sanitized_audit_url(link.url)
-      }
-    end
-  end
-
-  def sanitized_audit_url(value)
-    url = value.to_s
-    uri = URI.parse(url)
-
-    if url.start_with?("/")
-      uri.path.presence || "/"
-    else
-      port = uri.port && uri.port != uri.default_port ? ":#{uri.port}" : ""
-      path = uri.path.presence || "/"
-      "#{uri.scheme}://#{uri.host}#{port}#{path}"
-    end
-  rescue URI::InvalidURIError
-    "[invalid]"
-  end
-
   def prepare_link_rows
     links_by_position = @announcement
       .announcement_links
@@ -311,39 +222,11 @@ class Admin::AnnouncementsController < Admin::BaseController
     params.dig(:announcement, :image)
   end
 
-  def purge_announcement_image_if_requested!
-    return unless remove_image_requested?
-    return if uploaded_announcement_image.present?
-    return unless @announcement.image.attached?
-
-    Storage.purge_attachment(@announcement.image)
-    @announcement.update_columns(image_alt_text: nil, updated_at: Time.current)
-  end
-
-  def record_invalid_announcement_upload_security_event(file, errors)
-    reason = announcement_image_security_event_reason(errors)
-    return if file.blank? || reason.blank?
-
-    SecurityEvents.record_invalid_upload!(
-      request: request,
-      actor_user: current_user,
-      file: file,
-      reason: reason,
-      field_name: "announcement.image",
-      metadata: {
-        controller: controller_path,
-        action: action_name,
-        validation_errors: errors.full_messages_for(:image).first(3)
-      }
-    )
-  end
-
-  def announcement_image_security_event_reason(errors)
-    return "invalid_content_type" if errors.of_kind?(:image, :invalid_content_type)
-    return "file_too_large" if errors.of_kind?(:image, :file_too_large)
-    return "image_too_small" if errors.of_kind?(:image, :image_too_small)
-
-    "image_too_large" if errors.of_kind?(:image, :image_too_large)
+  def announcement_security_context
+    {
+      controller: controller_path,
+      action: action_name
+    }
   end
 
   def raise_not_found

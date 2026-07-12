@@ -66,7 +66,14 @@ module LayerEffectBoundary
       ]
     }.freeze
     CUSTOM_MUTATION_CALLS = {
-      "Admin::Operations" => %i[update_contact_request_status update_security_event_status],
+      "Admin::Operations" => %i[
+        archive_announcement
+        create_announcement
+        publish_announcement
+        update_announcement
+        update_contact_request_status
+        update_security_event_status
+      ],
       "ReceiptAnalysisRuns" => %i[
         cancel
         cleanup_expired
@@ -112,10 +119,12 @@ module LayerEffectBoundary
     ADMIN_MUTATION_METHODS = %i[
       save
       save!
+      assign_attributes
       create
       create!
       update
       update!
+      update_columns
       destroy
       destroy!
       status=

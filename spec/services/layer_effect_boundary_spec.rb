@@ -2,12 +2,13 @@ require "rails_helper"
 require_relative "../support/layer_effect_boundary_scanner"
 
 RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
-  ADMIN_MUTATION_EXCEPTIONS = {
-    [ "app/controllers/admin/announcements_controller.rb", "@announcement", :status= ] => 4,
-    [ "app/controllers/admin/announcements_controller.rb", "@announcement", :save ] => 1
-  }.freeze
+  ADMIN_MUTATION_EXCEPTIONS = {}.freeze
 
   ADMIN_OPERATION_CALLS = {
+    [ "app/controllers/admin/announcements_controller.rb", :archive_announcement ] => 1,
+    [ "app/controllers/admin/announcements_controller.rb", :create_announcement ] => 1,
+    [ "app/controllers/admin/announcements_controller.rb", :publish_announcement ] => 1,
+    [ "app/controllers/admin/announcements_controller.rb", :update_announcement ] => 1,
     [ "app/controllers/admin/contact_requests_controller.rb", :update_contact_request_status ] => 1,
     [ "app/controllers/admin/security_events_controller.rb", :update_security_event_status ] => 1
   }.freeze

@@ -3,7 +3,11 @@ require "rails_helper"
 RSpec.describe Admin::Operations do
   it "routine mutationのpublic APIをexactに限定する" do
     expect(described_class.singleton_methods(false)).to contain_exactly(
+      :archive_announcement,
+      :create_announcement,
+      :publish_announcement,
       :update_contact_request_status,
+      :update_announcement,
       :update_security_event_status
     )
   end
