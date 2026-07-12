@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ReceiptEditSaveInputBuilder
+class Receipts::Editing::InputBuilder
   class ConflictError < StandardError
     attr_reader :attributes_key, :duplicate_ids
 

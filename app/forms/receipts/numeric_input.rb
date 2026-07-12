@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ReceiptUserNumericInput
+class Receipts::NumericInput
   class InvalidValue < StandardError
     attr_reader :value
 

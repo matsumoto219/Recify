@@ -149,7 +149,7 @@ class ReceiptsController < ApplicationController
     @receipt = current_user.receipts.new
     begin
       create_params = normalized_receipt_params.to_h
-    rescue ReceiptUserNumericInput::InvalidValue
+    rescue Receipts::NumericInput::InvalidValue
       render_invalid_numeric_input(
         template: :new,
         rebuild_blank_item_row_after_failure: true,
@@ -271,7 +271,7 @@ class ReceiptsController < ApplicationController
 
     begin
       update_params = normalized_receipt_params.to_h
-    rescue ReceiptUserNumericInput::InvalidValue
+    rescue Receipts::NumericInput::InvalidValue
       render_invalid_numeric_input(
         template: :edit,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
@@ -285,7 +285,7 @@ class ReceiptsController < ApplicationController
 
     begin
       receipt_edit_save_input(update_params)
-    rescue ReceiptEditSaveInputBuilder::ConflictError
+    rescue Receipts::Editing::InputBuilder::ConflictError
       render_nested_child_conflict(
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
@@ -995,7 +995,7 @@ class ReceiptsController < ApplicationController
     fields.each do |field|
       next unless attributes.key?(field)
 
-      attributes[field] = ReceiptUserNumericInput.public_send(parser, attributes[field])
+      attributes[field] = Receipts::NumericInput.public_send(parser, attributes[field])
     end
   end
 
@@ -1639,7 +1639,7 @@ class ReceiptsController < ApplicationController
 
   def receipt_edit_save_input(permitted)
     if @receipt_edit_save_input_params_id != permitted.object_id
-      @receipt_edit_save_input = ReceiptEditSaveInputBuilder.call(receipt: @receipt, permitted: permitted)
+      @receipt_edit_save_input = Receipts::Editing::InputBuilder.call(receipt: @receipt, permitted: permitted)
       @receipt_edit_save_input_params_id = permitted.object_id
     end
 

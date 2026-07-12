@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptUserNumericInput do
+RSpec.describe Receipts::NumericInput do
   describe '.integer' do
     it 'accepts plain, grouped, zero-padded, and full-width integers' do
       aggregate_failures do
@@ -15,7 +15,7 @@ RSpec.describe ReceiptUserNumericInput do
     it 'rejects scientific notation, mixed text, decimals, negatives, and currency symbols' do
       %w[1e2 12abc abc12 1.5 -1 ¥100 ￥１００].each do |value|
         expect { described_class.integer(value) }
-          .to raise_error(ReceiptUserNumericInput::InvalidValue), value
+          .to raise_error(Receipts::NumericInput::InvalidValue), value
       end
     end
   end
@@ -34,7 +34,7 @@ RSpec.describe ReceiptUserNumericInput do
     it 'rejects malformed and negative quantities' do
       %w[1e2 1.2.3 12abc -0.5].each do |value|
         expect { described_class.decimal(value) }
-          .to raise_error(ReceiptUserNumericInput::InvalidValue), value
+          .to raise_error(Receipts::NumericInput::InvalidValue), value
       end
     end
   end
@@ -51,7 +51,7 @@ RSpec.describe ReceiptUserNumericInput do
     it 'rejects invalid percentages instead of treating them as zero or nil' do
       %w[abc 10percent 1e2 -1 ¥10].each do |value|
         expect { described_class.percentage(value) }
-          .to raise_error(ReceiptUserNumericInput::InvalidValue), value
+          .to raise_error(Receipts::NumericInput::InvalidValue), value
       end
     end
   end

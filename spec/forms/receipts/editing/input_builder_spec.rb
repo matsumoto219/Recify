@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptEditSaveInputBuilder do
+RSpec.describe Receipts::Editing::InputBuilder do
   let(:receipt) { create(:receipt) }
 
   it '送信されたitem更新を既存値へ重ね、未送信itemも保存後集合へ残す' do
