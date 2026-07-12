@@ -96,10 +96,12 @@ module LayerEffectBoundary
         succeed
         supersede
       ],
+      "Receipts::Uploads" => %i[batch],
       "Storage" => %i[purge_attachment purge_receipt_images],
       "SystemOperations" => %i[
         execute_ip_access_operation
         execute_receipt_analysis_cleanup
+        execute_receipt_analysis_retry
         execute_receipt_moderation_operation
         execute_user_operation
         reset_setting
