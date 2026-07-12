@@ -32,6 +32,20 @@ RSpec.describe 'Settings', type: :request do
     value["message"] || value[:message]
   end
 
+  def attach_missing_avatar(target_user)
+    blob = ActiveStorage::Blob.create!(
+      key: SecureRandom.uuid,
+      filename: 'missing-avatar.jpg',
+      content_type: 'image/jpeg',
+      metadata: {},
+      service_name: ActiveStorage::Blob.service.name,
+      byte_size: 1.kilobyte,
+      checksum: SecureRandom.base64(16)
+    )
+    ActiveStorage::Attachment.create!(name: 'avatar', record: target_user, blob: blob)
+    target_user.reload
+  end
+
   def expect_common_mail_layout(message)
     body = mail_html_body(message)
 
@@ -242,6 +256,7 @@ RSpec.describe 'Settings', type: :request do
 
       document = Nokogiri::HTML(response.body)
       delete_form = document.at_css("form[action='#{user_registration_path}'][method='post']")
+      settings_section = document.at_css('section[data-controller~="settings"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -254,6 +269,10 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('settings.index.sections.calculation'))
         expect(response.body).to include(I18n.t('settings.index.sections.usage'))
         expect(response.body).to include(I18n.t('settings.index.danger.delete_account'))
+        expect(settings_section['data-action']).to include(
+          'segmented-control:success->settings#applySegmentedControlSetting',
+          'segmented-control:failure->settings#restoreSegmentedControlSetting'
+        )
         expect(delete_form['data-confirm-variant']).to eq('danger')
         expect(delete_form['data-confirm-icon']).to eq('delete')
         expect(delete_form['data-confirm-confirm-label']).to eq(I18n.t('settings.index.danger.delete_account'))
@@ -995,6 +1014,24 @@ RSpec.describe 'Settings', type: :request do
   end
 
   describe 'PATCH /users avatar' do
+    it 'storage実体が欠損した既存avatarがあってもavatar未変更のプロフィール更新に成功する' do
+      attach_missing_avatar(user)
+
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: 'Updated Missing Avatar User'
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_path)
+        expect(user.reload.name).to eq('Updated Missing Avatar User')
+        expect(user.avatar).to be_attached
+      end
+    end
+
     it 'valid avatar upload attaches avatar' do
       patch user_registration_path,
             params: {
@@ -1932,6 +1969,20 @@ RSpec.describe 'Settings', type: :request do
   end
 
   describe 'PATCH /settings' do
+    it 'storage実体が欠損した既存avatarがあってもthemeを更新できる' do
+      attach_missing_avatar(user)
+
+      patch settings_path,
+            params: { user: { theme_preference: 'dark' } },
+            headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(user.reload.theme_preference).to eq('dark')
+        expect(user.avatar).to be_attached
+      end
+    end
+
     it 'Turbo Streamでflash targetを更新する' do
       patch settings_path,
             params: { user: { theme_preference: 'dark' } },
@@ -1949,6 +2000,17 @@ RSpec.describe 'Settings', type: :request do
         expect(notice_surface).to be_present
         expect(stream.text).to include(I18n.t('flash.settings.update_success'))
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
+      end
+    end
+
+    it 'HTML更新成功は設定を保存して設定画面へ303 redirectする' do
+      patch settings_path,
+            params: { user: { theme_preference: 'dark' } }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_path)
+        expect(response).to have_http_status(:see_other)
+        expect(user.reload.theme_preference).to eq('dark')
       end
     end
 
@@ -1989,8 +2051,9 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
-    it '通知OFFでも設定保存失敗のTurbo flashは表示する（現状は200でflashだけ更新する）' do
+    it '通知OFFでも設定保存失敗のTurbo flashを422で表示してDB値を維持する' do
       user.update!(push_notification_enabled: false)
+      original_theme = user.theme_preference
 
       patch settings_path,
             params: { user: { theme_preference: 'neon' } },
@@ -2001,11 +2064,27 @@ RSpec.describe 'Settings', type: :request do
       notice_surface = stream.at_css('[data-controller~="notice-surface"]')
 
       aggregate_failures do
-        expect(response).to have_http_status(:success)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(response.media_type).to eq('text/vnd.turbo-stream.html')
         expect(stream).to be_present
         expect(notice_surface).to be_present
         expect(stream.text).to include(I18n.t('flash.settings.update_failure'))
+        expect(user.reload.theme_preference).to eq(original_theme)
+      end
+    end
+
+    it 'HTML更新失敗は422で設定画面とflashを表示してDB値を維持する' do
+      original_theme = user.theme_preference
+
+      patch settings_path,
+            params: { user: { theme_preference: 'neon' } }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.media_type).to eq('text/html')
+        expect(response.body).to include(I18n.t('settings.index.title'))
+        expect(response.body).to include(I18n.t('flash.settings.update_failure'))
+        expect(user.reload.theme_preference).to eq(original_theme)
       end
     end
 

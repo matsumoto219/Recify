@@ -23,8 +23,8 @@ class User < ApplicationRecord
 
   has_one_attached :avatar
 
-  validate :avatar_type
-  validate :avatar_size
+  validate :avatar_type, if: :avatar_attachment_changed?
+  validate :avatar_size, if: :avatar_attachment_changed?
 
   validates :name, length: { maximum: 30 }, allow_blank: true
   validates :storage_limit_bytes,
@@ -215,6 +215,10 @@ class User < ApplicationRecord
     unless Storage.extract_image_dimensions(blob: avatar.blob, attached_change: attachment_changes["avatar"])
       errors.add(:avatar, :invalid_content_type)
     end
+  end
+
+  def avatar_attachment_changed?
+    attachment_changes.key?("avatar")
   end
 
   def avatar_size

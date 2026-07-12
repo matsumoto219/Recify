@@ -180,6 +180,32 @@ RSpec.describe Announcement, type: :model do
       expect(announcement).to be_valid
     end
 
+    it 'storage実体が欠損した既存画像は無関係な属性更新で再検証しない' do
+      announcement = create(:announcement, image_alt_text: '欠損画像')
+      blob = ActiveStorage::Blob.create!(
+        key: SecureRandom.uuid,
+        filename: 'missing-announcement.png',
+        content_type: 'image/png',
+        metadata: {},
+        service_name: ActiveStorage::Blob.service.name,
+        byte_size: 1.kilobyte,
+        checksum: SecureRandom.base64(16)
+      )
+      ActiveStorage::Attachment.create!(name: 'image', record: announcement, blob: blob)
+      announcement.reload
+
+      expect(Storage).not_to receive(:extract_image_dimensions)
+
+      announcement.title = '画像と無関係な更新'
+
+      aggregate_failures do
+        expect(announcement).to be_valid
+        expect(announcement.save).to be(true)
+        expect(announcement.reload.title).to eq('画像と無関係な更新')
+        expect(announcement.image).to be_attached
+      end
+    end
+
     it 'JPEG画像を許可する' do
       announcement = build(:announcement, image_alt_text: 'キャンペーン画像')
       attach_announcement_image(

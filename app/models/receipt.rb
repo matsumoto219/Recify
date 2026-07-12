@@ -180,9 +180,9 @@ class Receipt < ApplicationRecord
             allow_blank: true
 
   validate :validate_purchased_at_not_in_future
-  validate :validate_image_content_type
-  validate :validate_image_file_size
-  validate :validate_image_dimensions
+  validate :validate_image_content_type, if: :image_attachment_changed?
+  validate :validate_image_file_size, if: :image_attachment_changed?
+  validate :validate_image_dimensions, if: :image_attachment_changed?
   validate :validate_image_presence_for_processing
   validate :validate_store_address_components_shape
   validate :validate_receipt_items_count_within_limit
@@ -475,6 +475,10 @@ class Receipt < ApplicationRecord
     return if ALLOWED_IMAGE_CONTENT_TYPES.include?(content_type)
 
     errors.add(:image, :invalid_content_type)
+  end
+
+  def image_attachment_changed?
+    attachment_changes.key?("image")
   end
 
   def validate_image_file_size

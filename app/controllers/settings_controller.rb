@@ -2,10 +2,7 @@ class SettingsController < ApplicationController
   before_action :authenticate_user!
 
   def index
-    # ExternalServices から現在の状態を取得
-    @ocr_state = ExternalServices.state(:ocr).to_sym
-    @ai_state = ExternalServices.state(:ai).to_sym
-    @settings_index_presenter = Settings::IndexPresenter.new(user: current_user, view_context: view_context)
+    prepare_index
   end
 
   def account
@@ -20,6 +17,10 @@ class SettingsController < ApplicationController
       message = t("flash.settings.update_success")
 
       respond_to do |format|
+        format.html do
+          redirect_to settings_path, notice: message, status: :see_other
+        end
+
         format.json do
           render json: {
             ok: true,
@@ -43,6 +44,13 @@ class SettingsController < ApplicationController
       message = t("flash.settings.update_failure")
 
       respond_to do |format|
+        format.html do
+          current_user.reload
+          prepare_index
+          flash.now[:alert] = message
+          render :index, status: :unprocessable_content
+        end
+
         format.json do
           render json: {
             ok: false,
@@ -53,13 +61,20 @@ class SettingsController < ApplicationController
 
         format.turbo_stream do
           flash.now[:alert] = message
-          render turbo_stream: turbo_stream.update("flash", partial: "shared/ui/feedback/flash")
+          render turbo_stream: turbo_stream.update("flash", partial: "shared/ui/feedback/flash"),
+                 status: :unprocessable_content
         end
       end
     end
   end
 
   private
+
+  def prepare_index
+    @ocr_state = ExternalServices.state(:ocr).to_sym
+    @ai_state = ExternalServices.state(:ai).to_sym
+    @settings_index_presenter = Settings::IndexPresenter.new(user: current_user, view_context: view_context)
+  end
 
   def settings_params
     params.require(:user).permit(

@@ -611,6 +611,32 @@ RSpec.describe Receipt, type: :model do
   end
 
   describe 'image validation' do
+    it 'storage実体が欠損した既存画像は無関係な属性更新で再検証しない' do
+      receipt = create(:receipt)
+      blob = ActiveStorage::Blob.create!(
+        key: SecureRandom.uuid,
+        filename: 'missing-receipt.jpg',
+        content_type: 'image/jpeg',
+        metadata: {},
+        service_name: ActiveStorage::Blob.service.name,
+        byte_size: 1.kilobyte,
+        checksum: SecureRandom.base64(16)
+      )
+      ActiveStorage::Attachment.create!(name: 'image', record: receipt, blob: blob)
+      receipt.reload
+
+      expect(Storage).not_to receive(:extract_image_dimensions)
+
+      receipt.memo = '画像と無関係な更新'
+
+      aggregate_failures do
+        expect(receipt).to be_valid
+        expect(receipt.save).to be(true)
+        expect(receipt.reload.memo).to eq('画像と無関係な更新')
+        expect(receipt.image).to be_attached
+      end
+    end
+
     it 'WebP画像を対応外形式として弾く' do
       receipt = build(:receipt)
       receipt.image.attach(

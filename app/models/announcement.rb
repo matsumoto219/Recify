@@ -57,9 +57,9 @@ class Announcement < ApplicationRecord
             }
   validates :pinned, inclusion: { in: [ true, false ] }
   validate :ends_at_after_starts_at
-  validate :validate_image_content_type
-  validate :validate_image_file_size
-  validate :validate_image_dimensions
+  validate :validate_image_content_type, if: :image_attachment_changed?
+  validate :validate_image_file_size, if: :image_attachment_changed?
+  validate :validate_image_dimensions, if: :image_attachment_changed?
 
   scope :draft, -> { where(status: "draft") }
   scope :published, -> { where(status: "published") }
@@ -153,6 +153,10 @@ class Announcement < ApplicationRecord
     return if ALLOWED_IMAGE_CONTENT_TYPES.include?(image.blob.content_type)
 
     errors.add(:image, :invalid_content_type)
+  end
+
+  def image_attachment_changed?
+    attachment_changes.key?("image")
   end
 
   def validate_image_file_size

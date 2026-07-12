@@ -10,6 +10,14 @@ export default class extends Controller {
     }
   }
 
+  restoreSegmentedControlSetting (event) {
+    const { name, previousValue } = event.detail
+
+    if (name === 'theme_preference') {
+      this.applyTheme(previousValue)
+    }
+  }
+
   applyTheme (value) {
     document.documentElement.dataset.theme = value
     window.dispatchEvent(new CustomEvent('recify:theme-change'))

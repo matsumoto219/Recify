@@ -14,6 +14,7 @@ export default class extends Controller {
 
   connect () {
     this.syncActiveIndex()
+    this.committedValue = this.checkedInput()?.value
   }
 
   update (event) {
@@ -23,11 +24,11 @@ export default class extends Controller {
     if (index < 0) return
 
     this.setActiveIndex(index)
-    this.submitIfRemote(selectedInput.value)
+    return this.submitIfRemote(selectedInput.value)
   }
 
   syncActiveIndex () {
-    const checkedInput = this.inputTargets.find((input) => input.checked)
+    const checkedInput = this.checkedInput()
     const index = this.inputTargets.indexOf(checkedInput)
 
     this.setActiveIndex(index >= 0 ? index : 0)
@@ -37,14 +38,21 @@ export default class extends Controller {
     this.element.style.setProperty('--segmented-active-index', index)
   }
 
-  submitIfRemote (value) {
-    if (!this.remoteValue) return
-    if (!this.hasUrlValue || !this.hasNameValue) return
-
-    this.submit(value)
+  checkedInput () {
+    return this.inputTargets.find((input) => input.checked)
   }
 
-  async submit (value) {
+  submitIfRemote (value) {
+    if (!this.remoteValue) {
+      this.committedValue = value
+      return
+    }
+    if (!this.hasUrlValue || !this.hasNameValue) return
+
+    return this.submit(value, this.committedValue)
+  }
+
+  async submit (value, previousValue) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
 
     try {
@@ -62,25 +70,50 @@ export default class extends Controller {
         })
       })
 
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`)
-      }
-
       const responseBody = await response.text()
 
       if (responseBody.trim() !== '' && window.Turbo) {
         window.Turbo.renderStreamMessage(responseBody)
       }
 
+      if (!response.ok) {
+        this.restoreSelection(previousValue)
+        this.dispatchFailure(value, previousValue, response.status)
+        return
+      }
+
+      this.committedValue = value
+
       this.dispatch('success', {
         detail: {
           name: this.nameValue,
-          value
+          value,
+          previousValue
         },
         bubbles: true
       })
-    } catch (error) {
-      console.error('[SegmentedControl] Failed to update setting:', error)
+    } catch (_error) {
+      this.restoreSelection(previousValue)
+      this.dispatchFailure(value, previousValue, null)
     }
+  }
+
+  restoreSelection (value) {
+    this.inputTargets.forEach((input) => {
+      input.checked = input.value === value
+    })
+    this.syncActiveIndex()
+  }
+
+  dispatchFailure (value, previousValue, status) {
+    this.dispatch('failure', {
+      detail: {
+        name: this.nameValue,
+        value,
+        previousValue,
+        status
+      },
+      bubbles: true
+    })
   }
 }

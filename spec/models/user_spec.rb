@@ -361,6 +361,32 @@ RSpec.describe User, type: :model do
   end
 
   describe 'avatar validation' do
+    it 'storage実体が欠損した既存avatarは無関係な属性更新で再検証しない' do
+      user = create(:user)
+      blob = ActiveStorage::Blob.create!(
+        key: SecureRandom.uuid,
+        filename: 'missing-avatar.jpg',
+        content_type: 'image/jpeg',
+        metadata: {},
+        service_name: ActiveStorage::Blob.service.name,
+        byte_size: 1.kilobyte,
+        checksum: SecureRandom.base64(16)
+      )
+      ActiveStorage::Attachment.create!(name: 'avatar', record: user, blob: blob)
+      user.reload
+
+      expect(Storage).not_to receive(:extract_image_dimensions)
+
+      user.name = 'Updated Name'
+
+      aggregate_failures do
+        expect(user).to be_valid
+        expect(user.save).to be(true)
+        expect(user.reload.name).to eq('Updated Name')
+        expect(user.avatar).to be_attached
+      end
+    end
+
     it 'valid image content is accepted' do
       user = build(:user)
       user.avatar.attach(
