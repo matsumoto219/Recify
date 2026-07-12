@@ -915,13 +915,13 @@ class Receipt < ApplicationRecord
   end
 
   def broadcast_summary_cards_update
-    summary = self.class.summary_for(user)
+    summary = Receipts::SummaryQuery.call(user: user)
 
     broadcast_replace_later_to(
       [ user, :receipts ],
       target: "receipts_summary",
       partial: "shared/receipts/summary_cards",
-      locals: summary.merge(animate_on_connect: true)
+      locals: summary.to_h.merge(animate_on_connect: true)
     )
   ensure
     @summary_broadcast_needed = false

@@ -1464,17 +1464,17 @@ class ReceiptsController < ApplicationController
   end
 
   def assign_receipts_index_summary(receipts_scope)
-    summary = Receipt.summary_for(current_user, scope: receipts_scope)
+    summary = Receipts::SummaryQuery.call(user: current_user, scope: receipts_scope)
 
-    @receipts_count = summary[:receipts_count]
-    @current_month_total = summary[:current_month_total]
-    @overall_total = summary[:overall_total]
-    @processing_count = summary[:processing_count]
-    @review_needed_count = summary[:review_needed_count]
-    @failed_count = summary[:failed_count]
-    @monthly_change_label = summary[:monthly_change_label]
-    @monthly_change_icon = summary[:monthly_change_icon]
-    @monthly_change_icon_class = summary[:monthly_change_icon_class]
+    @receipts_count = summary.receipts_count
+    @current_month_total = summary.current_month_total
+    @overall_total = summary.overall_total
+    @processing_count = summary.processing_count
+    @review_needed_count = summary.review_needed_count
+    @failed_count = summary.failed_count
+    @monthly_change_label = summary.monthly_change_label
+    @monthly_change_icon = summary.monthly_change_icon
+    @monthly_change_icon_class = summary.monthly_change_icon_class
   end
 
   def suspicious_search_query?(query)
