@@ -350,8 +350,9 @@
     transparent 100%
   );
   background-position: 100% 0;
+  background-repeat: no-repeat;
   background-size: 220% 100%;
-  animation: receipt-processing-interval-flow 1.8s linear infinite;
+  animation: receipt-processing-interval-flow 2s linear 0s infinite normal;
 }
 
 .receipt-processing-step-dot {
@@ -468,22 +469,50 @@
 }
 
 @keyframes receipt-processing-interval-flow {
-  from {
-    background-position: 100% 0;
+  0%,
+  5% {
+    background-position: 115% 0;
+    opacity: 0;
   }
 
-  to {
-    background-position: -120% 0;
+  10% {
+    background-position: 100% 0;
+    opacity: 1;
+  }
+
+  72% {
+    background-position: -15% 0;
+    opacity: 1;
+  }
+
+  73%,
+  100% {
+    background-position: -15% 0;
+    opacity: 0;
   }
 }
 
 @keyframes receipt-processing-interval-flow-vertical {
-  from {
-    background-position: 0 100%;
+  0%,
+  5% {
+    background-position: 0 115%;
+    opacity: 0;
   }
 
-  to {
-    background-position: 0 -120%;
+  10% {
+    background-position: 0 100%;
+    opacity: 1;
+  }
+
+  72% {
+    background-position: 0 -15%;
+    opacity: 1;
+  }
+
+  73%,
+  100% {
+    background-position: 0 -15%;
+    opacity: 0;
   }
 }
 

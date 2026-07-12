@@ -105,14 +105,20 @@ RSpec.describe "レシート処理進捗の実Chrome表示", type: :system, mobi
         const activeBase = window.getComputedStyle(active, '::after')
         const activeGlint = window.getComputedStyle(active, '::before')
         const activeNodeStyle = window.getComputedStyle(activeNode)
-
         return {
           completedBase: completed ? window.getComputedStyle(completed, '::after').backgroundColor : null,
           activeBase: activeBase.backgroundColor,
           pendingBase: pending ? window.getComputedStyle(pending, '::after').backgroundColor : null,
           activeAnimation: activeGlint.animationName,
           activeAnimationDuration: activeGlint.animationDuration,
+          activeAnimationDelay: activeGlint.animationDelay,
+          activeAnimationDirection: activeGlint.animationDirection,
+          activeAnimationFillMode: activeGlint.animationFillMode,
+          activeAnimationIterationCount: activeGlint.animationIterationCount,
+          activeAnimationPlayState: activeGlint.animationPlayState,
+          activeAnimationCount: activeGlint.animationName.split(',').filter(Boolean).length,
           activeGlintImage: activeGlint.backgroundImage,
+          activeGlintRepeat: activeGlint.backgroundRepeat,
           activeGlintWidth: activeGlint.width,
           activeGlintHeight: activeGlint.height,
           activeNodeBackground: activeNodeStyle.backgroundColor,
@@ -219,8 +225,15 @@ RSpec.describe "レシート処理進捗の実Chrome表示", type: :system, mobi
       expect(light_styles.fetch("activeBase")).to eq(light_styles.fetch("pendingBase"))
       expect(light_styles.fetch("completedBase")).not_to eq(light_styles.fetch("pendingBase"))
       expect(light_styles.fetch("activeAnimation")).to eq("receipt-processing-interval-flow")
-      expect(light_styles.fetch("activeAnimationDuration")).to eq("1.8s")
+      expect(light_styles.fetch("activeAnimationDuration")).to eq("2s")
+      expect(light_styles.fetch("activeAnimationDelay")).to eq("0s")
+      expect(light_styles.fetch("activeAnimationDirection")).to eq("normal")
+      expect(light_styles.fetch("activeAnimationFillMode")).to eq("none")
+      expect(light_styles.fetch("activeAnimationIterationCount")).to eq("infinite")
+      expect(light_styles.fetch("activeAnimationPlayState")).to eq("running")
+      expect(light_styles.fetch("activeAnimationCount")).to eq(1)
       expect(light_styles.fetch("activeGlintImage")).to include("linear-gradient")
+      expect(light_styles.fetch("activeGlintRepeat")).to eq("no-repeat")
       expect(light_styles.fetch("activeNodeBackground")).not_to eq(light_styles.fetch("completedNodeBackground"))
       expect(light_styles.fetch("activeNodeRing")).not_to eq("none")
       expect(light_styles.fetch("nodeAnimation")).to eq("receipt-processing-step-pulse")
@@ -236,6 +249,8 @@ RSpec.describe "レシート処理進捗の実Chrome表示", type: :system, mobi
       expect(dark_styles.fetch("activeBase")).to eq(dark_styles.fetch("pendingBase"))
       expect(dark_styles.fetch("completedBase")).not_to eq(dark_styles.fetch("pendingBase"))
       expect(dark_styles.fetch("activeAnimation")).to eq("receipt-processing-interval-flow")
+      expect(dark_styles.fetch("activeAnimationCount")).to eq(1)
+      expect(dark_styles.fetch("activeGlintRepeat")).to eq("no-repeat")
       expect(dark_styles.fetch("activeNodeBackground")).not_to eq(dark_styles.fetch("completedNodeBackground"))
       expect(dark_styles.fetch("activeNodeRing")).not_to eq("none")
       expect(dark_styles.fetch("panelWithinViewport")).to be(true)
@@ -288,6 +303,8 @@ RSpec.describe "レシート処理進捗の実Chrome表示", type: :system, mobi
     vertical_styles = progress_style_snapshot(open_progress(fixtures.fetch(:organizing).first))
     aggregate_failures do
       expect(vertical_styles.fetch("activeAnimation")).to eq("receipt-processing-interval-flow-vertical")
+      expect(vertical_styles.fetch("activeAnimationCount")).to eq(1)
+      expect(vertical_styles.fetch("activeGlintRepeat")).to eq("no-repeat")
       expect(vertical_styles.fetch("activeGlintWidth")).to eq("2px")
       expect(vertical_styles.fetch("activeGlintHeight")).not_to eq("2px")
       expect(page.evaluate_script("document.documentElement.scrollWidth <= window.innerWidth")).to be(true)
