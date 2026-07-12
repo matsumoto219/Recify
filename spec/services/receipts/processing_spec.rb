@@ -34,24 +34,41 @@ RSpec.describe Receipts::Processing do
   end
 
   describe ".admin_retry_eligibility" do
-    it "SystemOperationsのread-only eligibility入口へ委譲する" do
-      allow(SystemOperations).to receive(:receipt_analysis_retry_eligibility).and_return(:eligibility)
+    it "private admin retry policyへ委譲する" do
+      allow(Receipts::Processing::AdminRetryPolicy).to receive(:eligibility).and_return(:eligibility)
 
       result = described_class.admin_retry_eligibility(receipt: build_stubbed(:receipt), parent_run: nil)
 
       aggregate_failures do
         expect(result).to eq(:eligibility)
-        expect(SystemOperations).to have_received(:receipt_analysis_retry_eligibility)
+        expect(Receipts::Processing::AdminRetryPolicy).to have_received(:eligibility)
           .with(receipt: kind_of(Receipt), parent_run: nil)
       end
     end
   end
 
   describe ".admin_retry_types" do
-    it "SystemOperationsの既存retry type一覧を公開する" do
-      allow(SystemOperations).to receive(:receipt_analysis_retry_types).and_return(%w[full_reanalyze])
+    it "private admin retry policyのtype一覧を公開する" do
+      expect(described_class.admin_retry_types).to eq(
+        %w[full_reanalyze ocr_retry ai_retry finalize_retry]
+      )
+    end
+  end
 
-      expect(described_class.admin_retry_types).to eq(%w[full_reanalyze])
+  describe ".admin_retry_decision" do
+    it "private admin retry policyへ委譲する" do
+      allow(Receipts::Processing::AdminRetryPolicy).to receive(:decision).and_return(:decision)
+
+      result = described_class.admin_retry_decision(receipt: build_stubbed(:receipt), parent_run: nil, retry_type: "full_reanalyze")
+
+      aggregate_failures do
+        expect(result).to eq(:decision)
+        expect(Receipts::Processing::AdminRetryPolicy).to have_received(:decision).with(
+          receipt: kind_of(Receipt),
+          parent_run: nil,
+          retry_type: "full_reanalyze"
+        )
+      end
     end
   end
 

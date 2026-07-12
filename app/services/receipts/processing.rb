@@ -39,11 +39,15 @@ module Receipts
 
     class << self
       def admin_retry_eligibility(...)
-        SystemOperations.receipt_analysis_retry_eligibility(...)
+        AdminRetryPolicy.eligibility(...)
       end
 
       def admin_retry_types
-        SystemOperations.receipt_analysis_retry_types
+        AdminRetryPolicy::RETRY_TYPES
+      end
+
+      def admin_retry_decision(...)
+        AdminRetryPolicy.decision(...)
       end
 
       def finalize_decision_from_snapshot(snapshot)

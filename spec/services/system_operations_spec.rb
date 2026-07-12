@@ -28,28 +28,6 @@ RSpec.describe SystemOperations do
     end
   end
 
-  describe '.receipt_analysis_retry_eligibility' do
-    it 'private retry executorのread-only eligibilityへ委譲する' do
-      allow(SystemOperations::ReceiptAnalysisRetryExecutor).to receive(:eligibility).and_return(:eligibility)
-
-      result = described_class.receipt_analysis_retry_eligibility(receipt: build_stubbed(:receipt), parent_run: nil)
-
-      aggregate_failures do
-        expect(result).to eq(:eligibility)
-        expect(SystemOperations::ReceiptAnalysisRetryExecutor).to have_received(:eligibility)
-          .with(receipt: kind_of(Receipt), parent_run: nil)
-      end
-    end
-  end
-
-  describe '.receipt_analysis_retry_types' do
-    it 'private retry executorのretry type一覧を公開する' do
-      expect(described_class.receipt_analysis_retry_types).to eq(
-        %w[full_reanalyze ocr_retry ai_retry finalize_retry]
-      )
-    end
-  end
-
   describe '.execute_receipt_analysis_cleanup' do
     it 'ReceiptAnalysisCleanupExecutorへ委譲する親入口である' do
       allow(SystemOperations::ReceiptAnalysisCleanupExecutor).to receive(:call).and_return(SystemOperations::Result.new(success: true))

@@ -1138,7 +1138,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
     end
   end
 
-  describe '.eligibility' do
+  describe 'Processing admin retry eligibility' do
     it 'enqueueもDB更新もせず、retry_optionsを返す' do
       parent_run = create(
         :receipt_analysis_run,
@@ -1150,7 +1150,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
       )
 
       expect do
-        result = described_class.eligibility(receipt: receipt, parent_run: parent_run)
+        result = Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: parent_run)
 
         aggregate_failures do
           expect(result.retry_options).to eq(
@@ -1171,7 +1171,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
     it 'active runがある場合は全retry不可にする' do
       create(:receipt_analysis_run, :running, receipt: receipt)
 
-      options = described_class.eligibility(receipt: receipt, parent_run: nil).retry_options
+      options = Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: nil).retry_options
 
       aggregate_failures do
         expect(options.map { |option| option[:possible] }).to all(be(false))
@@ -1186,7 +1186,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
         receipt: create(:receipt, :completed, :with_image)
       )
 
-      options = described_class.eligibility(receipt: receipt, parent_run: foreign_parent_run).retry_options
+      options = Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: foreign_parent_run).retry_options
 
       aggregate_failures do
         expect(options.map { |option| option[:possible] }).to all(be(false))
@@ -1199,7 +1199,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
       create(:receipt_analysis_run, :running, receipt: receipt)
 
       queries = count_sql_queries do
-        described_class.eligibility(receipt: receipt, parent_run: nil)
+        Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: nil)
       end
       active_run_queries = queries.select do |sql|
         sql.include?('"receipt_analysis_runs"') &&
@@ -1214,7 +1214,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
     it '画像がない場合はfull_reanalyze / ocr_retryを不可にする' do
       receipt_without_image = create(:receipt, :completed)
 
-      options = options_by_type(described_class.eligibility(receipt: receipt_without_image, parent_run: nil))
+      options = options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt_without_image, parent_run: nil))
 
       aggregate_failures do
         expect(options['full_reanalyze']).to include(possible: false, disabled_reason: 'image_missing')
@@ -1231,7 +1231,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
         image_purged_reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE
       )
 
-      options = options_by_type(described_class.eligibility(receipt: purged_receipt, parent_run: nil))
+      options = options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: purged_receipt, parent_run: nil))
 
       aggregate_failures do
         expect(options['full_reanalyze']).to include(possible: false, disabled_reason: 'image_missing')
@@ -1243,7 +1243,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
       create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
       parent_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
 
-      options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: parent_run))
+      options = options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: parent_run))
 
       aggregate_failures do
         expect(options['full_reanalyze']).to include(possible: false, disabled_reason: 'ocr_unavailable')
@@ -1256,7 +1256,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
       mark_service_down(:ocr, error_code: 'external_service_quota_exceeded')
       parent_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
 
-      options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: parent_run))
+      options = options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: parent_run))
 
       aggregate_failures do
         expect(options['full_reanalyze']).to include(possible: false, disabled_reason: 'ocr_unavailable')
@@ -1269,7 +1269,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
       create(:system_setting, key: 'operations.ai_enabled', value: SystemSettings.stored_value(false))
       parent_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
 
-      options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: parent_run))
+      options = options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: parent_run))
 
       aggregate_failures do
         expect(options['full_reanalyze']).to include(possible: true, disabled_reason: nil)
@@ -1282,7 +1282,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
       mark_service_down(:ai, error_code: 'ai_rate_limited')
       parent_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
 
-      options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: parent_run))
+      options = options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: parent_run))
 
       aggregate_failures do
         expect(options['full_reanalyze']).to include(possible: true, disabled_reason: nil)
@@ -1295,8 +1295,8 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
       missing_snapshot_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: {})
       ready_run = create(:receipt_analysis_run, :succeeded, receipt: receipt, ocr_result_snapshot: parent_ocr_snapshot)
 
-      missing_options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: missing_snapshot_run))
-      ready_options = options_by_type(described_class.eligibility(receipt: receipt, parent_run: ready_run))
+      missing_options = options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: missing_snapshot_run))
+      ready_options = options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: ready_run))
 
       aggregate_failures do
         expect(missing_options['ai_retry']).to include(possible: false, disabled_reason: 'ocr_snapshot_missing')
@@ -1355,12 +1355,12 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
       )
 
       aggregate_failures do
-        expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: no_ocr_run))['finalize_retry']).to include(possible: false, disabled_reason: 'ocr_snapshot_missing')
-        expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: no_ai_run))['finalize_retry']).to include(possible: false, disabled_reason: 'ai_snapshot_missing')
-        expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: no_decision_run))['finalize_retry']).to include(possible: false, disabled_reason: 'finalize_decision_missing')
-        expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: ready_run))['finalize_retry']).to include(possible: true, disabled_reason: nil)
-        expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: ocr_only_no_ai_run))['finalize_retry']).to include(possible: true, disabled_reason: nil)
-        expect(options_by_type(described_class.eligibility(receipt: receipt, parent_run: fail_receipt_no_snapshots_run))['finalize_retry']).to include(possible: true, disabled_reason: nil)
+        expect(options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: no_ocr_run))['finalize_retry']).to include(possible: false, disabled_reason: 'ocr_snapshot_missing')
+        expect(options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: no_ai_run))['finalize_retry']).to include(possible: false, disabled_reason: 'ai_snapshot_missing')
+        expect(options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: no_decision_run))['finalize_retry']).to include(possible: false, disabled_reason: 'finalize_decision_missing')
+        expect(options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: ready_run))['finalize_retry']).to include(possible: true, disabled_reason: nil)
+        expect(options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: ocr_only_no_ai_run))['finalize_retry']).to include(possible: true, disabled_reason: nil)
+        expect(options_by_type(Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: fail_receipt_no_snapshots_run))['finalize_retry']).to include(possible: true, disabled_reason: nil)
       end
     end
   end

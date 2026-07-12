@@ -2,13 +2,7 @@ module SystemOperations
   class ReceiptAnalysisRetryExecutor
     SOURCE = "admin_retry".freeze
     CONFIRMATION_TEXT = "RETRY ANALYSIS".freeze
-    RETRY_TYPES = %w[
-      full_reanalyze
-      ocr_retry
-      ai_retry
-      finalize_retry
-    ].freeze
-    ACTIVE_RUN_UNSET = Object.new.freeze
+    RETRY_TYPES = Receipts::Processing.admin_retry_types
 
     Result = Struct.new(:run, :enqueued_job, :retry_type, :error_code, :error_message, keyword_init: true) do
       def success?
@@ -19,8 +13,6 @@ module SystemOperations
         !success?
       end
     end
-    Eligibility = Struct.new(:retry_options, keyword_init: true)
-
     class << self
       def call(receipt:, parent_run: nil, actor:, retry_type:, reason: nil, request: nil, reauthentication: nil, confirmation: nil)
         new(
@@ -34,29 +26,9 @@ module SystemOperations
           confirmation: confirmation
         ).call
       end
-
-      def eligibility(receipt:, parent_run:)
-        active_run = receipt&.receipt_analysis_runs&.active&.order(created_at: :desc)&.first
-
-        Eligibility.new(
-          retry_options: RETRY_TYPES.map do |type|
-            new(
-              receipt: receipt,
-              parent_run: parent_run,
-              actor: nil,
-              retry_type: type,
-              reason: nil,
-              request: nil,
-              reauthentication: nil,
-              confirmation: nil,
-              active_run: active_run
-            ).retry_option
-          end
-        )
-      end
     end
 
-    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:, request:, reauthentication:, confirmation:, active_run: ACTIVE_RUN_UNSET)
+    def initialize(receipt:, parent_run:, actor:, retry_type:, reason:, request:, reauthentication:, confirmation:)
       @receipt = receipt
       @parent_run = parent_run
       @actor = actor
@@ -65,7 +37,6 @@ module SystemOperations
       @request = request
       @reauthentication = reauthentication.to_h.symbolize_keys
       @confirmation = confirmation.to_s.strip
-      @active_run = active_run unless active_run.equal?(ACTIVE_RUN_UNSET)
     end
 
     def call
@@ -101,8 +72,9 @@ module SystemOperations
         return result
       end
 
-      if (disabled_reason = disabled_reason_for(retry_type))
-        result = failure(disabled_reason, disabled_message(disabled_reason), run: disabled_run_for(disabled_reason))
+      if (disabled_reason = admin_retry_decision.disabled_reason)
+        disabled_run = admin_retry_decision.active_run if disabled_reason == "active_run_exists"
+        result = failure(disabled_reason, disabled_message(disabled_reason), run: disabled_run)
         record_audit!(result)
         return result
       end
@@ -165,16 +137,6 @@ module SystemOperations
       result
     end
 
-    def retry_option
-      disabled_reason = disabled_reason_for(retry_type)
-
-      {
-        type: retry_type,
-        possible: disabled_reason.blank?,
-        disabled_reason: disabled_reason
-      }
-    end
-
     private
 
     attr_reader :receipt, :parent_run, :actor, :retry_type, :reason, :request, :reauthentication, :confirmation
@@ -191,50 +153,12 @@ module SystemOperations
       confirmation == CONFIRMATION_TEXT
     end
 
-    def parent_finalize_decision
-      @parent_finalize_decision ||= Receipts::Processing.finalize_decision_from_snapshot(
-        parent_run&.metadata.to_h["finalize_decision"]
+    def admin_retry_decision
+      @admin_retry_decision ||= Receipts::Processing.admin_retry_decision(
+        receipt: receipt,
+        parent_run: parent_run,
+        retry_type: retry_type
       )
-    end
-
-    def disabled_reason_for(type)
-      if parent_run.present? && parent_run.receipt_id != receipt&.id
-        return "parent_run_receipt_mismatch"
-      end
-      return "active_run_exists" if active_run_exists?
-
-      case type
-      when "full_reanalyze", "ocr_retry"
-        return "image_missing" unless receipt&.image&.attached?
-        return "ocr_unavailable" if ExternalServices.down?(:ocr)
-      when "ai_retry"
-        return "parent_run_missing" if parent_run.blank?
-        return "ocr_snapshot_missing" if parent_run.ocr_result_snapshot.blank?
-        return "ai_unavailable" if ExternalServices.down?(:ai)
-      when "finalize_retry"
-        return "parent_run_missing" if parent_run.blank?
-        return "finalize_decision_missing" if parent_finalize_decision.blank?
-        requirements = finalize_retry_snapshot_requirements
-        return "ocr_snapshot_missing" if requirements[:ocr] && parent_run.ocr_result_snapshot.blank?
-        return "ai_snapshot_missing" if requirements[:ai] && parent_run.ai_normalized_result_snapshot.blank?
-      end
-
-      nil
-    end
-
-    def active_run_exists?
-      active_run.present?
-    end
-
-    def active_run
-      return @active_run if instance_variable_defined?(:@active_run)
-      return unless receipt
-
-      @active_run = receipt.receipt_analysis_runs.active.order(created_at: :desc).first
-    end
-
-    def disabled_run_for(disabled_reason)
-      active_run if disabled_reason.to_s == "active_run_exists"
     end
 
     def disabled_message(disabled_reason)
@@ -267,7 +191,7 @@ module SystemOperations
       when "ai_retry"
         Receipts::Processing.copy_retry_snapshots(run, parent_run: parent_run, include_ocr: true)
       when "finalize_retry"
-        requirements = finalize_retry_snapshot_requirements
+        requirements = admin_retry_decision.snapshot_requirements
         Receipts::Processing.copy_retry_snapshots(
           run,
           parent_run: parent_run,
@@ -275,19 +199,6 @@ module SystemOperations
           include_ai: requirements[:ai],
           include_finalize_decision: true
         )
-      end
-    end
-
-    def finalize_retry_snapshot_requirements
-      case parent_finalize_decision&.finalize_strategy.to_s
-      when "ai_success"
-        { ocr: true, ai: true }
-      when "ai_fallback", "ocr_only"
-        { ocr: true, ai: false }
-      when "fail_receipt"
-        { ocr: false, ai: false }
-      else
-        { ocr: false, ai: false }
       end
     end
 
@@ -402,7 +313,7 @@ module SystemOperations
     def build_audit_before_state
       {
         receipt_status: receipt&.status,
-        active_run_key: active_run&.run_key,
+        active_run_key: admin_retry_decision.active_run&.run_key,
         parent_run_status: parent_run&.status,
         parent_run_stage: parent_run&.stage
       }.compact

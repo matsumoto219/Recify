@@ -35,14 +35,6 @@ module SystemOperations
       ReceiptAnalysisRetryExecutor.call(...)
     end
 
-    def receipt_analysis_retry_eligibility(...)
-      ReceiptAnalysisRetryExecutor.eligibility(...)
-    end
-
-    def receipt_analysis_retry_types
-      ReceiptAnalysisRetryExecutor::RETRY_TYPES
-    end
-
     def receipt_analysis_retry_confirmation_text
       ReceiptAnalysisRetryExecutor::CONFIRMATION_TEXT
     end
