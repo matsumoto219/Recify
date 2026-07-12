@@ -12,6 +12,8 @@ RSpec.describe Admin::Operations::SecurityEventStatusUpdater do
 
       aggregate_failures do
         expect(result).to be_updated
+        expect(result).to be_frozen
+        expect { result.updated = false }.to raise_error(NoMethodError)
         expect(event.reload.resolved_at).to be_present
         expect(event.ignored_at).to be_nil
         expect(audit_log).to have_attributes(

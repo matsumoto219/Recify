@@ -22,6 +22,8 @@ RSpec.describe Admin::Operations::ContactRequestStatusUpdater do
 
         aggregate_failures do
           expect(@result).to be_success
+          expect(@result).to be_frozen
+          expect { @result.updated = false }.to raise_error(NoMethodError)
           expect(@result.contact_request).to eq(contact_request)
           expect(@result.error_code).to be_nil
           expect(contact_request.reload).to have_attributes(

@@ -1,6 +1,10 @@
 module Admin
   class Operations::SecurityEventStatusUpdater
-    Result = Struct.new(:security_event, :updated, :error_code, keyword_init: true) do
+    Result = Data.define(:security_event, :updated, :error_code) do
+      def initialize(security_event:, updated:, error_code: nil)
+        super(security_event:, updated:, error_code:)
+      end
+
       def updated?
         updated == true
       end

@@ -1,6 +1,10 @@
 module Admin
   class Operations::ContactRequestStatusUpdater
-    Result = Struct.new(:contact_request, :updated, :error_code, keyword_init: true) do
+    Result = Data.define(:contact_request, :updated, :error_code) do
+      def initialize(contact_request:, updated:, error_code: nil)
+        super(contact_request:, updated:, error_code:)
+      end
+
       def success?
         updated == true
       end
