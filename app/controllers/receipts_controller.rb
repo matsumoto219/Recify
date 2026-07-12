@@ -197,10 +197,23 @@ class ReceiptsController < ApplicationController
       purge_eligible: create_params["image"].present?
     )
 
-    @receipt.assign_attributes(create_params)
-    @receipt.status = create_params["review_reasons"].empty? ? "completed" : "review_needed"
+    items_missing = manual_receipt_items_missing?(create_params, context: :manual)
+    begin
+      result = Receipts::Editing.create_manual(
+        receipt: @receipt,
+        attributes: create_params,
+        user: current_user,
+        items_missing: items_missing
+      )
+    rescue Usage::LimitExceeded
+      render_manual_receipt_usage_limit_exceeded(
+        rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
 
-    if manual_receipt_items_missing?(create_params, context: :manual)
+    if result.items_missing?
       prepare_manual_receipt_items_missing_error!(create_params)
       build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
@@ -210,26 +223,7 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    saved = false
-
-    begin
-      ActiveRecord::Base.transaction do
-        if @receipt.valid?
-          consume_manual_receipt_limit!
-          saved = @receipt.save
-        end
-
-        raise ActiveRecord::Rollback unless saved
-      end
-    rescue Usage::LimitExceeded
-      render_manual_receipt_usage_limit_exceeded(
-        rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
-        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
-      )
-      return
-    end
-
-    if saved
+    if result.saved?
       redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.create"))
     else
       replace_manual_amount_errors!(create_params)
@@ -594,10 +588,6 @@ class ReceiptsController < ApplicationController
         max_dimension: Receipt.image_max_dimension
       )
     end
-  end
-
-  def consume_manual_receipt_limit!
-    Usage.consume_manual_receipt!(user: current_user)
   end
 
   def render_upload_usage_limit_exceeded

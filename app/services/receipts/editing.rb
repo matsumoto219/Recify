@@ -11,6 +11,10 @@ module Receipts
     end
 
     class << self
+      def create_manual(...)
+        ManualCreator.call(...)
+      end
+
       def build_input(...)
         InputBuilder.call(...)
       end

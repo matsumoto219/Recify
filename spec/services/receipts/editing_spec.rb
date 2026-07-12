@@ -1,6 +1,16 @@
 require "rails_helper"
 
 RSpec.describe Receipts::Editing do
+  describe ".create_manual" do
+    it "manual create workflowへ委譲する" do
+      arguments = { receipt: :receipt, attributes: :attributes, user: :user, items_missing: false }
+      allow(Receipts::Editing::ManualCreator).to receive(:call).and_return(:result)
+
+      expect(described_class.create_manual(**arguments)).to eq(:result)
+      expect(Receipts::Editing::ManualCreator).to have_received(:call).with(**arguments)
+    end
+  end
+
   describe ".build_input" do
     it "既存input builder入口へ委譲する" do
       allow(Receipts::Editing::InputBuilder).to receive(:call).and_return(:input)
