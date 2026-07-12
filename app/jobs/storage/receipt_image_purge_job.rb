@@ -9,14 +9,17 @@ module Storage
 
     def perform(dry_run: true, limit: DEFAULT_LIMIT, cutoff: Time.current)
       dry_run = normalize_boolean(dry_run)
-      result = Storage.purge_receipt_images(
-        dry_run: dry_run,
-        limit: limit,
-        cutoff: cutoff
-      )
+      result = nil
+      AuditLog.transaction do
+        result = Storage.purge_receipt_images(
+          dry_run: dry_run,
+          limit: limit,
+          cutoff: cutoff
+        )
+        record_audit!(result, dry_run: dry_run, limit: limit, cutoff: cutoff)
+      end
 
       log_completion(result)
-      record_audit!(result, dry_run: dry_run, limit: limit, cutoff: cutoff)
       result
     rescue StandardError => e
       record_failed_audit!(dry_run: dry_run, limit: limit, cutoff: cutoff, error: e)
@@ -35,9 +38,11 @@ module Storage
     end
 
     def record_audit!(result, dry_run:, limit:, cutoff:)
+      failed = result[:failed_count].to_i.positive?
       AuditLogs.record_system_action!(
         action: audit_action(dry_run),
-        outcome: "succeeded",
+        outcome: failed ? "failed" : "succeeded",
+        error_code: failed ? "partial_purge_failure" : nil,
         metadata: {
           dry_run: result.fetch(:dry_run, dry_run),
           cutoff: audit_time(result[:cutoff] || cutoff),

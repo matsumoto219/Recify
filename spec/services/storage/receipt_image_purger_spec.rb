@@ -1,6 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Storage::ReceiptImagePurger, type: :service do
+  include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
 
   around do |example|
@@ -46,7 +47,10 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
       receipt = purgeable_receipt
       blob = receipt.image.blob
 
-      result = described_class.call(dry_run: false)
+      result = nil
+      expect do
+        result = described_class.call(dry_run: false)
+      end.to have_enqueued_job(ActiveStorage::PurgeJob).with(blob)
 
       aggregate_failures do
         expect(result).to include(
@@ -57,7 +61,7 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
           failed_count: 0
         )
         expect(receipt.reload.image).not_to be_attached
-        expect(ActiveStorage::Blob.exists?(blob.id)).to eq(false)
+        expect(ActiveStorage::Blob.exists?(blob.id)).to eq(true)
         expect(receipt).to be_image_purged_by_system
         expect(receipt.image_purge_eligible_at).to be_nil
       end
@@ -122,7 +126,7 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
         'endpoint=https://storage.example.test/operation/123 ' \
         'provider_raw_response=raw-provider-receipt ' \
         'file=/Users/example/private/receipt.jpg user@example.com'
-      allow(Storage::AttachmentPurger).to receive(:call).and_raise(StandardError, sensitive_message)
+      allow_any_instance_of(ActiveStorage::Attachment).to receive(:destroy!).and_raise(StandardError, sensitive_message)
 
       result = described_class.call(dry_run: false)
       serialized_errors = result.fetch(:errors).to_json
@@ -139,6 +143,25 @@ RSpec.describe Storage::ReceiptImagePurger, type: :service do
           '/Users/example/private/receipt.jpg',
           'user@example.com'
         )
+      end
+    end
+
+    it 'purge marker保存失敗時はattachment/blob/fileを残して再試行可能にする' do
+      receipt = purgeable_receipt
+      attachment = receipt.image.attachment
+      blob = receipt.image.blob
+      allow_any_instance_of(Receipt).to receive(:mark_image_purged!)
+        .and_raise(ActiveRecord::StatementInvalid, 'local marker failure')
+
+      result = described_class.call(dry_run: false)
+
+      aggregate_failures do
+        expect(result).to include(purged_count: 0, failed_count: 1)
+        expect(ActiveStorage::Attachment).to exist(attachment.id)
+        expect(ActiveStorage::Blob).to exist(blob.id)
+        expect(blob.service).to exist(blob.key)
+        expect(receipt.reload.image).to be_attached
+        expect(receipt.image_purged_at).to be_nil
       end
     end
 

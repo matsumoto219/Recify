@@ -66,13 +66,24 @@ module Storage
       result[:skipped_count] = 0
 
       candidates.each do |receipt|
-        unless purgeable_now?(receipt)
+        purged = receipt.with_lock do
+          unless purgeable_now?(receipt)
+            next false
+          end
+
+          attachment = receipt.image.attachment
+          attachment.blob
+          attachment.record
+          attachment.destroy!
+          receipt.mark_image_purged!(reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE)
+          true
+        end
+
+        unless purged
           result[:skipped_count] += 1
           next
         end
 
-        Storage::AttachmentPurger.call(receipt.image)
-        receipt.mark_image_purged!(reason: Receipt::IMAGE_PURGED_REASON_SYSTEM_PURGE)
         result[:purged_count] += 1
       rescue StandardError => e
         result[:failed_count] += 1
