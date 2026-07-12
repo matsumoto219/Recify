@@ -7777,8 +7777,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(receipt.processing_error_code).to be_nil
         expect(receipt.processing_error_message).to be_nil
         expect(receipt.review_reasons).to be_empty
-        expect(Receipt.summary_for(user)[:review_needed_count]).to eq(0)
-        expect(Receipt.summary_for(user)[:failed_count]).to eq(0)
+        expect(Receipts::SummaryQuery.call(user: user).review_needed_count).to eq(0)
+        expect(Receipts::SummaryQuery.call(user: user).failed_count).to eq(0)
       end
     end
 

@@ -182,7 +182,7 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
-  describe '.summary_for' do
+  describe 'Receipts::SummaryQuery headline compatibility' do
     it 'user scopeを適用しstatus別件数を返す' do
       user = create(:user)
       other_user = create(:user, email: 'summary-other@example.com')
@@ -193,7 +193,7 @@ RSpec.describe Receipt, type: :model do
       create(:receipt, :failed, user: user)
       create(:receipt, :failed, user: other_user)
 
-      summary = described_class.summary_for(user)
+      summary = Receipts::SummaryQuery.call(user: user).to_h
 
       aggregate_failures do
         expect(summary[:receipts_count]).to eq(5)
@@ -211,7 +211,7 @@ RSpec.describe Receipt, type: :model do
       create(:receipt, :processing, :with_image, user:, total_amount: 3000)
       create(:receipt, :failed, user:, total_amount: 4000)
 
-      summary = described_class.summary_for(user)
+      summary = Receipts::SummaryQuery.call(user: user).to_h
 
       aggregate_failures do
         expect(summary[:current_month_total]).to eq(3000)
@@ -222,7 +222,7 @@ RSpec.describe Receipt, type: :model do
     it 'empty scope returns zero summary values' do
       user = create(:user)
 
-      summary = described_class.summary_for(user, scope: described_class.none)
+      summary = Receipts::SummaryQuery.call(user: user, scope: described_class.none).to_h
 
       aggregate_failures do
         expect(summary[:receipts_count]).to eq(0)
@@ -246,7 +246,7 @@ RSpec.describe Receipt, type: :model do
         create(:receipt, :failed, user:, total_amount: 9000, purchased_at: current_month)
         create(:receipt, :completed, user:, total_amount: 1500, purchased_at: previous_month)
 
-        summary = described_class.summary_for(user)
+        summary = Receipts::SummaryQuery.call(user: user).to_h
 
         aggregate_failures do
           expect(summary[:current_month_total]).to eq(3000)
@@ -265,7 +265,7 @@ RSpec.describe Receipt, type: :model do
 
       summary = nil
       queries = count_sql_queries do
-        summary = described_class.summary_for(user)
+        summary = Receipts::SummaryQuery.call(user: user).to_h
       end
       receipt_queries = queries.select { |sql| sql.include?('FROM "receipts"') }
 
@@ -285,7 +285,7 @@ RSpec.describe Receipt, type: :model do
       create(:receipt, :review_needed, user:, total_amount: 2000)
 
       queries = count_sql_queries do
-        2.times { described_class.summary_for(user) }
+        2.times { Receipts::SummaryQuery.call(user: user) }
       end
       receipt_queries = queries.select { |sql| sql.include?('FROM "receipts"') }
 
@@ -293,7 +293,7 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
-  describe '.category_summary_for' do
+  describe 'Receipts::SummaryQuery category compatibility' do
     def create_item(receipt, category:, line_total:, name: '商品')
       receipt.receipt_items.create!(
         raw_text: name,
@@ -319,7 +319,7 @@ RSpec.describe Receipt, type: :model do
       create_item(processing, category: 'food', line_total: 9_999)
       create_item(failed, category: 'drink', line_total: 9_999)
 
-      summary = described_class.category_summary_for(user)
+      summary = Receipts::SummaryQuery.categories(user: user)
 
       aggregate_failures do
         expect(summary).to include(
@@ -339,7 +339,7 @@ RSpec.describe Receipt, type: :model do
       create_item(receipt, category: 'food', line_total: 500)
       create_item(other_receipt, category: 'food', line_total: 10_000)
 
-      summary = described_class.category_summary_for(user)
+      summary = Receipts::SummaryQuery.categories(user: user)
 
       expect(summary).to contain_exactly(hash_including(category: 'food', total_amount: 500, item_count: 1))
     end
@@ -352,7 +352,7 @@ RSpec.describe Receipt, type: :model do
       create_item(receipt, category: '', line_total: 200)
       create_item(receipt, category: 'other', line_total: 300)
 
-      summary = described_class.category_summary_for(user)
+      summary = Receipts::SummaryQuery.categories(user: user)
 
       aggregate_failures do
         expect(summary).to include(hash_including(category: 'uncategorized', label: I18n.t('receipts.item_fields.uncategorized'), total_amount: 300, item_count: 2))
@@ -369,7 +369,7 @@ RSpec.describe Receipt, type: :model do
       create_item(grocery_receipt, category: 'food', line_total: 800, name: 'パン')
 
       scope = Receipts::SearchQuery.call(scope: user.receipts, query: 'コーヒー')
-      summary = described_class.category_summary_for(user, scope:)
+      summary = Receipts::SummaryQuery.categories(user: user, scope: scope)
 
       expect(summary).to contain_exactly(hash_including(category: 'drink', total_amount: 450, item_count: 1))
     end
@@ -1284,7 +1284,7 @@ RSpec.describe Receipt, type: :model do
 
     it 'summary broadcast localsにfailed_countを含める' do
       receipt = build_stubbed(:receipt, user: user)
-      summary = described_class.summary_for(user)
+      summary = Receipts::SummaryQuery.call(user: user).to_h
 
       expect(receipt).to receive(:broadcast_replace_later_to).with(
         [ user, :receipts ],
