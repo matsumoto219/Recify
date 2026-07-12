@@ -37,7 +37,7 @@ RSpec.describe "Service layer child implementation boundary" do
       facade: "app/services/audit_logs.rb",
       legacy_exceptions: [
         {
-          source_path: "app/services/admin/system_operations_dashboard.rb",
+          source_path: "app/queries/admin/system_operations_dashboard.rb",
           referenced_constant: "AuditLogs::RetentionPolicy",
           reason: "AuditLogs facadeにretention policy参照APIが未整備の既存参照",
           remove_in_loop: 22
@@ -120,7 +120,7 @@ RSpec.describe "Service layer child implementation boundary" do
           remove_in_loop: 22
         },
         {
-          source_path: "app/services/admin/dashboard.rb",
+          source_path: "app/queries/admin/dashboard.rb",
           referenced_constant: "LegalDocuments::CurrentStatus",
           reason: "LegalDocuments親facade未整備のcross-namespace既存参照",
           remove_in_loop: 22
@@ -195,19 +195,19 @@ RSpec.describe "Service layer child implementation boundary" do
           remove_in_loop: 22
         },
         {
-          source_path: "app/services/admin/ip_actions_query.rb",
+          source_path: "app/queries/admin/ip_actions_query.rb",
           referenced_constant: "Security::IpAddress",
           reason: "Security facadeにIP正規化APIが未整備のcross-namespace既存参照",
           remove_in_loop: 22
         },
         {
-          source_path: "app/services/admin/ip_blocks_query.rb",
+          source_path: "app/queries/admin/ip_blocks_query.rb",
           referenced_constant: "Security::IpAddress",
           reason: "Security facadeにIP正規化APIが未整備のcross-namespace既存参照",
           remove_in_loop: 22
         },
         {
-          source_path: "app/services/admin/ip_blocks_query.rb",
+          source_path: "app/queries/admin/ip_blocks_query.rb",
           referenced_constant: "Security::RackAttackBanRegistry",
           reason: "Security facadeにban診断APIが未整備のcross-namespace既存参照",
           remove_in_loop: 22
