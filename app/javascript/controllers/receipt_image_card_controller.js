@@ -1,4 +1,11 @@
 import { Controller } from '@hotwired/stimulus'
+import {
+  REVIEW_REASON_TARGET_LINK_SELECTOR,
+  reviewTargetHash,
+  reviewTargetIdFromHash,
+  reviewTargetUrl,
+  samePageReviewTargetUrl
+} from 'receipts/review_targets'
 
 const ALLOWED_RECEIPT_IMAGE_TYPES = [
   'image/jpeg',
@@ -21,7 +28,6 @@ const ALLOWED_RECEIPT_IMAGE_EXTENSIONS = [
 ]
 
 const DESKTOP_PREVIEW_MEDIA_QUERY = '(min-width: 1024px)'
-const REVIEW_REASON_TARGET_LINK_SELECTOR = 'a[data-review-reason-target-link]'
 
 function isAllowedReceiptImageFile (file) {
   if (!file) return false
@@ -336,28 +342,15 @@ export default class extends Controller {
   }
 
   reviewTargetUrl (href) {
-    try {
-      return new URL(href || '', window.location.href)
-    } catch {
-      return null
-    }
+    return reviewTargetUrl(href, window.location.href)
   }
 
   samePageReviewTargetUrl (url) {
-    return url.origin === window.location.origin &&
-      url.pathname === window.location.pathname &&
-      url.search === window.location.search
+    return samePageReviewTargetUrl(url, window.location)
   }
 
   reviewTargetIdFromHash (hash) {
-    const targetId = String(hash || '').replace(/^#/, '')
-    if (targetId === '') return null
-
-    try {
-      return decodeURIComponent(targetId)
-    } catch {
-      return targetId
-    }
+    return reviewTargetIdFromHash(hash)
   }
 
   imagePreviewReviewTargetId (targetId) {
@@ -392,7 +385,7 @@ export default class extends Controller {
   }
 
   reviewTargetHash (targetId) {
-    return `#${encodeURIComponent(targetId)}`
+    return reviewTargetHash(targetId)
   }
 
   replaceReviewTargetHash (targetId) {

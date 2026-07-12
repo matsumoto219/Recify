@@ -22,11 +22,17 @@ import {
   normalizeRoundingMode,
   roundLineAmount
 } from 'receipts/amount_preview'
+import {
+  REVIEW_REASON_TARGET_LINK_SELECTOR,
+  reviewTargetHash,
+  reviewTargetIdFromHash,
+  reviewTargetUrl,
+  samePageReviewTargetUrl
+} from 'receipts/review_targets'
 
 const DEFAULT_AMOUNT_MAX = 999999999
 const LINE_TOTAL_TOOLTIP_DELAY_MS = 500
 const CONTINUOUS_AMOUNT_UPDATE_THRESHOLD_MS = 150
-const REVIEW_REASON_TARGET_LINK_SELECTOR = 'a[data-review-reason-target-link]'
 
 export default class extends Controller {
   static targets = [
@@ -372,17 +378,11 @@ export default class extends Controller {
   }
 
   reviewTargetUrl (href) {
-    try {
-      return new URL(href || '', window.location.href)
-    } catch {
-      return null
-    }
+    return reviewTargetUrl(href, window.location.href)
   }
 
   samePageReviewTargetUrl (url) {
-    return url.origin === window.location.origin &&
-      url.pathname === window.location.pathname &&
-      url.search === window.location.search
+    return samePageReviewTargetUrl(url, window.location)
   }
 
   currentReviewTargetId () {
@@ -390,14 +390,7 @@ export default class extends Controller {
   }
 
   reviewTargetIdFromHash (hash) {
-    const targetId = String(hash || '').replace(/^#/, '')
-    if (targetId === '') return null
-
-    try {
-      return decodeURIComponent(targetId)
-    } catch {
-      return targetId
-    }
+    return reviewTargetIdFromHash(hash)
   }
 
   reviewItemTargetId (targetId) {
@@ -454,7 +447,7 @@ export default class extends Controller {
   pushReviewTargetHash (targetId) {
     if (!targetId || typeof window.history?.pushState !== 'function') return
 
-    const hash = `#${encodeURIComponent(targetId)}`
+    const hash = reviewTargetHash(targetId)
     if (window.location.hash === hash) return
 
     window.history.pushState(null, '', hash)
