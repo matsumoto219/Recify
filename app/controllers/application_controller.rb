@@ -123,7 +123,7 @@ class ApplicationController < ActionController::Base
       return
     end
 
-    requirement = LegalConsents::Requirement.new(user: current_user, locale: legal_consent_locale)
+    requirement = LegalConsents.requirement(user: current_user, locale: legal_consent_locale)
     return unless requirement.required?
 
     store_legal_consent_return_to

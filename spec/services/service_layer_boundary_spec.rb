@@ -46,38 +46,12 @@ RSpec.describe "Service layer child implementation boundary" do
     "legal_acceptances" => registry_entry(
       "legal_acceptances",
       "LegalAcceptances",
-      legacy_exceptions: [
-        {
-          source_path: "app/controllers/legal_consents_controller.rb",
-          referenced_constant: "LegalAcceptances::Recorder",
-          reason: "LegalAcceptances親facade未整備の既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/controllers/users/registrations_controller.rb",
-          referenced_constant: "LegalAcceptances::Recorder",
-          reason: "LegalAcceptances親facade未整備の既存参照",
-          remove_in_loop: 22
-        }
-      ]
+      facade: "app/services/legal_acceptances.rb"
     ),
     "legal_consents" => registry_entry(
       "legal_consents",
       "LegalConsents",
-      legacy_exceptions: [
-        {
-          source_path: "app/controllers/application_controller.rb",
-          referenced_constant: "LegalConsents::Requirement",
-          reason: "LegalConsents親facade未整備の既存参照",
-          remove_in_loop: 22
-        },
-        {
-          source_path: "app/controllers/legal_consents_controller.rb",
-          referenced_constant: "LegalConsents::Requirement",
-          reason: "LegalConsents親facade未整備の既存参照",
-          remove_in_loop: 22
-        }
-      ]
+      facade: "app/services/legal_consents.rb"
     ),
     "legal_documents" => registry_entry(
       "legal_documents",

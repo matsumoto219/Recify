@@ -31,7 +31,7 @@ class LegalConsentsController < ApplicationController
       return
     end
 
-    LegalAcceptances::Recorder.record_current_documents!(
+    LegalAcceptances.record_current_documents!(
       user: current_user,
       acceptance_context: "reconsent",
       request: request,
@@ -58,7 +58,7 @@ class LegalConsentsController < ApplicationController
   end
 
   def set_requirement
-    @requirement = LegalConsents::Requirement.new(user: current_user, locale: legal_consent_locale)
+    @requirement = LegalConsents.requirement(user: current_user, locale: legal_consent_locale)
   end
 
   def legal_agreement_accepted?

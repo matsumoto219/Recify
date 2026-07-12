@@ -357,7 +357,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
   end
 
   def record_current_legal_acceptances!(user, acceptance_context)
-    LegalAcceptances::Recorder.record_current_documents!(
+    LegalAcceptances.record_current_documents!(
       user: user,
       acceptance_context: acceptance_context,
       request: request,
