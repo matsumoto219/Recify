@@ -179,10 +179,18 @@
 
           <ol class="receipt-processing-steps mt-4" aria-label="<%= t("receipt_cards.processing_steps.label") %>">
             <% phase_presenter.steps.each do |step| %>
-              <li class="receipt-processing-step receipt-processing-step-<%= step.state %>">
+              <%
+                step_classes = [
+                  "receipt-processing-step",
+                  "receipt-processing-step-#{step.state}",
+                  ("receipt-processing-interval-#{step.interval_state}" if step.interval_state)
+                ].compact.join(" ")
+                step_aria = step.state == "active" ? { current: "step" } : nil
+              %>
+              <%= content_tag :li, class: step_classes, aria: step_aria do %>
                 <span class="receipt-processing-step-dot" aria-hidden="true"></span>
                 <span class="receipt-processing-step-label"><%= step.label %></span>
-              </li>
+              <% end %>
             <% end %>
           </ol>
         </div>

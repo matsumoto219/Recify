@@ -1,6 +1,6 @@
 module Receipts
   class ProcessingPhasePresenter
-    Step = Struct.new(:key, :label, :state, keyword_init: true)
+    Step = Struct.new(:key, :label, :state, :interval_state, keyword_init: true)
 
     STEP_KEYS = %i[uploaded ocr ai review].freeze
     FINAL_RECEIPT_PHASES = {
@@ -93,7 +93,8 @@ module Receipts
         Step.new(
           key: step_key,
           label: I18n.t("receipt_cards.processing_steps.#{step_key}"),
-          state: step_state(index)
+          state: step_state(index),
+          interval_state: step_interval_state(index)
         )
       end
     end
@@ -141,6 +142,14 @@ module Receipts
 
     def step_state(index)
       return "done" if index < step_index
+      return "active" if index == step_index
+
+      "pending"
+    end
+
+    def step_interval_state(index)
+      return nil if index >= STEP_KEYS.length - 1
+      return "completed" if index < step_index
       return "active" if index == step_index
 
       "pending"

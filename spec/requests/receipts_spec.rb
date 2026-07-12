@@ -625,10 +625,13 @@ RSpec.describe 'Receipts', type: :request do
     it 'processing receipt cardに解析段階を表示する' do
       queued_receipt = create(:receipt, :processing, :with_image, user:, store_name: 'キュー')
       ocr_receipt = create(:receipt, :processing, :with_image, user:, store_name: 'OCR')
+      organizing_receipt = create(:receipt, :processing, :with_image, user:, store_name: '整理')
       ai_receipt = create(:receipt, :processing, :with_image, user:, store_name: 'AI')
       finalize_receipt = create(:receipt, :processing, :with_image, user:, store_name: '保存')
       fallback_receipt = create(:receipt, :processing, :with_image, user:, store_name: 'Fallback')
       completed_receipt = create(:receipt, :completed, :with_image, user:, store_name: '完了')
+      review_needed_receipt = create(:receipt, :review_needed, :with_image, user:, store_name: '要確認')
+      failed_receipt = create(:receipt, :failed, :with_image, user:, store_name: '失敗')
 
       create(:receipt_analysis_run, receipt: queued_receipt, status: 'queued', stage: 'queued')
       create(
@@ -637,6 +640,14 @@ RSpec.describe 'Receipts', type: :request do
         status: 'running',
         stage: 'ocr',
         ocr_started_at: Time.current
+      )
+      create(
+        :receipt_analysis_run,
+        receipt: organizing_receipt,
+        status: 'running',
+        stage: 'ocr_validation',
+        ocr_started_at: 2.seconds.ago,
+        ocr_finished_at: Time.current
       )
       create(
         :receipt_analysis_run,
@@ -659,10 +670,21 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path
 
       document = Nokogiri::HTML(response.body)
+      step_snapshot = lambda do |receipt|
+        document.css("#receipt_#{receipt.public_id} .receipt-processing-step").map do |step|
+          classes = step['class'].to_s.split
+          {
+            node: classes.find { |name| name.match?(/\Areceipt-processing-step-(?:done|active|pending)\z/) },
+            interval: classes.find { |name| name.match?(/\Areceipt-processing-interval-(?:completed|active|pending)\z/) },
+            aria_current: step['aria-current']
+          }
+        end
+      end
 
       aggregate_failures do
         expect(document.at_css("#receipt_#{queued_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.queued.label'))
         expect(document.at_css("#receipt_#{ocr_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.ocr.label'))
+        expect(document.at_css("#receipt_#{organizing_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.organizing.label'))
         expect(document.at_css("#receipt_#{ai_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.ai.label'))
         expect(document.at_css("#receipt_#{finalize_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.finalize.label'))
         expect(document.at_css("#receipt_#{fallback_receipt.public_id}").text).to include(I18n.t('receipt_cards.processing_phase.processing.label'))
@@ -689,6 +711,34 @@ RSpec.describe 'Receipts', type: :request do
         expect(document.css("#receipt_#{ocr_receipt.public_id} .animate-spin")).to be_empty
         expect(document.at_css("#receipt_#{ocr_receipt.public_id}")['class']).not_to include('animate-pulse')
         expect(document.at_css("#receipt_#{completed_receipt.public_id} .receipt-processing-trigger")).to be_nil
+        expect(document.at_css("#receipt_#{review_needed_receipt.public_id} .receipt-processing-trigger")).to be_nil
+        expect(document.at_css("#receipt_#{failed_receipt.public_id} .receipt-processing-trigger")).to be_nil
+        expect(step_snapshot.call(queued_receipt)).to eq([
+          { node: 'receipt-processing-step-active', interval: 'receipt-processing-interval-active', aria_current: 'step' },
+          { node: 'receipt-processing-step-pending', interval: 'receipt-processing-interval-pending', aria_current: nil },
+          { node: 'receipt-processing-step-pending', interval: 'receipt-processing-interval-pending', aria_current: nil },
+          { node: 'receipt-processing-step-pending', interval: nil, aria_current: nil }
+        ])
+        expect(step_snapshot.call(fallback_receipt)).to eq(step_snapshot.call(queued_receipt))
+        expect(step_snapshot.call(ocr_receipt)).to eq([
+          { node: 'receipt-processing-step-done', interval: 'receipt-processing-interval-completed', aria_current: nil },
+          { node: 'receipt-processing-step-active', interval: 'receipt-processing-interval-active', aria_current: 'step' },
+          { node: 'receipt-processing-step-pending', interval: 'receipt-processing-interval-pending', aria_current: nil },
+          { node: 'receipt-processing-step-pending', interval: nil, aria_current: nil }
+        ])
+        expect(step_snapshot.call(organizing_receipt)).to eq(step_snapshot.call(ocr_receipt))
+        expect(step_snapshot.call(ai_receipt)).to eq([
+          { node: 'receipt-processing-step-done', interval: 'receipt-processing-interval-completed', aria_current: nil },
+          { node: 'receipt-processing-step-done', interval: 'receipt-processing-interval-completed', aria_current: nil },
+          { node: 'receipt-processing-step-active', interval: 'receipt-processing-interval-active', aria_current: 'step' },
+          { node: 'receipt-processing-step-pending', interval: nil, aria_current: nil }
+        ])
+        expect(step_snapshot.call(finalize_receipt)).to eq([
+          { node: 'receipt-processing-step-done', interval: 'receipt-processing-interval-completed', aria_current: nil },
+          { node: 'receipt-processing-step-done', interval: 'receipt-processing-interval-completed', aria_current: nil },
+          { node: 'receipt-processing-step-done', interval: 'receipt-processing-interval-completed', aria_current: nil },
+          { node: 'receipt-processing-step-active', interval: nil, aria_current: 'step' }
+        ])
       end
     end
 
