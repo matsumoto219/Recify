@@ -368,7 +368,7 @@ RSpec.describe Receipt, type: :model do
       create_item(coffee_receipt, category: 'drink', line_total: 450, name: 'コーヒー')
       create_item(grocery_receipt, category: 'food', line_total: 800, name: 'パン')
 
-      scope = user.receipts.search('コーヒー')
+      scope = Receipts::SearchQuery.call(scope: user.receipts, query: 'コーヒー')
       summary = described_class.category_summary_for(user, scope:)
 
       expect(summary).to contain_exactly(hash_including(category: 'drink', total_amount: 450, item_count: 1))
@@ -405,7 +405,10 @@ RSpec.describe Receipt, type: :model do
     end
 
     it 'subquery用途のmatching idsには既存orderを持ち込まない' do
-      sql = described_class.order(created_at: :desc).search('コーヒー').to_sql
+      sql = Receipts::SearchQuery.call(
+        scope: described_class.order(created_at: :desc),
+        query: 'コーヒー'
+      ).to_sql
 
       aggregate_failures do
         expect(sql).to include('ORDER BY "receipts"."created_at" DESC')
@@ -433,7 +436,7 @@ RSpec.describe Receipt, type: :model do
         purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
       )
 
-      expect(user.receipts.search('サンプルコンビニ 1000')).to contain_exactly(target)
+      expect(Receipts::SearchQuery.call(scope: user.receipts, query: 'サンプルコンビニ 1000')).to contain_exactly(target)
     end
 
     it '金額比較演算子でtotal_amountを検索する' do
@@ -457,10 +460,10 @@ RSpec.describe Receipt, type: :model do
       )
 
       aggregate_failures do
-        expect(user.receipts.search('<=1000')).to contain_exactly(low, exact)
-        expect(user.receipts.search('>=1000')).to contain_exactly(exact, high)
-        expect(user.receipts.search('amount<=1000')).to contain_exactly(low, exact)
-        expect(user.receipts.search('total>=1000')).to contain_exactly(exact, high)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: '<=1000')).to contain_exactly(low, exact)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: '>=1000')).to contain_exactly(exact, high)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: 'amount<=1000')).to contain_exactly(low, exact)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: 'total>=1000')).to contain_exactly(exact, high)
       end
     end
 
@@ -487,7 +490,7 @@ RSpec.describe Receipt, type: :model do
         item_name: 'パン'
       )
 
-      expect(user.receipts.search('牛乳 <=300')).to contain_exactly(target)
+      expect(Receipts::SearchQuery.call(scope: user.receipts, query: '牛乳 <=300')).to contain_exactly(target)
     end
 
     it '日付tokenとdate演算子で購入日を検索する' do
@@ -511,10 +514,10 @@ RSpec.describe Receipt, type: :model do
       )
 
       aggregate_failures do
-        expect(user.receipts.search('2026-01-10')).to contain_exactly(january_10)
-        expect(user.receipts.search('date>=2026-01-15')).to contain_exactly(january_20, february)
-        expect(user.receipts.search('date<=2026-01-10')).to contain_exactly(january_10)
-        expect(user.receipts.search('date:2026-01-01..2026-01-31')).to contain_exactly(january_10, january_20)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: '2026-01-10')).to contain_exactly(january_10)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: 'date>=2026-01-15')).to contain_exactly(january_20, february)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: 'date<=2026-01-10')).to contain_exactly(january_10)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: 'date:2026-01-01..2026-01-31')).to contain_exactly(january_10, january_20)
       end
     end
 
@@ -539,8 +542,8 @@ RSpec.describe Receipt, type: :model do
 
       aggregate_failures do
         (invalid_queries + partial_queries).each do |query|
-          expect { user.receipts.search(query).load }.not_to raise_error
-          expect(user.receipts.search(query)).to be_empty
+          expect { Receipts::SearchQuery.call(scope: user.receipts, query: query).load }.not_to raise_error
+          expect(Receipts::SearchQuery.call(scope: user.receipts, query: query)).to be_empty
         end
       end
     end
@@ -566,9 +569,9 @@ RSpec.describe Receipt, type: :model do
       )
 
       aggregate_failures do
-        expect(user.receipts.search('date>=2026-01-01 date<=2026-01-31')).to contain_exactly(january_10, january_20)
-        expect(user.receipts.search('date>=2026-01-15 date>=2026-02-01')).to contain_exactly(february)
-        expect(user.receipts.search('date>=2026-02-01 date<=2026-01-31')).to be_empty
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: 'date>=2026-01-01 date<=2026-01-31')).to contain_exactly(january_10, january_20)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: 'date>=2026-01-15 date>=2026-02-01')).to contain_exactly(february)
+        expect(Receipts::SearchQuery.call(scope: user.receipts, query: 'date>=2026-02-01 date<=2026-01-31')).to be_empty
       end
     end
 
@@ -598,7 +601,12 @@ RSpec.describe Receipt, type: :model do
         purchased_at: Time.zone.local(2026, 1, 10, 12, 0, 0)
       )
 
-      expect(user.receipts.search('サンプルコンビニ <=1000 date>=2026-01-01')).to contain_exactly(target)
+      expect(
+        Receipts::SearchQuery.call(
+          scope: user.receipts,
+          query: 'サンプルコンビニ <=1000 date>=2026-01-01'
+        )
+      ).to contain_exactly(target)
     end
   end
 
