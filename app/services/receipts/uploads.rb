@@ -11,6 +11,10 @@ module Receipts
     end
 
     class << self
+      def single(user:, image:)
+        Single.call(user:, image:)
+      end
+
       def batch(user:, files:)
         Batch.call(user: user, files: files)
       end

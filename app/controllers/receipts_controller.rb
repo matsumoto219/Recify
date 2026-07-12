@@ -109,26 +109,16 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    @receipt = current_user.receipts.new(
-      upload_receipt_params.merge(keep_image: current_user.effective_keep_receipt_images)
-    )
-    @receipt.status = "processing"
-
-    saved = false
-
     begin
-      ActiveRecord::Base.transaction do
-        consume_single_upload_limit!
-        saved = @receipt.save
-        raise ActiveRecord::Rollback unless saved
-      end
+      result = Receipts::Uploads.single(user: current_user, image: uploaded_receipt_image)
     rescue Usage::LimitExceeded
       render_upload_usage_limit_exceeded
       return
     end
+    @receipt = result.receipt
 
-    if saved
-      if enqueue_analysis_job(@receipt, source: "upload", requested_by_user: current_user)
+    if result.saved?
+      if result.enqueue_succeeded?
         redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.enqueued"))
       else
         redirect_to receipts_path, alert: t("flash.receipts.analysis_enqueue_failed")
@@ -455,30 +445,6 @@ class ReceiptsController < ApplicationController
     @ai_state = ExternalServices.snapshot(:ai)
   end
 
-  def enqueue_analysis_job(receipt, source:, requested_by_user:)
-    result = Receipts::Processing.start(
-      receipt: receipt,
-      source: source,
-      requested_by_user: requested_by_user
-    )
-
-    unless result.created?
-      Rails.logger.info(
-        "[ReceiptAnalysis] skip_enqueue_existing_run receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id}"
-      )
-      return true
-    end
-
-    Rails.logger.info(
-      "[ReceiptAnalysis] enqueue receipt_id=#{receipt.id} run_id=#{result.run.id} user_id=#{requested_by_user.id} image_attached=#{receipt.image.attached?}"
-    )
-
-    Receipts::Processing.enqueue(result.run, job_class: ReceiptOcrJob)
-    true
-  rescue Receipts::Processing::EnqueueError, ExternalServices::RuntimeConfigUnavailableError
-    false
-  end
-
   def temporary_notice_options(message)
     return {} unless current_user&.push_notification_enabled?
 
@@ -505,10 +471,6 @@ class ReceiptsController < ApplicationController
     return @pagy.last if @pagy.page > @pagy.last
 
     nil
-  end
-
-  def upload_receipt_params
-    params.require(:receipt).permit(:image)
   end
 
   def batch_upload_requested?
@@ -632,10 +594,6 @@ class ReceiptsController < ApplicationController
         max_dimension: Receipt.image_max_dimension
       )
     end
-  end
-
-  def consume_single_upload_limit!
-    Usage.consume_receipt_upload!(user: current_user)
   end
 
   def consume_manual_receipt_limit!

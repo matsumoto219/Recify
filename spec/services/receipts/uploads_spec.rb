@@ -1,6 +1,18 @@
 require "rails_helper"
 
 RSpec.describe Receipts::Uploads do
+  describe ".single" do
+    it "single upload workflowへ委譲する" do
+      user = build_stubbed(:user)
+      image = instance_double(ActionDispatch::Http::UploadedFile)
+      result = instance_double("Receipts::Uploads::Single result")
+      allow(Receipts::Uploads::Single).to receive(:call).and_return(result)
+
+      expect(described_class.single(user: user, image: image)).to eq(result)
+      expect(Receipts::Uploads::Single).to have_received(:call).with(user: user, image: image)
+    end
+  end
+
   describe ".batch" do
     it "既存batch upload入口へ委譲する" do
       user = build_stubbed(:user)

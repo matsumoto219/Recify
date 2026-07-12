@@ -137,7 +137,7 @@ RSpec.describe "root service and lifecycle status boundary" do
   end.freeze
 
   EXPECTED_STATUS_WRITE_FINGERPRINTS = {
-    [ "app/controllers/receipts_controller.rb", :receipt, "@receipt", :status=, [ :status ] ] => 2,
+    [ "app/controllers/receipts_controller.rb", :receipt, "@receipt", :status=, [ :status ] ] => 1,
     [ "app/services/system_operations/receipt_analysis_retry_executor.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
     [ "app/services/receipts/processing/pipeline.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
     [ "app/services/receipts/processing/runs.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
@@ -146,6 +146,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     [ "app/services/receipts/processing/runs/tracker.rb", :analysis_run, "locked_run", :update!, %i[status stage] ] => 8,
     [ "app/services/receipts/processing/runs/tracker.rb", :analysis_run, "run", :update!, %i[status stage] ] => 2,
     [ "app/services/receipts/processing/runs/tracker.rb", :receipt, "receipt", :update!, [ :status ] ] => 2,
+    [ "app/services/receipts/uploads/single.rb", :receipt, "user.receipts", :new, [ :status ] ] => 1,
     [ "app/services/receipts/uploads/batch.rb", :receipt, "user.receipts", :new, [ :status ] ] => 1
   }.freeze
 
