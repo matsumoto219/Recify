@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe Admin::SecurityEventStatusUpdater do
+RSpec.describe Admin::Operations::SecurityEventStatusUpdater do
   describe '.call' do
     it 'resolvedに更新し、AuditLogへpayloadなしで記録する' do
       admin = create(:user, :admin)

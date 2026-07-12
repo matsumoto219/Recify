@@ -1,5 +1,5 @@
 module Admin
-  class SecurityEventStatusUpdater
+  class Operations::SecurityEventStatusUpdater
     Result = Struct.new(:security_event, :updated, :error_code, keyword_init: true) do
       def updated?
         updated == true

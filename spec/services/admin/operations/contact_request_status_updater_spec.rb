@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe Admin::ContactRequestStatusUpdater do
+RSpec.describe Admin::Operations::ContactRequestStatusUpdater do
   include ActiveSupport::Testing::TimeHelpers
 
   describe '.call' do

@@ -57,7 +57,7 @@ module Admin
     end
 
     def update_security_event_status(security_event:, status:, actor:, request:)
-      SecurityEventStatusUpdater.call(
+      Operations.update_security_event_status(
         security_event: security_event,
         status: status,
         actor: actor,
@@ -86,7 +86,7 @@ module Admin
     end
 
     def update_contact_request_status(contact_request:, status:, actor:, request:)
-      ContactRequestStatusUpdater.call(
+      Operations.update_contact_request_status(
         contact_request: contact_request,
         status: status,
         actor: actor,

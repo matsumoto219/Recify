@@ -1,5 +1,5 @@
 module Admin
-  class ContactRequestStatusUpdater
+  class Operations::ContactRequestStatusUpdater
     Result = Struct.new(:contact_request, :updated, :error_code, keyword_init: true) do
       def success?
         updated == true

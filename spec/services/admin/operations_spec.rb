@@ -16,11 +16,11 @@ RSpec.describe Admin::Operations do
         actor: build_stubbed(:user, :admin),
         request: instance_double(ActionDispatch::Request)
       }
-      result = instance_double(Admin::ContactRequestStatusUpdater::Result)
-      allow(Admin::ContactRequestStatusUpdater).to receive(:call).and_return(result)
+      result = instance_double(Admin::Operations::ContactRequestStatusUpdater::Result)
+      allow(Admin::Operations::ContactRequestStatusUpdater).to receive(:call).and_return(result)
 
       expect(described_class.update_contact_request_status(**arguments)).to eq(result)
-      expect(Admin::ContactRequestStatusUpdater).to have_received(:call).with(**arguments)
+      expect(Admin::Operations::ContactRequestStatusUpdater).to have_received(:call).with(**arguments)
     end
   end
 
@@ -32,11 +32,11 @@ RSpec.describe Admin::Operations do
         actor: build_stubbed(:user, :admin),
         request: instance_double(ActionDispatch::Request)
       }
-      result = instance_double(Admin::SecurityEventStatusUpdater::Result)
-      allow(Admin::SecurityEventStatusUpdater).to receive(:call).and_return(result)
+      result = instance_double(Admin::Operations::SecurityEventStatusUpdater::Result)
+      allow(Admin::Operations::SecurityEventStatusUpdater).to receive(:call).and_return(result)
 
       expect(described_class.update_security_event_status(**arguments)).to eq(result)
-      expect(Admin::SecurityEventStatusUpdater).to have_received(:call).with(**arguments)
+      expect(Admin::Operations::SecurityEventStatusUpdater).to have_received(:call).with(**arguments)
     end
   end
 end
