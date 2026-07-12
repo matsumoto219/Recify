@@ -146,8 +146,10 @@ RSpec.describe "Service layer child implementation boundary" do
       "ReceiptAnalysisPipeline",
       facade: "app/services/receipt_analysis_pipeline.rb",
       public_constants: %w[
+        ReceiptAnalysisPipeline::AnalysisError
         ReceiptAnalysisPipeline::FINALIZE_DECISION_SCHEMA_VERSION
         ReceiptAnalysisPipeline::FINALIZE_STRATEGIES
+        ReceiptAnalysisPipeline::Result
       ]
     ),
     "receipt_analysis_profiles" => registry_entry(
@@ -161,6 +163,9 @@ RSpec.describe "Service layer child implementation boundary" do
       facade: "app/services/receipt_analysis_runs.rb",
       public_constants: %w[
         ReceiptAnalysisRuns::EnqueueError
+        ReceiptAnalysisRuns::Error
+        ReceiptAnalysisRuns::InvalidTransition
+        ReceiptAnalysisRuns::StartResult
         ReceiptAnalysisRuns::TerminalRunError
       ]
     ),
@@ -171,9 +176,16 @@ RSpec.describe "Service layer child implementation boundary" do
         Receipts::Editing
         Receipts::Processing
         Receipts::Uploads
+        Receipts::Processing::AnalysisError
         Receipts::Processing::Contracts::FinalizeDecision
         Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
         Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES
+        Receipts::Processing::EnqueueError
+        Receipts::Processing::Error
+        Receipts::Processing::InvalidTransition
+        Receipts::Processing::Result
+        Receipts::Processing::StartResult
+        Receipts::Processing::TerminalRunError
       ]
     ),
     "recify" => registry_entry(

@@ -16,9 +16,16 @@ RSpec.describe "Receipt workflow dependency boundary" do
       private_root: "app/services/receipts/processing",
       allowed_workflow_facades: [],
       public_constants: %w[
+        Receipts::Processing::AnalysisError
         Receipts::Processing::Contracts::FinalizeDecision
         Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
         Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES
+        Receipts::Processing::EnqueueError
+        Receipts::Processing::Error
+        Receipts::Processing::InvalidTransition
+        Receipts::Processing::Result
+        Receipts::Processing::StartResult
+        Receipts::Processing::TerminalRunError
       ]
     },
     "editing" => {

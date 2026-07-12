@@ -54,7 +54,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_summary warning_mismatch_codes],
     "receipt_analysis_pipeline.rb" => %i[finalize_decision_from_snapshot run_ai run_finalize run_ocr],
     "receipt_analysis_profiles.rb" => %i[default fetch],
-    "receipt_analysis_runs.rb" => %i[cancel claim_stage cleanup_expired cleanup_stale copy_retry_snapshots enqueue external_service_runtime_config fail record_ai_input record_ai_normalized_result record_ai_result record_build_params_snapshot record_final_result record_finalize_decision record_ocr_response_artifact record_ocr_result record_ocr_snapshot start succeed],
+    "receipt_analysis_runs.rb" => %i[cancel claim_stage cleanup_expired cleanup_stale copy_retry_snapshots enqueue external_service_runtime_config fail finish_stage record_ai_input record_ai_normalized_result record_ai_result record_build_params_snapshot record_final_result record_finalize_decision record_ocr_response_artifact record_ocr_result record_ocr_snapshot start start_stage succeed supersede],
     "receipt_ocr_service.rb" => %i[available? call error_result],
     "review_reasons.rb" => %i[blocking_reasons_for_user group_by_source normalize normalize_ai_output_reasons review_reasons_for_user user_facing_reason? warning_reasons_for_user],
     "security.rb" => %i[ip_access_snapshot manual_ip_block manual_ip_unblock rack_attack_ban_reset record_ip_access_operation record_ip_rate_limit_action request_ip_snapshot],

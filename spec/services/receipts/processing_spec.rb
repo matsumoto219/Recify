@@ -1,6 +1,38 @@
 require "rails_helper"
 
 RSpec.describe Receipts::Processing do
+  describe "public contracts" do
+    it "legacy workflowのErrorとResult contractを同一objectで公開する" do
+      aggregate_failures do
+        expect(described_class::AnalysisError).to equal(ReceiptAnalysisPipeline::AnalysisError)
+        expect(described_class::EnqueueError).to equal(ReceiptAnalysisRuns::EnqueueError)
+        expect(described_class::Error).to equal(ReceiptAnalysisRuns::Error)
+        expect(described_class::InvalidTransition).to equal(ReceiptAnalysisRuns::InvalidTransition)
+        expect(described_class::Result).to equal(ReceiptAnalysisPipeline::Result)
+        expect(described_class::StartResult).to equal(ReceiptAnalysisRuns::StartResult)
+        expect(described_class::TerminalRunError).to equal(ReceiptAnalysisRuns::TerminalRunError)
+      end
+    end
+  end
+
+  describe "pipeline facade" do
+    it "OCR stageをlegacy Pipelineへ委譲する" do
+      run = instance_double(ReceiptAnalysisRun)
+      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).with(run).and_return(:result)
+
+      expect(described_class.run_ocr(run)).to eq(:result)
+    end
+  end
+
+  describe "run lifecycle facade" do
+    it "run作成をlegacy Runsへ委譲する" do
+      arguments = { receipt: instance_double(Receipt), source: "upload" }
+      allow(ReceiptAnalysisRuns).to receive(:start).with(**arguments).and_return(:result)
+
+      expect(described_class.start(**arguments)).to eq(:result)
+    end
+  end
+
   describe ".admin_retry_eligibility" do
     it "SystemOperationsのread-only eligibility入口へ委譲する" do
       allow(SystemOperations).to receive(:receipt_analysis_retry_eligibility).and_return(:eligibility)
