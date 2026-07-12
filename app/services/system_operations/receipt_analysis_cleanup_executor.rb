@@ -33,7 +33,7 @@ module SystemOperations
       @operation = operation.to_s
       @actor = actor
       @reason = reason.to_s.strip
-      @cutoff = normalize_time(cutoff, Time.current)
+      @raw_cutoff = cutoff
       @limit = limit
       @request = request
       @reauthentication = reauthentication.to_h.symbolize_keys
@@ -71,13 +71,15 @@ module SystemOperations
 
     private
 
-    attr_reader :operation, :actor, :reason, :cutoff, :limit, :request, :reauthentication
+    attr_reader :operation, :actor, :reason, :raw_cutoff, :limit, :request, :reauthentication
 
     def validate!
       raise ValidationError, "unknown_operation" unless operation_config
       raise ValidationError, "actor_required" unless actor
       raise ValidationError, "reason_required" if reason.blank?
       raise ValidationError, "reauthentication_required" unless fresh_passkey_reauthentication?
+
+      cutoff
     end
 
     def execute_cleanup
@@ -127,7 +129,7 @@ module SystemOperations
     def failure_audit_metadata(error)
       {
         dry_run: false,
-        cutoff: audit_time(cutoff),
+        cutoff: audit_time(cutoff_for_audit),
         limit: normalized_limit_for_audit,
         error_class: error.class.name,
         sample_run_keys: []
@@ -190,14 +192,33 @@ module SystemOperations
       nil
     end
 
-    def normalize_time(value, fallback)
-      return fallback if value.blank?
-      return value if value.is_a?(Time) || value.is_a?(ActiveSupport::TimeWithZone)
-      return value.to_time.in_time_zone if value.is_a?(Date) || value.is_a?(DateTime)
+    def cutoff
+      @cutoff ||= normalize_time(raw_cutoff)
+    end
 
-      Time.zone.parse(value.to_s) || fallback
+    def cutoff_for_audit
+      cutoff
+    rescue ValidationError
+      nil
+    end
+
+    def normalize_time(value)
+      raise ValidationError, "invalid_cutoff" if value.blank?
+
+      normalized = if value.is_a?(Time) || value.is_a?(ActiveSupport::TimeWithZone)
+        value
+      elsif value.is_a?(Date) || value.is_a?(DateTime)
+        value.to_time.in_time_zone
+      else
+        Time.zone.parse(value.to_s)
+      end
+
+      raise ValidationError, "invalid_cutoff" unless normalized
+      raise ValidationError, "invalid_cutoff" if normalized > Time.current
+
+      normalized
     rescue ArgumentError, TypeError
-      fallback
+      raise ValidationError, "invalid_cutoff"
     end
 
     def sample_run_keys(cleanup_result)

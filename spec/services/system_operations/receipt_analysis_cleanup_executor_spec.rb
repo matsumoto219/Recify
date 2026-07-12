@@ -21,6 +21,35 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
   end
 
   describe '.call' do
+    shared_examples 'invalid cleanup cutoff' do |invalid_cutoff|
+      it "cutoff #{invalid_cutoff.inspect}ではcleanupを実行しない" do
+        allow(Receipts::Processing).to receive(:cleanup_stale)
+
+        result = described_class.call(
+          operation: 'stale_cleanup',
+          actor: actor,
+          reason: 'invalid cutoff check',
+          cutoff: invalid_cutoff,
+          limit: 10,
+          request: request,
+          reauthentication: reauthentication
+        )
+
+        aggregate_failures do
+          expect(result).to be_failure
+          expect(result.error_code).to eq('invalid_cutoff')
+          expect(Receipts::Processing).not_to have_received(:cleanup_stale)
+          expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'invalid_cutoff')
+          expect(AuditLog.last.metadata['cutoff']).to be_nil
+        end
+      end
+    end
+
+    include_examples 'invalid cleanup cutoff', nil
+    include_examples 'invalid cleanup cutoff', ''
+    include_examples 'invalid cleanup cutoff', 'not-a-time'
+    include_examples 'invalid cleanup cutoff', '2026-05-23T10:00:01'
+
     it '文字が混在するlimitでcleanupを実行しない' do
       allow(Receipts::Processing).to receive(:cleanup_stale)
 

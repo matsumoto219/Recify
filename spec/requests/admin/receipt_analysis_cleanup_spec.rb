@@ -437,6 +437,36 @@ RSpec.describe 'Admin receipt analysis cleanup preview', type: :request do
         expect(audit_log.metadata.to_json).not_to include('credential_id', 'challenge', 'public_key')
       end
     end
+
+    it '解釈できないcutoffでは対象runを変更せずfailed auditを残す' do
+      admin = create(:user, :admin)
+      stale_run = create_stale_run
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      post admin_receipt_analysis_cleanup_stale_path,
+           params: {
+             stale_cutoff: 'not-a-time',
+             stale_limit: '10',
+             reason: 'invalid cutoff attempt',
+             confirm: '1'
+           }
+
+      audit_log = AuditLog
+        .where(action: 'receipt_analysis_runs.cleanup_stale.execute', reason: 'invalid cutoff attempt')
+        .order(:created_at, :id)
+        .last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_receipt_analysis_cleanup_path(stale_cutoff: 'not-a-time', stale_limit: '10'))
+        expect(flash[:alert]).to include('invalid_cutoff')
+        expect(stale_run.reload.status).to eq('queued')
+        expect(stale_run.receipt.reload.status).to eq('processing')
+        expect(audit_log).to have_attributes(outcome: 'failed', error_code: 'invalid_cutoff')
+        expect(audit_log.metadata['cutoff']).to be_nil
+        expect_no_cleanup_or_analysis_jobs
+      end
+    end
   end
 
   describe 'POST /admin/receipt_analysis_cleanup/retention' do
