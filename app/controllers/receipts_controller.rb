@@ -19,7 +19,7 @@ class ReceiptsController < ApplicationController
     @query = normalize_search_query(params[:q])
     log_suspicious_search_query(@query) if suspicious_search_query?(@query)
 
-    search_validation = ReceiptSearch.validate_query(@query)
+    search_validation = Receipts::SearchForm.call(@query)
     unless search_validation.valid?
       render_invalid_search_query
       return
@@ -390,7 +390,7 @@ class ReceiptsController < ApplicationController
   end
 
   def prepare_receipt_index_query(scope)
-    @receipt_index_query = ReceiptSearch.index_query(
+    @receipt_index_query = Receipts::IndexQuery.call(
       scope: scope,
       query: @query,
       sort: params[:sort],
@@ -1746,7 +1746,7 @@ class ReceiptsController < ApplicationController
 
   def log_suspicious_search_query(query)
     Rails.logger.warn(
-      "[ReceiptSearch] suspicious_query user_id=#{current_user.id} query=#{query.inspect}"
+      "[Receipts::SearchForm] suspicious_query user_id=#{current_user.id} query=#{query.inspect}"
     )
   end
 end
