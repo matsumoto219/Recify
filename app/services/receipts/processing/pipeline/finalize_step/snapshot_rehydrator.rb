@@ -35,13 +35,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
     private
 
     def rehydrate_ai_receipt_attributes(value)
-      attributes = normalized_hash(value).to_h
-
-      %i[purchased_at ocr_completed_at].each do |key|
-        attributes[key] = parse_time_value(attributes[key]) if attributes[key].present?
-      end
-
-      attributes
+      normalized_hash(value).to_h
     end
 
     def rehydrate_ai_items(value)
@@ -54,14 +48,6 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
       Array(value).map do |adjustment|
         normalized_hash(adjustment).to_h
       end
-    end
-
-    def parse_time_value(value)
-      return value unless value.is_a?(String)
-
-      Time.zone.parse(value)
-    rescue ArgumentError, TypeError
-      value
     end
 
     def normalized_hash(value)

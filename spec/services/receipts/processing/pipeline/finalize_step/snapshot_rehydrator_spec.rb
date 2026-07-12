@@ -66,6 +66,20 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator 
       )
     end
 
+    it 'keeps JSON timestamp strings unchanged for downstream parsing and casting' do
+      result = described_class.ai(
+        'receipt_attributes' => {
+          'purchased_at' => '2026-05-23T10:00:00+09:00',
+          'ocr_completed_at' => '2026-05-23T10:01:00+09:00'
+        }
+      )
+
+      expect(result.fetch(:receipt_attributes)).to include(
+        'purchased_at' => '2026-05-23T10:00:00+09:00',
+        'ocr_completed_at' => '2026-05-23T10:01:00+09:00'
+      )
+    end
+
     it 'accepts snapshots without a schema version and uses strict booleans' do
       expect(described_class.ai('success' => 'true', 'needs_review' => 1)).to include(
         success: false,
