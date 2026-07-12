@@ -73,6 +73,28 @@ RSpec.describe ReceiptAmountService do
     end
   end
 
+  describe 'amount limit facade' do
+    it 'exposes configured limits through the Amount Engine public entry point' do
+      aggregate_failures do
+        expect(described_class.receipt_total_amount_max).to eq(999_999_999)
+        expect(described_class.receipt_item_price_max).to eq(999_999_999)
+        expect(described_class.receipt_item_line_total_max).to eq(999_999_999)
+        expect(described_class.receipt_tax_amount_max).to eq(999_999_999)
+        expect(described_class.receipt_adjustment_amount_max).to eq(999_999_999)
+        expect(described_class.receipt_payment_amount_max).to eq(999_999_999)
+      end
+    end
+
+    it 'exposes the existing amount-limit violation shape unchanged' do
+      expect(described_class.violations_for(receipt: { total_amount: 1_000_000_000 })).to contain_exactly(
+        resource: 'receipt',
+        field: 'total_amount',
+        limit: 999_999_999,
+        actual_value: 1_000_000_000
+      )
+    end
+  end
+
   describe '.call' do
     it 'analysisでは評価済みcandidateを再利用し候補生成を二重実行しない' do
       expect(Amounts::CandidateGenerator).to receive(:new).once.and_call_original

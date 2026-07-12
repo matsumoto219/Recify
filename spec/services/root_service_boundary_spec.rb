@@ -81,7 +81,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     "production_runtime_config.rb" => %i[],
     "receipt_ai_enrichment_service.rb" => %i[available? call error_result provider_metrics],
     "receipt_amount_limits.rb" => %i[limit_for receipt_adjustment_amount_max receipt_item_line_total_max receipt_item_price_max receipt_payment_amount_max receipt_tax_amount_max receipt_total_amount_max violations_for],
-    "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call mismatch_code parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_summary warning_mismatch_codes],
+    "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call mismatch_code parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_summary receipt_adjustment_amount_max receipt_item_line_total_max receipt_item_price_max receipt_payment_amount_max receipt_tax_amount_max receipt_total_amount_max violations_for warning_mismatch_codes],
     "receipt_analysis_profiles.rb" => %i[default fetch for_country],
     "receipt_ocr_service.rb" => %i[available? call error_result],
     "review_reasons.rb" => %i[blocking_reason? blocking_reasons_for_user group_by_source internal_processing_reasons known_reason? normalize normalize_ai_output_reasons normalize_allowed_reasons review_reasons_for_user source_for user_facing_reason? warning_reason? warning_reasons_for_user],

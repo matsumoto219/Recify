@@ -106,6 +106,40 @@ class ReceiptAmountService
     Amounts::MismatchCodes.code(reason.to_sym)
   end
 
+  def self.receipt_total_amount_max
+    ReceiptAmountLimits.receipt_total_amount_max
+  end
+
+  def self.receipt_item_price_max
+    ReceiptAmountLimits.receipt_item_price_max
+  end
+
+  def self.receipt_item_line_total_max
+    ReceiptAmountLimits.receipt_item_line_total_max
+  end
+
+  def self.receipt_tax_amount_max
+    ReceiptAmountLimits.receipt_tax_amount_max
+  end
+
+  def self.receipt_adjustment_amount_max
+    ReceiptAmountLimits.receipt_adjustment_amount_max
+  end
+
+  def self.receipt_payment_amount_max
+    ReceiptAmountLimits.receipt_payment_amount_max
+  end
+
+  def self.violations_for(receipt: {}, receipt_items: [], receipt_adjustments: [], receipt_payments: [], receipt_tax_details: [])
+    ReceiptAmountLimits.violations_for(
+      receipt: receipt,
+      receipt_items: receipt_items,
+      receipt_adjustments: receipt_adjustments,
+      receipt_payments: receipt_payments,
+      receipt_tax_details: receipt_tax_details
+    )
+  end
+
   def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }
