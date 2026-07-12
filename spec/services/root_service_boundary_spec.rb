@@ -107,7 +107,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     "security_events.rb" => EXTERNAL_METHODS.fetch("security_events.rb"),
     "sensitive_metadata_keys.rb" => %i[],
     "storage.rb" => EXTERNAL_METHODS.fetch("storage.rb"),
-    "system_operations.rb" => EXTERNAL_METHODS.fetch("system_operations.rb"),
+    "system_operations.rb" => %i[execute_ip_access_operation execute_receipt_analysis_cleanup execute_receipt_analysis_retry execute_receipt_moderation_operation execute_user_operation receipt_analysis_retry_confirmation_text reset_setting update_setting update_user_limit user_limit_update_confirmation_text],
     "system_settings.rb" => %i[audit_value cast_update_value definition_for definitions dependency_lock_groups_for editable? enabled? fetch limit_for limits_for rollout_enabled? source_for stored_value stored_value_for_update valid_key? validate_stored_value! value_for values_for],
     "two_factor.rb" => %i[confirm_totp_setup disable_totp_for generate_recovery_codes_for generate_totp_secret prepare_totp_setup recovery_code_digest recovery_codes_status regenerate_recovery_codes_for totp_provisioning_uri totp_qr_svg verify_recovery_code verify_totp verify_totp_setup],
     "usage.rb" => %i[consume_ai_job! consume_batch_upload! consume_manual_receipt! consume_ocr_job! consume_receipt_upload! consume_retry_operation! counter_summary_for effective_limit ensure_ai_job_within_limit! ensure_ocr_job_within_limit! limit_summary_for],

@@ -31,6 +31,14 @@ module SystemOperations
   end
 
   class << self
+    def execute_receipt_analysis_retry(...)
+      Analysis.retry_receipt_analysis(...)
+    end
+
+    def receipt_analysis_retry_confirmation_text
+      Analysis.retry_confirmation_text
+    end
+
     def execute_receipt_analysis_cleanup(operation:, actor:, reason:, cutoff:, limit:, request:, reauthentication:)
       ReceiptAnalysisCleanupExecutor.call(
         operation: operation,

@@ -1,6 +1,35 @@
 require 'rails_helper'
 
 RSpec.describe SystemOperations do
+  describe '.execute_receipt_analysis_retry' do
+    it 'Analysisの既存retry入口へ委譲する' do
+      allow(Analysis).to receive(:retry_receipt_analysis).and_return(:accepted)
+
+      result = described_class.execute_receipt_analysis_retry(
+        receipt: build_stubbed(:receipt),
+        actor: build_stubbed(:user, :admin),
+        retry_type: 'full_reanalyze'
+      )
+
+      aggregate_failures do
+        expect(result).to eq(:accepted)
+        expect(Analysis).to have_received(:retry_receipt_analysis).with(
+          receipt: kind_of(Receipt),
+          actor: kind_of(User),
+          retry_type: 'full_reanalyze'
+        )
+      end
+    end
+  end
+
+  describe '.receipt_analysis_retry_confirmation_text' do
+    it 'Analysisの既存確認文言を公開する' do
+      allow(Analysis).to receive(:retry_confirmation_text).and_return('RETRY ANALYSIS')
+
+      expect(described_class.receipt_analysis_retry_confirmation_text).to eq('RETRY ANALYSIS')
+    end
+  end
+
   describe '.execute_receipt_analysis_cleanup' do
     it 'ReceiptAnalysisCleanupExecutorへ委譲する親入口である' do
       allow(SystemOperations::ReceiptAnalysisCleanupExecutor).to receive(:call).and_return(SystemOperations::Result.new(success: true))
