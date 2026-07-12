@@ -21,6 +21,16 @@ RSpec.describe Receipts::Editing do
     end
   end
 
+  describe ".update_manual" do
+    it "manual update workflowへ委譲する" do
+      arguments = { receipt: :receipt, attributes: :attributes, items_missing: false }
+      allow(Receipts::Editing::ManualUpdater).to receive(:call).and_return(:result)
+
+      expect(described_class.update_manual(**arguments)).to eq(:result)
+      expect(Receipts::Editing::ManualUpdater).to have_received(:call).with(**arguments)
+    end
+  end
+
   describe ".build_input" do
     it "既存input builder入口へ委譲する" do
       allow(Receipts::Editing::InputBuilder).to receive(:call).and_return(:input)

@@ -328,8 +328,19 @@ class ReceiptsController < ApplicationController
       )
     )
 
-    if manual_receipt_items_missing?(update_params, context: :edit_save)
-      @receipt.assign_attributes(update_params)
+    items_missing = manual_receipt_items_missing?(update_params, context: :edit_save)
+    begin
+      result = Receipts::Editing.update_manual(
+        receipt: @receipt,
+        attributes: update_params,
+        items_missing: items_missing
+      )
+    rescue ActiveRecord::StaleObjectError
+      render_stale_edit_conflict
+      return
+    end
+
+    if result.items_missing?
       prepare_manual_receipt_items_missing_error!(update_params)
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
       prepare_receipt_form_presenter
@@ -338,19 +349,15 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    begin
-      if @receipt.update(update_params)
-        purge_receipt_image_if_requested!
-        redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
-      else
-        record_invalid_receipt_upload_security_event(uploaded_receipt_image, @receipt.errors) if uploaded_receipt_image.present?
-        build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
-        prepare_receipt_form_presenter
-        flash.now[:alert] = @receipt.errors.full_messages
-        render :edit, status: :unprocessable_content, formats: :html
-      end
-    rescue ActiveRecord::StaleObjectError
-      render_stale_edit_conflict
+    if result.saved?
+      purge_receipt_image_if_requested!
+      redirect_to @receipt, **temporary_notice_options(t("flash.receipts.update"))
+    else
+      record_invalid_receipt_upload_security_event(uploaded_receipt_image, @receipt.errors) if uploaded_receipt_image.present?
+      build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+      prepare_receipt_form_presenter
+      flash.now[:alert] = @receipt.errors.full_messages
+      render :edit, status: :unprocessable_content, formats: :html
     end
   end
 

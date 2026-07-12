@@ -19,6 +19,10 @@ module Receipts
         UpdateState.call(...)
       end
 
+      def update_manual(...)
+        ManualUpdater.call(...)
+      end
+
       def build_input(...)
         InputBuilder.call(...)
       end
