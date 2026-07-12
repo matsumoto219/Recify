@@ -65,9 +65,17 @@ class User < ApplicationRecord
   end
 
   scope :guest_cleanup_candidates, ->(cutoff = guest_cleanup_retention_period.ago) {
+    active_session_user_ids = UserSession
+      .where(signed_out_at: nil, revoked_at: nil, expired_at: nil)
+      .where("user_sessions.last_seen_at > ?", cutoff)
+      .where("user_sessions.session_version = users.session_version")
+      .select(:user_id)
+
     where(guest: true)
       .where.not(confirmed_at: nil)
+      .where(unconfirmed_email: nil)
       .where("COALESCE(last_sign_in_at, updated_at) <= ?", cutoff)
+      .where.not(id: active_session_user_ids)
   }
 
   def self.generate_webauthn_id

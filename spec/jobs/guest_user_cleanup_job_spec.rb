@@ -93,6 +93,36 @@ RSpec.describe GuestUserCleanupJob, type: :job do
       end
     end
 
+    it '候補取得後に本登録化したguestを削除直前の再検証で保護する' do
+      cutoff = User.guest_cleanup_retention_period.ago
+      guest = create_old_guest
+      stale_candidate = User.guest_cleanup_candidates(cutoff).find(guest.id)
+      guest.update!(guest: false)
+
+      deleted = described_class.new.send(:destroy_guest_user_transaction!, stale_candidate, cutoff: cutoff)
+
+      aggregate_failures do
+        expect(deleted).to be(false)
+        expect(User.exists?(guest.id)).to be(true)
+      end
+    end
+
+    it 'active current sessionを持つ長期guestを削除しない' do
+      guest = create_old_guest
+      create_user_session(
+        user: guest,
+        session_version: guest.session_version,
+        last_seen_at: Time.current
+      )
+
+      result = described_class.perform_now
+
+      aggregate_failures do
+        expect(User.exists?(guest.id)).to be(true)
+        expect(result).to eq(deleted_count: 0, failed_count: 0)
+      end
+    end
+
     it 'unconfirmed guestは削除しない' do
       unconfirmed_guest = create(:user, :unconfirmed, guest: true, last_sign_in_at: 8.days.ago)
 
@@ -280,6 +310,18 @@ RSpec.describe GuestUserCleanupJob, type: :job do
 
   def create_old_guest
     create(:user, guest: true, last_sign_in_at: 8.days.ago)
+  end
+
+  def create_user_session(user:, last_seen_at: Time.current, **attributes)
+    UserSession.create!(
+      {
+        user: user,
+        session_uid_digest: SecureRandom.hex(32),
+        session_version: user.session_version,
+        started_at: last_seen_at,
+        last_seen_at: last_seen_at
+      }.merge(attributes)
+    )
   end
 
   def receipt_item_attributes

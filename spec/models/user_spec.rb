@@ -222,6 +222,18 @@ RSpec.describe User, type: :model do
       travel_to(Time.zone.parse('2026-05-22 10:00:00')) { example.run }
     end
 
+    def create_user_session(user:, last_seen_at: Time.current, **attributes)
+      UserSession.create!(
+        {
+          user: user,
+          session_uid_digest: SecureRandom.hex(32),
+          session_version: user.session_version,
+          started_at: last_seen_at,
+          last_seen_at: last_seen_at
+        }.merge(attributes)
+      )
+    end
+
     it 'confirmed済みで7日以上前にログインしたguestだけを返す' do
       old_guest = create(:user, guest: true, last_sign_in_at: 7.days.ago)
       recent_guest = create(:user, guest: true, last_sign_in_at: 6.days.ago)
@@ -250,6 +262,42 @@ RSpec.describe User, type: :model do
         expect(candidates).to include(old_guest)
         expect(candidates).not_to include(recent_guest)
       end
+    end
+
+    it 'cutoffより新しいcurrent sessionがあるguestを除外する' do
+      guest = create(:user, guest: true, last_sign_in_at: 8.days.ago)
+      create_user_session(
+        user: guest,
+        session_version: guest.session_version,
+        last_seen_at: Time.current
+      )
+
+      expect(described_class.guest_cleanup_candidates).not_to include(guest)
+    end
+
+    it '終了済み・失効済み・古いsessionだけのguestは候補に残す' do
+      guests = %i[signed_out revoked expired stale].index_with do
+        create(:user, guest: true, last_sign_in_at: 8.days.ago)
+      end
+      create_user_session(user: guests.fetch(:signed_out), signed_out_at: 1.hour.ago, last_seen_at: Time.current)
+      create_user_session(user: guests.fetch(:revoked), revoked_at: 1.hour.ago, last_seen_at: Time.current)
+      create_user_session(user: guests.fetch(:expired), expired_at: 1.hour.ago, last_seen_at: Time.current)
+      create_user_session(user: guests.fetch(:stale), last_seen_at: 8.days.ago)
+
+      candidates = described_class.guest_cleanup_candidates
+
+      expect(candidates).to include(*guests.values)
+    end
+
+    it '本登録開始済みguestを除外する' do
+      guest = create(
+        :user,
+        guest: true,
+        last_sign_in_at: 8.days.ago,
+        unconfirmed_email: 'pending-registration@example.test'
+      )
+
+      expect(described_class.guest_cleanup_candidates).not_to include(guest)
     end
   end
 

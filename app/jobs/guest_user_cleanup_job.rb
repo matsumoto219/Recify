@@ -7,14 +7,14 @@ class GuestUserCleanupJob < ApplicationJob
   def perform(batch_size: DEFAULT_BATCH_SIZE, max_records: DEFAULT_MAX_RECORDS)
     batch_size = normalize_positive_integer(batch_size, DEFAULT_BATCH_SIZE)
     max_records = normalize_positive_integer(max_records, DEFAULT_MAX_RECORDS)
+    cutoff = User.guest_cleanup_retention_period.ago
     deleted_count = 0
     failed_count = 0
 
-    User.guest_cleanup_candidates
+    User.guest_cleanup_candidates(cutoff)
       .limit(max_records)
       .find_each(batch_size: batch_size) do |user|
-        destroy_guest_user!(user)
-        deleted_count += 1
+        deleted_count += 1 if destroy_guest_user!(user, cutoff: cutoff)
       rescue StandardError => e
         failed_count += 1
         log_destroy_failure(user, e)
@@ -30,19 +30,24 @@ class GuestUserCleanupJob < ApplicationJob
 
   private
 
-  def destroy_guest_user!(user)
+  def destroy_guest_user!(user, cutoff:)
     if Receipt.respond_to?(:suppressing_turbo_broadcasts)
-      Receipt.suppressing_turbo_broadcasts { destroy_guest_user_transaction!(user) }
+      Receipt.suppressing_turbo_broadcasts { destroy_guest_user_transaction!(user, cutoff: cutoff) }
     else
-      destroy_guest_user_transaction!(user)
+      destroy_guest_user_transaction!(user, cutoff: cutoff)
     end
   end
 
-  def destroy_guest_user_transaction!(user)
-    User.transaction do
+  def destroy_guest_user_transaction!(user, cutoff:)
+    user.with_lock do
+      return false unless User.guest_cleanup_candidates(cutoff).where(id: user.id).exists?
+
       user.notifications.delete_all
       user.destroy!
+      true
     end
+  rescue ActiveRecord::RecordNotFound
+    false
   end
 
   def normalize_positive_integer(value, fallback)
