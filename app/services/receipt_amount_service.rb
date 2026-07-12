@@ -107,31 +107,31 @@ class ReceiptAmountService
   end
 
   def self.receipt_total_amount_max
-    ReceiptAmountLimits.receipt_total_amount_max
+    Amounts::Limits.receipt_total_amount_max
   end
 
   def self.receipt_item_price_max
-    ReceiptAmountLimits.receipt_item_price_max
+    Amounts::Limits.receipt_item_price_max
   end
 
   def self.receipt_item_line_total_max
-    ReceiptAmountLimits.receipt_item_line_total_max
+    Amounts::Limits.receipt_item_line_total_max
   end
 
   def self.receipt_tax_amount_max
-    ReceiptAmountLimits.receipt_tax_amount_max
+    Amounts::Limits.receipt_tax_amount_max
   end
 
   def self.receipt_adjustment_amount_max
-    ReceiptAmountLimits.receipt_adjustment_amount_max
+    Amounts::Limits.receipt_adjustment_amount_max
   end
 
   def self.receipt_payment_amount_max
-    ReceiptAmountLimits.receipt_payment_amount_max
+    Amounts::Limits.receipt_payment_amount_max
   end
 
   def self.violations_for(receipt: {}, receipt_items: [], receipt_adjustments: [], receipt_payments: [], receipt_tax_details: [])
-    ReceiptAmountLimits.violations_for(
+    Amounts::Limits.violations_for(
       receipt: receipt,
       receipt_items: receipt_items,
       receipt_adjustments: receipt_adjustments,

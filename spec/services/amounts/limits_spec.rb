@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptAmountLimits do
+RSpec.describe Amounts::Limits do
   describe '.limit_for' do
     it 'default上限を返す' do
       aggregate_failures do

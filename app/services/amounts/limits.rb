@@ -1,4 +1,4 @@
-module ReceiptAmountLimits
+module Amounts::Limits
   DEFAULT_MAX = SystemSettings::AMOUNT_LIMIT_DEFAULT
   KEYS = {
     receipt_total_amount: "limits.receipt_total_amount_max",
