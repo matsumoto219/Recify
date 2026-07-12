@@ -152,4 +152,76 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect(new_jobs.map { |job| job[:job] }).to eq([ Turbo::Streams::ActionBroadcastJob ])
     expect_browser_console_clean
   end
+
+  it "review reasonリンクから該当明細を展開して入力できる" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "レビュー対象店",
+      purchased_at: Time.zone.local(2026, 7, 12, 12, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 91,
+      tax_amount: 9,
+      total_amount: 100
+    )
+    review_item = receipt.receipt_items.create!(
+      raw_text: "OCR要確認商品",
+      confirmed_name: "要確認商品",
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: "each",
+      tax_rate: BigDecimal("0.1"),
+      line_total: 100,
+      needs_review: true,
+      review_reasons: [ "item_tax_rate_uncertain" ]
+    )
+    receipt.update!(status: "review_needed", review_reasons: [])
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    target_id = "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX}#{review_item.id}"
+    item_row = find("##{target_id}")
+    panel_selector = "[data-receipt-form-target='itemDetailsPanel']"
+    toggle_selector = "[data-receipt-form-target='itemDetailsToggle']"
+
+    aggregate_failures do
+      expect(page.evaluate_script("window.location.hash")).to eq("")
+      expect(item_row.find(panel_selector, visible: :all)["aria-hidden"]).to eq("true")
+      expect(item_row).to have_css(
+        "#{toggle_selector}[aria-expanded='false']",
+        count: 2,
+        visible: :all
+      )
+    end
+
+    expect(page).to have_css("[data-receipt-review-notes-card][data-collapsible-enhanced='true']")
+    review_card = find("[data-receipt-review-notes-card]")
+    review_card.find("[data-receipt-notes-summary]").click
+
+    target_link_selector = "a[data-review-reason-target-item='#{target_id}']"
+    expect(review_card).to have_css(target_link_selector)
+    review_card.find(target_link_selector).click
+
+    expect(item_row).to have_css(
+      "#{panel_selector}.is-open[aria-hidden='false']:not([inert])",
+      visible: :all
+    )
+    expect(item_row).to have_css(
+      "#{toggle_selector}[aria-expanded='true']",
+      count: 2,
+      visible: :all
+    )
+    expect(page.evaluate_script("window.location.hash")).to eq("##{target_id}")
+
+    tax_rate_input = item_row.find("[data-receipt-form-target='taxRateInput']")
+    tax_rate_input.set("8")
+    expect(tax_rate_input.value).to eq("8")
+
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
 end
