@@ -8,13 +8,19 @@ RSpec.describe "Receipt form Stimulus controller" do
   let(:source) { Rails.root.join("app/javascript/controllers/receipt_form_controller.js").read }
 
   def run_controller_script(script)
-    encoded_source = Base64.strict_encode64(source)
+    module_source = %w[numeric_input amount_preview].map do |name|
+      Rails.root.join("app/javascript/receipts/#{name}.js").read.gsub(/^export /, "")
+    end.join("\n")
+    controller_source = source.gsub(%r!import \{[^}]*\} from '../receipts/(?:numeric_input|amount_preview)'\n!m, "")
+    encoded_module_source = Base64.strict_encode64(module_source)
+    encoded_source = Base64.strict_encode64(controller_source)
     harness = <<~JAVASCRIPT
+      const moduleSource = Buffer.from(#{encoded_module_source.inspect}, 'base64').toString('utf8')
       const source = Buffer.from(#{encoded_source.inspect}, 'base64').toString('utf8')
         .replace("import { Controller } from '@hotwired/stimulus'", 'class Controller {}')
         .replace('export default class extends Controller', 'class ReceiptFormController extends Controller')
 
-      eval(`${source}\nglobalThis.ReceiptFormController = ReceiptFormController`)
+      eval(`${moduleSource}\n${source}\nglobalThis.ReceiptFormController = ReceiptFormController`)
       #{script}
     JAVASCRIPT
 
