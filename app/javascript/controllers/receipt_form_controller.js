@@ -12,7 +12,7 @@ import {
   parseIntegerInput,
   previewValueInRange,
   quantityUnitList
-} from '../receipts/numeric_input'
+} from 'receipts/numeric_input'
 import {
   applyRounding,
   clampNumber,
@@ -21,7 +21,7 @@ import {
   formatTaxRate,
   normalizeRoundingMode,
   roundLineAmount
-} from '../receipts/amount_preview'
+} from 'receipts/amount_preview'
 
 const DEFAULT_AMOUNT_MAX = 999999999
 const LINE_TOTAL_TOOLTIP_DELAY_MS = 500

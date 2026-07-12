@@ -11,7 +11,7 @@ RSpec.describe "Receipt form Stimulus controller" do
     module_source = %w[numeric_input amount_preview].map do |name|
       Rails.root.join("app/javascript/receipts/#{name}.js").read.gsub(/^export /, "")
     end.join("\n")
-    controller_source = source.gsub(%r!import \{[^}]*\} from '../receipts/(?:numeric_input|amount_preview)'\n!m, "")
+    controller_source = source.gsub(%r!import \{[^}]*\} from 'receipts/(?:numeric_input|amount_preview)'\n!m, "")
     encoded_module_source = Base64.strict_encode64(module_source)
     encoded_source = Base64.strict_encode64(controller_source)
     harness = <<~JAVASCRIPT
