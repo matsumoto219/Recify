@@ -5,7 +5,7 @@ module Analysis
     # - error_code（内部ログ用）と error_category（ユーザー表示用）を分離
     #
     # 使用箇所:
-    # - ReceiptAnalysisPipeline::FinalizeStep 内で利用
+    # - Receipts::Processing::Pipeline::FinalizeStep 内で利用
     #
     # 設計方針:
     # - OCR / AI / System を分類
