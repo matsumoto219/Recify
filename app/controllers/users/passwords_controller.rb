@@ -21,7 +21,7 @@ class Users::PasswordsController < Devise::PasswordsController
   # POST /resource/password
   def create
     super do |resource|
-      set_flash_from_resource_errors(resource) if resource.errors.any?
+      set_flash_from_resource_errors(resource) if resource.errors.any? && !Devise.paranoid
     end
     keep_flash_until_manual_dismiss(:notice)
   end

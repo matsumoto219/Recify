@@ -393,7 +393,7 @@ RSpec.describe 'Auth pages', type: :request do
       expect(response).to redirect_to(new_user_session_path)
     end
 
-    it 'lockable failure warns on last attempt and sends unlock mail when locked' do
+    it 'lock状態を応答へ出さず、上限到達時はunlock mailを送る' do
       user = create(:user)
 
       with_devise_maximum_attempts(2) do
@@ -407,7 +407,7 @@ RSpec.describe 'Auth pages', type: :request do
 
         aggregate_failures do
           expect(response).to have_http_status(:unprocessable_content)
-          expect(flash[:alert]).to eq(I18n.t('devise.failure.last_attempt'))
+          expect(flash[:alert]).to eq(I18n.t('devise.failure.invalid', authentication_keys: 'メールアドレス'))
           expect(flash[:notice]).to be_nil
           expect_no_dashboard_shell
           expect(user.reload.failed_attempts).to eq(1)
@@ -424,7 +424,7 @@ RSpec.describe 'Auth pages', type: :request do
 
         aggregate_failures do
           expect(response).to have_http_status(:unprocessable_content)
-          expect(flash[:alert]).to eq(I18n.t('devise.failure.locked'))
+          expect(flash[:alert]).to eq(I18n.t('devise.failure.invalid', authentication_keys: 'メールアドレス'))
           expect(flash[:notice]).to be_nil
           expect_no_dashboard_shell
           expect(user.reload).to be_access_locked
@@ -1357,7 +1357,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
-        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_instructions'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_paranoid_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.to).to include('guest-resend-current@example.com')
       end
@@ -1393,7 +1393,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
-        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_instructions'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_paranoid_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.subject).to eq(I18n.t('devise.mailer.confirmation_instructions.subject'))
         expect_mail_cta_with_fallback(ActionMailer::Base.deliveries.last, I18n.t('auth.mailer.confirmation_instructions.action'))
@@ -1419,7 +1419,7 @@ RSpec.describe 'Auth pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(notice_surface).to be_present
-        expect(notice_surface.text).to include(I18n.t('devise.confirmations.send_instructions'))
+        expect(notice_surface.text).to include(I18n.t('devise.confirmations.send_paranoid_instructions'))
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('false')
       end
     end
@@ -1542,7 +1542,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'guest-registration'))
-        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_instructions'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_paranoid_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.to).to include('guest-resend-confirmation@example.com')
       end
@@ -1564,7 +1564,7 @@ RSpec.describe 'Auth pages', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(settings_security_path(anchor: 'email'))
-        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_instructions'))
+        expect(flash_message(:notice)).to eq(I18n.t('devise.confirmations.send_paranoid_instructions'))
         expect(ActionMailer::Base.deliveries.size).to eq(1)
         expect(ActionMailer::Base.deliveries.last.to).to include('normal-resend-confirmation@example.com')
       end
@@ -1682,7 +1682,7 @@ RSpec.describe 'Auth pages', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(notice_surface).to be_present
-        expect(notice_surface.text).to include(I18n.t('devise.passwords.send_instructions'))
+        expect(notice_surface.text).to include(I18n.t('devise.passwords.send_paranoid_instructions'))
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('false')
       end
     end
