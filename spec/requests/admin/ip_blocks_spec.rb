@@ -155,6 +155,7 @@ RSpec.describe 'Admin IP blocks', type: :request do
         expect(response.body).to include('xss_attempt')
         expect(response.body).to include(new_admin_passkey_reauthentication_path(return_to: admin_ip_block_path(block)))
         expect(created_by_email_node).to be_present
+        expect(created_by_email_node.text).to eq(created_by.email)
         expect(created_by_email_node['class'].split).to include('flex-1', 'overflow-hidden')
         expect(created_by_reference['class'].split).to include('flex', 'min-w-0', 'max-w-full')
         expect(response.body).not_to include("##{created_by.id} #{created_by.email}")

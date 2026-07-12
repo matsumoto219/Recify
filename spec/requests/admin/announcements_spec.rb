@@ -730,6 +730,7 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(response.body).not_to include('<b>本文</b>')
         expect(response.body).not_to include('translation missing')
         expect(creator_email_node).to be_present
+        expect(creator_email_node.text).to eq(admin.email)
         expect(creator_email_node['class'].split).to include('w-full', 'overflow-hidden')
         expect(creator_metadata_cell['class'].split).to include('min-w-0', 'max-w-full')
       end

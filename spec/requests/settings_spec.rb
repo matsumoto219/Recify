@@ -521,6 +521,7 @@ RSpec.describe 'Settings', type: :request do
       get settings_path
 
       document = Nokogiri::HTML(response.body)
+      body = document.at_css('body')
       email_node = document.css('p').find do |node|
         node['title'] == full_email && node['aria-label'] == full_email
       end
@@ -530,11 +531,13 @@ RSpec.describe 'Settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(full_email)
         expect(response.body).not_to include('recify-v11...')
+        expect(body['data-controller'].split).to include('email-address-copy')
+        expect(body['data-action'].split).to include('copy->email-address-copy#copy')
         expect(email_node).to be_present
-        expect(email_node.text.gsub(/\s+/, '')).to eq(full_email)
+        expect(email_node.text).to eq(full_email)
         expect(email_node['class']).to include('flex-wrap')
         expect(email_node['class']).not_to include('truncate')
-        expect(email_segments.map { |segment| segment.text.strip }).to eq([ 'recify-v11-ui-confirmation-user', '@example.com' ])
+        expect(email_segments.map(&:text)).to eq([ 'recify-v11-ui-confirmation-user', '@example.com' ])
         expect(email_segments.map { |segment| segment['class'] }).to all(include('truncate'))
       end
     end
@@ -696,9 +699,10 @@ RSpec.describe 'Settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(email_node).to be_present
         expect(display_node).to be_present
+        expect(display_node.text).to eq(full_email)
         expect(display_node['class']).to include('inline-flex')
         expect(display_node['class']).not_to include('grid-cols')
-        expect(email_segments.map { |segment| segment.text.strip }).to eq([
+        expect(email_segments.map(&:text)).to eq([
           'recify-v11-security-current-email-version123456789',
           '@',
           'example.com'
@@ -800,6 +804,7 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(pending_label)
         expect(response.body).to include(I18n.t('settings.security.email.resend_confirmation'))
         expect(document.at_css("a[href='#{new_user_confirmation_path}']")).to be_present
+        expect(pending_email_node.text).to eq('pending-normal@example.com')
         expect(pending_email_classes).to include('min-w-0', 'flex-1')
         expect(pending_email_classes).not_to include('w-full')
         expect(pending_email_classes).not_to include('min-w-[8rem]')
@@ -1006,6 +1011,7 @@ RSpec.describe 'Settings', type: :request do
         expect(response.body).to include(I18n.t('settings.security.guest_registration.pending.resend'))
         expect(document.at_css("a[href='#{new_user_confirmation_path}']")).to be_present
         expect(response.body).not_to include(fake_email)
+        expect(sent_to_email_node.text).to eq('pending-guest@example.com')
         expect(sent_to_email_classes).to include('min-w-0', 'flex-1')
         expect(sent_to_email_classes).not_to include('w-full')
         expect(sent_to_email_classes).not_to include('min-w-[8rem]')

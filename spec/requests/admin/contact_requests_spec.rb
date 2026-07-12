@@ -132,6 +132,7 @@ RSpec.describe 'Admin contact requests', type: :request do
         expect(response.body).to include(admin_user_path(user))
         expect(response.body).not_to include('sender@example.com')
         expect(masked_email_node).to be_present
+        expect(masked_email_node.text).to eq('se***@example.com')
         expect(masked_email_node['class'].split).to include('w-full', 'overflow-hidden')
         expect(masked_email_cell['class'].split).to include('min-w-0', 'max-w-full')
         expect(copy_sources).to include(user.id.to_s)

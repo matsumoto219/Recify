@@ -19,16 +19,34 @@
 
   local_class = "min-w-[1ch] max-w-full flex-[0_999_auto] truncate"
   domain_class = "min-w-0 max-w-full flex-[0_1_auto] truncate"
+
+  display_segments =
+    if parts[:domain].present?
+      if mode == :one_line
+        [
+          content_tag(:span, parts[:local_part], class: local_class),
+          content_tag(:span, "@", class: "shrink-0"),
+          content_tag(:span, parts[:domain], class: domain_class)
+        ]
+      else
+        [
+          content_tag(:span, parts[:local_part], class: local_class),
+          content_tag(:span, "@#{parts[:domain]}", class: domain_class)
+        ]
+      end
+    else
+      [ content_tag(:span, parts[:text], class: "min-w-0 max-w-full truncate") ]
+    end
+
+  display_content = safe_join(display_segments, "")
 %>
 
 <% if copyable %>
   <%= content_tag tag_name, class: [ "min-w-0 max-w-full", extra_class ].compact.join(" "), title: email_text, aria: { label: email_text } do %>
-    <% display_markup = capture do %>
-      <%= render "shared/ui/text/email_address",
-            email: email_text,
-            mode: mode,
-            tag: :span %>
-    <% end %>
+    <% display_markup = render "shared/ui/text/email_address",
+          email: email_text,
+          mode: mode,
+          tag: :span %>
     <%= render "shared/ui/actions/copyable_value",
           value: email_text,
           display: display_markup,
@@ -37,17 +55,10 @@
           value_class: "min-w-0 flex-1 overflow-hidden" %>
   <% end %>
 <% else %>
-  <%= content_tag tag_name, class: [ wrapper_class, extra_class ].compact.join(" "), title: email_text, aria: { label: email_text }, data: { email_address_display: true } do %>
-    <% if parts[:domain].present? %>
-      <span class="<%= local_class %>"><%= parts[:local_part] %></span>
-      <% if mode == :one_line %>
-        <span class="shrink-0">@</span>
-        <span class="<%= domain_class %>"><%= parts[:domain] %></span>
-      <% else %>
-        <span class="<%= domain_class %>">@<%= parts[:domain] %></span>
-      <% end %>
-    <% else %>
-      <span class="min-w-0 max-w-full truncate"><%= parts[:text] %></span>
-    <% end %>
-  <% end %>
+  <%= content_tag tag_name,
+        display_content,
+        class: [ wrapper_class, extra_class ].compact.join(" "),
+        title: email_text,
+        aria: { label: email_text },
+        data: { email_address_display: true, email_address_value: email_text } %>
 <% end %>

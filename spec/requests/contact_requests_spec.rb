@@ -142,12 +142,14 @@ RSpec.describe 'Contact requests', type: :request do
 
       document = Nokogiri::HTML(response.body)
       sender_name_input = document.at_css('input[name="contact_request[sender_name]"]')
+      email_node = document.css('[data-email-address-display]').find { |node| node['title'] == user.email }
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(document.at_css('#public-header')).to be_nil
         expect(document.at_css('#public-footer')).to be_nil
         expect(response.body).to include('contact-user@example.com')
+        expect(email_node.text).to eq('contact-user@example.com')
         expect(document.at_css('input[name="contact_request[email]"]')).to be_nil
         expect(sender_name_input['value']).to eq('登録 花子')
         expect(sender_name_input['required']).to be_nil

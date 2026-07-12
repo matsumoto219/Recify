@@ -33,7 +33,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
   </head>
 
-  <body data-theme-preference="<%= user_signed_in? ? current_user.theme_preference : 'system' %>">
+  <body
+    data-controller="email-address-copy"
+    data-action="copy->email-address-copy#copy"
+    data-theme-preference="<%= user_signed_in? ? current_user.theme_preference : 'system' %>">
     <% show_dashboard_shell = user_signed_in? && !public_layout_page? %>
 
     <div id="flash">

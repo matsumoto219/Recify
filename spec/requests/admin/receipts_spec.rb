@@ -101,9 +101,10 @@ RSpec.describe 'Admin receipts', type: :request do
         expect(response.body).to include(admin_audit_logs_path(target_uid: "receipt:#{receipt.public_id}"))
         expect(response.body.scan(/translation missing[^<]*/)).to be_empty
         expect(owner_email_node).to be_present
+        expect(owner_email_node.text).to eq(owner.email)
         expect(owner_email_node['class'].split).to include('w-full', 'overflow-hidden')
         expect(owner_email_section['class'].split).to include('min-w-0', 'max-w-full')
-        expect(owner_email_segments.map { |segment| segment.text.strip }).to include('@')
+        expect(owner_email_segments.map(&:text)).to include('@')
       end
     end
 
@@ -130,6 +131,7 @@ RSpec.describe 'Admin receipts', type: :request do
         expect(response.body).to include('確認文字列 RELEASE RECEIPT')
         expect(response.body).to include(release_admin_receipt_path(receipt))
         expect(moderator_email_node).to be_present
+        expect(moderator_email_node.text).to eq(admin.email)
         expect(moderator_email_node['class'].split).to include('flex-1', 'overflow-hidden')
         expect(moderator_reference['class'].split).to include('flex', 'min-w-0', 'max-w-full')
       end
