@@ -1,4 +1,4 @@
-class ReceiptAnalysisPipeline
+class Receipts::Processing::Pipeline
   module Config
     SUPPORTED_RECEIPT_COUNTRY_CODES = %w[JPN].freeze
     UNREADABLE_CONFIDENCE_THRESHOLD = 0.3

@@ -53,12 +53,12 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
         receipt_attributes: {}
       )
       Receipts::Processing.record_finalize_decision(run, decision)
-      allow(ReceiptAnalysisPipeline).to receive(:finalize).and_call_original
+      allow(Receipts::Processing::Pipeline).to receive(:finalize).and_call_original
 
       2.times { described_class.perform_now(run_id: run.id) }
 
       aggregate_failures do
-        expect(ReceiptAnalysisPipeline).to have_received(:finalize).once
+        expect(Receipts::Processing::Pipeline).to have_received(:finalize).once
         expect(receipt.reload.status).to eq('failed')
         expect(run.reload.status).to eq('succeeded')
       end

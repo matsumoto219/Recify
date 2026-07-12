@@ -51,15 +51,15 @@ module Receipts
       end
 
       def run_ocr(...)
-        ReceiptAnalysisPipeline.run_ocr(...)
+        Pipeline.run_ocr(...)
       end
 
       def run_ai(...)
-        ReceiptAnalysisPipeline.run_ai(...)
+        Pipeline.run_ai(...)
       end
 
       def run_finalize(...)
-        ReceiptAnalysisPipeline.run_finalize(...)
+        Pipeline.run_finalize(...)
       end
 
       def start(...)

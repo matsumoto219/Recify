@@ -1,4 +1,4 @@
-class ReceiptAnalysisPipeline
+class Receipts::Processing::Pipeline
   class AiStep
     def self.call(run:, ocr_result:, ai_name_completion_enabled: false, before_provider_call: nil)
       new(

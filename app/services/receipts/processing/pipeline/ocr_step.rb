@@ -1,4 +1,4 @@
-class ReceiptAnalysisPipeline
+class Receipts::Processing::Pipeline
   class OcrStep
     def self.call(run, before_provider_call: nil)
       new(run, before_provider_call: before_provider_call).call

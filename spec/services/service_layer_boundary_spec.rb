@@ -141,17 +141,6 @@ RSpec.describe "Service layer child implementation boundary" do
       ]
     ),
     "ocr" => registry_entry("ocr", "Ocr", facade: "app/services/receipt_ocr_service.rb"),
-    "receipt_analysis_pipeline" => registry_entry(
-      "receipt_analysis_pipeline",
-      "ReceiptAnalysisPipeline",
-      facade: "app/services/receipt_analysis_pipeline.rb",
-      public_constants: %w[
-        ReceiptAnalysisPipeline::AnalysisError
-        ReceiptAnalysisPipeline::FINALIZE_DECISION_SCHEMA_VERSION
-        ReceiptAnalysisPipeline::FINALIZE_STRATEGIES
-        ReceiptAnalysisPipeline::Result
-      ]
-    ),
     "receipt_analysis_profiles" => registry_entry(
       "receipt_analysis_profiles",
       "ReceiptAnalysisProfiles",

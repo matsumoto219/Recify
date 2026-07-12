@@ -1,4 +1,4 @@
-class ReceiptAnalysisPipeline
+class Receipts::Processing::Pipeline
   LOG_TAG = "[ReceiptAnalysisPipeline]".freeze
   FINALIZE_DECISION_SCHEMA_VERSION = Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
   FINALIZE_STRATEGIES = Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES

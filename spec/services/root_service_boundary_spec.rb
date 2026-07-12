@@ -18,7 +18,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_ai_enrichment_service.rb" => { constant: "ReceiptAiEnrichmentService", role: :public_facade, owner: "AI specialist facade", remove_in_loop: nil },
     "receipt_amount_limits.rb" => { constant: "ReceiptAmountLimits", role: :legacy_policy, owner: "move behind ReceiptAmountService", remove_in_loop: 19 },
     "receipt_amount_service.rb" => { constant: "ReceiptAmountService", role: :public_facade, owner: "Amount Engine facade", remove_in_loop: nil },
-    "receipt_analysis_pipeline.rb" => { constant: "ReceiptAnalysisPipeline", role: :legacy_workflow, owner: "migrate to Receipts::Processing", remove_in_loop: 22 },
     "receipt_analysis_profiles.rb" => { constant: "ReceiptAnalysisProfiles", role: :public_facade, owner: "country analysis profile facade", remove_in_loop: nil },
     "receipt_analysis_runs.rb" => { constant: "ReceiptAnalysisRuns", role: :legacy_workflow, owner: "migrate to Receipts::Processing run lifecycle", remove_in_loop: 22 },
     "receipt_ocr_service.rb" => { constant: "ReceiptOcrService", role: :public_facade, owner: "OCR specialist facade", remove_in_loop: nil },
@@ -52,7 +51,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_ai_enrichment_service.rb" => %i[available? call error_result provider_metrics],
     "receipt_amount_limits.rb" => %i[receipt_adjustment_amount_max receipt_item_line_total_max receipt_item_price_max receipt_payment_amount_max receipt_tax_amount_max receipt_total_amount_max violations_for],
     "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_summary warning_mismatch_codes],
-    "receipt_analysis_pipeline.rb" => %i[run_ai run_finalize run_ocr],
     "receipt_analysis_profiles.rb" => %i[default fetch],
     "receipt_analysis_runs.rb" => %i[cancel claim_stage cleanup_expired cleanup_stale copy_retry_snapshots enqueue external_service_runtime_config fail finish_stage record_ai_input record_ai_normalized_result record_ai_result record_build_params_snapshot record_final_result record_finalize_decision record_ocr_response_artifact record_ocr_result record_ocr_snapshot start start_stage succeed supersede],
     "receipt_ocr_service.rb" => %i[available? call error_result],
@@ -86,7 +84,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "receipt_ai_enrichment_service.rb" => %i[available? call error_result provider_metrics],
     "receipt_amount_limits.rb" => %i[limit_for receipt_adjustment_amount_max receipt_item_line_total_max receipt_item_price_max receipt_payment_amount_max receipt_tax_amount_max receipt_total_amount_max violations_for],
     "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call mismatch_code parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_summary warning_mismatch_codes],
-    "receipt_analysis_pipeline.rb" => %i[finalize finalize_decision_from_snapshot run_ai run_finalize run_ocr],
     "receipt_analysis_profiles.rb" => %i[default fetch for_country],
     "receipt_analysis_runs.rb" => %i[cancel claim_stage cleanup_expired cleanup_stale copy_retry_snapshots enqueue external_service_runtime_config fail finish_stage record_ai_input record_ai_normalized_result record_ai_result record_build_params_snapshot record_final_result record_finalize_decision record_ocr_response_artifact record_ocr_result record_ocr_snapshot start start_stage succeed supersede],
     "receipt_ocr_service.rb" => %i[available? call error_result],
@@ -111,7 +108,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     "production_runtime_config.rb" => %i[additional_hosts app_host app_protocol assume_ssl? force_ssl? host_authorization_hosts mailer_default_url_options mailer_host mailer_protocol missing_smtp_env routes_default_url_options smtp_env_present? smtp_settings ssl_options],
     "receipt_ai_enrichment_service.rb" => %i[call],
     "receipt_amount_service.rb" => %i[call],
-    "receipt_analysis_pipeline.rb" => %i[run_ai run_finalize run_ocr],
     "receipt_ocr_service.rb" => %i[call]
   }.freeze
 
@@ -122,7 +118,6 @@ RSpec.describe "root service and lifecycle status boundary" do
     production_runtime_config.rb
     receipt_ai_enrichment_service.rb
     receipt_amount_service.rb
-    receipt_analysis_pipeline.rb
     receipt_ocr_service.rb
   ].freeze
 
@@ -141,7 +136,7 @@ RSpec.describe "root service and lifecycle status boundary" do
   EXPECTED_STATUS_WRITE_FINGERPRINTS = {
     [ "app/controllers/receipts_controller.rb", :receipt, "@receipt", :status=, [ :status ] ] => 2,
     [ "app/services/system_operations/receipt_analysis_retry_executor.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
-    [ "app/services/receipt_analysis_pipeline.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
+    [ "app/services/receipts/processing/pipeline.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
     [ "app/services/receipt_analysis_runs.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
     [ "app/services/receipt_analysis_runs/starter.rb", :analysis_run, "receipt.receipt_analysis_runs", :create!, %i[status stage] ] => 1,
     [ "app/services/receipt_analysis_runs/starter.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
@@ -153,7 +148,7 @@ RSpec.describe "root service and lifecycle status boundary" do
 
   INDIRECT_STATUS_OWNERS = {
     "app/controllers/receipts_controller.rb" => "legacy upload/manual/edit lifecycle owner; migrate in Loops 8/12/13/21",
-    "app/services/receipt_analysis_pipeline/finalize_step.rb" => "final receipt status decision and persistence owner; migrate in Loops 14/18",
+    "app/services/receipts/processing/pipeline/finalize_step.rb" => "final receipt status decision and persistence owner; split in Finalize loop",
     "app/services/receipts/editing/review_state.rb" => "Receipts::Editing review status decision"
   }.freeze
 

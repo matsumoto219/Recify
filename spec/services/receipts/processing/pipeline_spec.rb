@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe ReceiptAnalysisPipeline do
+RSpec.describe Receipts::Processing::Pipeline do
   def successful_ocr_result
     {
       success: true,
@@ -1551,7 +1551,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_items_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1583,7 +1583,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_items_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1620,7 +1620,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_items_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1684,7 +1684,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_items_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1749,7 +1749,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_items_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1796,7 +1796,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_items_amount_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_items_amount_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1839,7 +1839,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_amount_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_amount_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1869,7 +1869,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_payments_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_payments_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1904,7 +1904,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_payments_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_payments_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1938,7 +1938,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_tax_details_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_tax_details_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -1973,7 +1973,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_tax_details_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_tax_details_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -2008,7 +2008,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_adjustments_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -2076,7 +2076,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_adjustments_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -2139,7 +2139,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
       expect {
         described_class.run_finalize(run)
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/)
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_adjustments_limit_exceeded/)
 
       aggregate_failures do
         expect(run.reload.status).to eq('failed')
@@ -2899,7 +2899,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           receipt: receipt,
           decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
         )
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_payments_limit_exceeded/) { |error|
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_payments_limit_exceeded/) { |error|
         expect(error.metadata).to include(
           error: 'analysis_value_invalid',
           resource: 'receipt_payments',
@@ -2925,7 +2925,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           receipt: receipt,
           decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
         )
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_tax_details_limit_exceeded/) { |error|
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_tax_details_limit_exceeded/) { |error|
         expect(error.metadata).to include(
           error: 'analysis_value_invalid',
           resource: 'receipt_tax_details',
@@ -2960,7 +2960,7 @@ RSpec.describe ReceiptAnalysisPipeline do
           receipt: receipt,
           decision: finalize_decision(:ai_success, ocr_result: ocr_result, ai_result: ai_result)
         )
-      }.to raise_error(ReceiptAnalysisPipeline::AnalysisError, /receipt_adjustments_limit_exceeded/) { |error|
+      }.to raise_error(Receipts::Processing::AnalysisError, /receipt_adjustments_limit_exceeded/) { |error|
         expect(error.metadata).to include(
           error: 'analysis_value_invalid',
           resource: 'receipt_adjustments',
@@ -4147,7 +4147,7 @@ RSpec.describe ReceiptAnalysisPipeline do
 
     it 'AI成功ルートではlow_quality_ocr?を1回だけ評価する' do
       receipt = create(:receipt, :processing, :with_image)
-      expect_any_instance_of(ReceiptAnalysisPipeline::FinalizeStep)
+      expect_any_instance_of(Receipts::Processing::Pipeline::FinalizeStep)
         .to receive(:low_quality_ocr?)
         .once
         .and_call_original

@@ -4,11 +4,11 @@ RSpec.describe Receipts::Processing do
   describe "public contracts" do
     it "legacy workflowのErrorとResult contractを同一objectで公開する" do
       aggregate_failures do
-        expect(described_class::AnalysisError).to equal(ReceiptAnalysisPipeline::AnalysisError)
+        expect(described_class::AnalysisError).to equal(Receipts::Processing::Pipeline::AnalysisError)
         expect(described_class::EnqueueError).to equal(ReceiptAnalysisRuns::EnqueueError)
         expect(described_class::Error).to equal(ReceiptAnalysisRuns::Error)
         expect(described_class::InvalidTransition).to equal(ReceiptAnalysisRuns::InvalidTransition)
-        expect(described_class::Result).to equal(ReceiptAnalysisPipeline::Result)
+        expect(described_class::Result).to equal(Receipts::Processing::Pipeline::Result)
         expect(described_class::StartResult).to equal(ReceiptAnalysisRuns::StartResult)
         expect(described_class::TerminalRunError).to equal(ReceiptAnalysisRuns::TerminalRunError)
       end
@@ -18,7 +18,7 @@ RSpec.describe Receipts::Processing do
   describe "pipeline facade" do
     it "OCR stageをlegacy Pipelineへ委譲する" do
       run = instance_double(ReceiptAnalysisRun)
-      allow(ReceiptAnalysisPipeline).to receive(:run_ocr).with(run).and_return(:result)
+      allow(Receipts::Processing::Pipeline).to receive(:run_ocr).with(run).and_return(:result)
 
       expect(described_class.run_ocr(run)).to eq(:result)
     end

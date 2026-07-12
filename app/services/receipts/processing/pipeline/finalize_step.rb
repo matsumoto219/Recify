@@ -1,4 +1,4 @@
-class ReceiptAnalysisPipeline
+class Receipts::Processing::Pipeline
   class FinalizeStep
     REVIEW_NEEDED_CONFIDENCE_THRESHOLD = Config::REVIEW_NEEDED_CONFIDENCE_THRESHOLD
     ITEM_TOTAL_DRIFT_REVIEW_REASON = "item_total_mismatch"
@@ -54,7 +54,7 @@ class ReceiptAnalysisPipeline
       when "ai_success"
         save_ai_result!(ocr_result_for_finalize, ai_result_for_finalize)
       else
-        raise ReceiptAnalysisPipeline::AnalysisError.new(
+        raise Receipts::Processing::AnalysisError.new(
           "unexpected_error",
           "Unknown finalize_strategy=#{decision.finalize_strategy}"
         )
@@ -454,7 +454,7 @@ class ReceiptAnalysisPipeline
       ).first
       return if violation.blank?
 
-      raise ReceiptAnalysisPipeline::AnalysisError.new(
+      raise Receipts::Processing::AnalysisError.new(
         "analysis_value_invalid",
         "#{violation.fetch(:resource)}_amount_limit_exceeded field=#{violation.fetch(:field)} actual=#{violation.fetch(:actual_value)} limit=#{violation.fetch(:limit)}",
         metadata: amount_limit_exceeded_metadata(violation)
@@ -553,7 +553,7 @@ class ReceiptAnalysisPipeline
     def raise_limit_exceeded!(error:, resource:, limit:, actual_count:, snapshot_count: nil)
       return if actual_count <= limit
 
-      raise ReceiptAnalysisPipeline::AnalysisError.new(
+      raise Receipts::Processing::AnalysisError.new(
         error,
         "#{resource}_limit_exceeded count=#{actual_count} limit=#{limit}",
         metadata: limit_exceeded_metadata(

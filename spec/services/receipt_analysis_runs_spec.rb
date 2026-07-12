@@ -1054,7 +1054,7 @@ RSpec.describe ReceiptAnalysisRuns do
       described_class.record_finalize_decision(run, decision)
 
       snapshot = run.reload.metadata['finalize_decision']
-      restored = ReceiptAnalysisPipeline.finalize_decision_from_snapshot(snapshot)
+      restored = Receipts::Processing.finalize_decision_from_snapshot(snapshot)
 
       aggregate_failures do
         expect(run.metadata['operator_note']).to eq('keep me')
@@ -1097,7 +1097,7 @@ RSpec.describe ReceiptAnalysisRuns do
 
       snapshot = run.reload.metadata['finalize_decision']
       snapshot_json = deep_json(snapshot)
-      restored = ReceiptAnalysisPipeline.finalize_decision_from_snapshot(snapshot)
+      restored = Receipts::Processing.finalize_decision_from_snapshot(snapshot)
 
       aggregate_failures do
         expect(snapshot['receipt_attributes']).to eq('country_region' => 'USA')
@@ -1176,7 +1176,7 @@ RSpec.describe ReceiptAnalysisRuns do
 
         described_class.record_finalize_decision(run, decision)
 
-        restored = ReceiptAnalysisPipeline.finalize_decision_from_snapshot(run.reload.metadata['finalize_decision'])
+        restored = Receipts::Processing.finalize_decision_from_snapshot(run.reload.metadata['finalize_decision'])
 
         aggregate_failures(decision.finalize_strategy) do
           expect(restored.finalize_strategy).to eq(decision.finalize_strategy)

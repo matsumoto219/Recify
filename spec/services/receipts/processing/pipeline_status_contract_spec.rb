@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-RSpec.describe 'ReceiptAnalysisPipeline status contract' do
+RSpec.describe 'Receipts::Processing::Pipeline status contract' do
   def successful_ocr_result(overrides = {})
     {
       success: true,
@@ -143,8 +143,8 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
     stub_amount_service(amount_result)
     allow(ReceiptAiEnrichmentService).to receive(:call).and_return(ai_result)
 
-    ai_stage = ReceiptAnalysisPipeline.run_ai(run)
-    finalize_stage = ReceiptAnalysisPipeline.run_finalize(run)
+    ai_stage = Receipts::Processing::Pipeline.run_ai(run)
+    finalize_stage = Receipts::Processing::Pipeline.run_finalize(run)
 
     [ receipt.reload, run.reload, ai_stage, finalize_stage ]
   end
@@ -159,8 +159,8 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
     finalize_stage = nil
 
     expect do
-      ocr_stage = ReceiptAnalysisPipeline.run_ocr(run)
-      finalize_stage = ReceiptAnalysisPipeline.run_finalize(run)
+      ocr_stage = Receipts::Processing::Pipeline.run_ocr(run)
+      finalize_stage = Receipts::Processing::Pipeline.run_finalize(run)
     end.not_to change(AuditLog, :count)
 
     [ receipt.reload, run.reload, ocr_stage, finalize_stage ]
@@ -291,7 +291,7 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
           metadata: {}
         )
 
-        ReceiptAnalysisPipeline.finalize(receipt: receipt, decision: decision)
+        Receipts::Processing::Pipeline.finalize(receipt: receipt, decision: decision)
         receipt.reload
 
         aggregate_failures(strategy) do
@@ -317,8 +317,8 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
       stub_amount_service
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return('invalid ai response')
 
-      ai_stage = ReceiptAnalysisPipeline.run_ai(run)
-      finalize_stage = ReceiptAnalysisPipeline.run_finalize(run)
+      ai_stage = Receipts::Processing::Pipeline.run_ai(run)
+      finalize_stage = Receipts::Processing::Pipeline.run_finalize(run)
       receipt.reload
       run.reload
 
@@ -515,7 +515,7 @@ RSpec.describe 'ReceiptAnalysisPipeline status contract' do
       stub_services_available
       allow(ReceiptOcrService).to receive(:call).and_return(successful_ocr_result)
 
-      result = ReceiptAnalysisPipeline.run_ocr(run)
+      result = Receipts::Processing::Pipeline.run_ocr(run)
 
       aggregate_failures do
         expect(result.next_step).to eq(:ai)
