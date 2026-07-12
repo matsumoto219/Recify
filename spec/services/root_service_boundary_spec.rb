@@ -138,8 +138,7 @@ RSpec.describe "root service and lifecycle status boundary" do
 
   EXPECTED_STATUS_WRITE_FINGERPRINTS = {
     [ "app/services/receipts/editing/manual_creator.rb", :receipt, "receipt", :status=, [ :status ] ] => 1,
-    [ "app/services/system_operations/receipt_analysis_retry_executor.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
-    [ "app/services/receipts/processing/pipeline.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
+    [ "app/services/receipts/processing/status_transition.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
     [ "app/services/receipts/processing/runs.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,
     [ "app/services/receipts/processing/runs/starter.rb", :analysis_run, "receipt.receipt_analysis_runs", :create!, %i[status stage] ] => 1,
     [ "app/services/receipts/processing/runs/starter.rb", :receipt, "receipt", :update!, [ :status ] ] => 1,

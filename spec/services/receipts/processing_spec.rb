@@ -24,6 +24,16 @@ RSpec.describe Receipts::Processing do
     end
   end
 
+  describe ".mark_processing!" do
+    it "Processing所有のstatus transitionへ委譲する" do
+      receipt = instance_double(Receipt)
+      allow(Receipts::Processing::StatusTransition).to receive(:mark_processing!).and_return(true)
+
+      expect(described_class.mark_processing!(receipt)).to eq(true)
+      expect(Receipts::Processing::StatusTransition).to have_received(:mark_processing!).with(receipt)
+    end
+  end
+
   describe "run lifecycle facade" do
     it "run作成をlegacy Runsへ委譲する" do
       arguments = { receipt: instance_double(Receipt), source: "upload" }

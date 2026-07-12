@@ -103,7 +103,7 @@ module SystemOperations
           end
 
           copy_retry_snapshots(run)
-          mark_receipt_processing!
+          Receipts::Processing.mark_processing!(receipt)
 
           result = Result.new(run: run, enqueued_job: job_class, retry_type: retry_type)
           record_retry_requested_audit!(result)
@@ -200,15 +200,6 @@ module SystemOperations
           include_finalize_decision: true
         )
       end
-    end
-
-    def mark_receipt_processing!
-      receipt.update!(
-        status: "processing",
-        processing_error_code: nil,
-        processing_error_message: nil,
-        review_reasons: []
-      )
     end
 
     def consume_retry_operation_limit

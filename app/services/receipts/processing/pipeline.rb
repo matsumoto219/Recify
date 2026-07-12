@@ -185,12 +185,7 @@ class Receipts::Processing::Pipeline
   end
 
   def mark_processing!
-    receipt.update!(
-      status: "processing",
-      processing_error_code: nil,
-      processing_error_message: nil,
-      review_reasons: []
-    )
+    Receipts::Processing::StatusTransition.mark_processing!(receipt)
   end
 
   def log_ocr_result(ocr_result)

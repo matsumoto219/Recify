@@ -66,6 +66,10 @@ module Receipts
         Pipeline.run_finalize(...)
       end
 
+      def mark_processing!(receipt)
+        StatusTransition.mark_processing!(receipt)
+      end
+
       def start(...)
         Runs.start(...)
       end
