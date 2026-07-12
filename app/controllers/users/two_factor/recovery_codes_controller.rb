@@ -12,6 +12,7 @@ class Users::TwoFactor::RecoveryCodesController < ApplicationController
   before_action :authenticate_user!, only: :regenerate
   before_action :ensure_two_factor_management_allowed!, only: :regenerate
   before_action :ensure_totp_enabled!, only: :regenerate
+  before_action :require_fresh_security_reauthentication!, only: :regenerate
   before_action -> { require_pending_second_factor!(method: "recovery_code") }, only: %i[new create]
   before_action :set_no_store_headers
 
@@ -57,5 +58,9 @@ class Users::TwoFactor::RecoveryCodesController < ApplicationController
   def set_no_store_headers
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
+  end
+
+  def security_reauthentication_return_to
+    settings_security_path(anchor: "two-factor")
   end
 end

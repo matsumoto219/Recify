@@ -240,6 +240,7 @@ RSpec.describe "Public meta tags", type: :request do
       receipt = create(:receipt, user: user, store_name: "Titleに出さない店舗名", total_amount: 12_345)
       accept_current_legal_documents_for(user)
       sign_in user
+      mark_security_reauthentication_fresh!(user)
 
       app_pages = {
         settings_path => "設定",

@@ -43,6 +43,7 @@ RSpec.describe 'User passkeys', type: :request do
 
     it 'confirmed userはoptionsを取得でき、challengeをsessionに保存する' do
       sign_in user
+      mark_security_reauthentication_fresh!(user)
 
       post settings_passkeys_options_path, as: :json
 
@@ -61,9 +62,22 @@ RSpec.describe 'User passkeys', type: :request do
       end
     end
 
+    it '古いlogin sessionではchallengeを発行せず再認証を要求する' do
+      sign_in user
+
+      post settings_passkeys_options_path, as: :json
+
+      aggregate_failures do
+        expect(response).to have_http_status(:precondition_required)
+        expect(response.parsed_body.fetch('reauthentication_url')).to include('/settings/security/reauthentication/new')
+        expect(session[:passkey_registration_challenge]).to be_blank
+      end
+    end
+
     it '9個登録済みでもoptionsを取得できる' do
       create_list(:passkey, Passkey::MAX_PER_USER - 1, user: user)
       sign_in user
+      mark_security_reauthentication_fresh!(user)
 
       post settings_passkeys_options_path, as: :json
 
@@ -74,6 +88,7 @@ RSpec.describe 'User passkeys', type: :request do
     it '10個登録済みの場合はoptions発行を拒否する' do
       create_list(:passkey, Passkey::MAX_PER_USER, user: user)
       sign_in user
+      mark_security_reauthentication_fresh!(user)
 
       post settings_passkeys_options_path, as: :json
 
@@ -89,6 +104,7 @@ RSpec.describe 'User passkeys', type: :request do
       admin = create(:user, :admin)
       create_list(:passkey, Passkey::MAX_PER_USER, user: admin)
       sign_in admin
+      mark_security_reauthentication_fresh!(admin)
 
       post settings_passkeys_options_path, as: :json
 
@@ -98,7 +114,10 @@ RSpec.describe 'User passkeys', type: :request do
   end
 
   describe 'POST /settings/passkeys' do
-    before { sign_in user }
+    before do
+      sign_in user
+      mark_security_reauthentication_fresh!(user)
+    end
 
     it 'challengeなしcreateは拒否する' do
       post settings_passkeys_path,
@@ -185,6 +204,7 @@ RSpec.describe 'User passkeys', type: :request do
       credential = fake_registration_credential(options)
 
       travel 6.minutes do
+        mark_security_reauthentication_fresh!(user)
         post settings_passkeys_path,
              params: { label: 'Expired', credential: credential },
              as: :json
@@ -192,6 +212,42 @@ RSpec.describe 'User passkeys', type: :request do
 
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body.fetch('error')).to eq(I18n.t('settings.security.auth.passkey.messages.challenge_missing'))
+    end
+
+    it '本人確認期限切れではcredentialを検証せずchallengeも破棄する' do
+      options = registration_options_payload
+      credential = fake_registration_credential(options)
+
+      travel 6.minutes do
+        expect do
+          post settings_passkeys_path,
+               params: { label: 'Stale reauthentication', credential: credential },
+               as: :json
+        end.not_to change(user.passkeys, :count)
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:precondition_required)
+        expect(session[:passkey_registration_challenge]).to be_blank
+      end
+    end
+
+    it 'challenge発行後に再認証し直した場合は古いchallengeを拒否する' do
+      options = registration_options_payload
+      credential = fake_registration_credential(options)
+
+      travel 1.second do
+        mark_security_reauthentication_fresh!(user)
+        post settings_passkeys_path,
+             params: { label: 'Old capability', credential: credential },
+             as: :json
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.fetch('error')).to eq(I18n.t('settings.security.auth.passkey.messages.challenge_missing'))
+        expect(user.passkeys).to be_empty
+      end
     end
 
     it 'AuditLogへraw credential materialを出さない' do
@@ -207,7 +263,10 @@ RSpec.describe 'User passkeys', type: :request do
   end
 
   describe 'DELETE /settings/passkeys/:uid' do
-    before { sign_in user }
+    before do |example|
+      sign_in user
+      mark_security_reauthentication_fresh!(user) unless example.metadata[:stale_reauthentication]
+    end
 
     it '自分のpasskeyを削除できる' do
       passkey = create(:passkey, user: user)
@@ -220,6 +279,16 @@ RSpec.describe 'User passkeys', type: :request do
         expect(settings_passkey_path(passkey)).to eq("/settings/passkeys/#{passkey.uid}")
         expect(response).to redirect_to(settings_security_path(anchor: 'passkeys'))
       end
+    end
+
+    it '古いlogin sessionでは自分のpasskeyも削除しない', :stale_reauthentication do
+      passkey = create(:passkey, user: user)
+
+      expect do
+        delete settings_passkey_path(passkey)
+      end.not_to change(user.passkeys, :count)
+
+      expect(response.location).to include('/settings/security/reauthentication/new')
     end
 
     it '10個登録済みでも削除できる' do

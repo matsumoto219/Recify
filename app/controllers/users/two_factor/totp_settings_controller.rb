@@ -4,6 +4,7 @@ class Users::TwoFactor::TotpSettingsController < ApplicationController
 
   before_action :authenticate_user!
   before_action :ensure_two_factor_management_allowed!
+  before_action :require_fresh_security_reauthentication!
   before_action :set_no_store_headers, only: %i[new create]
 
   def new
@@ -12,7 +13,10 @@ class Users::TwoFactor::TotpSettingsController < ApplicationController
     setup = TwoFactor.prepare_totp_setup(user: current_user)
     session[SETUP_SESSION_KEY] = {
       "secret" => setup.secret,
-      "issued_at" => Time.current.iso8601
+      "issued_at" => Time.current.iso8601,
+      "user_id" => current_user.id,
+      "session_version" => current_user.session_version.to_i,
+      "security_reauthenticated_at" => security_reauthentication_context["authenticated_at"]
     }
     assign_setup_view(setup)
   end
@@ -67,6 +71,9 @@ class Users::TwoFactor::TotpSettingsController < ApplicationController
     issued_at = Time.zone.parse(setup_session["issued_at"].to_s)
     return if secret.blank? || issued_at.blank?
     return if issued_at < SETUP_TTL.ago
+    return unless setup_session["user_id"].to_i == current_user.id
+    return unless setup_session["session_version"].to_i == current_user.session_version.to_i
+    return unless setup_session["security_reauthenticated_at"] == security_reauthentication_context["authenticated_at"]
 
     setup_session
   rescue ArgumentError, TypeError
@@ -95,5 +102,11 @@ class Users::TwoFactor::TotpSettingsController < ApplicationController
   def set_no_store_headers
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
+  end
+
+  def security_reauthentication_return_to
+    return new_settings_security_totp_path if action_name.in?(%w[new create])
+
+    settings_security_path(anchor: "two-factor")
   end
 end

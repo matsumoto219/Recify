@@ -44,6 +44,7 @@ class Users::SessionsController < Devise::SessionsController
         sign_in(resource_name, resource, force: true)
         set_flash_message!(:notice, :signed_in)
         store_user_session_version(resource)
+        record_security_reauthentication!(user: resource, method: "password")
         UserSessions.record_sign_in(user: resource, request: request, session: session, method: "password")
         respond_with resource, location: after_sign_in_path_for(resource)
       end

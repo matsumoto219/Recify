@@ -4,13 +4,17 @@ class Users::PasskeysController < ApplicationController
 
   before_action :authenticate_user!
   before_action :ensure_passkey_registration_allowed!
+  before_action :require_fresh_security_reauthentication!
   before_action :ensure_passkey_registration_limit_available!, only: %i[options create]
 
   def options
     options = Passkeys.registration_options(user: current_user)
     session[REGISTRATION_CHALLENGE_SESSION_KEY] = {
       "challenge" => options.challenge,
-      "issued_at" => Time.current.iso8601
+      "issued_at" => Time.current.iso8601,
+      "user_id" => current_user.id,
+      "session_version" => current_user.session_version.to_i,
+      "security_reauthenticated_at" => security_reauthentication_context["authenticated_at"]
     }
 
     render json: { publicKey: options.as_json }
@@ -90,6 +94,9 @@ class Users::PasskeysController < ApplicationController
     issued_at = Time.zone.parse(challenge_session["issued_at"].to_s)
     return if challenge.blank? || issued_at.blank?
     return if issued_at < REGISTRATION_CHALLENGE_TTL.ago
+    return unless challenge_session["user_id"].to_i == current_user.id
+    return unless challenge_session["session_version"].to_i == current_user.session_version.to_i
+    return unless challenge_session["security_reauthenticated_at"] == security_reauthentication_context["authenticated_at"]
 
     challenge
   rescue ArgumentError, TypeError
@@ -122,5 +129,9 @@ class Users::PasskeysController < ApplicationController
       created_at: passkey.created_at,
       last_used_at: passkey.last_used_at
     }
+  end
+
+  def security_reauthentication_return_to
+    settings_security_path(anchor: "passkeys")
   end
 end

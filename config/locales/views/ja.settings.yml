@@ -107,6 +107,20 @@ ja:
       meta_title: セキュリティ設定
       title: セキュリティ
       subtitle: アカウントの安全性を管理します
+      reauthentication:
+        meta_title: 本人確認
+        title: 本人確認
+        subtitle: セキュリティ設定を変更するため、現在のパスワードを入力してください。
+        password_label: 現在のパスワード
+        password_hint: 本人確認後5分間、セキュリティ設定を変更できます。
+        submit: 確認する
+        submitting: 確認中...
+        cancel: キャンセル
+        messages:
+          required: セキュリティ設定を変更するには本人確認が必要です。
+          succeeded: 本人確認が完了しました。
+          failed: パスワードが一致しませんでした。
+          unavailable: 本登録後にこの設定を利用できます。
       email:
         title: メールアドレス変更
         current: 現在のメールアドレス

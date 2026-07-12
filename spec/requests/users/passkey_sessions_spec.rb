@@ -83,6 +83,11 @@ RSpec.describe 'User passkey sessions', type: :request do
         expect(session[:pending_second_factor]).to be_blank
         expect(session[:user_session_version]).to eq(user.session_version)
         expect(session[:user_session_uid]).to be_present
+        expect(session[:security_reauthentication]).to include(
+          'user_id' => user.id,
+          'session_version' => user.session_version,
+          'method' => 'passkey'
+        )
         expect(user_session.user).to eq(user)
         expect(user_session.sign_in_method).to eq('passkey')
         expect(user_session.session_uid_digest).not_to eq(session[:user_session_uid])

@@ -98,6 +98,15 @@ RSpec.configure do |config|
 
   config.include LegalConsentRequestHelpers, type: :request
 
+  module SecurityReauthenticationRequestHelpers
+    def mark_security_reauthentication_fresh!(_user, password: "password")
+      post settings_security_reauthentication_path, params: { password: password }
+      raise "security reauthentication failed in request spec" unless response.redirect?
+    end
+  end
+
+  config.include SecurityReauthenticationRequestHelpers, type: :request
+
   config.before(type: :request) do
     LegalDocuments::Sync.call if ActiveRecord::Base.connection.data_source_exists?("legal_documents")
   end

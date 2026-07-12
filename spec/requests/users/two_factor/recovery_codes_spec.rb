@@ -179,6 +179,7 @@ RSpec.describe 'User recovery codes', type: :request do
 
     it '既存codeを削除して新しいcodeを発行し、平文はこのレスポンスだけ表示する' do
       sign_in user
+      mark_security_reauthentication_fresh!(user)
       create(:totp_credential, user: user, confirmed_at: Time.current)
       old_codes = TwoFactor.generate_recovery_codes_for(user: user)
       old_digests = user.recovery_codes.pluck(:code_digest)
@@ -219,8 +220,23 @@ RSpec.describe 'User recovery codes', type: :request do
       end
     end
 
+    it '古いlogin sessionでは既存recovery codeを変更せず再認証を要求する' do
+      sign_in user
+      create(:totp_credential, user: user, confirmed_at: Time.current)
+      TwoFactor.generate_recovery_codes_for(user: user)
+      old_digests = user.recovery_codes.pluck(:code_digest)
+
+      post settings_security_recovery_codes_regenerate_path
+
+      aggregate_failures do
+        expect(response.location).to include('/settings/security/reauthentication/new')
+        expect(user.recovery_codes.reload.pluck(:code_digest)).to eq(old_digests)
+      end
+    end
+
     it 'AuditLogを作成しない' do
       sign_in user
+      mark_security_reauthentication_fresh!(user)
       create(:totp_credential, user: user, confirmed_at: Time.current)
 
       expect do

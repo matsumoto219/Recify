@@ -1,9 +1,10 @@
 import { Controller } from '@hotwired/stimulus'
 
 class PasskeyRequestError extends Error {
-  constructor (displayMessage) {
+  constructor (displayMessage, reauthenticationUrl = null) {
     super('Passkey request failed')
     this.displayMessage = displayMessage
+    this.reauthenticationUrl = reauthenticationUrl
   }
 }
 
@@ -22,12 +23,14 @@ export default class extends Controller {
   connect () {
     this.optionsPromise = null
     this.optionsPreparedAt = null
+    this.reauthenticationUrl = null
     this.prepareCreationOptions()
   }
 
   disconnect () {
     this.optionsPromise = null
     this.optionsPreparedAt = null
+    this.reauthenticationUrl = null
   }
 
   async register (event) {
@@ -39,7 +42,13 @@ export default class extends Controller {
       return
     }
 
+    if (this.reauthenticationUrl) {
+      window.location.assign(this.reauthenticationUrl)
+      return
+    }
+
     this.setLoading(true)
+    let redirectingForReauthentication = false
 
     try {
       const publicKey = await this.consumePreparedCreationOptions()
@@ -61,10 +70,15 @@ export default class extends Controller {
       this.showSuccess(this.successMessageValue)
       window.location.reload()
     } catch (error) {
-      this.showError(this.userFacingErrorMessage(error))
+      if (error instanceof PasskeyRequestError && error.reauthenticationUrl) {
+        redirectingForReauthentication = true
+        window.location.assign(error.reauthenticationUrl)
+      } else {
+        this.showError(this.userFacingErrorMessage(error))
+      }
     } finally {
       this.setLoading(false)
-      this.prepareCreationOptions()
+      if (!redirectingForReauthentication) this.prepareCreationOptions()
     }
   }
 
@@ -76,10 +90,16 @@ export default class extends Controller {
     this.optionsPreparedAt = Date.now()
     this.optionsPromise = this.fetchJson(this.optionsUrlValue, {
       method: 'POST'
-    }).then((optionsResponse) => this.decodeCreationOptions(optionsResponse.publicKey))
+    }).then((optionsResponse) => {
+      this.reauthenticationUrl = null
+      return this.decodeCreationOptions(optionsResponse.publicKey)
+    })
       .catch((error) => {
         this.optionsPromise = null
         this.optionsPreparedAt = null
+        if (error instanceof PasskeyRequestError && error.reauthenticationUrl) {
+          this.reauthenticationUrl = error.reauthenticationUrl
+        }
         throw error
       })
 
@@ -121,7 +141,10 @@ export default class extends Controller {
     const payload = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      throw new PasskeyRequestError(payload.error || this.requestFailedMessageValue)
+      throw new PasskeyRequestError(
+        payload.error || this.requestFailedMessageValue,
+        payload.reauthentication_url || null
+      )
     }
 
     return payload

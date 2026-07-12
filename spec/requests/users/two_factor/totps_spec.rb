@@ -109,6 +109,11 @@ RSpec.describe 'User TOTP step-up', type: :request do
         expect(response).to redirect_to(root_path)
         expect(session[:pending_second_factor]).to be_blank
         expect(session[:user_session_version]).to eq(user.session_version)
+        expect(session[:security_reauthentication]).to include(
+          'user_id' => user.id,
+          'session_version' => user.session_version,
+          'method' => 'password_totp_step_up'
+        )
         expect(user_session.user).to eq(user)
         expect(user_session.sign_in_method).to eq('password_totp_step_up')
         expect(credential.reload.last_used_at).to be_present

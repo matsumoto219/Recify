@@ -45,6 +45,11 @@ RSpec.describe 'User password sessions', type: :request do
       expect(session[:pending_second_factor]).to be_blank
       expect(session[:user_session_version]).to eq(user.session_version)
       expect(session[:user_session_uid]).to be_present
+      expect(session[:security_reauthentication]).to include(
+        'user_id' => user.id,
+        'session_version' => user.session_version,
+        'method' => 'password'
+      )
       expect(user_session.user).to eq(user)
       expect(user_session.sign_in_method).to eq('password')
       expect(user_session.session_uid_digest).not_to eq(session[:user_session_uid])
@@ -189,6 +194,7 @@ RSpec.describe 'User password sessions', type: :request do
       expect(pending['allowed_methods']).to eq([ 'passkey' ])
       expect(pending['remember_me']).to be(false)
       expect(pending['issued_at']).to be_present
+      expect(session[:security_reauthentication]).to be_blank
       expect(user.current_sign_in_at).to be_blank
     end
 

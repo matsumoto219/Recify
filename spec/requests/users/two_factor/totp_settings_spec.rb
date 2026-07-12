@@ -22,6 +22,18 @@ RSpec.describe 'User TOTP settings', type: :request do
       expect(response).to redirect_to(new_user_session_path)
     end
 
+    it '古いlogin sessionではsetup secretを発行せず再認証を要求する' do
+      sign_in user
+
+      get new_settings_security_totp_path
+
+      aggregate_failures do
+        expect(response.location).to include('/settings/security/reauthentication/new')
+        expect(session[:totp_setup]).to be_blank
+        expect(user.reload.totp_credential).to be_blank
+      end
+    end
+
     it 'guest userは利用不可にする' do
       sign_in User.guest!
 
@@ -32,6 +44,7 @@ RSpec.describe 'User TOTP settings', type: :request do
 
     it 'すでに有効な場合は通常通知で設定へ戻す' do
       sign_in user
+      mark_security_reauthentication_fresh!(user)
       create(:totp_credential, user: user, confirmed_at: Time.current)
 
       get new_settings_security_totp_path
@@ -44,6 +57,7 @@ RSpec.describe 'User TOTP settings', type: :request do
 
     it '手入力用の設定キーはsetup画面限定で表示し、no-storeかつDB/AuditLogへ保存しない' do
       sign_in user
+      mark_security_reauthentication_fresh!(user)
 
       expect do
         get new_settings_security_totp_path
@@ -87,7 +101,10 @@ RSpec.describe 'User TOTP settings', type: :request do
   end
 
   describe 'POST /settings/security/totp' do
-    before { sign_in user }
+    before do
+      sign_in user
+      mark_security_reauthentication_fresh!(user)
+    end
 
     it 'setup成功でconfirmed credentialとrecovery codesを作成し、平文codeをこのレスポンスだけ表示する' do
       secret = start_totp_setup!
@@ -143,6 +160,7 @@ RSpec.describe 'User TOTP settings', type: :request do
       start_totp_setup!
 
       travel 11.minutes do
+        mark_security_reauthentication_fresh!(user)
         post settings_security_totp_path, params: { code: '123456' }
       end
 
@@ -173,7 +191,10 @@ RSpec.describe 'User TOTP settings', type: :request do
   end
 
   describe 'DELETE /settings/security/totp' do
-    before { sign_in user }
+    before do
+      sign_in user
+      mark_security_reauthentication_fresh!(user)
+    end
 
     it 'TOTP credentialとrecovery codesを削除する' do
       create(:totp_credential, user: user)
@@ -185,6 +206,23 @@ RSpec.describe 'User TOTP settings', type: :request do
         .and change(RecoveryCode, :count).by(-10)
 
       expect(response).to redirect_to(settings_security_path(anchor: 'two-factor'))
+    end
+
+    it '古いlogin sessionではTOTP credentialとrecovery codesを削除しない' do
+      credential = create(:totp_credential, user: user)
+      TwoFactor.generate_recovery_codes_for(user: user)
+      session_context_created_at = Time.zone.parse(session[:security_reauthentication].fetch('authenticated_at'))
+      recovery_code_count = user.recovery_codes.count
+
+      travel_to(session_context_created_at + 6.minutes) do
+        delete settings_security_totp_path
+      end
+
+      aggregate_failures do
+        expect(response.location).to include('/settings/security/reauthentication/new')
+        expect(TotpCredential).to exist(credential.id)
+        expect(user.recovery_codes.reload.count).to eq(recovery_code_count)
+      end
     end
   end
 

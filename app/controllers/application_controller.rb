@@ -51,6 +51,7 @@ class ApplicationController < ActionController::Base
   end
 
   include Pagy::Method
+  include Users::SecurityReauthentication
 
   # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
   allow_browser versions: :modern
@@ -86,6 +87,7 @@ class ApplicationController < ActionController::Base
 
   def clear_user_session_version
     session.delete(USER_SESSION_VERSION_SESSION_KEY)
+    clear_security_reauthentication!
   end
 
   def keep_flash_until_manual_dismiss(type)

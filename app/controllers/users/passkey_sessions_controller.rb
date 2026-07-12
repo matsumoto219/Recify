@@ -45,6 +45,7 @@ class Users::PasskeySessionsController < ApplicationController
     clear_pending_second_factor
     sign_in(:user, user)
     store_user_session_version(user)
+    record_security_reauthentication!(user: user, method: "passkey")
     UserSessions.record_sign_in(user: user, request: request, session: session, method: "passkey")
     flash[:notice] = t("auth.sessions.messages.signed_in")
     render json: {

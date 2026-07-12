@@ -160,6 +160,11 @@ Rails.application.routes.draw do
   get "/settings", to: "settings#index", as: :settings
   get "/settings/account", to: "settings#account", as: :settings_account
   get "/settings/security", to: "settings#security", as: :settings_security
+  resource :security_reauthentication,
+           only: %i[new create],
+           path: "/settings/security/reauthentication",
+           controller: "users/security_reauthentications",
+           as: :settings_security_reauthentication
   post "/settings/passkeys/options", to: "users/passkeys#options", as: :settings_passkeys_options
   post "/settings/passkeys", to: "users/passkeys#create", as: :settings_passkeys
   delete "/settings/passkeys/:uid", to: "users/passkeys#destroy", as: :settings_passkey

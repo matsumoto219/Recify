@@ -68,6 +68,7 @@ module Users::TwoFactor::PendingSecondFactor
     user.remember_me = remember_me
     sign_in(:user, user)
     store_user_session_version(user)
+    record_security_reauthentication!(user: user, method: sign_in_method)
     UserSessions.record_sign_in(user: user, request: request, session: session, method: sign_in_method)
   end
 
