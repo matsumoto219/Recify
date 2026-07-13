@@ -43,6 +43,11 @@ export default class extends Controller {
       return
     }
 
+    let loginSucceeded = false
+
+    // A failed preload clears the cached promise. Start its replacement before
+    // disabling the button so the explicit login can still obtain options.
+    this.prepareRequestOptions()
     this.setLoading(true)
 
     try {
@@ -55,11 +60,14 @@ export default class extends Controller {
       }
 
       await this.submitCredential(credential)
+      loginSucceeded = true
     } catch (error) {
       this.showError(this.userFacingErrorMessage(error))
     } finally {
-      this.setLoading(false)
-      this.prepareRequestOptions()
+      if (!loginSucceeded) {
+        this.setLoading(false)
+        this.prepareRequestOptions()
+      }
     }
   }
 

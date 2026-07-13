@@ -43,12 +43,17 @@ export default class extends Controller {
     }
 
     if (this.reauthenticationUrl) {
+      this.setLoading(true)
       window.location.assign(this.reauthenticationUrl)
       return
     }
 
+    let navigationStarted = false
+
+    // A failed preload clears the cached promise. Start its replacement before
+    // disabling the button so the explicit registration can still obtain options.
+    this.prepareCreationOptions()
     this.setLoading(true)
-    let redirectingForReauthentication = false
 
     try {
       const publicKey = await this.consumePreparedCreationOptions()
@@ -69,16 +74,19 @@ export default class extends Controller {
 
       this.showSuccess(this.successMessageValue)
       window.location.reload()
+      navigationStarted = true
     } catch (error) {
       if (error instanceof PasskeyRequestError && error.reauthenticationUrl) {
-        redirectingForReauthentication = true
         window.location.assign(error.reauthenticationUrl)
+        navigationStarted = true
       } else {
         this.showError(this.userFacingErrorMessage(error))
       }
     } finally {
-      this.setLoading(false)
-      if (!redirectingForReauthentication) this.prepareCreationOptions()
+      if (!navigationStarted) {
+        this.setLoading(false)
+        this.prepareCreationOptions()
+      }
     }
   }
 
