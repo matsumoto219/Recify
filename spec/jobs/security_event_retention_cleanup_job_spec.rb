@@ -7,7 +7,9 @@ RSpec.describe SecurityEventRetentionCleanupJob, type: :job do
       result = {
         dry_run: true,
         expired_count: 1,
+        expired_ip_action_count: 1,
         deleted_count: 0,
+        deleted_ip_action_count: 0,
         sample_event_ids: [ 123 ],
         retentions: { 'low' => 30 },
         cutoffs: { 'low' => 30.days.ago.iso8601 }
@@ -33,7 +35,9 @@ RSpec.describe SecurityEventRetentionCleanupJob, type: :job do
         expect(audit_log.metadata).to include(
           'dry_run' => true,
           'expired_count' => 1,
+          'expired_ip_action_count' => 1,
           'deleted_count' => 0,
+          'deleted_ip_action_count' => 0,
           'sample_event_ids' => [ 123 ]
         )
       end
@@ -44,7 +48,9 @@ RSpec.describe SecurityEventRetentionCleanupJob, type: :job do
       result = {
         dry_run: false,
         expired_count: 1,
+        expired_ip_action_count: 1,
         deleted_count: 1,
+        deleted_ip_action_count: 1,
         sample_event_ids: [ event.id ],
         retentions: { 'low' => 30 },
         cutoffs: { 'low' => 30.days.ago.iso8601 }
@@ -57,7 +63,12 @@ RSpec.describe SecurityEventRetentionCleanupJob, type: :job do
 
       aggregate_failures do
         expect(audit_log.action).to eq('security_events.retention_cleanup.execute')
-        expect(audit_log.metadata).to include('dry_run' => false, 'deleted_count' => 1)
+        expect(audit_log.metadata).to include(
+          'dry_run' => false,
+          'expired_ip_action_count' => 1,
+          'deleted_count' => 1,
+          'deleted_ip_action_count' => 1
+        )
         expect(audit_log.metadata.to_s).not_to include('<script>')
       end
     end
@@ -84,6 +95,14 @@ RSpec.describe SecurityEventRetentionCleanupJob, type: :job do
     it 'success audit失敗時はdeleteをrollbackしてfailed auditだけを残す' do
       now = Time.zone.parse('2026-06-16 12:00:00')
       expired = create(:security_event, severity: 'low', last_seen_at: now - 31.days)
+      action = create(
+        :security_ip_action,
+        source_security_event: expired,
+        source: 'rack_attack',
+        status: 'observed',
+        last_seen_at: now - 31.days,
+        expires_at: nil
+      )
       allow(AuditLogs).to receive(:record_system_action!).and_wrap_original do |original, **attributes|
         raise ActiveRecord::RecordInvalid, AuditLog.new if attributes[:outcome] == 'succeeded'
 
@@ -96,6 +115,7 @@ RSpec.describe SecurityEventRetentionCleanupJob, type: :job do
 
       aggregate_failures do
         expect(SecurityEvent.where(id: expired.id)).to exist
+        expect(SecurityIpAction.where(id: action.id)).to exist
         expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'cleanup_failed')
       end
     end

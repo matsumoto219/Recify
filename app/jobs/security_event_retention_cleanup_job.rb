@@ -31,7 +31,8 @@ class SecurityEventRetentionCleanupJob < ApplicationJob
     Rails.logger.info(
       "[SecurityEventRetentionCleanupJob] completed " \
       "dry_run=#{result[:dry_run]} expired_count=#{result[:expired_count]} " \
-      "deleted_count=#{result[:deleted_count]}"
+      "deleted_count=#{result[:deleted_count]} " \
+      "deleted_ip_action_count=#{result[:deleted_ip_action_count].to_i}"
     )
   end
 
@@ -46,7 +47,9 @@ class SecurityEventRetentionCleanupJob < ApplicationJob
         now: audit_time(now),
         limit: limit,
         expired_count: result[:expired_count],
+        expired_ip_action_count: result[:expired_ip_action_count].to_i,
         deleted_count: result[:deleted_count],
+        deleted_ip_action_count: result[:deleted_ip_action_count].to_i,
         skipped_count: result[:skipped_count].to_i,
         failed_count: result[:failed_count].to_i,
         retentions: result[:retentions] || {},
