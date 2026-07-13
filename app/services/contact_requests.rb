@@ -147,11 +147,24 @@ module ContactRequests
         return
       end
 
-      ContactRequestMailer.admin_notification(contact_request).deliver_later
+      enqueue_mail(contact_request, kind: "admin_notification") do
+        ContactRequestMailer.admin_notification(contact_request).deliver_later
+      end
     end
 
     def enqueue_auto_reply(contact_request)
-      ContactRequestMailer.auto_reply(contact_request).deliver_later
+      enqueue_mail(contact_request, kind: "auto_reply") do
+        ContactRequestMailer.auto_reply(contact_request).deliver_later
+      end
+    end
+
+    def enqueue_mail(contact_request, kind:)
+      yield
+    rescue ActiveJob::EnqueueError => error
+      Rails.logger.error(
+        "[ContactRequest] mail_enqueue_failed kind=#{kind} " \
+          "request_uid=#{contact_request.request_uid} error=#{error.class.name}"
+      )
     end
 
     def hmac_secret

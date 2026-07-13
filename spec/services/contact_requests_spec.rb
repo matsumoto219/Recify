@@ -189,6 +189,51 @@ RSpec.describe ContactRequests do
         )
       end
     end
+
+    it 'admin通知のenqueue失敗後も保存成功を返して自動返信を試行する' do
+      ENV["SUPPORT_NOTIFICATION_EMAIL"] = "support@example.com"
+      admin_delivery = instance_double(ActionMailer::MessageDelivery)
+      auto_reply_delivery = instance_double(ActionMailer::MessageDelivery)
+      allow(ContactRequestMailer).to receive(:admin_notification).and_return(admin_delivery)
+      allow(ContactRequestMailer).to receive(:auto_reply).and_return(auto_reply_delivery)
+      allow(admin_delivery).to receive(:deliver_later).and_raise(ActiveJob::EnqueueError, 'local enqueue failure')
+      expect(auto_reply_delivery).to receive(:deliver_later)
+      expect(Rails.logger).to receive(:error).with(
+        match(/\A\[ContactRequest\] mail_enqueue_failed kind=admin_notification request_uid=[a-zA-Z0-9_-]+ error=ActiveJob::EnqueueError\z/)
+      )
+
+      result = described_class.create(
+        user: nil,
+        params: valid_params(email: 'enqueue-failure@example.com'),
+        request: request
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(result.contact_request).to be_persisted
+      end
+    end
+
+    it '自動返信のenqueue失敗でも保存成功を返し、送信先をlogへ出さない' do
+      auto_reply_delivery = instance_double(ActionMailer::MessageDelivery)
+      allow(ContactRequestMailer).to receive(:auto_reply).and_return(auto_reply_delivery)
+      allow(auto_reply_delivery).to receive(:deliver_later).and_raise(ActiveJob::EnqueueError, 'local enqueue failure')
+      expect(Rails.logger).to receive(:error) do |message|
+        expect(message).to include('[ContactRequest] mail_enqueue_failed kind=auto_reply')
+        expect(message).not_to include('private-recipient@example.com')
+      end
+
+      result = described_class.create(
+        user: nil,
+        params: valid_params(email: 'private-recipient@example.com'),
+        request: request
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(result.contact_request).to be_persisted
+      end
+    end
   end
 
   describe '.category_options' do
