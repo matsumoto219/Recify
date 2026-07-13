@@ -93,6 +93,24 @@ RSpec.describe LayerEffectBoundary::Scanner do
     end
   end
 
+  it "model/associationを参照するproduction fileの直接保存を列挙する" do
+    with_scanner(
+      "app/services/unsafe_override_writer.rb" => <<~RUBY,
+        UserLimitOverride.update_all(enabled: false)
+        override = user.user_limit_overrides.find_by(key: key)
+        override.public_send(:save!)
+      RUBY
+      "app/services/safe_override_reader.rb" => "UserLimitOverride.active.where(user: user)\n"
+    ) do |scanner|
+      effects = scanner.db_mutations_in_files_referencing(
+        /\bUserLimitOverride\b|\buser_limit_overrides\b/,
+        receiver_pattern: /\bUserLimitOverride\b|\buser_limit_overrides\b|\boverride\b/
+      )
+
+      expect(effects.map(&:method_name)).to contain_exactly(:update_all, :save!)
+    end
+  end
+
   it "commentsとstringsをeffect callとして扱わずin-memory deleteを許可する" do
     with_scanner(
       "app/forms/receipts/edit_form.rb" => <<~RUBY

@@ -44,7 +44,6 @@ module LayerEffectBoundary
       create_or_find_by!
       find_or_create_by
       find_or_create_by!
-      find_or_initialize_by
     ].freeze
     ASYNC_METHODS = %i[
       perform_later
@@ -184,6 +183,20 @@ module LayerEffectBoundary
           alias_effect_record(facade_alias, :admin_controller)
         end
       end.sort_by { |effect| [ effect.source_path, effect.line, effect.receiver_constant ] }
+    end
+
+    def db_mutations_in_files_referencing(pattern, receiver_pattern: nil, globs: "app/**/*.rb")
+      paths_for(globs).flat_map do |path|
+        next [] unless path.read.match?(pattern)
+
+        calls_for(path).filter_map do |call|
+          method_name = effective_method_name(call)
+          next unless DB_MUTATION_METHODS.include?(method_name)
+          next if receiver_pattern && !call.fetch(:receiver_source).to_s.match?(receiver_pattern)
+
+          effect_record(call, :architecture, :db_write, method_name: method_name)
+        end
+      end.sort_by { |effect| [ effect.source_path, effect.line, effect.method_name ] }
     end
 
     def admin_controller_mutations
@@ -404,6 +417,10 @@ module LayerEffectBoundary
         app/jobs/**/*.rb
         app/models/**/*.rb
       ].flat_map { |glob| root.glob(glob) }.select(&:file?).uniq.sort
+    end
+
+    def paths_for(globs)
+      Array(globs).flat_map { |glob| root.glob(glob) }.select(&:file?).uniq.sort
     end
 
     def constant_name(node)

@@ -107,6 +107,19 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
     expect(actual).to eq(SECURITY_MUTATION_CALLS)
   end
 
+  it "UserLimitOverrideのproduction保存を共有lock内のexecutorへ限定する" do
+    actual = scanner.db_mutations_in_files_referencing(
+      /\bUserLimitOverride\b|\buser_limit_overrides\b/,
+      receiver_pattern: /\bUserLimitOverride\b|\buser_limit_overrides\b|\boverride\b/
+    ).map do |effect|
+      [ effect.source_path, effect.method_name ]
+    end.tally
+
+    expect(actual).to eq(
+      [ "app/services/system_operations/user_limit_update_executor.rb", :save! ] => 1
+    )
+  end
+
   it "serviceのHTML renderingをexact legacy exceptionだけに限定する" do
     actual = scanner.service_render_calls.map do |effect|
       {
