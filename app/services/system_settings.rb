@@ -129,6 +129,10 @@ module SystemSettings
     "limits.max_ai_per_day" => %w[ai_jobs_per_day],
     "limits.max_storage_bytes" => %w[storage_bytes]
   }.freeze
+  USER_LIMIT_DEPENDENCY_LOCK_GROUPS = {
+    "receipt_items_snapshot" => %w[receipt_items_per_receipt],
+    "user_limit_safety" => USER_LIMIT_SAFETY_OVERRIDE_KEYS.values.flatten.uniq.freeze
+  }.freeze
   SETTING_DEPENDENCY_LOCK_GROUPS = {
     "receipt_items_snapshot" => RECEIPT_ITEMS_SNAPSHOT_DEPENDENCY_KEYS,
     "store_name_casing_snapshot" => STORE_NAME_CASING_CONTEXT_LINES_DEPENDENCY_KEYS,
@@ -309,7 +313,8 @@ module SystemSettings
       normalized_key = normalize_key(key)
 
       SETTING_DEPENDENCY_LOCK_GROUPS.filter_map do |group, keys|
-        group if keys.include?(normalized_key)
+        user_limit_keys = USER_LIMIT_DEPENDENCY_LOCK_GROUPS.fetch(group, [])
+        group if keys.include?(normalized_key) || user_limit_keys.include?(normalized_key)
       end.sort
     end
 
@@ -516,11 +521,21 @@ module SystemSettings
 
       values = limits_for(RECEIPT_ITEMS_SNAPSHOT_DEPENDENCY_KEYS)
       values[definition.key] = Integer(value)
-      receipt_items_limit = values.fetch(RECEIPT_ITEMS_LIMIT_KEY)
+      receipt_items_limit = [
+        values.fetch(RECEIPT_ITEMS_LIMIT_KEY),
+        active_receipt_items_override_limit
+      ].max
       snapshot_ceiling = values.slice(*SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS).values.min
       return if receipt_items_limit <= snapshot_ceiling
 
       raise ValidationError, RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR
+    end
+
+    def active_receipt_items_override_limit
+      UserLimitOverride.active
+                       .where(key: "receipt_items_per_receipt")
+                       .filter_map { |override| override_integer_value(override) }
+                       .max || 0
     end
 
     def validate_store_name_casing_context_lines_dependency!(definition, value)

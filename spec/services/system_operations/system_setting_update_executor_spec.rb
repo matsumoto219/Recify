@@ -461,6 +461,35 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
       end
     end
 
+    it 'activeなuser overrideを下回るsnapshot item上限への更新を拒否する' do
+      user = create(:user)
+      create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(1500))
+      create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
+      create(
+        :user_limit_override,
+        user: user,
+        key: 'receipt_items_per_receipt',
+        value: { 'value' => 1200 }
+      )
+
+      result = described_class.call(
+        key: 'limits.snapshot_ocr_items_max',
+        value: '1000',
+        actor: actor,
+        reason: 'unsafe snapshot lowering with active override',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: '1'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('receipt_items_snapshot_limit')
+        expect(SystemSettings.limit_for('limits.snapshot_ocr_items_max')).to eq(1500)
+        expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'receipt_items_snapshot_limit')
+      end
+    end
+
     it '店舗名casing参照行数がsnapshot OCR行数上限を超える更新を拒否する' do
       create(:system_setting, key: 'limits.store_name_casing_context_lines_max', value: SystemSettings.stored_value(0))
       create(:system_setting, key: 'limits.snapshot_ocr_lines_max', value: SystemSettings.stored_value(10))

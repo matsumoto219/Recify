@@ -1176,6 +1176,28 @@ RSpec.describe SystemSettings do
       expect(described_class.cast_update_value('limits.receipt_items_per_receipt', '1200')).to eq(1200)
     end
 
+    it 'activeなreceipt item overrideを壊すsnapshot上限引下げを拒否し、disabled/expiredは無視する' do
+      user = create(:user)
+      create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: described_class.stored_value(1500))
+      create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: described_class.stored_value(1500))
+      override = create(
+        :user_limit_override,
+        user: user,
+        key: 'receipt_items_per_receipt',
+        value: { 'value' => 1200 }
+      )
+
+      expect do
+        described_class.cast_update_value('limits.snapshot_ocr_items_max', '1000')
+      end.to raise_error(SystemSettings::ValidationError, 'receipt_items_snapshot_limit')
+
+      override.update!(enabled: false)
+      expect(described_class.cast_update_value('limits.snapshot_ocr_items_max', '1000')).to eq(1000)
+
+      override.update!(enabled: true, expires_at: 1.second.ago)
+      expect(described_class.cast_update_value('limits.snapshot_ocr_items_max', '1000')).to eq(1000)
+    end
+
     it '金額上限は関連する上限との大小関係を維持する' do
       error_message = 'amount_limit_relationship'
 

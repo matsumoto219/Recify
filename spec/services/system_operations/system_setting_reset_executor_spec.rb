@@ -122,6 +122,43 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
     end
   end
 
+  it "activeなreceipt item overrideを壊すsnapshot既定値へのresetを拒否する" do
+    create(
+      :system_setting,
+      key: "limits.snapshot_ocr_items_max",
+      value: SystemSettings.stored_value(1500),
+      updated_by_user: actor
+    )
+    create(
+      :system_setting,
+      key: "limits.snapshot_ai_normalized_items_max",
+      value: SystemSettings.stored_value(1500),
+      updated_by_user: actor
+    )
+    create(
+      :user_limit_override,
+      user: create(:user),
+      key: "receipt_items_per_receipt",
+      value: { "value" => 1200 }
+    )
+
+    result = described_class.call(
+      key: "limits.snapshot_ocr_items_max",
+      actor: actor,
+      reason: "unsafe snapshot reset with active override",
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: "1"
+    )
+
+    aggregate_failures do
+      expect(result).to be_failure
+      expect(result.error_code).to eq("receipt_items_snapshot_limit")
+      expect(SystemSettings.limit_for("limits.snapshot_ocr_items_max")).to eq(1500)
+      expect(AuditLog.last).to have_attributes(outcome: "failed", error_code: "receipt_items_snapshot_limit")
+    end
+  end
+
   it "依存値を安全な順番でresetすれば詰まずに全て既定値へ戻せる" do
     create(
       :system_setting,

@@ -34,14 +34,14 @@ module SystemOperations
     end
 
     def call
-      validate!
-
       override = nil
       audit_log = nil
-      before_state = current_state
+      before_state = nil
       after_state = nil
 
-      UserLimitOverride.transaction do
+      SystemSettingDependencyLock.call(groups: SystemSettings.dependency_lock_groups_for(key)) do
+        validate!
+        before_state = current_state
         override = update_override!
         after_state = current_state
         audit_log = record_success_audit!(override: override, before_state: before_state, after_state: after_state)

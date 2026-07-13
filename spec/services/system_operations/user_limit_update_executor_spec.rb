@@ -25,6 +25,150 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
   end
 
   describe '.call' do
+    it 'user limitの検証・保存・監査をSystemSettingsと同じdependency lock内で行う' do
+      create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(1500))
+      create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
+      allow(SystemOperations::SystemSettingDependencyLock).to receive(:call).and_call_original
+
+      result = described_class.call(
+        user: target_user,
+        key: 'receipt_items_per_receipt',
+        value: '1200',
+        enabled: '1',
+        expires_at: nil,
+        actor: actor,
+        reason: 'shared dependency lock regression',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: 'UPDATE USER LIMIT'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemOperations::SystemSettingDependencyLock).to have_received(:call)
+          .with(groups: [ 'receipt_items_snapshot' ])
+      end
+    end
+
+    it 'snapshot引下げとreceipt item override増加が並行しても不整合を保存しない' do
+      create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(1500))
+      create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
+
+      results = Queue.new
+      ready = Queue.new
+      start = Queue.new
+      operations = [
+        -> {
+          described_class.call(
+            user: target_user,
+            key: 'receipt_items_per_receipt',
+            value: '1200',
+            enabled: '1',
+            expires_at: nil,
+            actor: actor,
+            reason: 'concurrent item override',
+            request: request,
+            reauthentication: reauthentication,
+            confirmation: 'UPDATE USER LIMIT'
+          )
+        },
+        -> {
+          SystemOperations::SystemSettingUpdateExecutor.call(
+            key: 'limits.snapshot_ocr_items_max',
+            value: '1000',
+            actor: actor,
+            reason: 'concurrent snapshot lowering',
+            request: request,
+            reauthentication: reauthentication,
+            confirmation: '1'
+          )
+        }
+      ]
+
+      threads = operations.map do |operation|
+        Thread.new do
+          ActiveRecord::Base.connection_pool.with_connection do
+            ready << true
+            start.pop
+            results << operation.call
+          end
+        end
+      end
+      2.times { ready.pop }
+      2.times { start << true }
+      threads.each(&:join)
+
+      operation_results = 2.times.map { results.pop }
+      effective_limit = UserLimits.effective_limit(user: target_user.reload, key: 'receipt_items_per_receipt')
+      snapshot_ceiling = SystemSettings.limits_for(SystemSettings::SNAPSHOT_RECEIPT_ITEMS_LIMIT_KEYS).values.min
+
+      aggregate_failures do
+        expect(operation_results.count(&:success?)).to eq(1)
+        expect(operation_results.count(&:failure?)).to eq(1)
+        expect(operation_results.find(&:failure?).error_code).to eq('receipt_items_snapshot_limit')
+        expect(effective_limit).to be <= snapshot_ceiling
+      end
+    end
+
+    it 'system safety ceiling引下げとoverride増加が並行しても不整合を保存しない' do
+      create(:system_setting, key: 'limits.max_uploads_per_day', value: SystemSettings.stored_value(200))
+
+      results = Queue.new
+      ready = Queue.new
+      start = Queue.new
+      operations = [
+        -> {
+          described_class.call(
+            user: target_user,
+            key: 'receipt_uploads_per_day',
+            value: '150',
+            enabled: '1',
+            expires_at: nil,
+            actor: actor,
+            reason: 'concurrent upload override',
+            request: request,
+            reauthentication: reauthentication,
+            confirmation: 'UPDATE USER LIMIT'
+          )
+        },
+        -> {
+          SystemOperations::SystemSettingUpdateExecutor.call(
+            key: 'limits.max_uploads_per_day',
+            value: '100',
+            actor: actor,
+            reason: 'concurrent upload ceiling lowering',
+            request: request,
+            reauthentication: reauthentication,
+            confirmation: '1'
+          )
+        }
+      ]
+
+      threads = operations.map do |operation|
+        Thread.new do
+          ActiveRecord::Base.connection_pool.with_connection do
+            ready << true
+            start.pop
+            results << operation.call
+          end
+        end
+      end
+      2.times { ready.pop }
+      2.times { start << true }
+      threads.each(&:join)
+
+      operation_results = 2.times.map { results.pop }
+      effective_limit = UserLimits.effective_limit(user: target_user.reload, key: 'receipt_uploads_per_day')
+      safety_ceiling = SystemSettings.limit_for('limits.max_uploads_per_day')
+
+      aggregate_failures do
+        expect(operation_results.count(&:success?)).to eq(1)
+        expect(operation_results.count(&:failure?)).to eq(1)
+        expect(operation_results.find(&:failure?).error_code).to eq('user_limit_safety_max')
+        expect(effective_limit).to be <= safety_ceiling
+      end
+    end
+
     it '不正な整数表現を別の上限値として保存しない' do
       %w[1e2 12abc abc12 1.5].each do |value|
         result = described_class.call(

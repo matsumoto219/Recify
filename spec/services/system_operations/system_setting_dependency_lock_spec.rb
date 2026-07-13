@@ -16,6 +16,21 @@ RSpec.describe SystemOperations::SystemSettingDependencyLock do
     end
   end
 
+  it 'UserLimit override keyを対応するSystemSettingsと同じlock groupへまとめる' do
+    aggregate_failures do
+      expect(SystemSettings.dependency_lock_groups_for('receipt_items_per_receipt'))
+        .to eq([ 'receipt_items_snapshot' ])
+      expect(SystemSettings.dependency_lock_groups_for('receipt_uploads_per_day'))
+        .to eq([ 'user_limit_safety' ])
+      expect(SystemSettings.dependency_lock_groups_for('ocr_jobs_per_day'))
+        .to eq([ 'user_limit_safety' ])
+      expect(SystemSettings.dependency_lock_groups_for('ai_jobs_per_day'))
+        .to eq([ 'user_limit_safety' ])
+      expect(SystemSettings.dependency_lock_groups_for('storage_bytes'))
+        .to eq([ 'user_limit_safety' ])
+    end
+  end
+
   it '同じdependency groupの更新blockを直列化する' do
     first_entered = Queue.new
     release_first = Queue.new
