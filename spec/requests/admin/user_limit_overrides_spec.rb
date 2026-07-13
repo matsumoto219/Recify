@@ -3,10 +3,18 @@ require 'rails_helper'
 RSpec.describe 'Admin user limit overrides', type: :request do
   def stub_fresh_admin_reauthentication
     allow_any_instance_of(Admin::UserLimitOverridesController).to receive(:admin_passkey_reauthenticated?).and_return(true)
-    allow_any_instance_of(Admin::UserLimitOverridesController).to receive(:admin_reauthentication_context).and_return(
-      method: 'passkey',
-      reauthenticated_at: Time.current
-    )
+    allow_any_instance_of(Admin::UserLimitOverridesController).to receive(:admin_reauthentication_context) do |controller|
+      admin_reauthentication_context_for(controller.send(:current_user))
+    end
+  end
+
+  def admin_reauthentication_context_for(user)
+    reauthenticated_at = Time.current
+    {
+      method: 'passkey', reauthenticated_at: reauthenticated_at,
+      user_id: user.id, session_version: user.session_version,
+      expires_at: reauthenticated_at + Admin.passkey_reauth_window_duration
+    }
   end
 
   describe 'POST /admin/users/:id/limit_overrides' do

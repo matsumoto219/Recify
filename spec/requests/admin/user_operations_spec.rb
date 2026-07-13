@@ -26,11 +26,19 @@ RSpec.describe 'Admin user operations', type: :request do
   def stub_fresh_admin_reauthentication
     [ Admin::UsersController, Admin::UserOperationsController ].each do |controller|
       allow_any_instance_of(controller).to receive(:admin_passkey_reauthenticated?).and_return(true)
-      allow_any_instance_of(controller).to receive(:admin_reauthentication_context).and_return(
-        method: 'passkey',
-        reauthenticated_at: Time.current
-      )
+      allow_any_instance_of(controller).to receive(:admin_reauthentication_context) do |instance|
+        admin_reauthentication_context_for(instance.send(:current_user))
+      end
     end
+  end
+
+  def admin_reauthentication_context_for(user)
+    reauthenticated_at = Time.current
+    {
+      method: 'passkey', reauthenticated_at: reauthenticated_at,
+      user_id: user.id, session_version: user.session_version,
+      expires_at: reauthenticated_at + Admin.passkey_reauth_window_duration
+    }
   end
 
   describe 'POST /admin/users/:id/operations/lock' do
