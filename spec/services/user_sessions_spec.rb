@@ -125,28 +125,8 @@ RSpec.describe UserSessions do
     end
   end
 
-  describe '.mark_revoked_for_user' do
-    it '未sign outのsessionをrevokedにする' do
-      user = create(:user)
-      session = {}
-      active = described_class.record_sign_in(user: user, request: request, session: session, method: 'password')
-      signed_out = UserSession.create!(
-        user: user,
-        session_uid_digest: SecureRandom.hex(32),
-        session_version: user.session_version,
-        started_at: Time.current,
-        last_seen_at: Time.current,
-        signed_out_at: Time.current
-      )
-
-      count = described_class.mark_revoked_for_user(user: user)
-
-      aggregate_failures do
-        expect(count).to eq(1)
-        expect(active.reload.revoked_at).to eq(Time.current)
-        expect(signed_out.reload.revoked_at).to be_nil
-      end
-    end
+  it 'session_versionとremember tokenを維持する部分失効APIを公開しない' do
+    expect(described_class).not_to respond_to(:mark_revoked_for_user)
   end
 
   describe '.revoke_all!' do

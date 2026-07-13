@@ -97,16 +97,6 @@ module UserSessions
       nil
     end
 
-    def mark_revoked_for_user(user:)
-      return 0 unless user
-
-      now = Time.current
-      revoke_tracked_sessions(user: user, at: now)
-    rescue StandardError => e
-      Rails.logger.warn("[UserSessions] mark_revoked_for_user failed: #{e.class.name}")
-      0
-    end
-
     def revoke_all!(user:)
       raise ArgumentError, "user is required" unless user
 
