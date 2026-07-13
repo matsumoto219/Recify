@@ -66,6 +66,32 @@ RSpec.describe 'User password sessions', type: :request do
     end
   end
 
+  it '通常loginの追跡保存失敗は認証を妨げずsession versionによる失効を維持する' do
+    user = create(:user)
+    accept_current_legal_documents_for_request(user)
+    allow(UserSession).to receive(:create!).and_raise(ActiveRecord::ConnectionNotEstablished)
+
+    post user_session_path,
+         params: { user: { email: user.email, password: 'password' } }
+
+    aggregate_failures do
+      expect(response).to redirect_to(root_path)
+      expect(session[:user_session_version]).to eq(user.session_version)
+      expect(session[:user_session_uid]).to be_blank
+    end
+
+    get settings_path
+    expect(response).to have_http_status(:success)
+
+    UserSessions.revoke_all!(user: user)
+    get settings_path
+
+    aggregate_failures do
+      expect(response).to redirect_to(new_user_session_path)
+      expect(session[:user_session_version]).to be_blank
+    end
+  end
+
   it 'login_restricted中の一般ユーザーpassword loginは拒否する' do
     user = create(:user)
     create(:system_setting, key: 'maintenance.mode', value: SystemSettings.stored_value('login_restricted'))
