@@ -28,6 +28,9 @@ RSpec.describe 'User security reauthentication', type: :request do
 
     document = Nokogiri::HTML(response.body)
     password_input = document.at_css("input[name='password']")
+    password_reveal_wrapper = password_input.ancestors.find do |node|
+      node['data-controller'].to_s.split.include?('password-reveal')
+    end
 
     aggregate_failures do
       expect(response).to have_http_status(:success)
@@ -35,8 +38,11 @@ RSpec.describe 'User security reauthentication', type: :request do
       expect(response.headers['Pragma']).to eq('no-cache')
       expect(password_input).to be_present
       expect(password_input['type']).to eq('password')
+      expect(password_input['id']).to eq('password')
       expect(password_input['autocomplete']).to eq('current-password')
+      expect(password_input['required']).to eq('required')
       expect(password_input['value']).to be_nil
+      expect(password_reveal_wrapper).to be_nil
     end
   end
 

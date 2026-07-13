@@ -55,27 +55,10 @@
                 passkey_session_target: "button"
               } %>
 
-        <% fallback_links = [] %>
-        <% if fallback_methods.include?("totp") %>
-          <% fallback_links << link_to(t("auth.two_factor.links.totp"), users_two_factor_totp_path, class: "text-sm token-text-brand font-medium hover:underline underline-offset-4") %>
-        <% end %>
-        <% if fallback_methods.include?("recovery_code") %>
-          <% fallback_links << link_to(t("auth.two_factor.links.recovery_code"), users_two_factor_recovery_code_path, class: "text-sm token-text-brand font-medium hover:underline underline-offset-4") %>
-        <% end %>
-        <% if fallback_links.any? %>
-          <div class="space-y-2 text-center">
-            <p class="text-xs token-text-muted"><%= t("auth.two_factor.links.heading") %></p>
-            <div class="flex flex-wrap justify-center gap-x-4 gap-y-2">
-              <%= safe_join(fallback_links) %>
-            </div>
-          </div>
-        <% end %>
-
-        <div class="text-center">
-          <%= link_to t("auth.two_factor.passkey.back_to_login"),
-                new_user_session_path,
-                class: "text-sm token-text-brand font-medium hover:underline underline-offset-4" %>
-        </div>
+        <%= render "users/two_factor/challenge_navigation",
+              allowed_methods: pending_second_factor_allowed_methods,
+              current_method: "passkey",
+              back_label: t("auth.two_factor.passkey.back_to_login") %>
       </div>
     <% end %>
   </div>

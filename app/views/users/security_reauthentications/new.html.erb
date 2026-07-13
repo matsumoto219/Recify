@@ -15,13 +15,17 @@
           class: "space-y-5",
           data: { turbo: false } do |form| %>
       <div class="space-y-2">
-        <%= form.label :password,
-              t("settings.security.reauthentication.password_label"),
-              class: "block text-sm font-medium token-text-base" %>
-        <%= form.password_field :password,
-              required: true,
+        <%= render "shared/ui/form/text_field",
+              f: form,
+              attribute: :password,
+              field_type: :password_field,
+              label: t("settings.security.reauthentication.password_label"),
               autocomplete: "current-password",
-              class: "w-full rounded-lg border token-border-soft token-bg-input px-3 py-2 text-sm token-text-base" %>
+              required: true,
+              with_icon: false,
+              size: :dense,
+              label_class: "block text-sm font-medium token-text-base normal-case tracking-normal px-0",
+              input_class: "rounded-lg text-sm" %>
         <p class="text-xs token-text-muted"><%= t(
           "settings.security.reauthentication.password_hint",
           count: @security_reauthentication_window_minutes
