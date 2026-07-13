@@ -7,9 +7,10 @@ module Security
 
     AUTO_RULES = {
       "fail2ban/scanner_paths" => {
-        action_type: "scanner_restriction",
-        status: "active",
-        expires_in: RACK_ATTACK_BANTIME
+        action_type: "scanner_restriction"
+      },
+      "adaptive/scanner_restrictions" => {
+        action_type: "scanner_restriction"
       },
       "fail2ban/admin_probes" => {
         action_type: "admin_probe_restriction",
@@ -36,8 +37,9 @@ module Security
 
         config = AUTO_RULES.fetch(rule, {})
         action_type = config.fetch(:action_type, "rate_limit_triggered")
-        status = config.fetch(:status, "observed")
-        expires_at = expires_at_for(config: config, retry_after: retry_after)
+        raw_metadata = metadata.respond_to?(:to_h) ? metadata.to_h.symbolize_keys : {}
+        status = action_status(config: config, metadata: raw_metadata)
+        expires_at = expires_at_for(config: config, retry_after: retry_after, metadata: raw_metadata)
 
         call(
           ip_address: request_ip(request),
@@ -50,7 +52,7 @@ module Security
           first_seen_at: security_event&.first_seen_at,
           last_seen_at: security_event&.last_seen_at,
           expires_at: expires_at,
-          metadata: rack_attack_metadata(metadata, retry_after: retry_after),
+          metadata: rack_attack_metadata(raw_metadata, retry_after: retry_after),
           aggregate: true
         )
       rescue StandardError => e
@@ -89,7 +91,15 @@ module Security
         IpAddress.normalize(raw)
       end
 
-      def expires_at_for(config:, retry_after:)
+      def action_status(config:, metadata:)
+        return metadata[:active] == true ? "active" : "observed" if scanner_restriction_config?(config)
+
+        config.fetch(:status, "observed")
+      end
+
+      def expires_at_for(config:, retry_after:, metadata:)
+        return metadata[:expires_at] if scanner_restriction_config?(config) && metadata[:active] == true
+
         expires_in = config[:expires_in]
         return expires_in.from_now if expires_in
         return retry_after.to_i.seconds.from_now if retry_after.to_i.positive?
@@ -99,10 +109,23 @@ module Security
 
       def rack_attack_metadata(metadata, retry_after:)
         raw = metadata.respond_to?(:to_h) ? metadata.to_h : {}
-        raw.symbolize_keys.slice(:matched, :limit, :period, :retry_after).merge(
+        raw.symbolize_keys.slice(
+          :matched,
+          :limit,
+          :period,
+          :retry_after,
+          :active,
+          :tier,
+          :strike_count,
+          :duration_seconds
+        ).merge(
           retry_after: retry_after,
           category: "ip_access"
         ).compact
+      end
+
+      def scanner_restriction_config?(config)
+        config[:action_type] == "scanner_restriction"
       end
 
       def operation_config(operation)

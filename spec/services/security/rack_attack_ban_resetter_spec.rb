@@ -3,6 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe Security::RackAttackBanResetter do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:ip_address) { '8.8.8.8' }
 
   around do |example|
@@ -25,6 +27,14 @@ RSpec.describe Security::RackAttackBanResetter do
       expect(result).to be_success
       expect(result.reset_targets).to eq([ 'scanner' ])
       expect(Security::RackAttackBanRegistry.banned_states(ip_address).fetch('scanner')).to be(false)
+      expect(Security::AdaptiveScannerRestriction.snapshot(ip_address: ip_address)).to include(
+        active: false,
+        strike_count: 0
+      )
+      expect(Security::AdaptiveScannerRestriction.record_probe(ip_address: ip_address)).to include(
+        active: false,
+        strike_count: 1
+      )
     end
   end
 
@@ -54,7 +64,10 @@ RSpec.describe Security::RackAttackBanResetter do
   end
 
   def ban_scanner!
-    Rack::Attack::Fail2Ban.filter("scanner:#{ip_address}", maxretry: 1, findtime: 10.minutes, bantime: 30.minutes) { true }
+    3.times do
+      Security::AdaptiveScannerRestriction.record_probe(ip_address: ip_address)
+      travel 2.seconds
+    end
   end
 
   def ban_admin_probe!

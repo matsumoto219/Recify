@@ -30,6 +30,7 @@ class Rack::Attack
   RECEIPT_PROCESSING_CARDS_PATH = "/receipts/processing_cards".freeze
   ACTIVE_STORAGE_DIRECT_UPLOAD_PATH = "/rails/active_storage/direct_uploads"
   ACTIVE_STORAGE_DOWNLOAD_PATH = %r{\A/rails/active_storage/(?:blobs|representations|disk)/}.freeze
+  SCANNER_RESTRICTION_ENV_KEY = "recify.security.scanner_restriction"
   SCANNER_PATH = %r{
     (?:\A|/)(?:\.env|\.env\.[^/?#]+|\.git(?:/config)?|wp-login\.php|xmlrpc\.php|etc/passwd|windows/win\.ini|boot\.ini)(?:\z|[/?#])
     |\A/[^/?#\/]+\.php(?:\z|[?#])
@@ -140,10 +141,17 @@ class Rack::Attack
     Security.ip_blocked?(request.ip)
   end
 
+  blocklist("adaptive/scanner_restrictions") do |request|
+    snapshot = Security.scanner_restriction_snapshot(request.ip)
+    request.env[SCANNER_RESTRICTION_ENV_KEY] = snapshot
+    snapshot.fetch(:active)
+  end
+
   blocklist("fail2ban/scanner_paths") do |request|
-    Rack::Attack::Fail2Ban.filter("scanner:#{request.ip}", maxretry: 3, findtime: 10.minutes, bantime: 30.minutes) do
-      Rack::Attack.scanner_request?(request)
-    end
+    next false unless Rack::Attack.scanner_request?(request)
+
+    request.env[SCANNER_RESTRICTION_ENV_KEY] = Security.record_scanner_probe(request.ip)
+    true
   end
 
   blocklist("fail2ban/admin_probes") do |request|
@@ -225,9 +233,11 @@ class Rack::Attack
   end
 
   self.blocklisted_responder = lambda do |request|
+    restriction_metadata = request.env.fetch(SCANNER_RESTRICTION_ENV_KEY, {})
     SecurityEvents.record_rate_limit!(
       request: request,
-      matched_rule: request.env["rack.attack.matched"].presence || "rack_attack_blocklist"
+      matched_rule: request.env["rack.attack.matched"].presence || "rack_attack_blocklist",
+      metadata: restriction_metadata
     )
     response_headers = {}
     response_headers["Turbo-Visit-Control"] = "reload" unless Rack::Attack.json_request?(request)

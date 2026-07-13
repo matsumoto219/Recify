@@ -3,6 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe Security::IpAccessSnapshot do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:ip_address) { '8.8.8.8' }
 
   around do |example|
@@ -21,7 +23,10 @@ RSpec.describe Security::IpAccessSnapshot do
     create(:security_event, ip_address: ip_address, matched_rule: 'fail2ban/scanner_paths', last_seen_at: 30.minutes.ago)
     create(:security_event, ip_address: ip_address, matched_rule: 'fail2ban/scanner_paths', last_seen_at: 20.minutes.ago)
     create(:security_event, ip_address: ip_address, matched_rule: 'auth/sign_in/ip', last_seen_at: 10.minutes.ago)
-    Rack::Attack::Fail2Ban.filter("scanner:#{ip_address}", maxretry: 1, findtime: 10.minutes, bantime: 30.minutes) { true }
+    3.times do
+      Security::AdaptiveScannerRestriction.record_probe(ip_address: ip_address)
+      travel 2.seconds
+    end
 
     snapshot = described_class.call(ip_address: ip_address)
 

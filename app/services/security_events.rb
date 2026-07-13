@@ -1,7 +1,16 @@
 module SecurityEvents
   ADMIN_BURST_WINDOW = 1.hour
   ADMIN_BURST_THRESHOLD = 5
-  RATE_LIMIT_METADATA_KEYS = %i[matched limit period retry_after].freeze
+  RATE_LIMIT_METADATA_KEYS = %i[
+    matched
+    limit
+    period
+    retry_after
+    active
+    tier
+    strike_count
+    duration_seconds
+  ].freeze
 
   class << self
     def detect(params:, max_detections: nil, url_field_policy: UrlFieldPolicy.new)

@@ -1,6 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe 'Rack::Attack', type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   around do |example|
     original_enabled = Rack::Attack.enabled
     original_store = Rack::Attack.cache.store
@@ -324,11 +326,12 @@ RSpec.describe 'Rack::Attack', type: :request do
   end
 
   it 'blocks scanner paths and bans the IP after repeated hits' do
-    ip = '203.0.113.12'
+    ip = '8.8.8.8'
 
     3.times do
       get '/wp-login.php', headers: remote_addr(ip)
       expect_blocklisted_html_response(path: 'wp-login.php')
+      travel 2.seconds
     end
 
     get root_path, headers: remote_addr(ip)
@@ -338,6 +341,58 @@ RSpec.describe 'Rack::Attack', type: :request do
       expect(SecurityIpAction.where(ip_address: ip, action_type: 'scanner_restriction')).to exist
       expect(SecurityIpAction.where(ip_address: ip, matched_rule: 'fail2ban/scanner_paths').sum(:count)).to be >= 3
     end
+  end
+
+  it 'persistent WordPress probesを30分から段階制限し、制限中は全pathを遮断する' do
+    ip = '8.8.4.4'
+
+    2.times do
+      get '/wp-admin/install.php', headers: remote_addr(ip)
+      expect_blocklisted_html_response(path: 'wp-admin/install.php')
+      get root_path, headers: remote_addr(ip)
+      expect(response).to have_http_status(:ok)
+      travel 2.seconds
+    end
+
+    get '/wp-admin/install.php', headers: remote_addr(ip)
+    expect_blocklisted_html_response(path: 'wp-admin/install.php')
+    get root_path, headers: remote_addr(ip)
+    expect_blocklisted_html_response
+
+    first_restriction = SecurityIpAction.where(ip_address: ip, action_type: 'scanner_restriction', status: 'active').last
+    first_event = SecurityEvent.where(ip_address: ip, matched_rule: 'fail2ban/scanner_paths').last
+    aggregate_failures do
+      expect(first_restriction.metadata).to include('tier' => 1, 'duration_seconds' => 30.minutes.to_i)
+      expect(first_restriction.expires_at).to be_within(2.seconds).of(30.minutes.from_now)
+      expect(first_event.metadata).to include('tier' => 1, 'duration_seconds' => 30.minutes.to_i)
+      expect(first_event.metadata.to_json).not_to include(ip)
+    end
+
+    travel 30.minutes + 1.second
+    get '/wp-admin/install.php', headers: remote_addr(ip)
+    expect_blocklisted_html_response(path: 'wp-admin/install.php')
+    get root_path, headers: remote_addr(ip)
+    expect_blocklisted_html_response
+
+    second_restriction = SecurityIpAction.where(ip_address: ip, action_type: 'scanner_restriction', status: 'active').last
+    aggregate_failures do
+      expect(second_restriction.metadata).to include('tier' => 2, 'duration_seconds' => 6.hours.to_i)
+      expect(second_restriction.expires_at).to be_within(2.seconds).of(6.hours.from_now)
+      expect(second_restriction.metadata.to_json).not_to include(ip)
+    end
+  end
+
+  it 'reserved addressのscanner probeはpathだけを拒否し全path制限へ昇格しない' do
+    ip = '203.0.113.12'
+
+    3.times do
+      get '/wp-admin/install.php', headers: remote_addr(ip)
+      expect_blocklisted_html_response(path: 'wp-admin/install.php')
+      travel 2.seconds
+    end
+
+    get root_path, headers: remote_addr(ip)
+    expect(response).to have_http_status(:ok)
   end
 
   it 'blocks manually restricted IP addresses from the database' do
@@ -462,11 +517,12 @@ RSpec.describe 'Rack::Attack', type: :request do
   end
 
   it 'blocks new scanner probes with the existing fail2ban response' do
-    ip = '203.0.113.19'
+    ip = '1.1.1.1'
 
     3.times do
       get '/.git/config', headers: remote_addr(ip)
       expect_blocklisted_html_response(path: '.git/config')
+      travel 2.seconds
     end
 
     get root_path, headers: remote_addr(ip)
@@ -475,11 +531,12 @@ RSpec.describe 'Rack::Attack', type: :request do
   end
 
   it 'blocks Rails debug probes with the existing fail2ban response' do
-    ip = '203.0.113.20'
+    ip = '9.9.9.9'
 
     3.times do
       get '/rails/info/routes', headers: remote_addr(ip)
       expect_blocklisted_html_response(path: 'rails/info/routes')
+      travel 2.seconds
     end
 
     get root_path, headers: remote_addr(ip)

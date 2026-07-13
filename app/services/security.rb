@@ -29,6 +29,23 @@ module Security
       RackAttackBanRegistry.banned_states(ip_address)
     end
 
+    def scanner_restriction_snapshot(ip_address)
+      snapshot = AdaptiveScannerRestriction.snapshot(ip_address: ip_address)
+      return snapshot if snapshot.fetch(:active)
+      return snapshot unless RackAttackBanRegistry.legacy_scanner_banned?(ip_address)
+
+      snapshot.merge(
+        active: true,
+        tier: 1,
+        duration_seconds: 30.minutes.to_i,
+        expires_at: 30.minutes.from_now
+      )
+    end
+
+    def record_scanner_probe(ip_address)
+      AdaptiveScannerRestriction.record_probe(ip_address: ip_address)
+    end
+
     def rack_attack_default_target
       RackAttackBanResetter::DEFAULT_TARGET
     end

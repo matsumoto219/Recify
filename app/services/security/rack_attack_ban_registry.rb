@@ -2,10 +2,14 @@
 
 module Security
   class RackAttackBanRegistry
+    LEGACY_SCANNER_COMPATIBILITY_WINDOW = 30.minutes
+    LEGACY_SCANNER_COMPATIBILITY_DEADLINE =
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) + LEGACY_SCANNER_COMPATIBILITY_WINDOW.to_f
     TARGETS = {
       "scanner" => {
         label: "scanner",
-        filter: Rack::Attack::Fail2Ban,
+        adaptive: true,
+        legacy_filter: Rack::Attack::Fail2Ban,
         discriminator_prefix: "scanner",
         findtime: 10.minutes
       },
@@ -34,12 +38,22 @@ module Security
         RESET_TARGETS
       end
 
+      def legacy_scanner_banned?(ip_address)
+        return false unless legacy_scanner_compatibility_active?
+
+        normalized = IpAddress.normalize(ip_address)
+        return false if normalized.blank?
+
+        config = TARGETS.fetch("scanner")
+        config.fetch(:legacy_filter).banned?(discriminator(config, normalized))
+      end
+
       def banned_states(ip_address)
         normalized = IpAddress.normalize(ip_address)
         return empty_states if normalized.blank?
 
         TARGETS.transform_values do |config|
-          config.fetch(:filter).banned?(discriminator(config, normalized))
+          banned_state(config, normalized)
         end
       end
 
@@ -49,10 +63,7 @@ module Security
 
         expanded_targets(target).each do |target_name|
           config = TARGETS.fetch(target_name)
-          config.fetch(:filter).reset(
-            discriminator(config, normalized),
-            findtime: config.fetch(:findtime)
-          )
+          reset_target(config, normalized)
         end
       end
 
@@ -64,6 +75,34 @@ module Security
       end
 
       private
+
+      def legacy_scanner_compatibility_active?
+        Process.clock_gettime(Process::CLOCK_MONOTONIC) < LEGACY_SCANNER_COMPATIBILITY_DEADLINE
+      end
+
+      def banned_state(config, ip_address)
+        if config[:adaptive]
+          return AdaptiveScannerRestriction.active?(ip_address: ip_address) ||
+            legacy_scanner_banned?(ip_address)
+        end
+
+        config.fetch(:filter).banned?(discriminator(config, ip_address))
+      end
+
+      def reset_target(config, ip_address)
+        if config[:adaptive]
+          AdaptiveScannerRestriction.reset!(ip_address: ip_address)
+          config.fetch(:legacy_filter).reset(
+            discriminator(config, ip_address),
+            findtime: config.fetch(:findtime)
+          )
+        else
+          config.fetch(:filter).reset(
+            discriminator(config, ip_address),
+            findtime: config.fetch(:findtime)
+          )
+        end
+      end
 
       def discriminator(config, ip_address)
         "#{config.fetch(:discriminator_prefix)}:#{ip_address}"
