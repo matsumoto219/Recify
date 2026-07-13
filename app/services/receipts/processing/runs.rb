@@ -237,6 +237,7 @@ module Receipts::Processing::Runs
         ids = ReceiptAnalysisRun
           .where(id: records.map { |record| record[:id] })
           .where.not(status: ReceiptAnalysisRun::ACTIVE_STATUSES)
+          .where(expires_at: ..cutoff)
           .lock
           .map(&:id)
         purge_ocr_response_artifacts_for_run_ids(ids)

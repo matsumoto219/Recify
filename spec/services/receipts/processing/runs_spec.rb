@@ -1812,6 +1812,30 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
+    it '候補取得後に保持期限が延長されたrunは再検証してartifactも削除しない' do
+      cutoff = Time.current
+      run = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
+      run.ocr_response_artifact.attach(
+        io: StringIO.new(JSON.generate('status' => 'succeeded')),
+        filename: "ocr_response_#{run.run_key}_attempt01.json",
+        content_type: 'application/json'
+      )
+      allow(described_class).to receive(:expired_terminal_runs).and_wrap_original do |original, **arguments|
+        candidates = original.call(**arguments)
+        run.update_columns(expires_at: 1.day.from_now)
+        candidates
+      end
+
+      result = described_class.cleanup_expired(cutoff:, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:expired_count]).to eq(1)
+        expect(result[:deleted_count]).to eq(0)
+        expect(ReceiptAnalysisRun).to exist(run.id)
+        expect(run.reload.ocr_response_artifact).to be_attached
+      end
+    end
+
     it 'limitを守る' do
       create_list(:receipt_analysis_run, 2, :succeeded, expires_at: 1.day.ago)
 
