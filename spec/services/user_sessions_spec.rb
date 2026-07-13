@@ -60,6 +60,41 @@ RSpec.describe UserSessions do
         expect(record.user_agent).to be_nil
       end
     end
+
+    it 'bang APIは追跡recordの保存失敗をcallerへ返す' do
+      user = create(:user)
+      session = {}
+
+      allow(UserSession).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(UserSession.new))
+
+      expect do
+        described_class.record_sign_in!(
+          user: user,
+          request: request,
+          session: session,
+          method: 'guest'
+        )
+      end.to raise_error(ActiveRecord::RecordInvalid)
+    end
+
+    it 'best-effort APIは保存失敗時に未追跡session uidを残さない' do
+      user = create(:user)
+      session = {}
+
+      allow(UserSession).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(UserSession.new))
+
+      result = described_class.record_sign_in(
+        user: user,
+        request: request,
+        session: session,
+        method: 'password'
+      )
+
+      aggregate_failures do
+        expect(result).to be_nil
+        expect(session[:user_session_uid]).to be_nil
+      end
+    end
   end
 
   describe '.touch_current' do

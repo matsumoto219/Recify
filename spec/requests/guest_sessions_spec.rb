@@ -1,6 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe 'GuestSessions', type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   describe 'POST /users/guest_sign_in' do
     it 'locale経由の成功flashでゲストログインする' do
       user = create(:user, guest: true)
@@ -18,8 +20,10 @@ RSpec.describe 'GuestSessions', type: :request do
       expect do
         post guest_sign_in_path
       end.to change(User.where(guest: true), :count).by(1)
+        .and change(UserSession, :count).by(1)
 
       user = User.where(guest: true).order(:id).last
+      user_session = UserSession.order(:id).last
 
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
@@ -29,6 +33,78 @@ RSpec.describe 'GuestSessions', type: :request do
         expect(user.display_email).to eq(I18n.t('users.display.email_unregistered'))
         expect(user.last_sign_in_at).to be_present
         expect(user.legal_acceptances).to be_empty
+        expect(session[:user_session_version]).to eq(user.session_version)
+        expect(session[:user_session_uid]).to be_present
+        expect(user_session).to have_attributes(
+          user_id: user.id,
+          session_version: user.session_version,
+          sign_in_method: 'guest'
+        )
+      end
+    end
+
+    it 'session追跡recordを保存できない場合はloginを成立させず新規guestを残さない' do
+      allow(UserSessions).to receive(:record_sign_in!).and_raise(ActiveRecord::StatementInvalid, 'local tracking failure')
+
+      expect do
+        post guest_sign_in_path
+      end.not_to change(User.where(guest: true), :count)
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(flash[:alert]).to eq(I18n.t('flash.guest_sessions.create.failure'))
+        expect(session[:user_session_version]).to be_blank
+        expect(session[:user_session_uid]).to be_blank
+        expect(session['warden.user.user.key']).to be_blank
+      end
+    end
+
+    it 'ログイン済みuserからのguest login要求は現在sessionを置き換えず新規guestも作らない' do
+      user = create(:user)
+      sign_in user
+      expect(BotProtection).not_to receive(:verify_turnstile)
+
+      expect do
+        post guest_sign_in_path
+      end.not_to change(User.where(guest: true), :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(receipts_path)
+        expect(session.dig('warden.user.user.key', 0, 0)).to eq(user.id)
+      end
+    end
+
+    it '保持期間を超えたguestでも現在sessionが利用中ならcleanupしない' do
+      guest_id = nil
+
+      travel_to(8.days.ago) do
+        post guest_sign_in_path
+        guest_id = User.where(guest: true).order(:id).last.id
+      end
+
+      get receipts_path
+      result = GuestUserCleanupJob.perform_now
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(User.exists?(guest_id)).to be(true)
+        expect(result).to eq(deleted_count: 0, failed_count: 0)
+      end
+    end
+
+    it 'guest logoutで追跡sessionをsigned outにする' do
+      post guest_sign_in_path
+      guest = User.where(guest: true).order(:id).last
+      tracked_session = guest.user_sessions.order(:id).last
+
+      delete destroy_user_session_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:see_other)
+        expect(tracked_session.reload.signed_out_at).to be_present
+        expect(session[:user_session_uid]).to be_blank
+        expect(session[:user_session_version]).to be_blank
       end
     end
 

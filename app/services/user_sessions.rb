@@ -39,6 +39,14 @@ module UserSessions
     end
 
     def record_sign_in(user:, request:, session:, method:)
+      record_sign_in!(user: user, request: request, session: session, method: method)
+    rescue StandardError => e
+      session&.delete(USER_SESSION_UID_SESSION_KEY)
+      Rails.logger.warn("[UserSessions] record_sign_in failed: #{e.class.name}")
+      nil
+    end
+
+    def record_sign_in!(user:, request:, session:, method:)
       return unless user && session
 
       raw_uid = SecureRandom.uuid
@@ -55,9 +63,6 @@ module UserSessions
         user_agent: truncate_user_agent(request&.user_agent),
         sign_in_method: method.to_s
       )
-    rescue StandardError => e
-      Rails.logger.warn("[UserSessions] record_sign_in failed: #{e.class.name}")
-      nil
     end
 
     def touch_current(user:, request:, session:)
