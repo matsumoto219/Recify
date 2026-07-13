@@ -34,6 +34,15 @@ RSpec.describe SystemOperations::UserOperationExecutor do
 
   describe '.call' do
     it 'lock_userで対象ユーザーをロックし、success auditを保存する' do
+      target_user.remember_me!
+      tracked_session = UserSession.create!(
+        user: target_user,
+        session_uid_digest: SecureRandom.hex(32),
+        session_version: target_user.session_version,
+        started_at: Time.current,
+        last_seen_at: Time.current
+      )
+
       result = described_class.call(
         operation: 'lock_user',
         user: target_user,
@@ -49,6 +58,9 @@ RSpec.describe SystemOperations::UserOperationExecutor do
       aggregate_failures do
         expect(result).to be_success
         expect(target_user.reload.locked_at).to be_present
+        expect(target_user.session_version).to eq(1)
+        expect(target_user.remember_created_at).to be_nil
+        expect(tracked_session.reload.revoked_at).to eq(Time.current)
         expect(audit_log).to have_attributes(
           actor_user: actor,
           actor_kind: 'admin',
@@ -63,6 +75,7 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         )
         expect(audit_log.metadata).to include(
           'operation' => 'lock_user',
+          'revoked_sessions_count' => 1,
           'reauthenticated' => true,
           'reauthentication_method' => 'passkey',
           'reauthenticated_at' => reauthenticated_at.iso8601
@@ -110,6 +123,14 @@ RSpec.describe SystemOperations::UserOperationExecutor do
     end
 
     it 'force_passkey_resetで対象ユーザーのpasskeysを削除し、credential情報なしでsuccess auditを保存する' do
+      target_user.remember_me!
+      tracked_session = UserSession.create!(
+        user: target_user,
+        session_uid_digest: SecureRandom.hex(32),
+        session_version: target_user.session_version,
+        started_at: Time.current,
+        last_seen_at: Time.current
+      )
       older = create(:passkey, user: target_user, credential_id: 'credential-secret-old', public_key: 'PUBLIC KEY OLD', last_used_at: 2.days.ago)
       latest = create(:passkey, user: target_user, credential_id: 'credential-secret-latest', public_key: 'PUBLIC KEY LATEST', last_used_at: 1.hour.ago)
 
@@ -129,6 +150,9 @@ RSpec.describe SystemOperations::UserOperationExecutor do
       aggregate_failures do
         expect(result).to be_success
         expect(target_user.passkeys.reload).to be_empty
+        expect(target_user.session_version).to eq(1)
+        expect(target_user.remember_created_at).to be_nil
+        expect(tracked_session.reload.revoked_at).to eq(Time.current)
         expect(audit_log).to have_attributes(
           actor_user: actor,
           action: 'admin.users.force_passkey_reset',
@@ -143,6 +167,7 @@ RSpec.describe SystemOperations::UserOperationExecutor do
           'passkeys_count_before' => 2,
           'passkeys_count_after' => 0,
           'latest_passkey_last_used_at' => latest.last_used_at.iso8601,
+          'revoked_sessions_count' => 1,
           'reauthenticated' => true,
           'reauthentication_method' => 'passkey'
         )

@@ -151,10 +151,12 @@ module SystemOperations
       case operation
       when "lock_user"
         user.lock_access!(send_instructions: false)
+        @revoked_sessions_count = UserSessions.revoke_all!(user: user)
       when "unlock_user"
         user.unlock_access!
       when "force_passkey_reset"
         user.passkeys.destroy_all
+        @revoked_sessions_count = UserSessions.revoke_all!(user: user)
       when "force_two_factor_reset"
         user.totp_credential&.destroy!
         user.recovery_codes.delete_all
@@ -228,11 +230,14 @@ module SystemOperations
       metadata = base_audit_metadata
 
       case operation
+      when "lock_user"
+        metadata.merge(revoked_sessions_count: @revoked_sessions_count.to_i)
       when "force_passkey_reset"
         metadata.merge(
           passkeys_count_before: before_state[:passkeys_count],
           passkeys_count_after: after_state[:passkeys_count],
-          latest_passkey_last_used_at: before_state[:latest_passkey_last_used_at]
+          latest_passkey_last_used_at: before_state[:latest_passkey_last_used_at],
+          revoked_sessions_count: @revoked_sessions_count.to_i
         )
       when "force_two_factor_reset"
         metadata.merge(

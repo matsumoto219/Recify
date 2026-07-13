@@ -457,6 +457,72 @@ RSpec.describe 'User password sessions', type: :request do
     end
   end
 
+  it '管理者lock後は確立済みsessionで一般画面を利用できない' do
+    admin = create(:user, :admin)
+    user = create(:user)
+    accept_current_legal_documents_for_request(user)
+    sign_in user
+    get settings_path
+
+    result = SystemOperations.execute_user_operation(
+      operation: 'lock_user',
+      user: user,
+      actor: admin,
+      reason: 'locked session regression',
+      request: nil,
+      reauthentication: {
+        method: 'passkey',
+        reauthenticated_at: Time.current,
+        user_id: admin.id,
+        session_version: admin.session_version,
+        expires_at: Time.current + Admin.passkey_reauth_window_duration
+      },
+      confirmation: 'LOCK USER'
+    )
+
+    get settings_path
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(response).to redirect_to(new_user_session_path)
+      expect(session['warden.user.user.key']).to be_blank
+      expect(user.reload.session_version).to eq(1)
+    end
+  end
+
+  it 'Passkey強制reset後はそのcredentialで確立済みのsessionを継続できない' do
+    admin = create(:user, :admin)
+    user = create(:user)
+    accept_current_legal_documents_for_request(user)
+    create_passkey_with_fake_client(user)
+    sign_in user
+    get settings_path
+
+    result = SystemOperations.execute_user_operation(
+      operation: 'force_passkey_reset',
+      user: user,
+      actor: admin,
+      reason: 'compromised passkey regression',
+      request: nil,
+      reauthentication: {
+        method: 'passkey',
+        reauthenticated_at: Time.current,
+        user_id: admin.id,
+        session_version: admin.session_version,
+        expires_at: Time.current + Admin.passkey_reauth_window_duration
+      },
+      confirmation: 'RESET PASSKEYS'
+    )
+
+    get settings_path
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(response).to redirect_to(new_user_session_path)
+      expect(session[:user_session_version]).to be_blank
+    end
+  end
+
   it 'session version nilの既存セッションは現在値で補完する' do
     user = create(:user)
     sign_in user
