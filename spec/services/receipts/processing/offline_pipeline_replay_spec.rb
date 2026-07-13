@@ -50,6 +50,15 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       payment_count: 0,
       payment_sum: 0,
       tax_detail_count: 1,
+      item_rows: [
+        [ 'ノート A5', 1, 220, 220, 220, nil, BigDecimal('0.1') ],
+        [ 'ボールペン(黒)', 1, 132, 132, 132, nil, BigDecimal('0.1') ],
+        [ 'クリアファイル A4', 1, 110, 110, 110, nil, BigDecimal('0.1') ],
+        [ '修正テープ', 1, 308, 308, 308, nil, BigDecimal('0.1') ]
+      ],
+      adjustment_rows: [],
+      payment_rows: [],
+      tax_detail_rows: [ [ '10%対象', 700, 70, BigDecimal('0.1') ] ],
       review_reasons: []
     },
     {
@@ -65,6 +74,20 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       payment_count: 1,
       payment_sum: 1_732,
       tax_detail_count: 2,
+      item_rows: [
+        [ 'たまご Mサイズ 10個入', 1, 198, 198, 198, nil, BigDecimal('0.08') ],
+        [ '牛乳 1000ml', 1, 248, 248, 248, nil, BigDecimal('0.08') ],
+        [ '食パン 6枚切', 1, 158, 158, 158, nil, BigDecimal('0.08') ],
+        [ 'トイレットペーパー12R', 1, 398, 398, 398, nil, BigDecimal('0.1') ],
+        [ '洗濯用洗剤 液体 900g', 1, 298, 298, 298, nil, BigDecimal('0.1') ],
+        [ 'シャンプー 詰替 330ml', 1, 298, 298, 298, nil, BigDecimal('0.1') ]
+      ],
+      adjustment_rows: [],
+      payment_rows: [ [ 'cash', 1_732 ] ],
+      tax_detail_rows: [
+        [ '8%対象', 604, 44, BigDecimal('0.08') ],
+        [ '10%対象', 994, 90, BigDecimal('0.1') ]
+      ],
       review_reasons: []
     },
     {
@@ -80,6 +103,19 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       payment_count: 2,
       payment_sum: 571,
       tax_detail_count: 1,
+      item_rows: [
+        [ '国産豚こま切れ肉 200g', 1, 398, 348, 398, 50, BigDecimal('0.08') ],
+        [ 'きゅうり 1本', 1, 258, 258, 258, nil, BigDecimal('0.08') ],
+        [ "トマト (大玉)\n1個", 1, 198, 198, 198, nil, BigDecimal('0.08') ],
+        [ 'たまご Mサイズ 6個入', 1, 128, 98, 128, 30, BigDecimal('0.08') ]
+      ],
+      adjustment_rows: [
+        [ 'receipt_discount', 100, 'discount' ],
+        [ 'coupon', 200, 'discount' ],
+        [ 'receipt_discount', 31, 'discount' ]
+      ],
+      payment_rows: [ [ 'ポイント利用', 300 ], [ 'クレジットカード', 271 ] ],
+      tax_detail_rows: [ [ '8%対象', 529, 42, BigDecimal('0.08') ] ],
       review_reasons: []
     },
     {
@@ -95,6 +131,16 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       payment_count: 1,
       payment_sum: 999,
       tax_detail_count: 2,
+      item_rows: [
+        [ 'カフェラテ(500ml)', 1, 120, 120, 120, nil, nil ],
+        [ 'チョコチップクッキー', 1, 159, 159, 159, nil, nil ]
+      ],
+      adjustment_rows: [],
+      payment_rows: [ [ 'paypay支払', 999 ] ],
+      tax_detail_rows: [
+        [ '小 計(税抜 8%) / 消費税等(8%) / 消費税等', 279, 22, BigDecimal('0.08') ],
+        [ '消費税等(10%) / 消費税等', 0, 54, BigDecimal('0.1') ]
+      ],
       required_review_reasons: %w[tax_detail_mismatch]
     },
     {
@@ -111,6 +157,16 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       payment_count: 1,
       payment_sum: 801,
       tax_detail_count: 2,
+      item_rows: [
+        [ 'サンプル軽減商品A', 1, 798, 798, 798, nil, BigDecimal('0.08') ],
+        [ 'レジ袋中1枚', 1, 3, 3, 3, nil, BigDecimal('0.1') ]
+      ],
+      adjustment_rows: [],
+      payment_rows: [ [ '電子マネー支払', 801 ] ],
+      tax_detail_rows: [
+        [ '8%対象', 739, 59, BigDecimal('0.08') ],
+        [ '10%対象', 3, 0, BigDecimal('0.1') ]
+      ],
       review_reasons: [],
       ai_item_names: [ 'サンプル軽減商品A', 'レジ袋中1枚' ],
       ai_item_categories: %w[food daily_goods],
@@ -145,6 +201,19 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       payment_count: 1,
       payment_sum: 801,
       tax_detail_count: 2,
+      item_rows: [
+        [ 'サンプル軽減商品A', 1, 128, 128, 128, nil, BigDecimal('0.08') ],
+        [ 'サンプル軽減商品B', 1, 198, 198, 198, nil, BigDecimal('0.08') ],
+        [ 'サンプル軽減商品C', 1, 115, 115, 115, nil, BigDecimal('0.08') ],
+        [ 'サンプル軽減商品D', 1, 298, 298, 298, nil, BigDecimal('0.08') ],
+        [ 'レジ袋中1枚', 1, 3, 3, 3, nil, BigDecimal('0.1') ]
+      ],
+      adjustment_rows: [],
+      payment_rows: [ [ 'Suica支払', 801 ] ],
+      tax_detail_rows: [
+        [ '8%対象', 739, 59, BigDecimal('0.08') ],
+        [ '10%対象', 3, 0, BigDecimal('0.1') ]
+      ],
       required_review_reasons: %w[store_name_missing purchased_at_missing]
     }
   ].freeze
@@ -164,6 +233,7 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       ocr_result = execution.fetch(:ocr_result)
 
       verify_receipt_result(receipt, case_config)
+      verify_child_records(receipt, case_config)
       verify_terminal_run(run, receipt, case_config)
       verify_item_source_values(receipt, ocr_result)
       verify_ownership_contract(run)
@@ -275,6 +345,32 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       expect(Array(receipt.review_reasons).sort).to eq(case_config.fetch(:review_reasons).sort)
     else
       expect(receipt.review_reasons).to include(*case_config.fetch(:required_review_reasons))
+    end
+  end
+
+  def verify_child_records(receipt, case_config)
+    aggregate_failures 'persisted child values' do
+      expect(receipt.receipt_items.order(:position_index, :id).pluck(
+        :raw_text,
+        :quantity,
+        :price,
+        :line_total,
+        :original_line_total,
+        :discount_amount,
+        :tax_rate
+      )).to eq(case_config.fetch(:item_rows))
+      expect(receipt.receipt_adjustments.order(:position_index, :id).pluck(:kind, :amount, :sign)).to eq(
+        case_config.fetch(:adjustment_rows)
+      )
+      expect(receipt.receipt_payments.order(:id).pluck(:method, :amount)).to eq(
+        case_config.fetch(:payment_rows)
+      )
+      expect(receipt.receipt_tax_details.order(:rate, :id).pluck(
+        :description,
+        :net_amount,
+        :amount,
+        :rate
+      )).to eq(case_config.fetch(:tax_detail_rows))
     end
   end
 
