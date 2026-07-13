@@ -302,7 +302,15 @@ RSpec.describe 'Announcements', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:ok)
         expect(image).to be_present
-        expect(image['loading']).to eq('lazy')
+        expect(image['loading']).to eq('eager')
+        expect(image['class']).to include('hidden')
+        expect(image['data-image-load-state-target']).to include('image')
+        expect(image['data-action']).to include('load->image-load-state#imageLoaded')
+        expect(image['data-action']).to include('error->image-load-state#imageFailed')
+        expect(document.at_css("[data-controller~='image-load-state']")).to be_present
+        expect(document.at_css("[data-image-load-state-target~='fallback']").text).to include(
+          I18n.t('announcements.image.unavailable')
+        )
         expect(document.at_css("a[download]")).to be_nil
         expect(document.at_css("a[href*='public-announcement.jpg']")).to be_nil
         expect(response.body).not_to include(announcement.image.blob.key)

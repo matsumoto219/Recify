@@ -1,5 +1,8 @@
 ja:
   announcements:
+    image:
+      unavailable: 画像を表示できません
+      unavailable_hint: 画像の読み込みに失敗しました。
     kinds:
       general: お知らせ
       release: リリース

@@ -2,7 +2,7 @@ import { Controller } from '@hotwired/stimulus'
 
 // Connects to data-controller="image-load-state"
 export default class extends Controller {
-  static targets = ['image', 'fallback']
+  static targets = ['image', 'fallback', 'empty']
   static values = {
     fallbackWhileLoading: { type: Boolean, default: false }
   }
@@ -41,8 +41,10 @@ export default class extends Controller {
     this.imageTarget.classList.add('hidden')
 
     if (this.hasFallbackTarget) {
-      this.fallbackTarget.classList.toggle('hidden', hasSource && !this.fallbackWhileLoadingValue)
+      const showLoadingFallback = hasSource && this.fallbackWhileLoadingValue
+      this.fallbackTarget.classList.toggle('hidden', !showLoadingFallback)
     }
+    if (this.hasEmptyTarget) this.emptyTarget.classList.toggle('hidden', hasSource)
 
     this.element.setAttribute('aria-busy', String(hasSource))
   }
@@ -52,11 +54,16 @@ export default class extends Controller {
 
     const source = this.imageTarget.getAttribute('src')
     if (!source) {
-      this.showUnavailable()
+      this.hasEmptyTarget ? this.showEmpty() : this.showUnavailable()
       return
     }
 
     if (!this.imageTarget.complete) {
+      if (this.fallbackWhileLoadingValue) {
+        this.imageTarget.classList.add('hidden')
+        if (this.hasFallbackTarget) this.fallbackTarget.classList.remove('hidden')
+        if (this.hasEmptyTarget) this.emptyTarget.classList.add('hidden')
+      }
       this.element.setAttribute('aria-busy', 'true')
       return
     }
@@ -71,6 +78,7 @@ export default class extends Controller {
   showAvailable () {
     this.imageTarget.classList.remove('hidden')
     if (this.hasFallbackTarget) this.fallbackTarget.classList.add('hidden')
+    if (this.hasEmptyTarget) this.emptyTarget.classList.add('hidden')
     this.element.setAttribute('aria-busy', 'false')
     this.dispatchState('available')
   }
@@ -78,8 +86,17 @@ export default class extends Controller {
   showUnavailable () {
     if (this.hasImageTarget) this.imageTarget.classList.add('hidden')
     if (this.hasFallbackTarget) this.fallbackTarget.classList.remove('hidden')
+    if (this.hasEmptyTarget) this.emptyTarget.classList.add('hidden')
     this.element.setAttribute('aria-busy', 'false')
     this.dispatchState('unavailable')
+  }
+
+  showEmpty () {
+    if (this.hasImageTarget) this.imageTarget.classList.add('hidden')
+    if (this.hasFallbackTarget) this.fallbackTarget.classList.add('hidden')
+    this.emptyTarget.classList.remove('hidden')
+    this.element.setAttribute('aria-busy', 'false')
+    this.dispatchState('empty')
   }
 
   dispatchState (state) {

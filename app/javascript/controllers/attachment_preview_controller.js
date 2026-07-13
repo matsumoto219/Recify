@@ -117,10 +117,14 @@ export default class extends Controller {
     if (!this.hasImageTarget) return
 
     this.imageTarget.src = src
-    this.imageTarget.classList.remove('hidden')
+    this.imageTarget.classList.toggle(
+      'hidden',
+      this.imageTarget.hasAttribute('data-image-load-state-target')
+    )
     if (this.hasFallbackTarget) {
       this.fallbackTarget.classList.add('hidden')
     }
+    this.dispatch('source-changed')
   }
 
   showFallback () {
@@ -132,6 +136,7 @@ export default class extends Controller {
       this.fallbackTarget.classList.remove('hidden')
     }
     this.revokeObjectUrl()
+    this.dispatch('source-changed')
   }
 
   showError (message) {

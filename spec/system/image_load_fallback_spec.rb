@@ -152,4 +152,83 @@ RSpec.describe "画像読み込み失敗時の実Chromeフォールバック", t
     end
     expect_no_unexpected_console_errors
   end
+
+  it "390pxで欠損したお知らせ画像をpublic/admin/edit画面から隠す" do
+    public_announcement = create(:announcement, :published, image_alt_text: "公開画像")
+    normal_announcement = create(:announcement, :published, image_alt_text: "正常な公開画像")
+    empty_announcement = create(:announcement, :published)
+    draft_announcement = create(:announcement, status: "draft", image_alt_text: "下書き画像")
+    empty_draft = create(:announcement, status: "draft")
+    attach_fixture(public_announcement.image, filename: "public-announcement.jpg")
+    attach_fixture(normal_announcement.image, filename: "normal-announcement.jpg")
+    attach_fixture(draft_announcement.image, filename: "draft-announcement.jpg")
+    delete_stored_file(public_announcement.image)
+    delete_stored_file(draft_announcement.image)
+
+    visit announcement_path(public_announcement)
+    wait_for_stimulus_controller("image-load-state")
+    expect(page).to have_content(I18n.t("announcements.image.unavailable"))
+    expect(page).to have_no_css("img[alt='公開画像']:not(.hidden)")
+
+    page.execute_script("Turbo.visit(arguments[0])", announcement_path(normal_announcement))
+    expect(page).to have_current_path(announcement_path(normal_announcement), ignore_query: true)
+    wait_for_stimulus_controller("image-load-state")
+    expect(page).to have_css("img[alt='正常な公開画像']:not(.hidden)")
+    expect(page).to have_no_content(I18n.t("announcements.image.unavailable"))
+
+    page.go_back
+    expect(page).to have_current_path(announcement_path(public_announcement), ignore_query: true)
+    expect(page).to have_content(I18n.t("announcements.image.unavailable"))
+    expect(page).to have_no_css("img[alt='公開画像']:not(.hidden)")
+
+    visit announcement_path(empty_announcement)
+    expect(page).to have_no_content(I18n.t("announcements.image.unavailable"))
+    expect(page).to have_no_css("[data-controller~='image-load-state']")
+
+    admin = create_system_test_user(name: "お知らせ管理者", admin: true)
+    sign_in_through_browser(admin)
+
+    visit admin_announcement_path(empty_draft)
+    expect(page).to have_content(I18n.t("admin.announcements.show.image_empty"))
+    expect(page).to have_no_content(I18n.t("announcements.image.unavailable"))
+
+    visit edit_admin_announcement_path(empty_draft)
+    wait_for_stimulus_controller("image-load-state")
+    expect(page).to have_content(I18n.t("admin.announcements.form.image_empty"))
+    expect(page).to have_no_content(I18n.t("announcements.image.unavailable"))
+    expect(page).to have_no_css("input[name='announcement[remove_image]']")
+
+    visit admin_announcement_path(draft_announcement)
+    wait_for_stimulus_controller("image-load-state")
+    expect(page).to have_content(I18n.t("announcements.image.unavailable"))
+    expect(page).to have_no_css("img[alt='下書き画像']:not(.hidden)")
+
+    visit edit_admin_announcement_path(draft_announcement)
+    wait_for_stimulus_controller("image-load-state")
+    expect(page).to have_content(I18n.t("announcements.image.unavailable"))
+    expect(page).to have_no_css("img[data-attachment-preview-target~='image']:not(.hidden)")
+    expect(page).to have_no_content(I18n.t("admin.announcements.form.image_empty"))
+
+    remove_checkbox = find("input[name='announcement[remove_image]']", visible: :all)
+    remove_checkbox.set(true)
+    expect(page).to have_content(I18n.t("admin.announcements.form.image_empty"))
+    expect(page).to have_no_content(I18n.t("announcements.image.unavailable"))
+
+    remove_checkbox.set(false)
+    expect(page).to have_content(I18n.t("announcements.image.unavailable"))
+    expect(page).to have_no_content(I18n.t("admin.announcements.form.image_empty"))
+
+    find("input[name='announcement[image]']", visible: :all).attach_file(
+      Rails.root.join("spec/fixtures/files/receipt_sample.jpg")
+    )
+    expect(page).to have_css("img[data-attachment-preview-target~='image']:not(.hidden)")
+    expect(page).to have_no_content(I18n.t("announcements.image.unavailable"))
+
+    aggregate_failures do
+      expect(page.evaluate_script("window.innerWidth")).to eq(390)
+      expect(page.evaluate_script("document.documentElement.scrollWidth <= window.innerWidth")).to be(true)
+      expect(page.evaluate_script("[...document.images].every((image) => image.classList.contains('hidden') || image.naturalWidth > 0)")).to be(true)
+    end
+    expect_no_unexpected_console_errors
+  end
 end

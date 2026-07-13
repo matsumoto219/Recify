@@ -160,4 +160,63 @@ RSpec.describe "Image load state Stimulus controller" do
       "state" => nil
     )
   end
+
+  it "distinguishes an absent source from a failed image when both fallbacks exist" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const attributes = new Map()
+      let imageSource = ''
+      const image = {
+        complete: true,
+        naturalWidth: 0,
+        classList: classList('hidden'),
+        getAttribute: (name) => name === 'src' ? imageSource : null
+      }
+      const unavailableFallback = { classList: classList('hidden') }
+      const emptyFallback = { classList: classList('hidden') }
+      const controller = Object.create(ImageLoadStateController.prototype)
+      Object.defineProperties(controller, {
+        hasImageTarget: { value: true },
+        imageTarget: { value: image },
+        hasFallbackTarget: { value: true },
+        fallbackTarget: { value: unavailableFallback },
+        hasEmptyTarget: { value: true },
+        emptyTarget: { value: emptyFallback },
+        fallbackWhileLoadingValue: { value: true },
+        element: { value: { setAttribute: (name, value) => attributes.set(name, value) } }
+      })
+      controller.dispatch = () => {}
+
+      controller.sync()
+      const withoutSource = {
+        imageHidden: image.classList.contains('hidden'),
+        unavailableHidden: unavailableFallback.classList.contains('hidden'),
+        emptyHidden: emptyFallback.classList.contains('hidden')
+      }
+
+      imageSource = '/missing.jpg'
+      controller.imageFailed({ currentTarget: image })
+      const failedSource = {
+        imageHidden: image.classList.contains('hidden'),
+        unavailableHidden: unavailableFallback.classList.contains('hidden'),
+        emptyHidden: emptyFallback.classList.contains('hidden'),
+        busy: attributes.get('aria-busy')
+      }
+
+      process.stdout.write(JSON.stringify({ withoutSource, failedSource }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "withoutSource" => {
+        "imageHidden" => true,
+        "unavailableHidden" => true,
+        "emptyHidden" => false
+      },
+      "failedSource" => {
+        "imageHidden" => true,
+        "unavailableHidden" => false,
+        "emptyHidden" => true,
+        "busy" => "false"
+      }
+    )
+  end
 end

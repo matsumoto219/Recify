@@ -7,10 +7,12 @@
     alt: announcement.image_alt_text.presence || t("admin.announcements.form.image_preview_alt"),
     class: [
       "max-h-full max-w-full rounded-lg object-contain",
-      ("hidden" unless image_attached)
+      "hidden"
     ].compact.join(" "),
     data: {
       attachment_preview_target: "image",
+      image_load_state_target: "image",
+      action: "load->image-load-state#imageLoaded error->image-load-state#imageFailed",
       persisted_url: (url_for(announcement.image) if image_attached)
     }.compact
   }
@@ -25,7 +27,8 @@
 
   <div
     class="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
-    data-controller="attachment-preview"
+    data-controller="attachment-preview image-load-state"
+    data-action="attachment-preview:source-changed->image-load-state#sync turbo:before-cache@document->image-load-state#beforeCache"
     data-attachment-preview-invalid-type-message-value="<%= t("admin.announcements.form.image_validation.invalid_type") %>"
     data-attachment-preview-file-too-large-message-value="<%= t("admin.announcements.form.image_validation.file_too_large", max_size: number_to_human_size(image_max_file_size)) %>"
     data-attachment-preview-max-file-size-bytes-value="<%= image_max_file_size %>">
@@ -33,9 +36,25 @@
       <div class="overflow-hidden rounded-xl border token-border-soft token-bg-input">
         <div class="flex aspect-video items-center justify-center p-3">
           <%= tag.img(**image_preview_attributes) %>
-          <div class="<%= image_attached ? "hidden" : "flex" %> min-w-0 flex-col items-center justify-center text-center" data-attachment-preview-target="fallback">
+          <div
+            class="<%= image_attached ? "hidden" : "flex" %> min-w-0 flex-col items-center justify-center text-center"
+            data-attachment-preview-target="fallback"
+            data-image-load-state-target="empty">
             <span class="material-symbols-outlined text-4xl token-text-muted" aria-hidden="true">image</span>
             <p class="mt-2 break-words text-sm token-text-muted [overflow-wrap:anywhere]"><%= t("admin.announcements.form.image_empty") %></p>
+          </div>
+          <div
+            class="hidden min-w-0 flex-col items-center justify-center text-center"
+            data-image-load-state-target="fallback"
+            role="status"
+            aria-live="polite">
+            <span class="material-symbols-outlined text-4xl token-text-muted" aria-hidden="true">broken_image</span>
+            <p class="mt-2 break-words text-sm font-semibold token-text-base [overflow-wrap:anywhere]">
+              <%= t("announcements.image.unavailable") %>
+            </p>
+            <p class="mt-1 break-words text-xs token-text-muted [overflow-wrap:anywhere]">
+              <%= t("announcements.image.unavailable_hint") %>
+            </p>
           </div>
         </div>
       </div>

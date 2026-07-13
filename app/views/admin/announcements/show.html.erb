@@ -150,13 +150,11 @@
     <h2 class="mb-4 text-lg font-bold token-text-base"><%= t("admin.announcements.show.sections.image") %></h2>
     <% if @announcement.image.attached? && @announcement.image.blob&.persisted? %>
       <div class="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div class="overflow-hidden rounded-xl border token-border-soft token-bg-input">
-          <div class="flex aspect-video items-center justify-center p-3">
-            <%= image_tag @announcement.image,
-                  alt: @announcement.image_alt_text.presence || t("admin.announcements.show.image_preview_alt"),
-                  class: "max-h-full max-w-full rounded-lg object-contain" %>
-          </div>
-        </div>
+        <%= render "announcements/image_with_fallback",
+              announcement: @announcement,
+              alt_text: @announcement.image_alt_text.presence || t("admin.announcements.show.image_preview_alt"),
+              aspect_class: "aspect-video",
+              image_class: "rounded-lg" %>
 
         <dl class="min-w-0 space-y-4 text-sm">
           <div>

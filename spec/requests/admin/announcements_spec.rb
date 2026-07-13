@@ -748,6 +748,13 @@ RSpec.describe 'Admin announcements', type: :request do
 
       get admin_announcement_path(announcement)
 
+      document = Nokogiri::HTML(response.body)
+      preview_image = document.at_css("img[data-image-load-state-target~='image']")
+      image_controller = preview_image&.ancestors&.find do |node|
+        node['data-controller'].to_s.split.include?('image-load-state')
+      end
+      unavailable_fallback = image_controller&.at_css("[data-image-load-state-target~='fallback']")
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('admin.announcements.show.sections.image'))
@@ -757,6 +764,10 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(response.body).not_to include('<script>alert(1)</script>')
         expect(response.body).not_to include(announcement.image.blob.key)
         expect(response.body).not_to include('signed_id')
+        expect(preview_image).to be_present
+        expect(preview_image['class']).to include('hidden')
+        expect(preview_image['data-action']).to include('error->image-load-state#imageFailed')
+        expect(unavailable_fallback.text).to include(I18n.t('announcements.image.unavailable'))
       end
     end
   end
@@ -796,7 +807,11 @@ RSpec.describe 'Admin announcements', type: :request do
 
       document = Nokogiri::HTML(response.body)
       preview_image = document.at_css('[data-attachment-preview-target~="image"]')
-      fallback = document.at_css('[data-attachment-preview-target~="fallback"]')
+      image_controller = preview_image&.ancestors&.find do |node|
+        node['data-controller'].to_s.split.include?('image-load-state')
+      end
+      empty_fallback = document.at_css('[data-attachment-preview-target~="fallback"]')
+      unavailable_fallback = image_controller&.at_css('[data-image-load-state-target~="fallback"]')
       remove_checkbox = document.at_css("input[name='announcement[remove_image]']")
 
       aggregate_failures do
@@ -804,8 +819,12 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(preview_image).to be_present
         expect(preview_image['src']).to include('/rails/active_storage/')
         expect(preview_image['data-persisted-url']).to include('/rails/active_storage/')
-        expect(preview_image['class']).not_to include('hidden')
-        expect(fallback['class']).to include('hidden')
+        expect(preview_image['class']).to include('hidden')
+        expect(preview_image['data-image-load-state-target']).to include('image')
+        expect(preview_image['data-action']).to include('error->image-load-state#imageFailed')
+        expect(empty_fallback['data-image-load-state-target']).to include('empty')
+        expect(empty_fallback['class']).to include('hidden')
+        expect(unavailable_fallback.text).to include(I18n.t('announcements.image.unavailable'))
         expect(remove_checkbox['data-action']).to include('change->attachment-preview#toggleRemove')
         expect(remove_checkbox['data-attachment-preview-target']).to include('removeCheckbox')
       end
