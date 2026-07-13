@@ -60,17 +60,17 @@ module Users::SecurityReauthentication
   def require_fresh_security_reauthentication!
     return if security_reauthentication_fresh?
 
+    notice = security_reauthentication_context.present? ? "expired" : "required"
     clear_security_reauthentication!
     clear_security_management_capabilities!
     reauthentication_url = new_settings_security_reauthentication_path(
-      return_to: security_reauthentication_return_to
+      return_to: security_reauthentication_return_to,
+      notice: notice
     )
 
     respond_to do |format|
       format.html do
-        redirect_to reauthentication_url,
-                    alert: t("settings.security.reauthentication.messages.required"),
-                    status: :see_other
+        redirect_to reauthentication_url, status: :see_other
       end
       format.json do
         render json: {

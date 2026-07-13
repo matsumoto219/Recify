@@ -3037,15 +3037,16 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       flash = document.at_css('#flash')
+      toast_stream = document.at_css('#toast-stream')
       notice_surface = flash.at_css('[data-controller~="notice-surface"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(flash).to be_present
-        expect(document.at_css('#toast-stream')).to be_present
+        expect(toast_stream['data-notice-surface-container']).to eq('')
+        expect(toast_stream['data-notice-surface-max-visible']).to eq('5')
         expect(notice_surface).to be_present
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
-        expect(notice_surface['data-notice-surface-max-visible-value']).to eq('3')
         expect(notice_surface.at_css('button[data-action="click->notice-surface#close"]')).to be_present
       end
     end

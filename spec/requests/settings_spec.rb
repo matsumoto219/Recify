@@ -880,6 +880,8 @@ RSpec.describe 'Settings', type: :request do
       document = Nokogiri::HTML(response.body)
       passkey_list = document.at_css('[data-passkey-list]')
       passkey_button = document.at_css('[data-passkey-target="button"]')
+      passkey_error = document.at_css('[data-passkey-target="error"]')
+      passkey_success = document.at_css('[data-passkey-target="success"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -892,6 +894,10 @@ RSpec.describe 'Settings', type: :request do
         expect(document.at_css('[data-passkey-limit-message]')).to be_nil
         expect(passkey_button['disabled']).to be_nil
         expect(passkey_button['data-action']).to eq('click->passkey#register')
+        expect(passkey_error['role']).to eq('alert')
+        expect(passkey_error['aria-live']).to eq('assertive')
+        expect(passkey_success['role']).to eq('status')
+        expect(passkey_success['aria-live']).to eq('polite')
       end
     end
 

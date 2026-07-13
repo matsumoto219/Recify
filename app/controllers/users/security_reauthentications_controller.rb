@@ -16,6 +16,7 @@ class Users::SecurityReauthenticationsController < ApplicationController
 
   def new
     session[RETURN_TO_SESSION_KEY] = safe_return_to(params[:return_to]) if params[:return_to].present?
+    apply_reauthentication_notice
   end
 
   def create
@@ -39,6 +40,15 @@ class Users::SecurityReauthenticationsController < ApplicationController
     redirect_to settings_security_path,
                 alert: t("settings.security.reauthentication.messages.unavailable"),
                 status: :see_other
+  end
+
+  def apply_reauthentication_notice
+    case params[:notice]
+    when "required"
+      flash.now[:info] = t("settings.security.reauthentication.messages.required")
+    when "expired"
+      flash.now[:warning] = t("settings.security.reauthentication.messages.expired")
+    end
   end
 
   def safe_return_to(value)

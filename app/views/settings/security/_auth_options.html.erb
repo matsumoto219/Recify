@@ -201,8 +201,18 @@
                 data: { passkey_target: "label" }
               } %>
 
-        <p class="hidden text-sm token-text-error" data-passkey-target="error"></p>
-        <p class="hidden text-sm token-text-success" data-passkey-target="success"></p>
+        <p
+          class="hidden text-sm token-text-error"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          data-passkey-target="error"></p>
+        <p
+          class="hidden text-sm token-text-success"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-passkey-target="success"></p>
 
         <%= render "shared/ui/actions/button",
               label: t("settings.security.auth.passkey.action"),

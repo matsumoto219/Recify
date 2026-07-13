@@ -40,6 +40,48 @@ RSpec.describe 'User security reauthentication', type: :request do
     end
   end
 
+  it '本人確認要求はinfo、期限切れはwarning、password不一致はerrorとして描画する' do
+    sign_in user
+
+    get new_settings_security_reauthentication_path(notice: 'required')
+    required_surface = Nokogiri::HTML(response.body).at_css('#flash [data-controller~="notice-surface"]')
+
+    get new_settings_security_reauthentication_path(notice: 'expired')
+    expired_surface = Nokogiri::HTML(response.body).at_css('#flash [data-controller~="notice-surface"]')
+
+    post settings_security_reauthentication_path, params: { password: 'wrong-local-secret' }
+    failed_surface = Nokogiri::HTML(response.body).at_css('#flash [data-controller~="notice-surface"]')
+
+    aggregate_failures do
+      expect(required_surface.text).to include(I18n.t('settings.security.reauthentication.messages.required'))
+      expect(required_surface['class']).to include('notice-surface-info')
+      expect(required_surface['role']).to eq('status')
+      expect(expired_surface.text).to include(I18n.t('settings.security.reauthentication.messages.expired'))
+      expect(expired_surface['class']).to include('notice-surface-warning')
+      expect(expired_surface['role']).to eq('status')
+      expect(failed_surface.text).to include(I18n.t('settings.security.reauthentication.messages.failed'))
+      expect(failed_surface['class']).to include('notice-surface-error')
+      expect(failed_surface['role']).to eq('alert')
+      expect(failed_surface['aria-live']).to eq('assertive')
+    end
+  end
+
+  it 'Passkey JSONとTOTP HTMLは同じrequired本人確認通知へ誘導する' do
+    sign_in user
+
+    post settings_passkeys_options_path, as: :json
+    passkey_url = response.parsed_body.fetch('reauthentication_url')
+
+    get new_settings_security_totp_path
+    totp_url = response.location
+
+    aggregate_failures do
+      expect(Rack::Utils.parse_query(URI.parse(passkey_url).query)).to include('notice' => 'required')
+      expect(Rack::Utils.parse_query(URI.parse(totp_url).query)).to include('notice' => 'required')
+      expect(URI.parse(passkey_url).path).to eq(URI.parse(totp_url).path)
+    end
+  end
+
   it '本人確認画面とvalidation失敗画面にSystemSettingsの有効期間を表示する' do
     create(
       :system_setting,
@@ -120,6 +162,9 @@ RSpec.describe 'User security reauthentication', type: :request do
       expect(response).to have_http_status(:precondition_required)
       expect(session[:security_reauthentication]).to be_blank
       expect(session[:passkey_registration_challenge]).to be_blank
+      expect(
+        Rack::Utils.parse_query(URI.parse(response.parsed_body.fetch('reauthentication_url')).query)
+      ).to include('notice' => 'expired')
     end
   end
 

@@ -126,6 +126,7 @@ export default class extends Controller {
   handleBeforeCache () {
     this.close({ animated: false })
     this.hideAllHelp()
+    this.removeSearchErrorNotice()
   }
 
   handleInput (event) {
@@ -492,17 +493,20 @@ export default class extends Controller {
     const container = document.createElement('div')
     container.id = 'search-error-toast-container'
     container.className = 'fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm'
+    container.setAttribute('data-notice-surface-container', '')
+    container.setAttribute('data-notice-surface-max-visible', '3')
 
     const notice = document.createElement('div')
     notice.id = 'search-error-toast'
     notice.className = 'pointer-events-auto notice-glass notice-surface notice-surface-error p-4 flex gap-3 items-center opacity-0 translate-x-full transition-all duration-300 ease-out'
     notice.setAttribute('role', 'alert')
-    notice.setAttribute('aria-live', 'polite')
+    notice.setAttribute('aria-live', 'assertive')
+    notice.setAttribute('aria-atomic', 'true')
     notice.setAttribute('data-controller', 'notice-surface')
     notice.setAttribute('data-notice-surface-animation-value', 'slide_right')
     notice.setAttribute('data-notice-surface-auto-dismiss-value', 'true')
     notice.setAttribute('data-notice-surface-auto-dismiss-delay-value', '7000')
-    notice.setAttribute('data-notice-surface-max-visible-value', '3')
+    notice.setAttribute('data-notice-surface-remove-before-cache-value', 'true')
 
     const iconWrapper = document.createElement('div')
     iconWrapper.className = 'flex-shrink-0 w-8 h-8 rounded-lg token-state-error-soft flex items-center justify-center'

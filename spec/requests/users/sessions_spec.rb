@@ -194,6 +194,8 @@ RSpec.describe 'User password sessions', type: :request do
       expect(pending['allowed_methods']).to eq([ 'passkey' ])
       expect(pending['remember_me']).to be(false)
       expect(pending['issued_at']).to be_present
+      expect(flash[:info]).to eq(I18n.t('auth.two_factor.messages.pending_notice'))
+      expect(flash[:notice]).to be_blank
       expect(session[:security_reauthentication]).to be_blank
       expect(user.current_sign_in_at).to be_blank
     end

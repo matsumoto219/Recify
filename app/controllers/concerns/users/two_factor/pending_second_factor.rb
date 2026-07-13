@@ -16,7 +16,10 @@ module Users::TwoFactor::PendingSecondFactor
     clear_pending_second_factor
 
     respond_to do |format|
-      format.html { redirect_to new_user_session_path, alert: t("auth.two_factor.messages.expired") }
+      format.html do
+        redirect_to new_user_session_path,
+                    flash: { warning: t("auth.two_factor.messages.expired") }
+      end
       format.json { render json: { ok: false, error: t("auth.two_factor.messages.expired") }, status: :unauthorized }
     end
   end

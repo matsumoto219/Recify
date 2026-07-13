@@ -35,7 +35,12 @@
           <%= t("auth.two_factor.passkey.description") %>
         </p>
 
-        <p class="hidden px-1 text-xs leading-relaxed token-text-error" data-passkey-session-target="error"></p>
+        <p
+          class="hidden px-1 text-xs leading-relaxed token-text-error"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          data-passkey-session-target="error"></p>
 
         <%= render "shared/ui/actions/button",
               label: t("auth.two_factor.passkey.button"),

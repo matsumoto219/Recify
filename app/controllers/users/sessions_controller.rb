@@ -38,7 +38,7 @@ class Users::SessionsController < Devise::SessionsController
       allowed_methods = second_factor_methods_for(resource)
       if allowed_methods.any?
         store_pending_second_factor(resource, allowed_methods: allowed_methods)
-        flash[:notice] = t("auth.two_factor.messages.pending_notice")
+        flash[:info] = t("auth.two_factor.messages.pending_notice")
         redirect_to second_factor_path_for(allowed_methods), status: :see_other
       else
         sign_in(resource_name, resource, force: true)

@@ -118,6 +118,7 @@ ja:
         cancel: キャンセル
         messages:
           required: セキュリティ設定を変更するには本人確認が必要です。
+          expired: 本人確認の有効期限が切れました。もう一度確認してください。
           succeeded: 本人確認が完了しました。
           failed: パスワードが一致しませんでした。
           unavailable: 本登録後にこの設定を利用できます。

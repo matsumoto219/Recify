@@ -53,10 +53,13 @@ RSpec.describe "セキュリティ設定の本人確認", type: :system do
         click_button I18n.t("settings.security.auth.passkey.action")
 
         expect(page).to have_current_path(new_settings_security_reauthentication_path, ignore_query: true)
+        expect(page).to have_content(I18n.t("settings.security.reauthentication.messages.expired"))
+        expect(page).to have_css("#flash [role='status'].notice-surface-warning")
         fill_in "password", with: "wrong-local-secret"
         click_button I18n.t("settings.security.reauthentication.submit")
 
         expect(page).to have_content(I18n.t("settings.security.reauthentication.messages.failed"))
+        expect(page).to have_css("#flash [role='alert'][aria-live='assertive'].notice-surface-error")
         expect(find("input[name='password']").value).to eq("")
 
         fill_in "password", with: "password"

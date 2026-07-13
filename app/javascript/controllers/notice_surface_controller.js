@@ -6,7 +6,6 @@ export default class extends Controller {
     animation: String,
     autoDismiss: Boolean,
     autoDismissDelay: Number,
-    maxVisible: Number,
     removeBeforeCache: Boolean
   }
 
@@ -20,15 +19,8 @@ export default class extends Controller {
     if (this.element.dataset.noticeInitialized === 'true') return
     this.element.dataset.noticeInitialized = 'true'
 
-    if (this.maxVisibleValue > 0) {
-      const selector = `[data-controller~="notice-surface"][data-notice-surface-max-visible-value="${this.maxVisibleValue}"]`
-      const sameGroup = Array.from(document.querySelectorAll(selector))
-
-      if (sameGroup.length > this.maxVisibleValue && sameGroup[0] === this.element) {
-        this.element.remove()
-        return
-      }
-    }
+    this.enforceContainerLimit()
+    if (!this.element.isConnected) return
 
     requestAnimationFrame(() => {
       if (this.animationValue === 'slide_right') {
@@ -70,6 +62,22 @@ export default class extends Controller {
   handleBeforeCache () {
     this.clearTimers()
     this.element.remove()
+  }
+
+  enforceContainerLimit () {
+    const container = this.element.parentElement
+    if (!container?.matches('[data-notice-surface-container]')) return
+
+    const maxVisible = Number.parseInt(container.dataset.noticeSurfaceMaxVisible || '', 10)
+    if (!Number.isInteger(maxVisible) || maxVisible <= 0) return
+
+    const notices = Array.from(container.children).filter((child) => (
+      child.matches('[data-controller~="notice-surface"]')
+    ))
+    const excessCount = notices.length - maxVisible
+    if (excessCount <= 0) return
+
+    notices.slice(0, excessCount).forEach((notice) => notice.remove())
   }
 
   clearTimers () {

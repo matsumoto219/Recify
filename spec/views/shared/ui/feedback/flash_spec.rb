@@ -43,4 +43,33 @@ RSpec.describe 'shared/ui/feedback/_flash', type: :view do
       expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('false')
     end
   end
+
+  it 'toneごとにstatusとalertを使い分け、container単位の表示上限を持つ' do
+    document = render_flash(
+      flash_messages: {
+        info: '本人確認が必要です',
+        notice: '保存しました',
+        warning: '有効期限が切れました',
+        alert: '検証に失敗しました'
+      }
+    )
+
+    surfaces = document.css('[data-controller~="notice-surface"]')
+    by_message = surfaces.index_by { |surface| surface.text }
+    container = document.at_css('[data-notice-surface-container]')
+    info_surface = by_message.find { |text, _surface| text.include?('本人確認が必要です') }.last
+    error_surface = by_message.find { |text, _surface| text.include?('検証に失敗しました') }.last
+
+    aggregate_failures do
+      expect(container['data-notice-surface-max-visible']).to eq('3')
+      expect(info_surface['role']).to eq('status')
+      expect(info_surface['aria-live']).to eq('polite')
+      expect(info_surface['aria-atomic']).to eq('true')
+      expect(by_message.find { |text, _surface| text.include?('保存しました') }.last['role']).to eq('status')
+      expect(by_message.find { |text, _surface| text.include?('有効期限が切れました') }.last['role']).to eq('status')
+      expect(error_surface['role']).to eq('alert')
+      expect(error_surface['aria-live']).to eq('assertive')
+      expect(error_surface['aria-atomic']).to eq('true')
+    end
+  end
 end

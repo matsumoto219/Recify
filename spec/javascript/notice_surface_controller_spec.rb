@@ -12,4 +12,13 @@ RSpec.describe "Notice surface Stimulus controller" do
       expect(source).to include("this.element.remove()")
     end
   end
+
+  it "keeps the newest notices within their own container" do
+    aggregate_failures do
+      expect(source).to include("data-notice-surface-container")
+      expect(source).to include("this.element.parentElement")
+      expect(source).to include("container.children")
+      expect(source).not_to include("document.querySelectorAll(selector)")
+    end
+  end
 end

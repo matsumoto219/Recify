@@ -132,7 +132,8 @@ RSpec.describe 'User TOTP step-up', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
-        expect(flash[:alert]).to eq(I18n.t('auth.two_factor.messages.expired'))
+        expect(flash[:warning]).to eq(I18n.t('auth.two_factor.messages.expired'))
+        expect(flash[:alert]).to be_blank
         expect(session[:pending_second_factor]).to be_blank
         expect(session[:user_session_version]).to be_blank
         expect(session[:user_session_uid]).to be_blank

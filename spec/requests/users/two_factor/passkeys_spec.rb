@@ -56,6 +56,9 @@ RSpec.describe 'User passkey step-up', type: :request do
 
       get users_two_factor_passkey_path
 
+      document = Nokogiri::HTML(response.body)
+      error_surface = document.at_css('[data-passkey-session-target="error"]')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include(I18n.t('auth.two_factor.passkey.title'))
@@ -68,6 +71,8 @@ RSpec.describe 'User passkey step-up', type: :request do
         expect(response.body).not_to include(passkey.credential_id)
         expect(response.body).not_to include(passkey.public_key)
         expect(response.body).not_to include('challenge')
+        expect(error_surface['role']).to eq('alert')
+        expect(error_surface['aria-live']).to eq('assertive')
       end
     end
 
