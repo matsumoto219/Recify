@@ -121,6 +121,42 @@ RSpec.describe UserSessions::RetentionCleanup do
       end
     end
 
+    it 'selection後に利用再開したsessionは実行直前の再検査で保護する' do
+      user = create(:user, session_version: 4)
+      selected = create_user_session(user: user, session_version: 3, signed_out_at: 91.days.ago)
+      cleanup = described_class.new(dry_run: false, cutoff: 90.days.ago, limit: 100)
+
+      allow(cleanup).to receive(:target_sessions).and_wrap_original do |original|
+        sessions = original.call
+        selected.update!(
+          session_version: user.session_version,
+          signed_out_at: nil,
+          last_seen_at: Time.current
+        )
+        sessions
+      end
+
+      result = cleanup.call
+
+      aggregate_failures do
+        expect(result).to include(expired_count: 1, deleted_count: 0, skipped_count: 1, failed_count: 0)
+        expect(UserSession.where(id: selected.id)).to exist
+      end
+    end
+
+    it 'dry_run nilは安全側のdry-runとして扱う' do
+      user = create(:user)
+      expired = create_user_session(user: user, signed_out_at: 91.days.ago)
+
+      result = described_class.call(cutoff: 90.days.ago, dry_run: nil)
+
+      aggregate_failures do
+        expect(result[:dry_run]).to be(true)
+        expect(result[:deleted_count]).to eq(0)
+        expect(UserSession.where(id: expired.id)).to exist
+      end
+    end
+
     it '現在session_versionと一致するactive sessionは削除対象にしない' do
       user = create(:user, session_version: 5)
       active = create_user_session(

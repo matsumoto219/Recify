@@ -60,6 +60,42 @@ RSpec.describe ContactRequests::RetentionCleanup do
       end
     end
 
+    it "selection後にopen・recent・anonymizedへ変わった対象は実行直前の再検査で保護する" do
+      opened = create(:contact_request, status: "resolved", handled_at: 183.days.ago, body: "opened body")
+      recent = create(:contact_request, status: "closed", handled_at: 182.days.ago, body: "recent body")
+      anonymized = create(:contact_request, status: "resolved", handled_at: 181.days.ago)
+      cleanup = described_class.new(dry_run: false, now: Time.current, limit: 100)
+
+      allow(cleanup).to receive(:target_records).and_wrap_original do |original|
+        records = original.call
+        opened.update!(status: "open")
+        recent.update!(handled_at: 1.day.ago)
+        ContactRequests.anonymize(anonymized)
+        records
+      end
+
+      result = cleanup.call
+
+      aggregate_failures do
+        expect(result).to include(candidate_count: 3, anonymized_count: 0, skipped_count: 3, failed_count: 0)
+        expect(opened.reload.body).to eq("opened body")
+        expect(recent.reload.body).to eq("recent body")
+        expect(ContactRequests.anonymized?(anonymized.reload)).to be(true)
+      end
+    end
+
+    it "dry_run nilは安全側のdry-runとして扱う" do
+      expired = create(:contact_request, status: "resolved", handled_at: 181.days.ago, body: "PII body")
+
+      result = described_class.call(dry_run: nil, now: Time.current)
+
+      aggregate_failures do
+        expect(result[:dry_run]).to be(true)
+        expect(result[:anonymized_count]).to eq(0)
+        expect(expired.reload.body).to eq("PII body")
+      end
+    end
+
     it "does not select already anonymized contact requests again" do
       expired = create(:contact_request, status: "resolved", handled_at: 181.days.ago)
 

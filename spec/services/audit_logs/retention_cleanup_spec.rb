@@ -96,6 +96,18 @@ RSpec.describe AuditLogs::RetentionCleanup do
       end
     end
 
+    it 'dry_run nilは安全側のdry-runとして扱う' do
+      expired = create_log(action: 'audit_logs.retention_cleanup.dry_run', created_at: 31.days.ago)
+
+      result = described_class.call(dry_run: nil, categories: :system_dry_run, now: Time.current)
+
+      aggregate_failures do
+        expect(result[:dry_run]).to be(true)
+        expect(result[:deleted_count]).to eq(0)
+        expect(AuditLog.where(id: expired.id)).to exist
+      end
+    end
+
     it 'limitとsample上限を適用する' do
       create_list(:audit_log, 25, action: 'audit_logs.retention_cleanup.dry_run', created_at: 31.days.ago)
 

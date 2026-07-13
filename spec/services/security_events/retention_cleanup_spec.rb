@@ -38,6 +38,75 @@ RSpec.describe SecurityEvents::RetentionCleanup do
       end
     end
 
+    it 'selection後にrecentへ変わったeventは実行直前の再検査で保護する' do
+      now = Time.zone.parse('2026-06-16 12:00:00')
+      expired = create(:security_event, severity: 'low', last_seen_at: now - 31.days)
+      cleanup = described_class.new(dry_run: false, now: now, limit: 100)
+
+      allow(cleanup).to receive(:target_records).and_wrap_original do |original|
+        records = original.call
+        expired.update!(last_seen_at: now - 1.day)
+        records
+      end
+
+      result = cleanup.call
+
+      aggregate_failures do
+        expect(result).to include(expired_count: 1, deleted_count: 0, skipped_count: 1, failed_count: 0)
+        expect(SecurityEvent.where(id: expired.id)).to exist
+      end
+    end
+
+    it 'Receipt・IP action・IP blockから参照中のeventは削除対象にしない' do
+      now = Time.zone.parse('2026-06-16 12:00:00')
+      receipt_event = create(:security_event, severity: 'low', last_seen_at: now - 31.days)
+      action_event = create(:security_event, severity: 'low', last_seen_at: now - 31.days)
+      block_event = create(:security_event, severity: 'low', last_seen_at: now - 31.days)
+      create(:receipt, quarantine_source_security_event: receipt_event)
+      create(:security_ip_action, source_security_event: action_event)
+      create(:security_ip_block, source_security_event: block_event)
+
+      result = described_class.call(dry_run: false, now: now, limit: 100)
+
+      aggregate_failures do
+        expect(result[:expired_count]).to eq(0)
+        expect(result[:deleted_count]).to eq(0)
+        expect(SecurityEvent.where(id: [ receipt_event.id, action_event.id, block_event.id ]).count).to eq(3)
+      end
+    end
+
+    it 'selection後に参照されたeventは実行直前の再検査で保護する' do
+      now = Time.zone.parse('2026-06-16 12:00:00')
+      expired = create(:security_event, severity: 'low', last_seen_at: now - 31.days)
+      cleanup = described_class.new(dry_run: false, now: now, limit: 100)
+
+      allow(cleanup).to receive(:target_records).and_wrap_original do |original|
+        records = original.call
+        create(:receipt, quarantine_source_security_event: expired)
+        records
+      end
+
+      result = cleanup.call
+
+      aggregate_failures do
+        expect(result).to include(expired_count: 1, deleted_count: 0, skipped_count: 1, failed_count: 0)
+        expect(SecurityEvent.where(id: expired.id)).to exist
+      end
+    end
+
+    it 'dry_run nilは安全側のdry-runとして扱う' do
+      now = Time.zone.parse('2026-06-16 12:00:00')
+      expired = create(:security_event, severity: 'low', last_seen_at: now - 31.days)
+
+      result = described_class.call(dry_run: nil, now: now, limit: 100)
+
+      aggregate_failures do
+        expect(result[:dry_run]).to be(true)
+        expect(result[:deleted_count]).to eq(0)
+        expect(SecurityEvent.where(id: expired.id)).to exist
+      end
+    end
+
     it 'limitで削除対象数を丸める' do
       now = Time.zone.parse('2026-06-16 12:00:00')
       create_list(:security_event, 3, severity: 'low', last_seen_at: now - 31.days)

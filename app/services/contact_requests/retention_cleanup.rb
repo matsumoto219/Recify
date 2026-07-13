@@ -13,17 +13,21 @@ module ContactRequests
       @dry_run = normalize_boolean(dry_run)
       @now = now || Time.current
       @limit = normalize_limit(limit)
+      @retention_days = ContactRequests.contact_request_retention_days
+      @cutoff = @now - @retention_days.days
     end
 
     def call
-      records = target_records.map { |contact_request| contact_request_record(contact_request) }
+      candidates = target_records
+      records = candidates.map { |contact_request| contact_request_record(contact_request) }
       result = {
         dry_run: dry_run,
-        cutoff: ContactRequests.retention_cutoff(now: now),
-        retention_days: ContactRequests.contact_request_retention_days,
+        cutoff: cutoff,
+        retention_days: retention_days,
         limit: limit,
         candidate_count: records.size,
         anonymized_count: 0,
+        skipped_count: 0,
         failed_count: 0,
         sample_request_uids: records.map { |record| record[:request_uid] }.first(SAMPLE_REQUEST_UID_LIMIT),
         records: records,
@@ -32,13 +36,13 @@ module ContactRequests
 
       return result if dry_run
 
-      anonymize_candidates!(result)
+      anonymize_candidates!(candidates, result)
       result
     end
 
     private
 
-    attr_reader :dry_run, :now, :limit
+    attr_reader :dry_run, :now, :limit, :retention_days, :cutoff
 
     def target_records
       @target_records ||= ContactRequests
@@ -48,14 +52,29 @@ module ContactRequests
         .to_a
     end
 
-    def anonymize_candidates!(result)
-      target_records.each do |contact_request|
-        ContactRequests.anonymize(contact_request)
-        result[:anonymized_count] += 1
+    def anonymize_candidates!(candidates, result)
+      candidates.each do |contact_request|
+        outcome = ContactRequest.transaction(requires_new: true) do
+          current = ContactRequest.lock.find_by(id: contact_request.id)
+          next :skipped unless current && anonymizable_now?(current)
+
+          ContactRequests.anonymize(current)
+          :anonymized
+        end
+
+        result[outcome == :anonymized ? :anonymized_count : :skipped_count] += 1
       rescue StandardError => e
         result[:failed_count] += 1
         result[:errors] << anonymize_error_record(contact_request, e)
       end
+    end
+
+    def anonymizable_now?(contact_request)
+      return false unless RetentionPolicy::TERMINAL_STATUSES.include?(contact_request.status)
+      return false if ContactRequests.anonymized?(contact_request)
+
+      timestamp = contact_request.handled_at || contact_request.updated_at
+      timestamp.present? && timestamp <= cutoff
     end
 
     def contact_request_record(contact_request)

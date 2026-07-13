@@ -15,7 +15,7 @@ module AuditLogs
     end
 
     def initialize(dry_run:, categories:, now:, limit:)
-      @dry_run = ActiveModel::Type::Boolean.new.cast(dry_run)
+      @dry_run = normalize_boolean(dry_run)
       @categories = normalize_categories(categories)
       @now = now || Time.current
       @limit = normalize_limit(limit)
@@ -119,6 +119,12 @@ module AuditLogs
     def normalize_limit(value)
       integer = value.to_i
       integer.positive? ? integer : DEFAULT_LIMIT
+    end
+
+    def normalize_boolean(value)
+      return true if value.nil?
+
+      ActiveModel::Type::Boolean.new.cast(value)
     end
   end
 end

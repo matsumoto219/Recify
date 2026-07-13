@@ -11,9 +11,10 @@ module UserSessions
     end
 
     def initialize(dry_run:, cutoff:, limit:)
-      @dry_run = ActiveModel::Type::Boolean.new.cast(dry_run)
+      @dry_run = normalize_boolean(dry_run)
       @cutoff = cutoff || UserSessions.retention_cutoff
       @limit = normalize_limit(limit)
+      @active_cutoff = Time.current - ACTIVE_LAST_SEEN_PERIOD
     end
 
     def call
@@ -25,19 +26,21 @@ module UserSessions
         limit: limit,
         expired_count: sessions.size,
         deleted_count: 0,
+        skipped_count: 0,
+        failed_count: 0,
         sample_session_ids: records.map { |record| record[:id] }.first(SAMPLE_SESSION_ID_LIMIT),
         errors: []
       }
 
       return result if dry_run
 
-      result[:deleted_count] = UserSession.where(id: records.map { |record| record[:id] }).delete_all
+      delete_candidates!(sessions, result)
       result
     end
 
     private
 
-    attr_reader :dry_run, :cutoff, :limit
+    attr_reader :dry_run, :cutoff, :limit, :active_cutoff
 
     def target_sessions
       expired_scope
@@ -47,8 +50,6 @@ module UserSessions
     end
 
     def expired_scope
-      active_cutoff = ACTIVE_LAST_SEEN_PERIOD.ago
-
       UserSession
         .joins(:user)
         .where(
@@ -72,6 +73,48 @@ module UserSessions
         )
     end
 
+    def delete_candidates!(candidates, result)
+      candidates.each do |candidate|
+        outcome = UserSession.transaction(requires_new: true) do
+          user_session = UserSession.lock.find_by(id: candidate.id)
+          next :skipped unless user_session && expired_now?(user_session)
+
+          user_session.delete
+          :deleted
+        end
+
+        result[outcome == :deleted ? :deleted_count : :skipped_count] += 1
+      rescue StandardError => e
+        result[:failed_count] += 1
+        result[:errors] << { session_id: candidate&.id, error_class: e.class.name }
+      end
+    end
+
+    def expired_now?(user_session)
+      return true if terminal_timestamp_expired?(user_session)
+      return false if terminal_timestamp_present?(user_session)
+      return false unless user_session.last_seen_at <= cutoff
+
+      !active_current_session?(user_session)
+    end
+
+    def terminal_timestamp_expired?(user_session)
+      terminal_timestamps(user_session).compact.any? { |timestamp| timestamp <= cutoff }
+    end
+
+    def terminal_timestamp_present?(user_session)
+      terminal_timestamps(user_session).compact.any?
+    end
+
+    def terminal_timestamps(user_session)
+      [ user_session.signed_out_at, user_session.revoked_at, user_session.expired_at ]
+    end
+
+    def active_current_session?(user_session)
+      current_version = User.where(id: user_session.user_id).pick(:session_version)
+      user_session.last_seen_at >= active_cutoff && user_session.session_version == current_version
+    end
+
     def session_record(session)
       {
         id: session.id,
@@ -86,6 +129,12 @@ module UserSessions
     def normalize_limit(value)
       integer = value.to_i
       integer.positive? ? integer : DEFAULT_LIMIT
+    end
+
+    def normalize_boolean(value)
+      return true if value.nil?
+
+      ActiveModel::Type::Boolean.new.cast(value)
     end
   end
 end
