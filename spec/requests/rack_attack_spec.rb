@@ -13,6 +13,7 @@ RSpec.describe 'Rack::Attack', type: :request do
 
     example.run
   ensure
+    travel_back
     Rack::Attack.reset!
     Rack::Attack.cache.store = original_store
     Rack::Attack.enabled = original_enabled
@@ -382,6 +383,84 @@ RSpec.describe 'Rack::Attack', type: :request do
     end
   end
 
+  it 'public IPv6のscanner probeも3回目から全pathを制限する' do
+    ip = '2001:4860:4860::8888'
+
+    3.times do
+      get '/wp-admin/install.php', headers: remote_addr(ip)
+      expect_blocklisted_html_response(path: 'wp-admin/install.php')
+      travel 2.seconds
+    end
+
+    get root_path, headers: remote_addr(ip)
+
+    aggregate_failures do
+      expect_blocklisted_html_response
+      expect(SecurityIpAction.where(ip_address: ip, action_type: 'scanner_restriction')).to exist
+      expect(SecurityIpAction.where(ip_address: ip, matched_rule: 'fail2ban/scanner_paths').sum(:count)).to be >= 3
+    end
+  end
+
+  it 'query文字列だけのscanner一致は当該requestを拒否するがadaptive strikeに加算しない' do
+    ip = '1.0.0.1'
+    query_only_path = '/receipts?q=%2Fwp-admin%2Finstall.php'
+
+    3.times do
+      get query_only_path, headers: remote_addr(ip)
+      expect_blocklisted_html_response(path: 'wp-admin/install.php')
+      travel 2.seconds
+    end
+
+    get root_path, headers: remote_addr(ip)
+
+    aggregate_failures do
+      expect(response).to have_http_status(:ok)
+      expect(Security::AdaptiveScannerRestriction.snapshot(ip_address: ip)).to include(
+        active: false,
+        strike_count: 0
+      )
+      expect(SecurityIpAction.where(ip_address: ip, status: 'active')).not_to exist
+    end
+  end
+
+  it 'pathの高確度scanner一致だけをadaptive probeと判定する' do
+    path_probe = scanner_request_for('/wp-admin/install.php')
+    query_probe = scanner_request_for('/receipts?q=%2Fwp-admin%2Finstall.php')
+
+    aggregate_failures do
+      expect(Rack::Attack.scanner_request?(path_probe)).to be(true)
+      expect(Rack::Attack.adaptive_scanner_probe?(path_probe)).to be(true)
+      expect(Rack::Attack.scanner_request?(query_probe)).to be(true)
+      expect(Rack::Attack.adaptive_scanner_probe?(query_probe)).to be(false)
+    end
+  end
+
+  it 'active cache write失敗時は全path制限やactiveの監査metadataを記録しない' do
+    ip = '9.9.9.8'
+    store = Rack::Attack.cache.store
+    allow(store).to receive(:write).and_wrap_original do |original, *args, **kwargs|
+      if args.first.to_s.include?(':active:')
+        false
+      else
+        original.call(*args, **kwargs)
+      end
+    end
+
+    3.times do
+      get '/wp-admin/install.php', headers: remote_addr(ip)
+      expect_blocklisted_html_response(path: 'wp-admin/install.php')
+      travel 2.seconds
+    end
+
+    get root_path, headers: remote_addr(ip)
+
+    aggregate_failures do
+      expect(response).to have_http_status(:ok)
+      expect(SecurityIpAction.where(ip_address: ip, status: 'active')).not_to exist
+      expect(SecurityEvent.where(ip_address: ip).where("metadata ->> 'active' = ?", 'true')).not_to exist
+    end
+  end
+
   it 'reserved addressのscanner probeはpathだけを拒否し全path制限へ昇格しない' do
     ip = '203.0.113.12'
 
@@ -580,6 +659,22 @@ RSpec.describe 'Rack::Attack', type: :request do
     get '/admin.php', headers: remote_addr(ip)
 
     expect_blocklisted_html_response(path: 'admin.php')
+  end
+
+  it 'inactive adaptive snapshotを他のblock ruleのmetadataへ混入させない' do
+    ip = '203.0.113.31'
+
+    (Rack::Attack::ADMIN_PROBE_MAXRETRY + 1).times do
+      get '/admin/login', headers: remote_addr(ip)
+    end
+
+    event = SecurityEvent.where(ip_address: ip, matched_rule: 'fail2ban/admin_probes').last
+
+    aggregate_failures do
+      expect_blocklisted_html_response(path: 'admin/login')
+      expect(event).to be_present
+      expect(event.metadata).not_to include('active', 'tier', 'strike_count', 'duration_seconds')
+    end
   end
 
   it 'treats suspicious admin paths as admin probes' do

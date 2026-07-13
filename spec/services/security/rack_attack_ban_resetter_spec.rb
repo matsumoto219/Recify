@@ -14,6 +14,7 @@ RSpec.describe Security::RackAttackBanResetter do
 
     example.run
   ensure
+    travel_back
     Rack::Attack.reset!
     Rack::Attack.cache.store = original_store
   end
@@ -61,6 +62,17 @@ RSpec.describe Security::RackAttackBanResetter do
     result = described_class.call(ip_address: ip_address, target: 'requests/ip')
 
     expect(result).to have_attributes(success: false, error_code: 'rack_attack_target_invalid')
+  end
+
+  it 'adaptive resetのpostconditionを確認できない場合は失敗を返す' do
+    allow(Security::AdaptiveScannerRestriction).to receive(:reset!).with(ip_address: ip_address).and_return(false)
+
+    result = described_class.call(ip_address: ip_address, target: 'scanner')
+
+    aggregate_failures do
+      expect(result).to be_failure
+      expect(result.error_code).to eq('rack_attack_reset_failed')
+    end
   end
 
   def ban_scanner!

@@ -65,6 +65,8 @@ module Security
           config = TARGETS.fetch(target_name)
           reset_target(config, normalized)
         end
+
+        true
       end
 
       def expanded_targets(target)
@@ -91,7 +93,9 @@ module Security
 
       def reset_target(config, ip_address)
         if config[:adaptive]
-          AdaptiveScannerRestriction.reset!(ip_address: ip_address)
+          reset = AdaptiveScannerRestriction.reset!(ip_address: ip_address)
+          raise ValidationError, "rack_attack_reset_failed" unless reset
+
           config.fetch(:legacy_filter).reset(
             discriminator(config, ip_address),
             findtime: config.fetch(:findtime)

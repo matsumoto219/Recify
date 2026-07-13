@@ -231,6 +231,30 @@ RSpec.describe SystemOperations::IpAccessOperationExecutor do
     end
   end
 
+  it 'Rack::Attack resetのpostcondition失敗時は成功Auditやreset actionを記録しない' do
+    allow(Security::AdaptiveScannerRestriction).to receive(:reset!).with(ip_address: '8.8.8.8').and_return(false)
+
+    result = described_class.call(
+      operation: 'rack_attack_ip_ban_reset',
+      ip_address: '8.8.8.8',
+      actor: actor,
+      reason: 'cache reset verification failure',
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: 'RESET IP BAN',
+      source_security_event: security_event,
+      rack_attack_target: 'scanner'
+    )
+
+    aggregate_failures do
+      expect(result).to be_failure
+      expect(result.error_code).to eq('rack_attack_reset_failed')
+      expect(AuditLog.where(action: 'admin.ip_access.rack_attack_ban_reset', outcome: 'succeeded')).not_to exist
+      expect(AuditLog.where(action: 'admin.ip_access.rack_attack_ban_reset', outcome: 'failed')).to exist
+      expect(SecurityIpAction.where(action_type: 'rack_attack_ban_reset')).not_to exist
+    end
+  end
+
   it 'Rack::Attack resetのoutcome audit失敗時もintentを残して適用済みとして返す' do
     Rack::Attack::Fail2Ban.filter('scanner:8.8.8.8', maxretry: 1, findtime: 10.minutes, bantime: 30.minutes) { true }
     allow(AuditLogs).to receive(:record_admin_action!).and_wrap_original do |original, **attributes|

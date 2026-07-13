@@ -60,7 +60,7 @@ RSpec.describe Security::AdaptiveScannerRestriction do
     expect(described_class.snapshot(ip_address: ip_address)).to eq(active)
   end
 
-  it "90日間probeがなければstrike履歴を失効させる" do
+  it "最初のstrikeから90日で履歴windowを閉じ、後続probeで無期限延長しない" do
     2.times do
       record_probe
       travel 2.seconds
@@ -133,6 +133,110 @@ RSpec.describe Security::AdaptiveScannerRestriction do
       expect(described_class.record_probe(ip_address: ip_address)).to include(active: false)
       expect(described_class.active?(ip_address: ip_address)).to be(false)
     end
+  end
+
+  it "active payloadの書込みがfalseまたはnilなら制限成功とせずstrikeを巻き戻す" do
+    [ false, nil ].each do |write_result|
+      store = ActiveSupport::Cache::MemoryStore.new
+      reject_active_write = true
+      allow(store).to receive(:write).and_wrap_original do |original, *args, **kwargs|
+        if reject_active_write && args.first.to_s.include?(":active:")
+          write_result
+        else
+          original.call(*args, **kwargs)
+        end
+      end
+      Rack::Attack.cache.store = store
+
+      2.times do
+        record_probe
+        travel 2.seconds
+      end
+      rejected = record_probe
+
+      aggregate_failures "write_result=#{write_result.inspect}" do
+        expect(rejected).to include(active: false, tier: 0, strike_count: 2)
+        expect(described_class.active?(ip_address: ip_address)).to be(false)
+      end
+
+      reject_active_write = false
+      travel 2.seconds
+      activated = record_probe
+
+      aggregate_failures "retry write_result=#{write_result.inspect}" do
+        expect(activated).to include(active: true, tier: 1, strike_count: 3)
+        expect(activated.fetch(:duration_seconds)).to eq(30.minutes.to_i)
+      end
+    end
+  end
+
+  it "active write失敗後のstrike rollbackも失敗した場合に次回tierを飛ばさない" do
+    store = ActiveSupport::Cache::MemoryStore.new
+    reject_active_write = true
+    allow(store).to receive(:write).and_wrap_original do |original, *args, **kwargs|
+      if reject_active_write && args.first.to_s.include?(":active:")
+        false
+      else
+        original.call(*args, **kwargs)
+      end
+    end
+    allow(store).to receive(:decrement).and_return(nil)
+    allow(store).to receive(:delete).and_wrap_original do |original, *args, **kwargs|
+      if args.first.to_s.include?(":strikes:")
+        false
+      else
+        original.call(*args, **kwargs)
+      end
+    end
+    Rack::Attack.cache.store = store
+
+    2.times do
+      record_probe
+      travel 2.seconds
+    end
+    rejected = record_probe
+    reject_active_write = false
+    travel 2.seconds
+    activated = record_probe
+
+    aggregate_failures do
+      expect(rejected).to include(active: false, tier: 0)
+      expect(activated).to include(active: true, tier: 1, strike_count: 4)
+      expect(activated.fetch(:duration_seconds)).to eq(30.minutes.to_i)
+    end
+  end
+
+  it "reset後にadaptive keyが残る場合は失敗を返す" do
+    3.times do
+      record_probe
+      travel 2.seconds
+    end
+    store = Rack::Attack.cache.store
+    allow(store).to receive(:delete_multi).and_return(0)
+
+    result = described_class.reset!(ip_address: ip_address)
+
+    aggregate_failures do
+      expect(result).to be(false)
+      expect(described_class.active?(ip_address: ip_address)).to be(true)
+    end
+  end
+
+  it "reset確認用cache writeが失敗する場合は解除成功としない" do
+    3.times do
+      record_probe
+      travel 2.seconds
+    end
+    store = Rack::Attack.cache.store
+    allow(store).to receive(:write).and_wrap_original do |original, *args, **kwargs|
+      if args.first.to_s.include?(":reset_verification:")
+        false
+      else
+        original.call(*args, **kwargs)
+      end
+    end
+
+    expect(described_class.reset!(ip_address: ip_address)).to be(false)
   end
 
   def record_probe

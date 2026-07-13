@@ -66,6 +66,10 @@ class Rack::Attack
       SCANNER_PATH.match?(path)
     end
 
+    def adaptive_scanner_probe?(request)
+      SCANNER_PATH.match?(request.path.to_s)
+    end
+
     def admin_probe_request?(request)
       path = request.path.to_s
 
@@ -143,14 +147,18 @@ class Rack::Attack
 
   blocklist("adaptive/scanner_restrictions") do |request|
     snapshot = Security.scanner_restriction_snapshot(request.ip)
+    next false unless snapshot.fetch(:active)
+
     request.env[SCANNER_RESTRICTION_ENV_KEY] = snapshot
-    snapshot.fetch(:active)
+    true
   end
 
   blocklist("fail2ban/scanner_paths") do |request|
     next false unless Rack::Attack.scanner_request?(request)
 
-    request.env[SCANNER_RESTRICTION_ENV_KEY] = Security.record_scanner_probe(request.ip)
+    if Rack::Attack.adaptive_scanner_probe?(request)
+      request.env[SCANNER_RESTRICTION_ENV_KEY] = Security.record_scanner_probe(request.ip)
+    end
     true
   end
 

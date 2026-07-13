@@ -40,6 +40,7 @@ module Security
       before_state = RackAttackBanRegistry.banned_states(ip_address)
       RackAttackBanRegistry.reset!(ip_address: ip_address, target: target)
       after_state = RackAttackBanRegistry.banned_states(ip_address)
+      raise ValidationError, "rack_attack_reset_failed" if reset_failed?(after_state)
 
       Result.new(
         success: true,
@@ -64,6 +65,10 @@ module Security
 
     def reset_targets
       RackAttackBanRegistry.expanded_targets(target)
+    end
+
+    def reset_failed?(after_state)
+      reset_targets.any? { |target_name| after_state.fetch(target_name) }
     end
   end
 end
