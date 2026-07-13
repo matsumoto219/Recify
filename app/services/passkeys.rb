@@ -1,4 +1,8 @@
+require "openssl"
+
 module Passkeys
+  AUTHENTICATION_CHALLENGE_REPLAY_TTL = 10.minutes
+  private_constant :AUTHENTICATION_CHALLENGE_REPLAY_TTL
   VerificationResult = Struct.new(:passkey, :user, :credential, keyword_init: true)
   AuthenticationError = Class.new(StandardError)
 
@@ -69,55 +73,52 @@ module Passkeys
     def verify_authentication(credential:, challenge:, user: nil)
       webauthn_credential = WebAuthn::Credential.from_get(credential)
       passkey = Passkey.find_by!(credential_id: webauthn_credential.id)
-      raise ActiveRecord::RecordNotFound if user.present? && passkey.user_id != user.id
 
-      webauthn_credential.verify(
-        challenge,
-        public_key: passkey.public_key,
-        sign_count: passkey.sign_count,
-        user_verification: true
-      )
+      passkey.with_lock do
+        raise ActiveRecord::RecordNotFound if user.present? && passkey.user_id != user.id
 
-      yield passkey.user if block_given?
+        webauthn_credential.verify(
+          challenge,
+          public_key: passkey.public_key,
+          sign_count: passkey.sign_count,
+          user_verification: true
+        )
+        consume_authentication_challenge!(challenge)
 
-      passkey.update!(
-        sign_count: webauthn_credential.sign_count || passkey.sign_count,
-        last_used_at: Time.current,
-        backup_eligible: webauthn_credential.backup_eligible? || false,
-        backed_up: webauthn_credential.backed_up? || false
-      )
+        yield passkey.user if block_given?
 
-      VerificationResult.new(passkey: passkey, user: passkey.user, credential: webauthn_credential)
+        update_authentication_state(passkey, webauthn_credential)
+
+        VerificationResult.new(passkey: passkey, user: passkey.user, credential: webauthn_credential)
+      end
     end
 
     def verify_discoverable_authentication(credential:, challenge:)
       webauthn_credential = WebAuthn::Credential.from_get(credential)
       passkey = Passkey.includes(:user).find_by!(credential_id: webauthn_credential.id)
 
-      webauthn_credential.verify(
-        challenge,
-        public_key: passkey.public_key,
-        sign_count: passkey.sign_count,
-        user_verification: true
-      )
+      passkey.with_lock do
+        webauthn_credential.verify(
+          challenge,
+          public_key: passkey.public_key,
+          sign_count: passkey.sign_count,
+          user_verification: true
+        )
 
-      user = passkey.user
-      raise AuthenticationError, "user_handle_missing" if webauthn_credential.user_handle.blank?
-      raise AuthenticationError, "user_handle_mismatch" unless ActiveSupport::SecurityUtils.secure_compare(
-        webauthn_credential.user_handle,
-        user.webauthn_id.to_s
-      )
+        user = passkey.user
+        raise AuthenticationError, "user_handle_missing" if webauthn_credential.user_handle.blank?
+        raise AuthenticationError, "user_handle_mismatch" unless ActiveSupport::SecurityUtils.secure_compare(
+          webauthn_credential.user_handle,
+          user.webauthn_id.to_s
+        )
 
-      yield user if block_given?
+        consume_authentication_challenge!(challenge)
+        yield user if block_given?
 
-      passkey.update!(
-        sign_count: webauthn_credential.sign_count || passkey.sign_count,
-        last_used_at: Time.current,
-        backup_eligible: webauthn_credential.backup_eligible? || false,
-        backed_up: webauthn_credential.backed_up? || false
-      )
+        update_authentication_state(passkey, webauthn_credential)
 
-      VerificationResult.new(passkey: passkey, user: user, credential: webauthn_credential)
+        VerificationResult.new(passkey: passkey, user: user, credential: webauthn_credential)
+      end
     end
 
     def reauthentication_options(user:)
@@ -137,6 +138,26 @@ module Passkeys
     end
 
     private
+
+    def consume_authentication_challenge!(challenge)
+      challenge_digest = OpenSSL::Digest::SHA256.hexdigest(challenge.to_s)
+      consumed = Rails.cache.write(
+        "passkeys/authentication_challenge/#{challenge_digest}",
+        true,
+        expires_in: AUTHENTICATION_CHALLENGE_REPLAY_TTL,
+        unless_exist: true
+      )
+      raise AuthenticationError, "authentication_challenge_replayed" unless consumed
+    end
+
+    def update_authentication_state(passkey, webauthn_credential)
+      passkey.update!(
+        sign_count: webauthn_credential.sign_count || passkey.sign_count,
+        last_used_at: Time.current,
+        backup_eligible: webauthn_credential.backup_eligible? || false,
+        backed_up: webauthn_credential.backed_up? || false
+      )
+    end
 
     def webauthn_user_entity(user)
       {

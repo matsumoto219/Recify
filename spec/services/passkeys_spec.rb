@@ -230,6 +230,35 @@ RSpec.describe Passkeys do
         )
       }.to raise_error(ActiveRecord::RecordNotFound)
     end
+
+    it 'counter 0の認証器でも同じchallengeの再利用を拒否する' do
+      user = create(:user)
+      passkey = create(:passkey, user: user, sign_count: 0)
+      webauthn_credential = double(
+        'WebAuthn authentication credential',
+        id: passkey.credential_id,
+        sign_count: 0,
+        backup_eligible?: false,
+        backed_up?: false
+      )
+      allow(WebAuthn::Credential).to receive(:from_get).and_return(webauthn_credential)
+      allow(webauthn_credential).to receive(:verify)
+      allow(Rails).to receive(:cache).and_return(ActiveSupport::Cache::MemoryStore.new)
+
+      described_class.verify_authentication(
+        credential: {},
+        challenge: 'single-use-challenge',
+        user: user
+      )
+
+      expect do
+        described_class.verify_authentication(
+          credential: {},
+          challenge: 'single-use-challenge',
+          user: user
+        )
+      end.to raise_error(Passkeys::AuthenticationError, 'authentication_challenge_replayed')
+    end
   end
 
   describe '.verify_discoverable_authentication' do
