@@ -30,6 +30,27 @@ RSpec.describe "ゲスト本登録の実Chrome回帰", type: :system do
     click_button I18n.t("auth.sessions.submit")
   end
 
+  def start_guest_registration_via_browser(email:, password: "browser-password-123")
+    visit new_user_session_path
+    click_button I18n.t("auth.sessions.guest.button")
+    expect(page).to have_current_path(receipts_path, ignore_query: true)
+
+    guest = User.where(guest: true).order(:id).last
+    visit settings_security_path
+    within("#guest-registration") do
+      fill_in "user_email", with: email
+      fill_in "user_password", with: password
+      fill_in "user_password_confirmation", with: password
+      check "guest_registration_legal_agreement"
+      click_button I18n.t("settings.security.guest_registration.submit")
+    end
+
+    expect(page).to have_content(I18n.t("settings.security.guest_registration.pending.title"))
+    expect(ActionMailer::Base.deliveries.size).to eq(1)
+
+    [ guest, confirmation_token_from(ActionMailer::Base.deliveries.last) ]
+  end
+
   it "同じbrowserでguest本登録を完了し、旧sessionを終了して登録情報で再loginできる" do
     registered_email = "browser-guest-confirmation@example.com"
     registered_password = "browser-password-123"
@@ -100,6 +121,91 @@ RSpec.describe "ゲスト本登録の実Chrome回帰", type: :system do
         expect(result).to eq(deleted_count: 0, failed_count: 0)
         expect(User.where(id: guest.id)).to exist
       end
+    end
+
+    expect_browser_console_clean
+  end
+
+  it "期限切れtokenを同じbrowserで拒否し、guest状態とsessionを維持する" do
+    issued_at = Time.zone.parse("2026-05-23 10:00:00")
+    guest = nil
+    token = nil
+
+    travel_to(issued_at) do
+      guest, token = start_guest_registration_via_browser(
+        email: "browser-expired-guest-confirmation@example.com"
+      )
+    end
+
+    original_email = guest.email
+    original_session_version = guest.session_version
+    tracked_session = guest.user_sessions.order(:id).last
+
+    travel_to(issued_at + 3.days + 1.minute) do
+      visit user_confirmation_path(confirmation_token: token)
+    end
+
+    aggregate_failures do
+      expect(page).to have_content(I18n.t("auth.confirmations.new.title"))
+      expect(page).to have_content("期限")
+      expect(guest.reload).to be_guest
+      expect(guest.email).to eq(original_email)
+      expect(guest.unconfirmed_email).to eq("browser-expired-guest-confirmation@example.com")
+      expect(guest.session_version).to eq(original_session_version)
+      expect(tracked_session.reload.signed_out_at).to be_nil
+    end
+
+    visit settings_security_path
+    expect(page).to have_css("#guest-registration")
+    expect_browser_console_clean
+  end
+
+  it "confirmation途中のDB失敗をrollbackし、同じbrowserから再試行できる" do
+    guest, token = start_guest_registration_via_browser(
+      email: "browser-atomic-guest-confirmation@example.com"
+    )
+    guest.reload
+    original_email = guest.email
+    original_session_version = guest.session_version
+    original_confirmation_token = guest.confirmation_token
+    tracked_session = guest.user_sessions.order(:id).last
+
+    allow_any_instance_of(User).to receive(:complete_guest_registration!)
+      .and_raise(ActiveRecord::StatementInvalid, "local fault injection")
+
+    visit user_confirmation_path(confirmation_token: token)
+
+    server_error = page.server.error
+    expected_console_entries = browser_console_entries.reject do |entry|
+      blocked_external_font_entry?(entry)
+    end
+
+    aggregate_failures do
+      expect(server_error).to be_a(ActiveRecord::StatementInvalid)
+      expect(server_error.message).to eq("local fault injection")
+      expect(expected_console_entries).to contain_exactly(
+        an_object_having_attributes(level: "SEVERE", message: include("500 (Internal Server Error)"))
+      )
+    end
+    page.server.reset_error!
+
+    aggregate_failures do
+      expect(guest.reload).to be_guest
+      expect(guest.email).to eq(original_email)
+      expect(guest.unconfirmed_email).to eq("browser-atomic-guest-confirmation@example.com")
+      expect(guest.confirmation_token).to eq(original_confirmation_token)
+      expect(guest.session_version).to eq(original_session_version)
+      expect(tracked_session.reload.signed_out_at).to be_nil
+    end
+
+    allow_any_instance_of(User).to receive(:complete_guest_registration!).and_call_original
+    visit user_confirmation_path(confirmation_token: token)
+
+    aggregate_failures do
+      expect(page).to have_current_path(new_user_session_path, ignore_query: true)
+      expect(page).to have_content(I18n.t("flash.users.guest_registration.completed"))
+      expect(guest.reload).not_to be_guest
+      expect(tracked_session.reload.signed_out_at).to be_present
     end
 
     expect_browser_console_clean
