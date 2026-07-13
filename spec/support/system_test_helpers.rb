@@ -99,6 +99,12 @@ RSpec.configure do |config|
     end
   end
 
+  config.before(type: :system) do
+    page.driver.browser.logs.get(:browser)
+  rescue Selenium::WebDriver::Error::UnsupportedOperationError
+    nil
+  end
+
   config.around(type: :system) do |example|
     original_env = SystemTestHelpers::SYSTEM_TEST_ENV.to_h do |key, _value|
       [ key, [ ENV.key?(key), ENV[key] ] ]
@@ -111,5 +117,19 @@ RSpec.configure do |config|
       present ? ENV[key] = value : ENV.delete(key)
     end
     WebMock.allow_net_connect!
+  end
+
+  config.after(type: :system) do
+    unexpected_entries = page.driver.browser.logs.get(:browser).select do |entry|
+      entry.level == "SEVERE" && !blocked_external_font_entry?(entry)
+    end
+    messages = unexpected_entries.map { |entry| "[#{entry.level}] #{entry.message}" }
+
+    expect(unexpected_entries).to be_empty, <<~MESSAGE
+      Unasserted browser console entries:
+      #{messages.join("\n")}
+    MESSAGE
+  rescue Selenium::WebDriver::Error::UnsupportedOperationError
+    nil
   end
 end

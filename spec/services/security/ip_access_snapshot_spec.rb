@@ -14,6 +14,7 @@ RSpec.describe Security::IpAccessSnapshot do
 
     example.run
   ensure
+    travel_back
     Rack::Attack.reset!
     Rack::Attack.cache.store = original_store
   end

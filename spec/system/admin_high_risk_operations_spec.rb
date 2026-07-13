@@ -1,5 +1,6 @@
 require "rails_helper"
 require_relative "../support/system_test_helpers"
+require "webauthn/fake_client"
 
 RSpec.describe "管理画面の高リスク操作", type: :system do
   include ActiveSupport::Testing::TimeHelpers
@@ -8,6 +9,24 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
     "status" => "succeeded",
     "analyzeResult" => { "content" => "LOCAL SYSTEM SPEC ARTIFACT" }
   ).freeze
+
+  around do |example|
+    original_rack_attack_store = Rack::Attack.cache.store
+    original_rate_limit_store = ApplicationController::RateLimitStore.instance_variable_get(:@store)
+    rate_limit_store = ActiveSupport::Cache::MemoryStore.new
+    rack_attack_store = ActiveSupport::Cache::MemoryStore.new
+
+    ApplicationController.rate_limit_cache_store = rate_limit_store
+    Rack::Attack.cache.store = rack_attack_store
+    Rack::Attack.reset!
+    example.run
+  ensure
+    travel_back
+    rate_limit_store&.clear
+    ApplicationController.rate_limit_cache_store = original_rate_limit_store
+    Rack::Attack.reset!
+    Rack::Attack.cache.store = original_rack_attack_store
+  end
 
   def with_mobile_viewport
     page.driver.browser.execute_cdp(
@@ -30,34 +49,91 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
     expect(page).to have_current_path(receipts_path, ignore_query: true)
   end
 
-  # WebAuthnの署名検証はrequest specのWebAuthn::FakeClientへ委ねる。
-  # ここでは実hardware認証を成功扱いにせず、ブラウザ導線だけをtest限定で固定する。
-  def allow_test_only_browser_credential_verification
-    allow(Passkeys).to receive(:verify_reauthentication) do |user:, **_attributes, &verified|
-      verified.call(user)
-      true
-    end
+  # 実機のWebAuthn認証ではないが、FakeClientが実challengeへ署名したassertionをサーバー側で検証する。
+  def webauthn_fake_client
+    @webauthn_fake_client ||= WebAuthn::FakeClient.new("http://localhost:3000")
   end
 
-  def install_test_only_browser_credential
-    page.execute_script(<<~JAVASCRIPT)
+  def create_fake_client_passkey(user)
+    options = Passkeys.registration_options(user: user)
+    credential = webauthn_fake_client.create(
+      challenge: options.challenge,
+      rp_id: "localhost",
+      user_verified: true
+    )
+
+    Passkeys.verify_registration(user: user, credential: credential, challenge: options.challenge)
+  end
+
+  def prepared_browser_request_options
+    wait_for_stimulus_controller("passkey-session")
+
+    result = page.evaluate_async_script(<<~JAVASCRIPT)
+      const done = arguments[arguments.length - 1]
+      const controller = window.Stimulus.controllers.find(
+        (candidate) => candidate.identifier === "passkey-session"
+      )
+      const encode = (buffer) => {
+        const bytes = new Uint8Array(buffer)
+        let binary = ""
+        bytes.forEach((byte) => { binary += String.fromCharCode(byte) })
+        return window.btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "")
+      }
+
+      Promise.resolve(controller.prepareRequestOptions())
+        .then((publicKey) => done({
+          challenge: encode(publicKey.challenge),
+          rpId: publicKey.rpId,
+          allowCredentialIds: (publicKey.allowCredentials || []).map((entry) => encode(entry.id))
+        }))
+        .catch((error) => done({ error: error?.name || "PasskeyOptionsError" }))
+    JAVASCRIPT
+
+    expect(result.fetch("error", nil)).to be_nil
+    result
+  end
+
+  def install_fake_client_browser_credential(credential, expected_challenge:)
+    page.execute_script(<<~JAVASCRIPT, credential, expected_challenge)
+      const assertion = arguments[0]
+      const expectedChallenge = arguments[1]
+      const decode = (value) => {
+        const base64 = value.replace(/-/g, "+").replace(/_/g, "/")
+        const padded = base64.padEnd(base64.length + ((4 - base64.length % 4) % 4), "=")
+        const binary = window.atob(padded)
+        return Uint8Array.from(binary, (character) => character.charCodeAt(0)).buffer
+      }
+      const encode = (buffer) => {
+        const bytes = new Uint8Array(buffer)
+        let binary = ""
+        bytes.forEach((byte) => { binary += String.fromCharCode(byte) })
+        return window.btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "")
+      }
+
       Object.defineProperty(navigator, "credentials", {
         configurable: true,
         value: {
-          get: async () => {
-            const bytes = () => Uint8Array.from([1, 2, 3]).buffer
+          get: async ({ publicKey }) => {
+            if (encode(publicKey.challenge) !== expectedChallenge) {
+              throw new DOMException("Passkey challenge changed", "SecurityError")
+            }
+
+            const allowedIds = (publicKey.allowCredentials || []).map((entry) => encode(entry.id))
+            if (!allowedIds.includes(assertion.id)) {
+              throw new DOMException("Passkey credential is not allowed", "SecurityError")
+            }
 
             return {
-              type: "public-key",
-              id: "system-spec-browser-credential",
-              rawId: bytes(),
-              authenticatorAttachment: "platform",
-              getClientExtensionResults: () => ({}),
+              type: assertion.type,
+              id: assertion.id,
+              rawId: decode(assertion.rawId),
+              authenticatorAttachment: assertion.authenticatorAttachment,
+              getClientExtensionResults: () => assertion.clientExtensionResults || {},
               response: {
-                authenticatorData: bytes(),
-                clientDataJSON: bytes(),
-                signature: bytes(),
-                userHandle: null
+                authenticatorData: decode(assertion.response.authenticatorData),
+                clientDataJSON: decode(assertion.response.clientDataJSON),
+                signature: decode(assertion.response.signature),
+                userHandle: assertion.response.userHandle ? decode(assertion.response.userHandle) : null
               }
             }
           }
@@ -66,17 +142,33 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
     JAVASCRIPT
   end
 
-  def complete_test_only_browser_reauthentication(expected_return_path:)
-    wait_for_stimulus_controller("passkey-session")
-    install_test_only_browser_credential
+  def complete_fake_client_browser_reauthentication(passkey:, expected_return_path:)
+    request_options = prepared_browser_request_options
+    expect(request_options.fetch("allowCredentialIds")).to include(passkey.credential_id)
+    previous_sign_count = passkey.sign_count
+
+    credential = webauthn_fake_client.get(
+      challenge: request_options.fetch("challenge"),
+      rp_id: request_options.fetch("rpId"),
+      user_verified: true,
+      allow_credentials: [ passkey.credential_id ]
+    )
+    install_fake_client_browser_credential(
+      credential,
+      expected_challenge: request_options.fetch("challenge")
+    )
     click_button I18n.t("admin.passkey_reauthentications.new.submit")
 
     expect(page).to have_current_path(expected_return_path, ignore_query: true)
+    aggregate_failures do
+      expect(passkey.reload.sign_count).to be > previous_sign_count
+      expect(passkey.last_used_at).to be_present
+    end
   end
 
-  def reauthenticate_through_browser(return_to:)
+  def reauthenticate_through_browser(passkey:, return_to:)
     visit new_admin_passkey_reauthentication_path(return_to: return_to)
-    complete_test_only_browser_reauthentication(expected_return_path: return_to)
+    complete_fake_client_browser_reauthentication(passkey: passkey, expected_return_path: return_to)
   end
 
   def expect_exact_mobile_viewport_without_overflow
@@ -125,8 +217,7 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
     with_mobile_viewport do
       admin = create_system_test_user(admin: true, theme_preference: "dark")
       sign_in_through_browser(admin)
-      create(:passkey, user: admin)
-      allow_test_only_browser_credential_verification
+      passkey = create_fake_client_passkey(admin)
 
       setting_path = admin_system_setting_path("security.user_reauth_window_minutes")
       visit setting_path
@@ -138,7 +229,7 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
       end
 
       click_link I18n.t("admin.system_settings.show.update.reauthentication_link")
-      complete_test_only_browser_reauthentication(expected_return_path: setting_path)
+      complete_fake_client_browser_reauthentication(passkey: passkey, expected_return_path: setting_path)
 
       aggregate_failures do
         expect(page).to have_field("value", with: "5")
@@ -227,8 +318,7 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
     with_mobile_viewport do
       admin = create_system_test_user(admin: true, theme_preference: "light")
       sign_in_through_browser(admin)
-      create(:passkey, user: admin)
-      allow_test_only_browser_credential_verification
+      passkey = create_fake_client_passkey(admin)
 
       receipt = create(:receipt, :completed, user: admin)
       run = create(
@@ -273,7 +363,7 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
 
       visit artifact_path
       expect(page).to have_current_path(new_admin_passkey_reauthentication_path, ignore_query: true)
-      complete_test_only_browser_reauthentication(expected_return_path: run_path)
+      complete_fake_client_browser_reauthentication(passkey: passkey, expected_return_path: run_path)
 
       ocr_retry_card = retry_option_card("ocr_retry")
       ai_retry_card = retry_option_card("ai_retry")
@@ -329,23 +419,22 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
     end
   end
 
-  it "test限定browser credential模擬のfreshnessを別adminのbrowser sessionへ継承しない" do
+  it "FakeClient再認証のfreshnessを別adminのbrowser sessionへ継承しない" do
     first_admin = create_system_test_user(admin: true)
     second_admin = create_system_test_user(admin: true)
-    allow_test_only_browser_credential_verification
     setting_path = admin_system_setting_path("security.user_reauth_window_minutes")
 
     Capybara.using_session(:first_admin) do
       sign_in_through_browser(first_admin)
-      create(:passkey, user: first_admin)
-      reauthenticate_through_browser(return_to: setting_path)
+      first_passkey = create_fake_client_passkey(first_admin)
+      reauthenticate_through_browser(passkey: first_passkey, return_to: setting_path)
       expect(page).to have_field("value", with: "5")
       expect_browser_console_clean
     end
 
     Capybara.using_session(:second_admin) do
       sign_in_through_browser(second_admin)
-      create(:passkey, user: second_admin)
+      create_fake_client_passkey(second_admin)
       visit setting_path
 
       aggregate_failures do
