@@ -159,6 +159,7 @@ RSpec.describe SystemOperations::UserOperationExecutor do
 
     it 'revoke_sessionsで対象ユーザーのsession_versionをincrementし、success auditを保存する' do
       target_user.update!(session_version: 4)
+      target_user.remember_me!
       user_session = UserSession.create!(
         user: target_user,
         session_uid_digest: SecureRandom.hex(32),
@@ -183,6 +184,7 @@ RSpec.describe SystemOperations::UserOperationExecutor do
       aggregate_failures do
         expect(result).to be_success
         expect(target_user.reload.session_version).to eq(5)
+        expect(target_user.remember_created_at).to be_nil
         expect(audit_log).to have_attributes(
           actor_user: actor,
           action: 'admin.users.session_revoke',
@@ -210,6 +212,7 @@ RSpec.describe SystemOperations::UserOperationExecutor do
 
     it 'force_two_factor_resetでTOTP/recovery codesを削除し、sessionを失効してsuccess auditを保存する' do
       target_user.update!(session_version: 7)
+      target_user.remember_me!
       totp = create(:totp_credential, user: target_user, totp_secret: 'TOTP-SECRET-VALUE')
       unused_code = create(:recovery_code, user: target_user, code_digest: 'code-digest-secret-unused')
       used_code = create(:recovery_code, user: target_user, code_digest: 'code-digest-secret-used', used_at: 1.day.ago)
@@ -239,6 +242,7 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         expect(target_user.reload.totp_credential).to be_nil
         expect(target_user.recovery_codes.reload).to be_empty
         expect(target_user.session_version).to eq(8)
+        expect(target_user.remember_created_at).to be_nil
         expect(user_session.reload.revoked_at).to be_present
         expect(UserSessions.active_for(user: target_user)).to be_empty
         expect(audit_log).to have_attributes(
@@ -339,6 +343,7 @@ RSpec.describe SystemOperations::UserOperationExecutor do
 
     it 'admin_email_change_recoveryでunconfirmed_emailだけを設定し、sessionを失効してsuccess auditを保存する' do
       old_email = target_user.email
+      target_user.remember_me!
       user_session = UserSession.create!(
         user: target_user,
         session_uid_digest: 'email-change-session-digest-secret',
@@ -373,6 +378,7 @@ RSpec.describe SystemOperations::UserOperationExecutor do
         expect(target_user.reload.email).to eq(old_email)
         expect(target_user.unconfirmed_email).to eq(new_email)
         expect(target_user.session_version).to eq(1)
+        expect(target_user.remember_created_at).to be_nil
         expect(user_session.reload.revoked_at).to be_present
         expect(delivered_recipients).to include(new_email, old_email)
         expect(audit_log).to have_attributes(

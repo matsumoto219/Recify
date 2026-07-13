@@ -114,6 +114,48 @@ RSpec.describe UserSessions do
     end
   end
 
+  describe '.revoke_all!' do
+    it 'remember cookieの発行時刻を消し、session versionと追跡中sessionを原子的に失効する' do
+      user = create(:user, session_version: 4)
+      user.remember_me!
+      tracked_session = described_class.record_sign_in(
+        user: user,
+        request: request,
+        session: {},
+        method: 'password'
+      )
+
+      revoked_count = described_class.revoke_all!(user: user)
+
+      aggregate_failures do
+        expect(revoked_count).to eq(1)
+        expect(user.reload.session_version).to eq(5)
+        expect(user.remember_created_at).to be_nil
+        expect(tracked_session.reload.revoked_at).to eq(Time.current)
+        expect(described_class.active_for(user: user)).to be_empty
+      end
+    end
+
+    it '追跡sessionの失効に失敗した場合はremember情報とsession versionをrollbackする' do
+      user = create(:user, session_version: 2)
+      user.remember_me!
+      remember_created_at = user.reload.remember_created_at
+      relation = instance_double(ActiveRecord::Relation)
+
+      allow(UserSession).to receive(:where).and_return(relation)
+      allow(relation).to receive(:update_all).and_raise(ActiveRecord::StatementInvalid, 'local rollback fixture')
+
+      expect do
+        described_class.revoke_all!(user: user)
+      end.to raise_error(ActiveRecord::StatementInvalid, 'local rollback fixture')
+
+      aggregate_failures do
+        expect(user.reload.session_version).to eq(2)
+        expect(user.remember_created_at).to eq(remember_created_at)
+      end
+    end
+  end
+
   describe '.active_for / .summary_for' do
     it '現在session_versionのactive sessionだけを返し、summaryを作る' do
       user = create(:user, session_version: 3)

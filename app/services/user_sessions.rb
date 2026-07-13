@@ -96,12 +96,24 @@ module UserSessions
       return 0 unless user
 
       now = Time.current
-      UserSession
-        .where(user: user, signed_out_at: nil, revoked_at: nil)
-        .update_all(revoked_at: now, updated_at: now)
+      revoke_tracked_sessions(user: user, at: now)
     rescue StandardError => e
       Rails.logger.warn("[UserSessions] mark_revoked_for_user failed: #{e.class.name}")
       0
+    end
+
+    def revoke_all!(user:)
+      raise ArgumentError, "user is required" unless user
+
+      user.with_lock do
+        now = Time.current
+        user.update_columns(
+          remember_created_at: nil,
+          session_version: session_version_for(user) + 1,
+          updated_at: now
+        )
+        revoke_tracked_sessions(user: user, at: now)
+      end
     end
 
     def active_for(user:)
@@ -156,6 +168,12 @@ module UserSessions
 
     def session_version_for(user)
       user.respond_to?(:session_version) ? user.session_version.to_i : 0
+    end
+
+    def revoke_tracked_sessions(user:, at:)
+      UserSession
+        .where(user: user, signed_out_at: nil, revoked_at: nil)
+        .update_all(revoked_at: at, updated_at: at)
     end
   end
 end

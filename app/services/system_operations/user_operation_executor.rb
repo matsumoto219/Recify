@@ -158,8 +158,7 @@ module SystemOperations
       when "force_two_factor_reset"
         user.totp_credential&.destroy!
         user.recovery_codes.delete_all
-        user.increment!(:session_version)
-        @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
+        @revoked_sessions_count = UserSessions.revoke_all!(user: user)
       when "force_password_reset_instruction"
         @reset_password_sent_at_before = user.reset_password_sent_at
         _raw_reset_token = user.send_reset_password_instructions
@@ -170,14 +169,12 @@ module SystemOperations
         @new_email_digest = email_digest(recovery_email)
         @session_version_before = user.session_version
         user.update!(email: recovery_email)
-        user.increment!(:session_version)
-        @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
+        @revoked_sessions_count = UserSessions.revoke_all!(user: user)
         user.reload
         @unconfirmed_email_digest = email_digest(user.unconfirmed_email)
         @session_version_after = user.session_version
       when "revoke_sessions"
-        user.increment!(:session_version)
-        @revoked_sessions_count = UserSessions.mark_revoked_for_user(user: user)
+        @revoked_sessions_count = UserSessions.revoke_all!(user: user)
       when "delete_user"
         deletion_result = Users.delete_account(
           user: user,

@@ -407,6 +407,56 @@ RSpec.describe 'User password sessions', type: :request do
     end
   end
 
+  it 'session revoke前はremember cookieから復帰でき、revoke後は同じcookieを再利用できない' do
+    admin = create(:user, :admin)
+    user = create(:user)
+    accept_current_legal_documents_for_request(user)
+
+    post user_session_path,
+         params: {
+           user: {
+             email: user.email,
+             password: 'password',
+             remember_me: '1'
+           }
+         }
+
+    remember_cookie = response.cookies.fetch('remember_user_token')
+    remembered_before_revoke = ActionDispatch::Integration::Session.new(Rails.application)
+    remembered_before_revoke.cookies['remember_user_token'] = remember_cookie
+    remembered_before_revoke.get settings_path
+
+    expect(remembered_before_revoke.response).to have_http_status(:success)
+
+    result = SystemOperations.execute_user_operation(
+      operation: 'revoke_sessions',
+      user: user,
+      actor: admin,
+      reason: 'remember cookie revocation regression',
+      request: nil,
+      reauthentication: {
+        method: 'passkey',
+        reauthenticated_at: Time.current,
+        user_id: admin.id,
+        session_version: admin.session_version,
+        expires_at: Time.current + Admin.passkey_reauth_window_duration
+      },
+      confirmation: 'REVOKE SESSIONS'
+    )
+
+    remembered_after_revoke = ActionDispatch::Integration::Session.new(Rails.application)
+    remembered_after_revoke.cookies['remember_user_token'] = remember_cookie
+    remembered_after_revoke.get settings_path
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(user.reload.remember_created_at).to be_nil
+      expect(remembered_after_revoke.response).to have_http_status(:redirect)
+      expect(remembered_after_revoke.request.env.fetch('warden').user).to be_nil
+      expect(remembered_after_revoke.request.session['warden.user.user.key']).to be_blank
+    end
+  end
+
   it 'session version nilの既存セッションは現在値で補完する' do
     user = create(:user)
     sign_in user
