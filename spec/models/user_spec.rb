@@ -344,6 +344,7 @@ RSpec.describe User, type: :model do
   describe '#confirm' do
     it 'guest本登録のconfirmation完了時だけguest:falseにする' do
       guest = described_class.guest!
+      guest.update!(remember_created_at: Time.current)
       guest.start_guest_registration(
         email: 'complete-guest@example.com',
         password: 'password123',
@@ -351,15 +352,52 @@ RSpec.describe User, type: :model do
         legal_agreement: '1'
       )
 
-      expect do
-        guest.confirm
-      end.to change { guest.reload.guest? }.from(true).to(false)
-        .and change { guest.reload.session_version }.by(1)
+      session_version_before = guest.session_version
+
+      expect(guest.confirm).to be(true)
 
       aggregate_failures do
+        expect(guest).not_to be_guest
+        expect(guest.session_version).to eq(session_version_before + 1)
         expect(guest.email).to eq('complete-guest@example.com')
         expect(guest.unconfirmed_email).to be_nil
+        expect(guest.remember_created_at).to be_nil
+        expect(guest).to be_guest_registration_completed
       end
+    end
+
+    it 'guest解除に失敗した場合はconfirmationの更新もrollbackする' do
+      guest = described_class.guest!
+      original_email = guest.email
+      original_session_version = guest.session_version
+      guest.start_guest_registration(
+        email: 'atomic-guest@example.com',
+        password: 'password123',
+        password_confirmation: 'password123',
+        legal_agreement: '1'
+      )
+      original_confirmation_token = guest.confirmation_token
+      allow(guest).to receive(:complete_guest_registration!).and_raise(ActiveRecord::StatementInvalid, 'local failure')
+
+      expect do
+        guest.confirm
+      end.to raise_error(ActiveRecord::StatementInvalid, 'local failure')
+
+      guest.reload
+
+      aggregate_failures do
+        expect(guest).to be_guest
+        expect(guest.email).to eq(original_email)
+        expect(guest.unconfirmed_email).to eq('atomic-guest@example.com')
+        expect(guest.confirmation_token).to eq(original_confirmation_token)
+        expect(guest.session_version).to eq(original_session_version)
+        expect(guest).not_to be_guest_registration_completed
+      end
+
+      allow(guest).to receive(:complete_guest_registration!).and_call_original
+
+      expect(guest.confirm).to be(true)
+      expect(guest.reload).not_to be_guest
     end
 
     it '通常ユーザーのreconfirmationではguest状態を変更しない' do

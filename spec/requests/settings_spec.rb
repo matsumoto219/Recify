@@ -1482,9 +1482,10 @@ RSpec.describe 'Settings', type: :request do
 
     it 'guest本登録はconfirmation完了で本登録ユーザーにする' do
       sign_out user
-      guest = User.guest!
+      post guest_sign_in_path
+      guest = User.where(guest: true).order(:id).last
+      tracked_session = guest.user_sessions.order(:id).last
       session_version_before_confirmation = guest.session_version
-      sign_in guest
       ActionMailer::Base.deliveries.clear
 
       patch user_registration_path,
@@ -1503,17 +1504,73 @@ RSpec.describe 'Settings', type: :request do
       get user_confirmation_path(confirmation_token: token)
 
       aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(flash_message(:notice)).to eq(I18n.t('flash.users.guest_registration.completed'))
         expect(guest.reload).not_to be_guest
         expect(guest.email).to eq('guest-confirmed@example.com')
         expect(guest.unconfirmed_email).to be_nil
         expect(guest.session_version).to eq(session_version_before_confirmation + 1)
+        expect(guest.remember_created_at).to be_nil
+        expect(tracked_session.reload.signed_out_at).to be_present
+        expect(session[:user_session_version]).to be_blank
+        expect(session[:user_session_uid]).to be_blank
+        expect(session['warden.user.user.key']).to be_blank
       end
 
-      get settings_security_path
+      follow_redirect!
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(I18n.t('flash.users.guest_registration.completed'))
+      end
+    end
+
+    it 'logout後にguest本登録を完了しても完了通知を表示してloginへ誘導する' do
+      sign_out user
+      post guest_sign_in_path
+      guest = User.where(guest: true).order(:id).last
+      ActionMailer::Base.deliveries.clear
+
+      patch user_registration_path,
+            params: {
+              update_context: 'guest_registration',
+              user: {
+                email: 'logged-out-guest-confirmed@example.com',
+                password: 'password123',
+                password_confirmation: 'password123',
+                legal_agreement: '1'
+              }
+            }
+
+      token = confirmation_token_from(ActionMailer::Base.deliveries.last)
+      delete destroy_user_session_path
+      get user_confirmation_path(confirmation_token: token)
 
       aggregate_failures do
         expect(response).to redirect_to(new_user_session_path)
-        expect(session[:user_session_version]).to be_blank
+        expect(flash_message(:notice)).to eq(I18n.t('flash.users.guest_registration.completed'))
+        expect(guest.reload).not_to be_guest
+      end
+    end
+
+    it '別userのlogin中にguest確認linkを開いても現在sessionを終了しない' do
+      sign_out user
+      guest = User.guest!
+      guest.start_guest_registration(
+        email: 'other-session-guest-confirmed@example.com',
+        password: 'password123',
+        password_confirmation: 'password123',
+        legal_agreement: '1'
+      )
+      token = confirmation_token_from(ActionMailer::Base.deliveries.last)
+      sign_in user
+
+      get user_confirmation_path(confirmation_token: token)
+
+      aggregate_failures do
+        expect(response).to redirect_to(root_path)
+        expect(session.dig('warden.user.user.key', 0, 0)).to eq(user.id)
+        expect(guest.reload).not_to be_guest
       end
     end
 
@@ -1570,10 +1627,12 @@ RSpec.describe 'Settings', type: :request do
       end
 
       aggregate_failures do
-        expect(response).to redirect_to(root_path)
+        expect(response).to redirect_to(new_user_session_path)
+        expect(flash_message(:notice)).to eq(I18n.t('flash.users.guest_registration.completed'))
         expect(guest.reload).not_to be_guest
         expect(guest.email).to eq(new_email)
         expect(guest.unconfirmed_email).to be_nil
+        expect(session['warden.user.user.key']).to be_blank
       end
     end
 

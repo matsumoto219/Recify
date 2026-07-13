@@ -112,7 +112,19 @@ class Users::ConfirmationsController < Devise::ConfirmationsController
   end
 
   # The path used after confirmation.
-  # def after_confirmation_path_for(resource_name, resource)
-  #   super(resource_name, resource)
-  # end
+  def after_confirmation_path_for(resource_name, resource)
+    return super unless resource.respond_to?(:guest_registration_completed?) &&
+                        resource.guest_registration_completed?
+    return super if user_signed_in? && current_user.id != resource.id
+
+    end_guest_session_after_registration if user_signed_in?
+    flash[:notice] = t("flash.users.guest_registration.completed")
+    new_session_path(resource_name)
+  end
+
+  def end_guest_session_after_registration
+    UserSessions.record_sign_out(user: current_user, session: session)
+    clear_user_session_version
+    sign_out(:user)
+  end
 end

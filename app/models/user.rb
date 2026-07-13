@@ -95,11 +95,23 @@ class User < ApplicationRecord
   end
 
   def confirm(args = {})
-    completing_guest_registration = guest_registration_pending?
-    confirmed = super
-    complete_guest_registration! if confirmed && completing_guest_registration
+    @guest_registration_completed = false
+    return super unless guest_registration_pending?
 
-    confirmed
+    with_lock do
+      return super unless guest_registration_pending?
+
+      confirmed = super
+      if confirmed
+        complete_guest_registration!
+        @guest_registration_completed = true
+      end
+      confirmed
+    end
+  end
+
+  def guest_registration_completed?
+    @guest_registration_completed == true
   end
 
   def guest_registration_pending?
@@ -115,7 +127,11 @@ class User < ApplicationRecord
   end
 
   def complete_guest_registration!
-    update!(guest: false, session_version: session_version.to_i + 1)
+    update!(
+      guest: false,
+      remember_created_at: nil,
+      session_version: session_version.to_i + 1
+    )
   end
 
   def display_name
