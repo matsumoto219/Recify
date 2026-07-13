@@ -22,12 +22,16 @@ RSpec.describe Admin::SystemOperationsDashboard do
           'receipt_analysis_runs.cleanup_stale.execute',
           'receipt_analysis_runs.cleanup_expired.execute',
           'receipt_images.purge.execute',
+          'security_events.retention_cleanup.execute',
+          'user_sessions.retention_cleanup.execute',
+          'audit_logs.retention_cleanup.execute',
           'contact_requests.retention_cleanup.dry_run',
           'receipt_analysis_runs.cleanup_stale.dry_run',
           'receipt_analysis_runs.cleanup_expired.dry_run',
           'receipt_images.purge.dry_run',
           'user_sessions.retention_cleanup.dry_run',
           'audit_logs.retention_cleanup.dry_run',
+          'security_events.retention_cleanup.dry_run',
           'admin.passkey_reauthentication.succeeded',
           'admin.passkey_reauthentication.failed'
         )

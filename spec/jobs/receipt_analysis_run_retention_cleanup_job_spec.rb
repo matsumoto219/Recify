@@ -59,6 +59,41 @@ RSpec.describe ReceiptAnalysisRunRetentionCleanupJob, type: :job do
       limit: 10,
       dry_run: false
     )
+    expect(AuditLog.last.action).to eq('receipt_analysis_runs.cleanup_expired.execute')
+  end
+
+  it 'artifact errorがあるpartial resultはexecute auditをfailedとして記録する' do
+    allow(Receipts::Processing).to receive(:cleanup_expired).and_return(
+      dry_run: false,
+      expired_count: 1,
+      deleted_count: 0,
+      artifact_errors: [ { artifact_id: 1, error_class: 'StandardError' } ]
+    )
+
+    described_class.perform_now(dry_run: false)
+
+    expect(AuditLog.last).to have_attributes(
+      action: 'receipt_analysis_runs.cleanup_expired.execute',
+      outcome: 'failed',
+      error_code: 'partial_cleanup_failure'
+    )
+  end
+
+  it 'dry_run nilはjob境界でも安全側に正規化する' do
+    allow(Receipts::Processing).to receive(:cleanup_expired).and_return(
+      dry_run: true, expired_count: 0, deleted_count: 0
+    )
+
+    described_class.perform_now(dry_run: nil)
+
+    aggregate_failures do
+      expect(Receipts::Processing).to have_received(:cleanup_expired).with(
+        cutoff: Time.current,
+        limit: 1000,
+        dry_run: true
+      )
+      expect(AuditLog.last.action).to eq('receipt_analysis_runs.cleanup_expired.dry_run')
+    end
   end
 
   it 'dry_run結果をsystem auditとして記録しsample_run_keysを20件に制限する' do

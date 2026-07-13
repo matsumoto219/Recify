@@ -13,6 +13,8 @@ RSpec.describe AuditLogs::RetentionPolicy do
         expect(described_class.category_for(action: 'receipt_analysis.retry_requested')).to eq(:high_risk_admin)
         expect(described_class.category_for(action: 'system_settings.update')).to eq(:high_risk_admin)
         expect(described_class.category_for(action: 'contact_requests.retention_cleanup.execute')).to eq(:cleanup_execute)
+        expect(described_class.category_for(action: 'user_sessions.retention_cleanup.execute')).to eq(:cleanup_execute)
+        expect(described_class.category_for(action: 'audit_logs.retention_cleanup.execute')).to eq(:cleanup_execute)
         expect(described_class.category_for(action: 'receipt_analysis_runs.cleanup_stale.execute')).to eq(:cleanup_execute)
         expect(described_class.category_for(action: 'receipt_images.purge.execute')).to eq(:cleanup_execute)
         expect(described_class.category_for(action: 'admin.passkey_reauthentication.succeeded')).to eq(:passkey_reauth)

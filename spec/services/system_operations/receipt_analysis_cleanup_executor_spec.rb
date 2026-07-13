@@ -163,6 +163,32 @@ RSpec.describe SystemOperations::ReceiptAnalysisCleanupExecutor do
       end
     end
 
+    it 'cleanup resultにerrorsがある場合はpartial failureとして監査する' do
+      result_payload = stale_result(records: [ { run_key: 'run-partial' } ])
+        .merge(errors: [ { run_key: 'run-partial', error_class: 'StandardError' } ])
+      allow(Receipts::Processing).to receive(:cleanup_stale).and_return(result_payload)
+
+      result = described_class.call(
+        operation: 'stale_cleanup',
+        actor: actor,
+        reason: 'partial cleanup check',
+        cutoff: '2026-05-23T03:00',
+        limit: '10',
+        request: request,
+        reauthentication: reauthentication
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('partial_cleanup_failure')
+        expect(result.cleanup_result).to eq(result_payload)
+        expect(AuditLog.last).to have_attributes(
+          outcome: 'failed',
+          error_code: 'partial_cleanup_failure'
+        )
+      end
+    end
+
     it 'retention_cleanupのsuccess audit失敗時はrunとartifact/fileをrollbackする' do
       run = create(:receipt_analysis_run, :succeeded, expires_at: 1.day.ago)
       run.ocr_response_artifact.attach(

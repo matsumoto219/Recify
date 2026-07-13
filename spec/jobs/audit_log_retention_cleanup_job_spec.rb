@@ -67,6 +67,68 @@ RSpec.describe AuditLogRetentionCleanupJob, type: :job do
       limit: 10,
       dry_run: false
     )
+    expect(AuditLog.last.action).to eq('audit_logs.retention_cleanup.execute')
+  end
+
+  it 'partial failureはexecute auditをfailedとして記録する' do
+    allow(AuditLogs).to receive(:cleanup_retention).and_return(
+      dry_run: false,
+      expired_count: 2,
+      deleted_count: 1,
+      failed_count: 1,
+      errors: [ { audit_id: 1, error_class: 'StandardError' } ],
+      categories: [ 'system_dry_run' ],
+      cutoffs: {}
+    )
+
+    described_class.perform_now(dry_run: false)
+
+    expect(AuditLog.last).to have_attributes(
+      action: 'audit_logs.retention_cleanup.execute',
+      outcome: 'failed',
+      error_code: 'partial_cleanup_failure'
+    )
+  end
+
+  it 'success audit失敗時はdeleteをrollbackしてfailed auditだけを残す' do
+    expired = create(:audit_log, action: 'audit_logs.retention_cleanup.dry_run', created_at: 31.days.ago)
+    allow(AuditLogs).to receive(:record_system_action!).and_wrap_original do |original, **attributes|
+      raise ActiveRecord::RecordInvalid, AuditLog.new if attributes[:outcome] == 'succeeded'
+
+      original.call(**attributes)
+    end
+
+    expect do
+      described_class.perform_now(categories: :system_dry_run, dry_run: false)
+    end.to raise_error(ActiveRecord::RecordInvalid)
+
+    aggregate_failures do
+      expect(AuditLog.where(id: expired.id)).to exist
+      expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'cleanup_failed')
+    end
+  end
+
+  it 'dry_run nilはjob境界でも安全側に正規化する' do
+    allow(AuditLogs).to receive(:cleanup_retention).and_return(
+      dry_run: true,
+      expired_count: 0,
+      deleted_count: 0,
+      sample_audit_ids: [],
+      categories: [],
+      cutoffs: {}
+    )
+
+    described_class.perform_now(dry_run: nil)
+
+    aggregate_failures do
+      expect(AuditLogs).to have_received(:cleanup_retention).with(
+        categories: nil,
+        now: kind_of(ActiveSupport::TimeWithZone),
+        limit: 1000,
+        dry_run: true
+      )
+      expect(AuditLog.last.action).to eq('audit_logs.retention_cleanup.dry_run')
+    end
   end
 
   it 'dry-run結果をsystem auditとして記録しsample_audit_idsを20件に制限する' do

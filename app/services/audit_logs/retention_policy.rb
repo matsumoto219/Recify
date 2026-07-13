@@ -29,6 +29,8 @@ module AuditLogs
       receipt_analysis_runs.cleanup_expired.execute
       receipt_images.purge.execute
       security_events.retention_cleanup.execute
+      user_sessions.retention_cleanup.execute
+      audit_logs.retention_cleanup.execute
     ].freeze
 
     PASSKEY_REAUTH_ACTIONS = %w[

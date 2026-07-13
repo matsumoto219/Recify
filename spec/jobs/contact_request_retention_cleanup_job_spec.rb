@@ -91,6 +91,43 @@ RSpec.describe ContactRequestRetentionCleanupJob, type: :job do
     end
   end
 
+  it "partial failureはexecute auditをfailedとして記録する" do
+    allow(ContactRequests).to receive(:cleanup_retention).and_return(
+      dry_run: false,
+      candidate_count: 2,
+      anonymized_count: 1,
+      skipped_count: 0,
+      failed_count: 1,
+      errors: [ { request_uid: "cr_sample", error_class: "StandardError" } ]
+    )
+
+    described_class.perform_now(dry_run: false)
+
+    expect(AuditLog.last).to have_attributes(
+      action: "contact_requests.retention_cleanup.execute",
+      outcome: "failed",
+      error_code: "partial_cleanup_failure"
+    )
+  end
+
+  it "success audit失敗時はanonymizeをrollbackしてfailed auditだけを残す" do
+    expired = create(:contact_request, status: "resolved", handled_at: 181.days.ago, body: "PII body")
+    allow(AuditLogs).to receive(:record_system_action!).and_wrap_original do |original, **attributes|
+      raise ActiveRecord::RecordInvalid, AuditLog.new if attributes[:outcome] == "succeeded"
+
+      original.call(**attributes)
+    end
+
+    expect do
+      described_class.perform_now(dry_run: false)
+    end.to raise_error(ActiveRecord::RecordInvalid)
+
+    aggregate_failures do
+      expect(expired.reload.body).to eq("PII body")
+      expect(AuditLog.last).to have_attributes(outcome: "failed", error_code: "cleanup_failed")
+    end
+  end
+
   it "SystemSettingsの保持期間をdry-run audit metadataへ反映しPIIを残さない" do
     create(
       :system_setting,

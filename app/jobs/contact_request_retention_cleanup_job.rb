@@ -7,14 +7,17 @@ class ContactRequestRetentionCleanupJob < ApplicationJob
 
   def perform(dry_run: true, now: Time.current, limit: DEFAULT_LIMIT)
     dry_run = normalize_boolean(dry_run)
-    result = ContactRequests.cleanup_retention(
-      dry_run: dry_run,
-      now: now,
-      limit: limit
-    )
+    result = nil
+    AuditLog.transaction do
+      result = ContactRequests.cleanup_retention(
+        dry_run: dry_run,
+        now: now,
+        limit: limit
+      )
+      record_audit!(result, dry_run: dry_run, now: now, limit: limit)
+    end
 
     log_completion(result)
-    record_audit!(result, dry_run: dry_run, now: now, limit: limit)
     result
   rescue StandardError => e
     record_failed_audit!(dry_run: dry_run, now: now, limit: limit, error: e)
@@ -33,9 +36,11 @@ class ContactRequestRetentionCleanupJob < ApplicationJob
   end
 
   def record_audit!(result, dry_run:, now:, limit:)
+    failed = partial_failure?(result)
     AuditLogs.record_system_action!(
       action: audit_action(dry_run),
-      outcome: "succeeded",
+      outcome: failed ? "failed" : "succeeded",
+      error_code: failed ? "partial_cleanup_failure" : nil,
       metadata: {
         dry_run: result.fetch(:dry_run, dry_run),
         cutoff: audit_time(result[:cutoff] || ContactRequests.retention_cutoff(now: now)),
@@ -43,6 +48,7 @@ class ContactRequestRetentionCleanupJob < ApplicationJob
         limit: result[:limit] || limit,
         candidate_count: result[:candidate_count],
         anonymized_count: result[:anonymized_count],
+        skipped_count: result[:skipped_count].to_i,
         failed_count: result[:failed_count]
       }
     )
@@ -65,6 +71,10 @@ class ContactRequestRetentionCleanupJob < ApplicationJob
 
   def audit_action(dry_run)
     dry_run ? DRY_RUN_AUDIT_ACTION : EXECUTE_AUDIT_ACTION
+  end
+
+  def partial_failure?(result)
+    result[:failed_count].to_i.positive? || Array(result[:errors]).any?
   end
 
   def audit_time(value)

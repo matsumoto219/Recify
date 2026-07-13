@@ -44,17 +44,25 @@ module SystemOperations
 
       cleanup_result = nil
       audit_log = nil
+      partial_failure = false
 
       AuditLog.transaction do
         cleanup_result = execute_cleanup
-        audit_log = record_success_audit!(cleanup_result)
+        partial_failure = partial_cleanup_failure?(cleanup_result)
+        audit_log = if partial_failure
+          record_partial_failure_audit!(cleanup_result)
+        else
+          record_success_audit!(cleanup_result)
+        end
       end
 
       Result.new(
-        success: true,
+        success: !partial_failure,
         operation: operation,
         cleanup_result: cleanup_result,
-        audit_log: audit_log
+        audit_log: audit_log,
+        error_code: partial_failure ? "partial_cleanup_failure" : nil,
+        error_message: partial_failure ? "partial_cleanup_failure" : nil
       )
     rescue StandardError => e
       audit_log = record_failed_audit!(e)
@@ -97,6 +105,18 @@ module SystemOperations
         action: operation_config.fetch(:action),
         reason: reason,
         outcome: "succeeded",
+        metadata: audit_metadata(cleanup_result),
+        request: request
+      )
+    end
+
+    def record_partial_failure_audit!(cleanup_result)
+      AuditLogs.record_admin_action!(
+        actor: actor,
+        action: operation_config.fetch(:action),
+        reason: reason,
+        outcome: "failed",
+        error_code: "partial_cleanup_failure",
         metadata: audit_metadata(cleanup_result),
         request: request
       )
@@ -153,6 +173,10 @@ module SystemOperations
           deleted_count: cleanup_result[:deleted_count]
         }
       end
+    end
+
+    def partial_cleanup_failure?(cleanup_result)
+      Array(cleanup_result[:errors]).any? || Array(cleanup_result[:artifact_errors]).any?
     end
 
     def reauthentication_metadata

@@ -2,10 +2,12 @@ class ReceiptAnalysisRunRetentionCleanupJob < ApplicationJob
   queue_as :default
 
   DEFAULT_LIMIT = 1000
-  AUDIT_ACTION = "receipt_analysis_runs.cleanup_expired.dry_run".freeze
+  DRY_RUN_AUDIT_ACTION = "receipt_analysis_runs.cleanup_expired.dry_run".freeze
+  EXECUTE_AUDIT_ACTION = "receipt_analysis_runs.cleanup_expired.execute".freeze
   SAMPLE_RUN_KEY_LIMIT = 20
 
   def perform(cutoff: Time.current, limit: DEFAULT_LIMIT, dry_run: true)
+    dry_run = normalize_boolean(dry_run)
     result = nil
     AuditLog.transaction do
       result = Receipts::Processing.cleanup_expired(
@@ -34,9 +36,11 @@ class ReceiptAnalysisRunRetentionCleanupJob < ApplicationJob
   end
 
   def record_audit!(result, cutoff:, limit:, dry_run:)
+    failed = partial_failure?(result)
     AuditLogs.record_system_action!(
-      action: AUDIT_ACTION,
-      outcome: "succeeded",
+      action: audit_action(dry_run),
+      outcome: failed ? "failed" : "succeeded",
+      error_code: failed ? "partial_cleanup_failure" : nil,
       metadata: {
         dry_run: result.fetch(:dry_run, dry_run),
         cutoff: audit_time(result[:cutoff] || cutoff),
@@ -50,7 +54,7 @@ class ReceiptAnalysisRunRetentionCleanupJob < ApplicationJob
 
   def record_failed_audit!(cutoff:, limit:, dry_run:, error:)
     AuditLogs.record_system_action!(
-      action: AUDIT_ACTION,
+      action: audit_action(dry_run),
       outcome: "failed",
       error_code: "cleanup_failed",
       metadata: {
@@ -69,9 +73,23 @@ class ReceiptAnalysisRunRetentionCleanupJob < ApplicationJob
       .first(SAMPLE_RUN_KEY_LIMIT)
   end
 
+  def audit_action(dry_run)
+    dry_run ? DRY_RUN_AUDIT_ACTION : EXECUTE_AUDIT_ACTION
+  end
+
+  def partial_failure?(result)
+    Array(result[:errors]).any? || Array(result[:artifact_errors]).any?
+  end
+
   def audit_time(value)
     return value.iso8601 if value.respond_to?(:iso8601)
 
     value
+  end
+
+  def normalize_boolean(value)
+    return true if value.nil?
+
+    ActiveModel::Type::Boolean.new.cast(value)
   end
 end

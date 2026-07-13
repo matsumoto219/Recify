@@ -67,6 +67,70 @@ RSpec.describe ReceiptAnalysisRunStaleCleanupJob, type: :job do
       limit: 5,
       dry_run: false
     )
+    expect(AuditLog.last).to have_attributes(
+      action: 'receipt_analysis_runs.cleanup_stale.execute',
+      outcome: 'succeeded'
+    )
+  end
+
+  it 'errorsがあるpartial resultはexecute auditをfailedとして記録する' do
+    allow(Receipts::Processing).to receive(:cleanup_stale).and_return(
+      dry_run: false,
+      stale_count: 2,
+      failed_count: 1,
+      canceled_count: 0,
+      skipped_count: 0,
+      errors: [ { run_key: 'run-safe', error_class: 'StandardError' } ]
+    )
+
+    described_class.perform_now(dry_run: false)
+
+    expect(AuditLog.last).to have_attributes(
+      action: 'receipt_analysis_runs.cleanup_stale.execute',
+      outcome: 'failed',
+      error_code: 'partial_cleanup_failure'
+    )
+  end
+
+  it 'dry_run nilはjob境界でも安全側に正規化する' do
+    allow(Receipts::Processing).to receive(:cleanup_stale).and_return(
+      dry_run: true,
+      stale_count: 0,
+      failed_count: 0,
+      canceled_count: 0,
+      skipped_count: 0,
+      errors: []
+    )
+
+    described_class.perform_now(dry_run: nil)
+
+    aggregate_failures do
+      expect(Receipts::Processing).to have_received(:cleanup_stale).with(
+        cutoff: 6.hours.ago,
+        limit: 100,
+        dry_run: true
+      )
+      expect(AuditLog.last.action).to eq('receipt_analysis_runs.cleanup_stale.dry_run')
+    end
+  end
+
+  it 'success audit失敗時はrunのterminal遷移をrollbackしてfailed auditだけを残す' do
+    run = create(:receipt_analysis_run, :running)
+    run.update_column(:updated_at, 7.hours.ago)
+    allow(AuditLogs).to receive(:record_system_action!).and_wrap_original do |original, **attributes|
+      raise ActiveRecord::RecordInvalid, AuditLog.new if attributes[:outcome] == 'succeeded'
+
+      original.call(**attributes)
+    end
+
+    expect do
+      described_class.perform_now(dry_run: false)
+    end.to raise_error(ActiveRecord::RecordInvalid)
+
+    aggregate_failures do
+      expect(run.reload).to have_attributes(status: 'running', stage: 'ocr')
+      expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'cleanup_failed')
+    end
   end
 
   it 'dry_run結果をsystem auditとして記録しsample_run_keysを20件に制限する' do
