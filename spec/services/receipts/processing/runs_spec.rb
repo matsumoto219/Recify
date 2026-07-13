@@ -1422,6 +1422,62 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
+    it '候補取得後にfresh化したrunはrow lock後の再検査でskipする' do
+      run = create_stale_run(status: 'running', stage: 'ai')
+      allow(described_class).to receive(:stale_runs).and_wrap_original do |original, **arguments|
+        candidates = original.call(**arguments)
+        run.update_columns(stage: 'finalize', updated_at: Time.current)
+        candidates
+      end
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stale_count]).to eq(1)
+        expect(result[:failed_count]).to eq(0)
+        expect(result[:skipped_count]).to eq(1)
+        expect(run.reload).to have_attributes(status: 'running', stage: 'finalize')
+        expect(run.receipt.reload.status).to eq('processing')
+      end
+    end
+
+    it '候補取得後にstageだけ進んだstale runも誤ってfailed化しない' do
+      run = create_stale_run(status: 'running', stage: 'ai')
+      stale_updated_at = run.updated_at
+      allow(described_class).to receive(:stale_runs).and_wrap_original do |original, **arguments|
+        candidates = original.call(**arguments)
+        run.update_columns(stage: 'finalize', updated_at: stale_updated_at)
+        candidates
+      end
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:failed_count]).to eq(0)
+        expect(result[:skipped_count]).to eq(1)
+        expect(run.reload).to have_attributes(status: 'running', stage: 'finalize')
+      end
+    end
+
+    it '候補取得後にterminal化したrunはskipして現在状態を維持する' do
+      run = create_stale_run(status: 'running', stage: 'ai')
+      allow(described_class).to receive(:stale_runs).and_wrap_original do |original, **arguments|
+        candidates = original.call(**arguments)
+        run.update_columns(status: 'succeeded', stage: 'completed', updated_at: Time.current)
+        candidates
+      end
+      allow(described_class).to receive(:stuck_processing_receipts).and_return([])
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:failed_count]).to eq(0)
+        expect(result[:canceled_count]).to eq(0)
+        expect(result[:skipped_count]).to eq(1)
+        expect(run.reload).to have_attributes(status: 'succeeded', stage: 'completed')
+      end
+    end
+
     it 'limitを守る' do
       create_stale_run(status: 'queued')
       create_stale_run(status: 'queued')
@@ -1543,6 +1599,46 @@ RSpec.describe Receipts::Processing::Runs do
       aggregate_failures do
         expect(result[:stuck_processing_count]).to eq(0)
         expect(receipt.reload.status).to eq('processing')
+      end
+    end
+
+    it '候補取得後にfresh化したprocessing receiptはfailedへ変更しない' do
+      receipt = create_old_processing_receipt
+      create(:receipt_analysis_run, :failed, receipt: receipt)
+      allow(described_class).to receive(:stuck_processing_receipts).and_wrap_original do |original, **arguments|
+        candidates = original.call(**arguments)
+        receipt.update_columns(updated_at: Time.current)
+        candidates
+      end
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stuck_processing_count]).to eq(1)
+        expect(result[:stuck_processing_failed_count]).to eq(0)
+        expect(result[:stuck_processing_skipped_count]).to eq(1)
+        expect(receipt.reload.status).to eq('processing')
+      end
+    end
+
+    it '候補取得後にactive runが開始したprocessing receiptはfailedへ変更しない' do
+      receipt = create_old_processing_receipt
+      create(:receipt_analysis_run, :failed, receipt: receipt)
+      active_run = nil
+      allow(described_class).to receive(:stuck_processing_receipts).and_wrap_original do |original, **arguments|
+        candidates = original.call(**arguments)
+        active_run = create(:receipt_analysis_run, receipt: receipt, status: 'queued', stage: 'queued')
+        candidates
+      end
+
+      result = described_class.cleanup_stale(cutoff: 6.hours.ago, dry_run: false)
+
+      aggregate_failures do
+        expect(result[:stuck_processing_count]).to eq(1)
+        expect(result[:stuck_processing_failed_count]).to eq(0)
+        expect(result[:stuck_processing_skipped_count]).to eq(1)
+        expect(receipt.reload.status).to eq('processing')
+        expect(active_run.reload.status).to eq('queued')
       end
     end
 

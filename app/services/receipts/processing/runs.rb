@@ -175,9 +175,23 @@ module Receipts::Processing::Runs
       return result if dry_run
 
       runs.each_with_index do |run, index|
-        Tracker.new(run).mark_stale!(error_code: STALE_ERROR_CODE)
+        expected_status = records.fetch(index).fetch(:status)
+        expected_stage = records.fetch(index).fetch(:stage)
+        marked_stale = ReceiptAnalysisRun.transaction(requires_new: true) do
+          Tracker.new(run).mark_stale!(
+            cutoff: cutoff,
+            expected_status: expected_status,
+            expected_stage: expected_stage,
+            error_code: STALE_ERROR_CODE
+          )
+        end
         run.reload
         records[index] = cleanup_run_record(run)
+
+        unless marked_stale
+          result[:skipped_count] += 1
+          next
+        end
 
         if run.status == "failed"
           result[:failed_count] += 1
@@ -189,16 +203,20 @@ module Receipts::Processing::Runs
       end
 
       stuck_processing_receipts.each_with_index do |receipt, index|
-        marked_failed = mark_stuck_processing_receipt_failed!(receipt)
+        marked_failed = Receipt.transaction(requires_new: true) do
+          mark_stuck_processing_receipt_failed!(receipt, cutoff: cutoff)
+        end
         receipt.reload
         stuck_processing_records[index] = stuck_processing_receipt_record(receipt)
-        result[:stuck_processing_failed_count] += 1 if marked_failed
+        if marked_failed
+          result[:stuck_processing_failed_count] += 1
+        else
+          result[:stuck_processing_skipped_count] += 1
+        end
       rescue StandardError => e
         result[:errors] << stuck_processing_cleanup_error_record(receipt, e)
       end
 
-      result[:skipped_count] = 0
-      result[:stuck_processing_skipped_count] = 0
       result
     end
 
@@ -326,10 +344,11 @@ module Receipts::Processing::Runs
       receipt.receipt_analysis_runs.max_by(&:created_at)
     end
 
-    def mark_stuck_processing_receipt_failed!(receipt)
+    def mark_stuck_processing_receipt_failed!(receipt, cutoff:)
       receipt.with_lock do
         receipt.reload
         return false unless receipt.processing?
+        return false unless receipt.updated_at <= cutoff
         return false if receipt.receipt_analysis_runs.active.exists?
         return false unless stuck_processing_receipt?(receipt)
 

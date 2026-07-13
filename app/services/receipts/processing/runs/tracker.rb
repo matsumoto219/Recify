@@ -249,10 +249,13 @@ module Receipts::Processing::Runs
       terminate!("canceled", at: at)
     end
 
-    def mark_stale!(at: Time.current, error_code: "analysis_stale_run")
+    def mark_stale!(cutoff:, expected_status:, expected_stage:, at: Time.current, error_code: "analysis_stale_run")
       run.with_lock do
         run.reload
-        ensure_not_terminal!(run)
+        return false unless run.active?
+        return false unless run.updated_at <= cutoff
+        return false unless run.status == expected_status.to_s
+        return false unless run.stage == expected_stage.to_s
 
         receipt = run.receipt
         receipt_processing = stale_receipt_processing?(receipt)
