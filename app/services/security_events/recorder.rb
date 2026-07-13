@@ -1,6 +1,7 @@
 module SecurityEvents
   class Recorder
     AGGREGATION_WINDOW = 1.hour
+    STALE_CANDIDATE_RETRY_LIMIT = 1
     PAYLOAD_DIGEST_EMPTY = nil
 
     class << self
@@ -50,20 +51,27 @@ module SecurityEvents
     end
 
     def call
-      SecurityEvent.transaction do
-        existing = aggregation_candidate
+      stale_candidate_retries = 0
 
-        if existing
-          existing.with_lock do
+      begin
+        SecurityEvent.transaction do
+          existing = aggregation_candidate
+
+          if existing
             existing.count += 1
             existing.last_seen_at = occurred_at
             existing.metadata = merge_metadata(existing.metadata)
             existing.save!
+            existing
+          else
+            SecurityEvent.create!(event_attributes)
           end
-          existing
-        else
-          SecurityEvent.create!(event_attributes)
         end
+      rescue ActiveRecord::RecordNotFound
+        stale_candidate_retries += 1
+        retry if stale_candidate_retries <= STALE_CANDIDATE_RETRY_LIMIT
+
+        raise
       end
     end
 
@@ -105,6 +113,7 @@ module SecurityEvents
           last_seen_at: self.class.aggregation_window.ago..
         )
         .order(last_seen_at: :desc, id: :desc)
+        .lock
         .first
     end
 

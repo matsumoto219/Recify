@@ -162,6 +162,81 @@ RSpec.describe SecurityEvents::Recorder do
     expect(SecurityEvent.first.count).to eq(2)
   end
 
+  it 'retention cleanupとの競合で集約候補が消えても発生中のeventを再記録する' do
+    recorder = described_class.new(
+      event_type: 'path_traversal_attempt',
+      severity: 'high',
+      request: request,
+      path: '/receipts',
+      payload: '../config/master.key'
+    )
+    attempts = 0
+    allow(recorder).to receive(:aggregation_candidate).and_wrap_original do |original|
+      attempts += 1
+      raise ActiveRecord::RecordNotFound if attempts == 1
+
+      original.call
+    end
+
+    event = recorder.call
+
+    aggregate_failures do
+      expect(attempts).to eq(2)
+      expect(event).to be_persisted
+      expect(event).to have_attributes(
+        event_type: 'path_traversal_attempt',
+        severity: 'high',
+        count: 1,
+        payload_excerpt: '../config/master.key'
+      )
+    end
+  end
+
+  it 'retention cleanup競合の再試行回数を上限付きにする' do
+    recorder = described_class.new(
+      event_type: 'path_traversal_attempt',
+      severity: 'high',
+      request: request,
+      path: '/receipts',
+      payload: '../config/master.key'
+    )
+    attempts = 0
+    allow(recorder).to receive(:aggregation_candidate) do
+      attempts += 1
+      raise ActiveRecord::RecordNotFound
+    end
+
+    expect { recorder.call }.to raise_error(ActiveRecord::RecordNotFound)
+    expect(attempts).to eq(described_class::STALE_CANDIDATE_RETRY_LIMIT + 1)
+  end
+
+  it 'retention cleanupとの競合に備えて集約候補を最初のSELECTでlockする' do
+    attributes = {
+      event_type: 'path_traversal_attempt',
+      severity: 'high',
+      request: request,
+      path: '/receipts',
+      payload: '../config/master.key'
+    }
+    described_class.call(**attributes)
+    statements = []
+    subscriber = lambda do |_name, _started, _finished, _unique_id, payload|
+      statements << payload[:sql] unless payload[:cached]
+    end
+
+    ActiveSupport::Notifications.subscribed(subscriber, 'sql.active_record') do
+      described_class.call(**attributes)
+    end
+
+    aggregation_select = statements.find do |statement|
+      statement.include?('FROM "security_events"') &&
+        statement.include?('"security_events"."event_type"') &&
+        statement.include?('"security_events"."last_seen_at"')
+    end
+
+    expect(aggregation_select).to include('FOR UPDATE')
+  end
+
   it 'SystemSettingsの集約窓を過ぎたeventは新規作成する' do
     create(:system_setting, key: 'security_events.aggregation_window_minutes', value: SystemSettings.stored_value(5))
     event = described_class.call(
