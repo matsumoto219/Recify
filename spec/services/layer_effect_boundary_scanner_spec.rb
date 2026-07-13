@@ -49,6 +49,50 @@ RSpec.describe LayerEffectBoundary::Scanner do
     end
   end
 
+  it "静的method名のdynamic dispatchによる副作用を検知する" do
+    with_scanner(
+      "app/queries/unsafe_query.rb" => <<~RUBY,
+        record.public_send(:save!)
+        ReceiptOcrService.send(:call, receipt)
+        AuditLogs.__send__(:record_admin_action!, action: "unsafe")
+        Receipts::Processing.public_send(:cleanup_stale, dry_run: true)
+        Receipts::Editing.send(:create_manual, receipt: receipt)
+        Receipts::Uploads.__send__(:single, user: user, image: image)
+      RUBY
+      "app/forms/unsafe_form.rb" => "ReceiptFinalizeJob.public_send(:perform_later, run_id: 1)\n"
+    ) do |scanner|
+      expect(scanner.layer_effects.map { |effect| [ effect.effect, effect.method_name ] }).to contain_exactly(
+        [ :db_write, :save! ],
+        [ :provider, :call ],
+        [ :audit, :record_admin_action! ],
+        [ :workflow_mutation, :cleanup_stale ],
+        [ :workflow_mutation, :create_manual ],
+        [ :workflow_mutation, :single ],
+        [ :async, :perform_later ]
+      )
+    end
+  end
+
+  it "重要facadeのaliasをQuery/FormとAdmin controllerで検知する" do
+    with_scanner(
+      "app/queries/unsafe_query.rb" => "processor = Receipts::Processing\nprocessor.cleanup_stale\n",
+      "app/forms/unsafe_form.rb" => "@provider = ReceiptOcrService\n",
+      "app/controllers/settings_controller.rb" => <<~RUBY
+        operations = SystemOperations
+        operations.update_setting
+        Object.const_get("SystemOperations").update_setting
+      RUBY
+    ) do |scanner|
+      expect(scanner.layer_effects.map { |effect| [ effect.effect, effect.receiver_constant ] }).to contain_exactly(
+        [ :facade_alias, "Receipts::Processing" ],
+        [ :facade_alias, "ReceiptOcrService" ]
+      )
+      expect(scanner.high_risk_facade_aliases.map(&:receiver_constant)).to eq(
+        [ "SystemOperations", "SystemOperations" ]
+      )
+    end
+  end
+
   it "commentsとstringsをeffect callとして扱わずin-memory deleteを許可する" do
     with_scanner(
       "app/forms/receipts/edit_form.rb" => <<~RUBY

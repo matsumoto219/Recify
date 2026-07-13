@@ -74,6 +74,18 @@ RSpec.describe ReceiptWorkflowBoundary::Scanner do
     expect(scanner.violations.first.rule).to eq(:private_implementation)
   end
 
+  it "静的文字列のdynamic constant lookupでworkflow private childを隠せない" do
+    write_source("app/controllers/receipts_controller.rb", <<~RUBY)
+      class ReceiptsController
+        def create
+          Object.const_get("Receipts::Processing::Runner").call
+        end
+      end
+    RUBY
+
+    expect(scanner.violations.map(&:referenced_constant)).to eq([ "Receipts::Processing::Runner" ])
+  end
+
   it "ProcessingからEditing facadeへの逆依存を検知する" do
     write_source("app/services/receipts/processing/runner.rb", <<~RUBY)
       class Receipts::Processing::Runner

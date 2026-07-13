@@ -29,11 +29,17 @@ module ApplicationStructureBoundary
       update_all
       update_column
       update_columns
+      update_attribute
+      update_attribute!
       assign_attributes
       attributes=
       status=
       stage=
+      write_attribute
+      write_attributes
+      []=
     ].freeze
+    DYNAMIC_DISPATCH_METHODS = %i[public_send send __send__].freeze
 
     attr_reader :calls, :status_writes, :issues
 
@@ -96,9 +102,10 @@ module ApplicationStructureBoundary
     end
 
     def build_status_write(node, receiver_source)
-      return unless STATUS_MUTATION_METHODS.include?(node.name)
+      method_name = effective_method_name(node)
+      return unless STATUS_MUTATION_METHODS.include?(method_name)
 
-      attributes = status_attributes(node)
+      attributes = status_attributes(node, method_name)
       return if attributes.empty?
 
       record_type = status_record_type(receiver_source)
@@ -109,20 +116,42 @@ module ApplicationStructureBoundary
         line: node.location.start_line,
         record_type: record_type,
         receiver_source: receiver_source,
-        method_name: node.name,
+        method_name: method_name,
         attributes: attributes
       )
     end
 
-    def status_attributes(node)
-      return [ :status ] if node.name == :status=
-      return [ :stage ] if node.name == :stage=
+    def status_attributes(node, method_name)
+      return [ :status ] if method_name == :status=
+      return [ :stage ] if method_name == :stage=
+      if %i[write_attribute []=].include?(method_name)
+        attribute = static_attribute_argument(node)
+        return [ attribute ] if %i[status stage].include?(attribute)
+      end
 
       arguments = node.arguments&.location&.slice.to_s
       attributes = []
       attributes << :status if arguments.match?(/(?:\bstatus\s*:|:status\b|["']status["']\s*=>)/)
       attributes << :stage if arguments.match?(/(?:\bstage\s*:|:stage\b|["']stage["']\s*=>)/)
       attributes
+    end
+
+    def effective_method_name(node)
+      return node.name unless DYNAMIC_DISPATCH_METHODS.include?(node.name)
+
+      static_symbol_or_string(node.arguments&.arguments&.first)&.to_sym || node.name
+    end
+
+    def static_attribute_argument(node)
+      arguments = node.arguments&.arguments.to_a
+      index = DYNAMIC_DISPATCH_METHODS.include?(node.name) ? 1 : 0
+      static_symbol_or_string(arguments[index])&.to_sym
+    end
+
+    def static_symbol_or_string(node)
+      return unless node.is_a?(Prism::StringNode) || node.is_a?(Prism::SymbolNode)
+
+      node.unescaped.to_s
     end
 
     def status_record_type(receiver_source)

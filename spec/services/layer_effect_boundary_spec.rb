@@ -71,7 +71,10 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
   end
 
   it "routine Admin mutationをAdmin::Operationsのexact facade callへ限定する" do
-    actual = scanner.constant_calls("Admin::Operations", globs: "app/controllers/admin/**/*.rb").map do |effect|
+    actual = scanner.constant_calls(
+      "Admin::Operations",
+      globs: %w[app/controllers/**/*.rb app/jobs/**/*.rb app/models/**/*.rb]
+    ).map do |effect|
       [ effect.source_path, effect.method_name ]
     end.tally
 
@@ -79,11 +82,19 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
   end
 
   it "high-risk Admin操作をSystemOperationsのexact facade callへ限定する" do
-    actual = scanner.constant_calls("SystemOperations", globs: "app/controllers/admin/**/*.rb").map do |effect|
+    actual = scanner.constant_calls(
+      "SystemOperations",
+      globs: %w[app/controllers/**/*.rb app/jobs/**/*.rb app/models/**/*.rb]
+    ).map do |effect|
       [ effect.source_path, effect.method_name ]
     end.tally
 
     expect(actual).to eq(SYSTEM_OPERATION_CALLS)
+  end
+
+  it "Query/FormとAdmin controllerで重要facadeのaliasを作らない" do
+    expect(scanner.layer_effects.select { |effect| effect.effect == :facade_alias }).to be_empty
+    expect(scanner.high_risk_facade_aliases).to be_empty
   end
 
   it "Security mutationをSystemOperations childからだけ呼ぶ" do

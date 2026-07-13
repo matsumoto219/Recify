@@ -93,4 +93,27 @@ RSpec.describe ApplicationStructureBoundary::Scanner do
       )
     end
   end
+
+  it "静的method名のdynamic dispatchによるstatusとstage更新を検知する" do
+    with_scanner(
+      files: {
+        "app/services/analysis.rb" => "module Analysis; end\n",
+        "app/services/processing.rb" => <<~RUBY
+          receipt.public_send(:status=, "failed")
+          locked_run.send(:update!, status: "running", stage: "ai")
+          run.__send__(:write_attribute, :stage, "finalize")
+          receipt.write_attribute(:status, "completed")
+          receipt[:status] = "review_needed"
+        RUBY
+      }
+    ) do |scanner|
+      expect(scanner.status_writes.map { |write| [ write.record_type, write.method_name, write.attributes ] }).to contain_exactly(
+        [ :receipt, :status=, [ :status ] ],
+        [ :analysis_run, :update!, %i[status stage] ],
+        [ :analysis_run, :write_attribute, [ :stage ] ],
+        [ :receipt, :write_attribute, [ :status ] ],
+        [ :receipt, :[]=, [ :status ] ]
+      )
+    end
+  end
 end

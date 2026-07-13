@@ -86,9 +86,51 @@ module ServiceLayerBoundary
           lexical_namespace: lexical_namespace,
           absolute: false
         )
+      when Prism::CallNode
+        record_dynamic_constant_reference(node, lexical_namespace)
+        node.compact_child_nodes.each { |child| walk(child, lexical_namespace: lexical_namespace) }
       else
         node.compact_child_nodes.each { |child| walk(child, lexical_namespace: lexical_namespace) }
       end
+    end
+
+    def record_dynamic_constant_reference(node, lexical_namespace)
+      name = dynamic_constant_name(node)
+      return unless name
+
+      references << Reference.new(
+        constant_name: name.delete_prefix("::"),
+        line: adjusted_line(node.location.start_line),
+        lexical_namespace: lexical_namespace,
+        absolute: name.start_with?("::")
+      )
+    end
+
+    def dynamic_constant_name(node)
+      case node.name
+      when :constantize, :safe_constantize
+        static_constant_literal(node.receiver)
+      when :const_get
+        const_get_constant_name(node)
+      end
+    end
+
+    def const_get_constant_name(node)
+      name = static_constant_literal(node.arguments&.arguments&.first)
+      return unless name
+      return name if name.start_with?("::")
+
+      receiver_name = full_name(node.receiver) if node.receiver&.respond_to?(:full_name)
+      return name if receiver_name.blank? || receiver_name.delete_prefix("::") == "Object"
+
+      "#{receiver_name}::#{name}"
+    end
+
+    def static_constant_literal(node)
+      return unless node.is_a?(Prism::StringNode) || node.is_a?(Prism::SymbolNode)
+
+      value = node.unescaped.to_s
+      value if value.match?(/\A(?:::)?[A-Z][A-Za-z0-9]*(?:::[A-Z][A-Za-z0-9]*)*\z/)
     end
 
     def walk_namespace_node(node, lexical_namespace:)

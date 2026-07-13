@@ -85,6 +85,43 @@ RSpec.describe ServiceLayerBoundary::Scanner do
     end
   end
 
+  it "静的文字列のdynamic constant lookupでprivate childを隠せない" do
+    with_scanner(
+      files: {
+        "app/controllers/reports_controller.rb" => <<~RUBY
+          class ReportsController
+            def show
+              Object.const_get("Analysis::PrivateWorker").call
+              "Analysis::PrivateWorker".safe_constantize.call
+            end
+          end
+        RUBY
+      }
+    ) do |scanner|
+      expect(scanner.violations.map(&:referenced_constant)).to contain_exactly(
+        "Analysis::PrivateWorker",
+        "Analysis::PrivateWorker"
+      )
+    end
+  end
+
+  it "private childをlocal variableへ代入してもconstant参照を検知する" do
+    with_scanner(
+      files: {
+        "app/controllers/reports_controller.rb" => <<~RUBY
+          class ReportsController
+            def show
+              worker = Analysis::PrivateWorker
+              worker.call
+            end
+          end
+        RUBY
+      }
+    ) do |scanner|
+      expect(scanner.violations.map(&:referenced_constant)).to eq([ "Analysis::PrivateWorker" ])
+    end
+  end
+
   it "別service namespaceからprivate childへの直接参照を検知する" do
     registry = analysis_registry.merge(
       "admin" => registry_entry("admin", "Admin")
