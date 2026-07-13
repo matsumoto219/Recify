@@ -12,6 +12,9 @@ RSpec.describe SystemOperations::IpAccessOperationExecutor do
     {
       method: 'passkey',
       reauthenticated_at: reauthenticated_at,
+      user_id: actor.id,
+      session_version: actor.session_version,
+      expires_at: reauthenticated_at + Admin.passkey_reauth_window_duration,
       credential_id: 'credential-secret',
       challenge: 'challenge-secret'
     }

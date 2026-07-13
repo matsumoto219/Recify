@@ -27,6 +27,15 @@ class ApplicationController < ActionController::Base
   PUBLIC_HEADER_ACTIONS = PUBLIC_LAYOUT_ACTIONS.merge(AUTH_HEADER_ACTIONS).freeze
 
   USER_SESSION_VERSION_SESSION_KEY = :user_session_version
+  ADMIN_PASSKEY_SESSION_KEYS = %i[
+    admin_passkey_reauthenticated_at
+    admin_passkey_reauthentication_method
+    admin_passkey_reauthentication_user_id
+    admin_passkey_reauthentication_session_version
+    admin_passkey_reauthentication_expires_at
+    admin_passkey_reauthentication_challenge
+    admin_passkey_reauthentication_return_to
+  ].freeze
   LEGAL_CONSENT_RETURN_TO_SESSION_KEY = :legal_consent_return_to
   LEGAL_CONSENT_LOCALE = :ja
 
@@ -88,6 +97,11 @@ class ApplicationController < ActionController::Base
   def clear_user_session_version
     session.delete(USER_SESSION_VERSION_SESSION_KEY)
     clear_security_reauthentication!
+    clear_admin_passkey_session!
+  end
+
+  def clear_admin_passkey_session!
+    ADMIN_PASSKEY_SESSION_KEYS.each { |key| session.delete(key) }
   end
 
   def keep_flash_until_manual_dismiss(type)

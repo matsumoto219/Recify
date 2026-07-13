@@ -166,7 +166,7 @@ module SystemOperations
     end
 
     def fresh_passkey_reauthentication?
-      Admin.passkey_reauth_fresh?(reauthentication)
+      Admin.passkey_reauth_fresh?(reauthentication, user: actor)
     end
 
     def operation_config

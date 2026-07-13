@@ -146,7 +146,7 @@ module SystemOperations
     attr_reader :receipt, :parent_run, :actor, :retry_type, :reason, :request, :reauthentication, :confirmation
 
     def fresh_passkey_reauthentication?
-      Admin.passkey_reauth_fresh?(reauthentication)
+      Admin.passkey_reauth_fresh?(reauthentication, user: actor)
     end
 
     def reauthenticated_at

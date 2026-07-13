@@ -11,6 +11,9 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
     {
       method: 'passkey',
       reauthenticated_at: reauthenticated_at,
+      user_id: actor.id,
+      session_version: actor.session_version,
+      expires_at: reauthenticated_at + Admin.passkey_reauth_window_duration,
       credential_id: 'credential-secret',
       public_key: 'public-key-secret',
       challenge: 'challenge-secret'
@@ -365,6 +368,10 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
 
     it '非admin自身の増枠は防御的に拒否する' do
       non_admin = create(:user, storage_limit_bytes: 1.gigabyte)
+      non_admin_reauthentication = reauthentication.merge(
+        user_id: non_admin.id,
+        session_version: non_admin.session_version
+      )
 
       result = described_class.call(
         user: non_admin,
@@ -375,7 +382,7 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
         actor: non_admin,
         reason: 'self increase',
         request: request,
-        reauthentication: reauthentication,
+        reauthentication: non_admin_reauthentication,
         confirmation: 'UPDATE USER LIMIT'
       )
 

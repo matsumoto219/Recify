@@ -33,7 +33,9 @@ class Admin::PasskeyReauthenticationsController < Admin::BaseController
     options = Passkeys.reauthentication_options(user: current_user)
     session[CHALLENGE_SESSION_KEY] = {
       "challenge" => options.challenge,
-      "issued_at" => Time.current.iso8601
+      "issued_at" => Time.current.iso8601,
+      "user_id" => current_user.id,
+      "session_version" => current_user.session_version.to_i
     }
 
     render json: { publicKey: options.as_json }
@@ -79,6 +81,8 @@ class Admin::PasskeyReauthenticationsController < Admin::BaseController
     issued_at = Time.zone.parse(challenge_session["issued_at"].to_s)
     return if challenge.blank? || issued_at.blank?
     return if issued_at < CHALLENGE_TTL.ago
+    return unless challenge_session["user_id"].to_i == current_user.id.to_i
+    return unless challenge_session["session_version"].to_i == current_user.session_version.to_i
 
     challenge
   rescue ArgumentError, TypeError

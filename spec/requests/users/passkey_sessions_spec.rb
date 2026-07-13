@@ -133,7 +133,13 @@ RSpec.describe 'User passkey sessions', type: :request do
         actor: admin,
         reason: 'passkey recovery request',
         request: nil,
-        reauthentication: { method: 'passkey', reauthenticated_at: Time.current },
+        reauthentication: {
+          method: 'passkey',
+          reauthenticated_at: Time.current,
+          user_id: admin.id,
+          session_version: admin.session_version,
+          expires_at: Time.current + Admin.passkey_reauth_window_duration
+        },
         confirmation: 'RESET PASSKEYS'
       )
 

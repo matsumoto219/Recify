@@ -151,6 +151,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       request: request,
       audit: false
     )
+    clear_user_session_version
     Devise.sign_out_all_scopes ? sign_out : sign_out(resource_name)
     set_flash_message! :notice, :destroyed
     yield resource if block_given?

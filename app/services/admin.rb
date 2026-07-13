@@ -106,8 +106,8 @@ module Admin
       PasskeyReauthWindow.duration
     end
 
-    def passkey_reauth_fresh?(reauthentication)
-      PasskeyReauthWindow.fresh?(reauthentication)
+    def passkey_reauth_fresh?(reauthentication, user:)
+      PasskeyReauthWindow.fresh?(reauthentication, user: user)
     end
 
     def passkey_reauthenticated_at(reauthentication)

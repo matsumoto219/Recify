@@ -272,6 +272,9 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
         expect(response.parsed_body.fetch('redirect_url')).to eq(admin_receipt_analysis_runs_path)
         expect(session[:admin_passkey_reauthenticated_at]).to be_present
         expect(session[:admin_passkey_reauthentication_method]).to eq('passkey')
+        expect(session[:admin_passkey_reauthentication_user_id]).to eq(admin.id)
+        expect(session[:admin_passkey_reauthentication_session_version]).to eq(admin.session_version)
+        expect(session[:admin_passkey_reauthentication_expires_at]).to be_present
         expect(session[:admin_passkey_reauthentication_challenge]).to be_blank
         expect(passkey.reload.last_used_at).to be_present
         expect(audit_log).to have_attributes(
@@ -284,6 +287,118 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
         expect(audit_log.request_id).to be_present
         expect(audit_log.ip_address).to be_present
         expect(audit_log.user_agent).to eq('Admin Reauth Spec')
+      end
+    end
+
+    it '別adminへ切り替えた同じsessionでは以前の再認証を引き継がない' do
+      first_admin = create(:user, :admin)
+      passkey = create_passkey_with_fake_client(first_admin)
+      sign_in first_admin
+      options = reauthentication_options_payload
+      credential = fake_reauthentication_credential(options, passkey: passkey)
+      post admin_passkey_reauthentication_path,
+           params: { credential: credential },
+           as: :json
+
+      second_admin = create(:user, :admin)
+      create(:passkey, user: second_admin)
+      sign_in second_admin
+      get new_admin_passkey_reauthentication_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).not_to include('パスキー再認証済みです')
+      end
+    end
+
+    it '発行後のwindow延長で期限切れの再認証を復活させない' do
+      setting = create(
+        :system_setting,
+        key: 'security.admin_passkey_reauth_window_minutes',
+        value: SystemSettings.stored_value(1)
+      )
+      admin = create(:user, :admin)
+      passkey = create_passkey_with_fake_client(admin)
+      sign_in admin
+      options = reauthentication_options_payload
+      credential = fake_reauthentication_credential(options, passkey: passkey)
+      post admin_passkey_reauthentication_path,
+           params: { credential: credential },
+           as: :json
+
+      travel 2.minutes do
+        setting.update!(value: SystemSettings.stored_value(60))
+        get new_admin_passkey_reauthentication_path
+
+        expect(response.body).not_to include('パスキー再認証済みです')
+      end
+    end
+
+    it 'session version失効時に管理者再認証の全session値を削除する' do
+      admin = create(:user, :admin)
+      passkey = create_passkey_with_fake_client(admin)
+      sign_in admin
+      get new_admin_passkey_reauthentication_path(return_to: admin_root_path)
+      options = reauthentication_options_payload
+      credential = fake_reauthentication_credential(options, passkey: passkey)
+      post admin_passkey_reauthentication_path,
+           params: { credential: credential },
+           as: :json
+      get new_admin_passkey_reauthentication_path(return_to: admin_root_path)
+      post options_admin_passkey_reauthentication_path, as: :json
+
+      admin.update!(session_version: admin.session_version + 1)
+      get admin_root_path
+
+      aggregate_failures do
+        expect(response).to redirect_to(new_user_session_path)
+        expect(session[:admin_passkey_reauthenticated_at]).to be_blank
+        expect(session[:admin_passkey_reauthentication_method]).to be_blank
+        expect(session[:admin_passkey_reauthentication_user_id]).to be_blank
+        expect(session[:admin_passkey_reauthentication_session_version]).to be_blank
+        expect(session[:admin_passkey_reauthentication_expires_at]).to be_blank
+        expect(session[:admin_passkey_reauthentication_challenge]).to be_blank
+        expect(session[:admin_passkey_reauthentication_return_to]).to be_blank
+      end
+    end
+
+    it 'logout時に管理者再認証の全session値を削除する' do
+      admin = create(:user, :admin)
+      passkey = create_passkey_with_fake_client(admin)
+      sign_in admin
+      get new_admin_passkey_reauthentication_path(return_to: admin_root_path)
+      options = reauthentication_options_payload
+      credential = fake_reauthentication_credential(options, passkey: passkey)
+      post admin_passkey_reauthentication_path,
+           params: { credential: credential },
+           as: :json
+      get new_admin_passkey_reauthentication_path(return_to: admin_root_path)
+      post options_admin_passkey_reauthentication_path, as: :json
+
+      delete destroy_user_session_path
+
+      ApplicationController::ADMIN_PASSKEY_SESSION_KEYS.each do |key|
+        expect(session[key]).to be_blank
+      end
+    end
+
+    it '本人退会時に管理者再認証の全session値を削除する' do
+      admin = create(:user, :admin)
+      passkey = create_passkey_with_fake_client(admin)
+      sign_in admin
+      get new_admin_passkey_reauthentication_path(return_to: admin_root_path)
+      options = reauthentication_options_payload
+      credential = fake_reauthentication_credential(options, passkey: passkey)
+      post admin_passkey_reauthentication_path,
+           params: { credential: credential },
+           as: :json
+      get new_admin_passkey_reauthentication_path(return_to: admin_root_path)
+      post options_admin_passkey_reauthentication_path, as: :json
+
+      delete user_registration_path
+
+      ApplicationController::ADMIN_PASSKEY_SESSION_KEYS.each do |key|
+        expect(session[key]).to be_blank
       end
     end
 

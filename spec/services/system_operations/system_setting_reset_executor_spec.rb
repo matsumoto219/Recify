@@ -18,6 +18,9 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
     {
       method: "passkey",
       reauthenticated_at: Time.current,
+      user_id: actor.id,
+      session_version: actor.session_version,
+      expires_at: Time.current + Admin.passkey_reauth_window_duration,
       credential_id: "credential-secret",
       challenge: "challenge-secret"
     }
