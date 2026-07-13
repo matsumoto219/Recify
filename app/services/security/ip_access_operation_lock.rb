@@ -4,6 +4,8 @@ module Security
   class IpAccessOperationLock
     # These values must stay stable so every application process competes for the same locks.
     ADVISORY_LOCK_NAMESPACE = 1_909_403_571
+    ADVISORY_LOCK_SQL = "SELECT pg_advisory_xact_lock($1, $2) IS NULL AS lock_result_ignored".freeze
+    ADVISORY_LOCK_INTEGER = ActiveRecord::Type::Integer.new(limit: 4).freeze
     PROCESS_LOCK_STRIPES = Array.new(64) { Mutex.new }.freeze
 
     class << self
@@ -30,8 +32,20 @@ module Security
       end
 
       def acquire_database_lock(lock_id)
-        SecurityIpBlock.connection.execute(
-          "SELECT pg_advisory_xact_lock(#{ADVISORY_LOCK_NAMESPACE}, #{lock_id})"
+        binds = [
+          ActiveRecord::Relation::QueryAttribute.new(
+            "namespace",
+            ADVISORY_LOCK_NAMESPACE,
+            ADVISORY_LOCK_INTEGER
+          ),
+          ActiveRecord::Relation::QueryAttribute.new("lock_id", lock_id, ADVISORY_LOCK_INTEGER)
+        ]
+
+        SecurityIpBlock.connection.exec_query(
+          ADVISORY_LOCK_SQL,
+          "Security::IpAccessOperationLock",
+          binds,
+          prepare: true
         )
       end
     end

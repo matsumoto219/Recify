@@ -39,11 +39,24 @@ RSpec.describe Security::IpAccessOperationLock do
 
   it 'IPごとのdatabase advisory transaction lockを取得する' do
     connection = SecurityIpBlock.connection
+    ip_address = "8.8.8.8'); SELECT pg_sleep(1); --"
+    unsigned_lock_id = Zlib.crc32("recify.security_ip_access.#{ip_address}")
+    expected_lock_id = unsigned_lock_id >= (2**31) ? unsigned_lock_id - (2**32) : unsigned_lock_id
     allow(SecurityIpBlock).to receive(:connection).and_return(connection)
-    expect(connection).to receive(:execute)
-      .with(a_string_including('pg_advisory_xact_lock'))
+    expect(connection).to receive(:exec_query)
+      .with(
+        'SELECT pg_advisory_xact_lock($1, $2) IS NULL AS lock_result_ignored',
+        'Security::IpAccessOperationLock',
+        satisfy do |binds|
+          binds.map(&:value_for_database) == [
+            described_class::ADVISORY_LOCK_NAMESPACE,
+            expected_lock_id
+          ]
+        end,
+        prepare: true
+      )
       .and_call_original
 
-    described_class.call(ip_address: '8.8.8.8') { true }
+    described_class.call(ip_address: ip_address) { true }
   end
 end
