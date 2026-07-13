@@ -131,6 +131,13 @@ RSpec.describe "レシート処理進捗の実Chrome表示", type: :system, mobi
     JAVASCRIPT
   end
 
+  def stored_progress_state(receipt)
+    page.evaluate_script(
+      "window.sessionStorage.getItem(arguments[0])",
+      "receipt-processing-popover:#{receipt.public_id}"
+    )
+  end
+
   def force_processing_card_sync
     result = page.evaluate_async_script(<<~JAVASCRIPT, Capybara.default_max_wait_time * 1000)
       const timeoutMilliseconds = arguments[0]
@@ -160,6 +167,35 @@ RSpec.describe "レシート処理進捗の実Chrome表示", type: :system, mobi
     JAVASCRIPT
 
     expect(result).to be(true)
+  end
+
+  it "別カードを開いた後は直前のpopoverを閉じた状態で保持する" do
+    user = create_system_test_user
+    first_receipt, = create_processing_fixture(user:, phase: :ocr)
+    second_receipt, = create_processing_fixture(user:, phase: :ai)
+
+    sign_in_through_browser(user)
+    wait_for_stimulus_controller("receipt-processing-sync")
+
+    first_panel_id = open_progress(first_receipt)
+    second_trigger = find("##{second_receipt.dom_target_id} .receipt-processing-trigger")
+    second_panel_id = second_trigger["aria-controls"]
+    page.execute_script("arguments[0].click()", second_trigger)
+
+    aggregate_failures do
+      expect(page).to have_css("##{second_panel_id}.is-open")
+      expect(page).to have_css("##{first_panel_id}[hidden]", visible: :all)
+      expect(stored_progress_state(first_receipt)).to eq("closed")
+      expect(stored_progress_state(second_receipt)).to eq("open")
+    end
+
+    page.refresh
+
+    aggregate_failures do
+      expect(page).to have_css("##{second_panel_id}.is-open")
+      expect(page).to have_css("##{first_panel_id}[hidden]", visible: :all)
+      expect(page).to have_css(".receipt-processing-popover-panel.is-open", count: 1)
+    end
   end
 
   it "390pxで各phaseを区別し、Turbo更新・theme・reduced motion・縦配置を維持する" do
@@ -300,7 +336,8 @@ RSpec.describe "レシート処理進捗の実Chrome表示", type: :system, mobi
     set_viewport(width: 375, height: 812)
     page.refresh
     expect(page.evaluate_script("window.innerWidth")).to eq(375)
-    vertical_styles = progress_style_snapshot(open_progress(fixtures.fetch(:organizing).first))
+    expect(page).to have_css("##{ocr_panel_id}.is-open")
+    vertical_styles = progress_style_snapshot(ocr_panel_id)
     aggregate_failures do
       expect(vertical_styles.fetch("activeAnimation")).to eq("receipt-processing-interval-flow-vertical")
       expect(vertical_styles.fetch("activeAnimationCount")).to eq(1)

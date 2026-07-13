@@ -152,7 +152,7 @@ export default class extends Controller {
   handleAnotherPopoverOpen (event) {
     if (event.detail?.controller === this) return
 
-    this.closePopover({ restoreFocus: false, persist: false })
+    this.closePopover({ restoreFocus: false })
   }
 
   handleDocumentPointerDown (event) {
