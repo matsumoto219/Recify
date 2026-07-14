@@ -119,9 +119,12 @@ RSpec.configure do |config|
     WebMock.allow_net_connect!
   end
 
-  config.after(type: :system) do
+  config.after(type: :system) do |example|
+    allowed_patterns = Array(example.metadata[:allowed_browser_console_failures])
     unexpected_entries = page.driver.browser.logs.get(:browser).select do |entry|
-      entry.level == "SEVERE" && !blocked_external_font_entry?(entry)
+      entry.level == "SEVERE" &&
+        !blocked_external_font_entry?(entry) &&
+        allowed_patterns.none? { |pattern| entry.message.match?(pattern) }
     end
     messages = unexpected_entries.map { |entry| "[#{entry.level}] #{entry.message}" }
 

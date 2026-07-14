@@ -4,6 +4,11 @@ require_relative "../support/system_test_helpers"
 RSpec.describe "セキュリティ設定の本人確認", type: :system do
   include ActiveSupport::Testing::TimeHelpers
 
+  EXPECTED_REAUTHENTICATION_CONSOLE_FAILURES = [
+    %r{/settings/passkeys/options.+428},
+    %r{/settings/security/reauthentication.+422}
+  ].freeze
+
   def sign_in_through_browser(user)
     visit new_user_session_path
     fill_in "user_email", with: user.email
@@ -34,12 +39,16 @@ RSpec.describe "セキュリティ設定の本人確認", type: :system do
     end
 
     aggregate_failures do
-      expect(expected_entries.size).to be >= patterns.size
+      patterns.each do |pattern|
+        expect(expected_entries.any? { |entry| entry.message.match?(pattern) }).to be(true)
+      end
       expect(unexpected_entries).to be_empty
     end
   end
 
-  it "期限切れ時のpasskey preloadでは遷移せず、登録操作後だけ本人確認して元へ戻る", :mobile do
+  it "期限切れ時のpasskey preloadでは遷移せず、登録操作後だけ本人確認して元へ戻る",
+    :mobile,
+    allowed_browser_console_failures: EXPECTED_REAUTHENTICATION_CONSOLE_FAILURES do
     with_mobile_viewport do
       user = create_system_test_user
       sign_in_through_browser(user)
@@ -70,10 +79,7 @@ RSpec.describe "セキュリティ設定の本人確認", type: :system do
         expect(page).to have_content(I18n.t("settings.security.reauthentication.messages.succeeded"))
         expect(page.evaluate_script("window.innerWidth")).to eq(390)
         expect(page.evaluate_script("document.documentElement.scrollWidth")).to eq(390)
-        expect_only_expected_browser_failures(
-          %r{/settings/passkeys/options.+428},
-          %r{/settings/security/reauthentication.+422}
-        )
+        expect_only_expected_browser_failures(*EXPECTED_REAUTHENTICATION_CONSOLE_FAILURES)
       end
     end
   end
