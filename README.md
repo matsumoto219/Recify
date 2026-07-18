@@ -4,246 +4,218 @@
 
 # Recify
 
-Recifyは、レシート画像をアップロードし、OCR解析とAI補完によって店舗名・日付・金額・明細・カテゴリ整理を支援するレシート管理アプリです。
+> レシート整理を、もっと簡単に。
 
-支出記録を、画像アップロード、解析、確認、編集、保存までの流れで扱えるようにすることを目指しています。
+## Current release
 
-## URL
+**Current release: v1.2.0**
 
-- URL: https://recify-app.com
+- Version: [`VERSION`](VERSION)
+- Changelog: [`CHANGELOG.md`](CHANGELOG.md)
+- Release notes: [`release_notes/v1.2.0.md`](release_notes/v1.2.0.md)
+- Versioning policy: [`VERSIONING.md`](VERSIONING.md)
+- Release tag: [`v1.2.0`](https://github.com/matsumoto219/Recify/tree/v1.2.0)
 
-## 開発背景
+## プロダクト概要
 
-レシートは紙のままだと保管・検索・集計がしづらく、手入力にも負担がかかります。Recifyは、レシート画像や手動入力から支出データを半自動で記録し、日々の入力・整理の手間を減らすことを目的に開発しました。
+Recifyは、レシート画像から店舗名・購入日時・金額・明細を読み取り、確認しやすい支出記録へ整理するRailsアプリです。
 
-## 設計上のポイント
+画像のアップロードから解析、内容確認、編集、保存、検索までをひとつの流れで扱い、手入力や紙のレシートを探す負担を減らします。AIによるカテゴリ整理を支援し、設定に応じて商品名候補を補完します。
 
-- OCR/AIは確定値ではなく入力補助として扱い、OCR原文、AI候補、ユーザー確定値を分けて保持します。
-- 税率、割引、支払調整、丸めを考慮し、OCR/AIの候補値を保存前に金額整合性チェックへ通します。
-- 画像解析はバックグラウンドで処理し、解析完了までブラウザ上で待機しなくてもよい設計にしています。
-- AIが利用できない場合でも、OCR結果をもとに最低限の確認・編集を進められるようにしています。
-- ゲスト利用から本登録へ移行できる導線を用意し、メール確認や規約同意を組み合わせています。
+OCRやAIの結果は入力補助です。抽出・補完された内容が常に正しいとは限らないため、利用者が確認し、必要に応じて修正することを前提としています。
+
+## 試してみる
+
+- 本番環境: [https://recify-app.com](https://recify-app.com)
+- ログイン画面: [https://recify-app.com/users/sign_in](https://recify-app.com/users/sign_in)
+
+ログイン画面で「ゲストとして試す」を選択すると、アカウント登録前に一部機能を体験できます。
+
+ゲストアカウントとそのデータは一時的な体験用で、一定期間利用がない場合に削除されます。また、一部機能には制限があります。本番環境では、ゲスト利用であっても、個人情報や第三者の情報など機微な内容を含む実レシートをアップロードしないでください。
+
+利用前に以下をご確認ください。
+
+- [利用規約](https://recify-app.com/terms)
+- [プライバシーポリシー](https://recify-app.com/privacy)
+- [お問い合わせ](https://recify-app.com/contact)
+
+<details>
+<summary><strong>目次</strong></summary>
+
+- [スクリーンショット](#スクリーンショット)
+- [主な機能](#主な機能)
+- [利用フロー](#利用フロー)
+- [設計上の工夫](#設計上の工夫)
+- [技術スタック](#技術スタック)
+- [セキュリティ・プライバシー方針](#セキュリティプライバシー方針)
+- [主要データ構成](#主要データ構成)
+- [インフラ構成](#インフラ構成)
+- [最新リリース](#最新リリース)
+- [今後の改善候補](#今後の改善候補)
+- [法務・ライセンス・脆弱性報告](#法務ライセンス脆弱性報告)
+
+</details>
+
+## スクリーンショット
+
+以下の画像は、ローカル環境の匿名テストユーザーと架空データを使用しています。実ユーザー、実レシート、メールアドレス、IPアドレス、解析の生データは含みません。
+
+### ランディングページ
+
+![Recifyのプロダクト概要と利用導線を表示したランディングページ](.github/readme/screenshots/landing-page.png)
+
+### レシート一覧と処理状態
+
+![架空の店舗と金額を使ったRecifyのレシート一覧および解析処理状態](.github/readme/screenshots/receipt-dashboard.png)
+
+### レシート編集と金額確認
+
+![架空の商品明細、税率、支払情報を確認できるRecifyのレシート編集画面](.github/readme/screenshots/receipt-edit.png)
+
+### モバイル表示
+
+<p align="center">
+  <img src=".github/readme/screenshots/mobile-receipts.png" alt="390ピクセル幅で表示したRecifyのモバイル向けレシート一覧" width="390">
+</p>
 
 ## 主な機能
 
-- レシート画像アップロード
-- OCR解析による店舗名、日付、合計金額、明細候補の抽出
-- AI補完によるカテゴリ分類や商品名整理の支援
-- 明細、税区分、支払情報、合計金額の確認・編集
-- 税率、割引、支払調整を含む金額整合性チェック
+- レシート画像のアップロードと手動入力
+- 複数のレシート画像を選択できる一括アップロード
+- OCRによる店舗名、購入日時、金額、明細候補の抽出
+- AIによるカテゴリ整理と、設定に応じた商品名候補の補完
+- バックグラウンド解析と画面上での処理状態更新
+- 明細、数量、税率、割引、支払情報、調整額の確認・編集
+- 複数税率や支払調整を含む金額整合性の確認
 - レシート一覧、検索、詳細表示
-- ゲスト利用と通常ユーザーへの本登録
+- ゲスト利用から本登録への移行
 - メール確認、パスワード再設定、アカウントロック解除
-- パスキー、認証アプリ、リカバリーコードを使った認証強化
-- ライト/ダークテーマ切替
-- お知らせ、通知、問い合わせ
-- 利用規約・プライバシーポリシーの同意管理
+- パスキー、認証アプリ、リカバリーコードによる認証強化
+- ライトテーマとダークテーマ
+- お知らせ、通知、お問い合わせ
+- 利用規約・プライバシーポリシーの表示と同意管理
 
 ## 利用フロー
 
-1. レシート画像をアップロードします。
-2. OCRで店舗名、日付、金額、明細候補を抽出します。
-3. 必要に応じてAI補完でカテゴリや商品名整理を支援します。
-4. ユーザーが明細、税率、支払情報、調整額を確認・編集します。
-5. 金額整合性を確認し、レシートとして保存します。
+1. レシート画像をアップロードするか、内容を手動で入力します。
+2. アップロードした画像をバックグラウンドでOCR解析します。
+3. AIが利用可能な場合は、カテゴリ整理などの補完を行います。
+4. 店舗名、購入日時、明細、税率、支払情報、合計金額を確認し、必要に応じて編集・保存します。
+5. 保存した記録を一覧や検索から見返します。
 
-## 使用技術
+AIを利用できない場合でも、OCR結果をもとに確認・編集へ進めるようにしています。外部サービスの状態や解析結果によっては、利用者による確認が必要な状態になります。
 
-**アプリケーション**
+## 設計上の工夫
 
-| 使用技術 | 詳細 |
+- OCRの抽出候補、AIの補完候補、利用者が確定した値を分けて扱います。
+- 金額は整数円を基本とし、複数税率、割引、追加料金、支払調整、丸めを考慮して検算します。
+- 画像解析をバックグラウンドで行い、処理状態を画面へ反映します。
+- AI連携に問題がある場合も、OCR結果を利用した確認フローを維持します。
+- 不確かな値を自動確定せず、確認が必要な項目として利用者へ示します。
+- レスポンシブ表示、ライト／ダークテーマ、動きを抑える表示設定に対応します。
+- 認証、レシート処理、金額計算、外部連携の責務と依存方向を分け、回帰テストで境界を確認します。
+
+## 技術スタック
+
+### アプリケーション
+
+| 技術 | 用途 |
 | --- | --- |
 | Ruby 4.0.5 | アプリケーション実行環境 |
 | Ruby on Rails 8.1.3 | Webアプリケーションフレームワーク |
-| PostgreSQL | レシート、ユーザー、管理・監査データの保存 |
-| Turbo / Stimulus | 画面遷移、フォーム操作、UI制御 |
+| PostgreSQL | ユーザーとレシート関連データの保存 |
+| Turbo / Stimulus | 画面遷移、フォーム操作、処理状態の更新 |
 | Tailwind CSS | UIスタイリング |
 | Devise | ユーザー認証、メール確認、パスワード再設定 |
-| WebAuthn | パスキー登録・ログイン |
-| Active Storage | レシート画像の添付管理 |
+| WebAuthn / ROTP | パスキーと認証アプリによる追加認証 |
+| Active Storage / ruby-vips | レシート画像の添付と画像処理 |
 | Solid Queue / Solid Cache / Solid Cable | 非同期ジョブ、キャッシュ、リアルタイム更新 |
 
-<br>
+### OCR・AI・外部サービス
 
-**OCR / AI / 外部サービス**
-
-| 使用技術 | 詳細 |
+| 技術 | 用途 |
 | --- | --- |
-| Azure Document Intelligence | レシート画像から店舗名、日付、金額、明細候補を抽出 |
-| OpenAI API | カテゴリ分類や商品名整理などのAI補完 |
-| Resend | 認証メールや問い合わせ関連メールの送信 |
+| Azure Document Intelligence | レシート画像から店舗名、日時、金額、明細候補を抽出 |
+| OpenAI API | カテゴリ整理などのAI補完 |
+| Cloudflare Edge | CDNと公開経路の保護 |
+| Cloudflare Turnstile | ボット検証 |
+| Resend | 認証・通知・問い合わせ関連メールの送信 |
 | Sentry | エラー監視 |
-| Cloudflare Turnstile | bot対策 |
 
-<br>
+### インフラ・開発
 
-**インフラ / 運用**
-
-| 使用技術 | 詳細 |
+| 技術 | 用途 |
 | --- | --- |
 | AWS Lightsail | アプリケーション実行基盤 |
-| Docker | アプリケーション実行環境のコンテナ化 |
-| Kamal | コンテナデプロイ |
-| Cloudflare | DNS/CDN、入口保護、Abuse protection |
-| Lightsail snapshots / metrics alarms | バックアップとメトリクス通知 |
+| Docker / Kamal | コンテナ化とデプロイ |
+| RSpec | モデル、リクエスト、サービス、ジョブ、システムテスト |
+| RuboCop / StandardJS / Stylelint | Ruby、JavaScript、CSSの静的確認 |
+| Brakeman / Bundler Audit / Importmap Audit | アプリケーションと依存関係のセキュリティ確認 |
 
-<br>
+## セキュリティ・プライバシー方針
 
-**品質確認**
+- パスキー、認証アプリ、リカバリーコードに対応します。
+- メール確認、アカウントロック、重要操作時の本人再確認を行います。
+- レート制限とボット対策により、不正利用や過度なアクセスを抑制します。
+- アップロード画像の形式、容量、画像としての妥当性を検証します。
+- 通常利用者向け機能と管理機能の権限を分離します。
+- 重要な操作を監査できる記録を残します。
+- ログやエラー監視へ認証情報や機微情報が残りにくいよう、削減とマスキングを行います。
+- CIでテスト、Lint、静的解析、依存関係のセキュリティ確認を実行します。
 
-| 使用技術 | 詳細 |
-| --- | --- |
-| RSpec | モデル、リクエスト、サービス、ジョブなどのテスト |
-| RuboCop | Rubyコードの静的解析 |
-| ERB Lint | ERBテンプレートのLint |
-| StandardJS | JavaScriptのLint |
-| Stylelint | CSSのLint |
-| gitleaks | secret混入検知 |
-| bundler-audit / brakeman | 依存GemとRailsアプリのセキュリティチェック |
+画像解析では、レシート画像がOCRサービスへ送信される場合があります。AI補完では、原則としてOCRで抽出したテキストや解析に必要な構造化情報を利用します。詳しくは[プライバシーポリシー](https://recify-app.com/privacy)をご確認ください。
 
-## OCR / AI補完
+## 主要データ構成
 
-Recifyの解析フローは、OCR、AI補完、保存判定を分けて扱います。
+公開機能を説明するため、レシート管理に関係する主要モデルと関連だけを、現行のモデル関連とデータベーススキーマに基づいて示しています。この図は概念理解を目的としており、物理的なデータベース構造やその互換性を保証するものではありません。
 
-- OCRはAzure Document Intelligenceを利用し、レシート画像から候補値を抽出します。
-- AI補完はOpenAI APIを利用し、カテゴリや商品名整理を支援します。
-- OCR結果とAI結果をそのまま保存せず、金額整合性やレビュー判定を組み合わせます。
-- AIが不確かな内容は、ユーザー確認が必要な状態として扱います。
-- 外部サービス障害時は、認証エラー、利用制限、タイムアウト、解析失敗を分けて扱います。
-- OCR/AI機能は実装済みで、運用設定により利用範囲や公開状態を制御できる設計です。
-- 抽出結果は常に正しいものとして扱わず、必要に応じてユーザーが確認・修正する前提です。
+<a href=".github/readme/diagrams/core-data-model.png">
+  <img src=".github/readme/diagrams/core-data-model.png" alt="User、Receipt、明細、調整、支払、税詳細、解析履歴の関連を示したRecify主要データ構成図">
+</a>
 
-## 金額計算 / 税率対応
+画像を選択すると原寸で確認できます。
 
-OCRやAIの候補値を元に、アプリ側で金額の整合性を確認する方針にしています。
-
-- 税込・税抜の金額を扱えるように整数円で正規化
-- 8% / 10% など複数税率に対応
-- 明細単位、税率単位、支払単位の情報を分けて保持
-- 割引、ポイント利用、キャッシュレス還元などの支払調整に対応
-- 丸め設定を考慮した合計金額の検算
-- OCR/AI結果に矛盾がある場合は、保存前に確認が必要な状態として扱う
-
-## セキュリティ・運用面の工夫
-
-公開運用を想定し、認証、管理画面、ログ、監視、バックアップの基本を整えています。
-
-- Deviseベースの認証
-- メール確認、ロック、ログイン履歴管理
-- Passkey / WebAuthn対応
-- 認証アプリとリカバリーコードによる追加認証
-- ゲスト利用から本登録への安全な導線
-- 管理者向けの重要操作に対する追加確認
-- Cloudflareを利用した公開前提の入口保護
-- Turnstileによるbot対策
-- Rails / Sentry / structured logでの認証情報の秘匿
-- 外部API連携時の安全なメタデータ記録
-- Sentryによるエラー監視
-- DBと添付画像を対象にしたバックアップ・復旧確認
-- Lightsail snapshotとメトリクス通知
-- 法務文書の同期と同意履歴管理
-- HSTSは公開後の安定状況を見て段階導入予定
-
-## 管理画面
-
-管理画面は通常ユーザー向け導線とは分離し、管理権限と保護されたアクセス経路を前提にしています。重要な管理操作では、操作理由や追加確認を組み合わせて安全性を高めています。
-
-## 画面構成
-
-- LP
-- 認証画面
-- レシート一覧
-- レシート登録
-- レシート詳細 / 編集
-- 設定
-- 通知
-- 問い合わせ
-- 法務ページ
-- 管理者画面
-
-## ER図
-
-主要モデルだけを抜粋した簡易ER図です。読みやすいように、ドメインごとにグループ分けしています。
-
-```mermaid
-flowchart TB
-  users["users<br/>account / admin / guest"]
-
-  subgraph auth["Account / Auth"]
-    direction TB
-    auth_records["passkeys<br/>user_sessions<br/>TOTP / recovery codes<br/>usage limits"]
-  end
-
-  subgraph receipt["Receipt domain"]
-    direction TB
-    receipts["receipts<br/>status / store / total"]
-    receipt_details["receipt_items<br/>receipt_tax_details<br/>receipt_payments<br/>receipt_adjustments"]
-    attachments["Active Storage<br/>receipt image"]
-  end
-
-  subgraph analysis["OCR / AI analysis"]
-    direction TB
-    runs["receipt_analysis_runs<br/>provider / phase / status"]
-  end
-
-  subgraph legal["Legal documents"]
-    direction TB
-    legal_documents["legal_documents"]
-  end
-
-  subgraph content["Public content"]
-    direction TB
-    public_content["announcements<br/>announcement_links"]
-  end
-
-  subgraph support["User support records"]
-    direction TB
-    support_records["legal_acceptances<br/>contact_requests<br/>notifications"]
-  end
-
-  subgraph ops["Admin / Audit"]
-    direction TB
-    ops_records["audit_logs<br/>security events<br/>system_settings"]
-  end
-
-  users --> auth_records
-  users --> receipts
-  users --> support_records
-  users -.-> public_content
-  users -.-> ops_records
-  receipts --> receipt_details
-  receipts --> runs
-  receipts --> attachments
-  receipts -.-> ops_records
-  legal_documents --> support_records
-  ops_records -.-> runs
-
-  classDef account fill:#eef2ff,stroke:#6366f1,color:#111827;
-  classDef receipt fill:#ecfdf5,stroke:#10b981,color:#111827;
-  classDef analysis fill:#fff7ed,stroke:#f97316,color:#111827;
-  classDef support fill:#fdf2f8,stroke:#ec4899,color:#111827;
-  classDef ops fill:#f8fafc,stroke:#64748b,color:#111827;
-
-  class users,auth_records account;
-  class receipts,receipt_details,attachments receipt;
-  class runs analysis;
-  class legal_documents,public_content,support_records support;
-  class ops_records ops;
-```
+レシート画像は独立した`ReceiptImage`モデルやテーブルではなく、`Receipt`の任意のActive Storage添付として管理します。認証・監査・運用管理用の内部モデルは、この公開向け図から省略しています。
 
 ## インフラ構成
 
-以下は、Recifyの本番運用で利用している主要サービスのインフラ構成図です。
+ブラウザからRailsアプリケーション、バックグラウンド処理、データ保存、外部OCR／AI、メール、エラー監視までの関係を高レベルに示します。公開理解のための概念図であり、実際のネットワークトポロジーや運用上の境界を示すものではありません。
 
-![Recify infrastructure diagram](.github/readme/infrastructure.png)
+<a href=".github/readme/diagrams/infrastructure.png">
+  <img src=".github/readme/diagrams/infrastructure.png" alt="ブラウザから公開経路、Webアプリ、非同期処理、保存先、外部連携までを示したRecifyインフラ構成図">
+</a>
 
-## 今後の改善予定
+画像を選択すると原寸で確認できます。
 
-- 統計ページの追加
-  - グラフ表示
-  - 月別・年別集計
-  - カテゴリ別や購入内容ごとの割合表示
-- S3 / R2など外部オブジェクトストレージへの移行
-- OCR / AI精度改善
-- レシート分類・検索体験の強化
-- スマホアプリ向けAPIの実装
+## 最新リリース
+
+### v1.2.0
+
+v1.2.0では、レシート解析の進行表示、ゲスト本登録、設定保存、画像の代替表示、メールアドレスのコピーを改善しました。あわせて、セッション失効、本人確認、添付ファイル保護、機微情報の取り扱いを強化しました。
+
+このリリースにデータベースマイグレーションはありません。
+
+主な変更は[`CHANGELOG.md`](CHANGELOG.md)と[`release_notes/v1.2.0.md`](release_notes/v1.2.0.md)をご覧ください。
+
+## 今後の改善候補
+
+以下は将来の検討事項であり、提供時期を確約するものではありません。
+
+- 月別・年別・カテゴリ別の集計とグラフ表示
+- レシート検索・分類体験の改善
+- OCR／AI補完精度の改善
+- 画像ストレージ構成の拡張
+- モバイルアプリ向けAPI
+- 公開ライセンスの明確化と、脆弱性報告専用窓口の整備
+
+## 法務・ライセンス・脆弱性報告
+
+- [利用規約](https://recify-app.com/terms)
+- [プライバシーポリシー](https://recify-app.com/privacy)
+- [お問い合わせ](https://recify-app.com/contact)
+
+Recifyはレシート管理を補助するサービスであり、税務、会計、法律上の専門的助言を提供するものではありません。
+
+現時点では、ソースコードの利用条件を示す`LICENSE`ファイルを配置していません。オープンソースライセンスが適用されるものとして取り扱わないでください。
+
+脆弱性に関する連絡は、お問い合わせフォームからお願いします。報告には、認証情報、実ユーザーの個人情報、実レシート、外部サービスの秘密情報を含めないでください。
