@@ -15,7 +15,7 @@ module Amounts
       @tax_excluded_price_conversion_enabled = tax_excluded_price_conversion_enabled != false
       @base_result = base_result
       @calculation_profile_result = Amounts::CalculationProfileResult.wrap(calculation_profile_result)
-      @evaluated_candidates = Array(evaluated_candidates).presence
+      @evaluated_candidates = evaluated_candidates.nil? ? nil : Array(evaluated_candidates)
     end
 
     def call

@@ -205,7 +205,12 @@ module Amounts
 
     def computed_basis_value(key, fallback)
       return fallback unless preserve_calculation_profile_output?
-      return :line_total_as_recorded if key == :item_amount_basis
+      profile_value = calculation_profile_value(key)
+      if key == :item_amount_basis
+        return :line_total_as_net if profile_value.to_s == "line_total_as_net"
+        return :line_total_as_recorded
+      end
+      return profile_value.to_sym if profile_value.present?
 
       fallback
     end

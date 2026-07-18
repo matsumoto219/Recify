@@ -2662,6 +2662,74 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'edit_saveでは明示されたexternal net source semanticsと現在の丸め設定を使う' do
+      result = call_service(
+        receipt: {
+          receipt_tax_basis: 'tax_added_to_subtotal',
+          item_amount_basis: 'line_total_as_net',
+          tax_detail_amount_basis: 'net'
+        },
+        receipt_items: [
+          { price: 128, quantity: 2, quantity_unit_code: 'each', line_total: 256, tax_rate: BigDecimal('0.08') },
+          { price: 198, quantity: 1, quantity_unit_code: 'each', line_total: 198, tax_rate: BigDecimal('0.08') },
+          { price: 115, quantity: 1, quantity_unit_code: 'each', line_total: 115, tax_rate: BigDecimal('0.08') },
+          { price: 298, quantity: 1, quantity_unit_code: 'each', line_total: 298, tax_rate: BigDecimal('0.08') },
+          { price: 3, quantity: 1, quantity_unit_code: 'each', line_total: 3, tax_rate: BigDecimal('0.10') }
+        ],
+        context: :edit_save,
+        tax_rounding_mode: :floor,
+        discount_rounding_mode: :round
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 870, tax: 69, total: 939)
+        expect(result[:computed]).to include(
+          receipt_tax_basis: :tax_added_to_subtotal,
+          item_amount_basis: :line_total_as_net,
+          tax_detail_amount_basis: :net
+        )
+        expect(result[:calculation_profile]).to eq(
+          tax_rounding_mode: :floor,
+          discount_rounding_mode: :round,
+          receipt_tax_basis: :tax_added_to_subtotal,
+          item_amount_basis: :line_total_as_net,
+          tax_detail_amount_basis: :net
+        )
+        expect(result.dig(:amount_engine, :selected_basis)).to eq('items_as_tax_excluded')
+      end
+    end
+
+    it 'edit_saveではmixed provenanceを保持しつつ保存済みgross itemをrecorded sourceとして扱う' do
+      result = call_service(
+        receipt: {
+          receipt_tax_basis: 'total_includes_tax',
+          item_amount_basis: 'mixed_by_tax_rate_group',
+          tax_detail_amount_basis: 'gross'
+        },
+        receipt_items: [
+          { price: 140, quantity: 1, quantity_unit_code: 'each', line_total: 140, tax_rate: BigDecimal('0.08') },
+          { price: 151, quantity: 1, quantity_unit_code: 'each', line_total: 151, tax_rate: BigDecimal('0.08') },
+          { price: 330, quantity: 1, quantity_unit_code: 'each', line_total: 330, tax_rate: BigDecimal('0.10') },
+          { price: 490, quantity: 1, quantity_unit_code: 'each', line_total: 490, tax_rate: BigDecimal('0.10') },
+          { price: 50, quantity: 1, quantity_unit_code: 'each', line_total: 50, tax_rate: BigDecimal('0') }
+        ],
+        context: :edit_save,
+        tax_rounding_mode: :floor,
+        discount_rounding_mode: :round
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 1_066, tax: 95, total: 1_161)
+        expect(result[:computed]).to include(
+          receipt_tax_basis: :total_includes_tax,
+          item_amount_basis: :line_total_as_recorded,
+          tax_detail_amount_basis: :gross
+        )
+        expect(result[:calculation_profile]).to include(item_amount_basis: :mixed_by_tax_rate_group)
+        expect(result.dig(:amount_engine, :selected_basis)).to eq('items_as_tax_included')
+      end
+    end
+
     it 'applies tax excluded calculation profile when strict external tax evidence is complete' do
       result = call_service(
         receipt: {

@@ -40,6 +40,9 @@
 #
 class ReceiptAmountService
   TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY = "amount_engine.tax_excluded_price_conversion_enabled"
+  RECEIPT_TAX_BASES = %i[tax_added_to_subtotal total_includes_tax].freeze
+  ITEM_AMOUNT_BASES = %i[line_total_as_net line_total_as_recorded mixed_by_tax_rate_group].freeze
+  TAX_DETAIL_AMOUNT_BASES = %i[gross net unknown].freeze
 
   def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
     new(
@@ -162,11 +165,12 @@ class ReceiptAmountService
     @discount_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
       discount_rounding_mode || Amounts::Rounding::DISCOUNT_DEFAULT_MODE
     )
+    @edit_source_semantics = normalized_edit_source_semantics
   end
 
   def call
     tax_excluded_price_conversion_enabled = tax_excluded_price_conversion_enabled?
-    profile_estimation = applicable_calculation_profile(estimate_calculation_profile)
+    profile_estimation = active_calculation_profile
     active_profile = profile_estimation.applied_profile || {}
     active_tax_rounding_mode = active_profile[:tax_rounding_mode] || @tax_rounding_mode
     active_discount_rounding_mode = active_profile[:discount_rounding_mode] || @discount_rounding_mode
@@ -190,7 +194,7 @@ class ReceiptAmountService
       tax_excluded_price_conversion_enabled: tax_excluded_price_conversion_enabled,
       base_result: base_result,
       calculation_profile_result: profile_estimation,
-      evaluated_candidates: @estimated_candidates
+      evaluated_candidates: evaluated_candidates_for_engine
     ).call
   end
 
@@ -225,6 +229,45 @@ class ReceiptAmountService
       mismatch_codes: [],
       mismatch_messages: []
     }
+  end
+
+  def active_calculation_profile
+    return trusted_edit_calculation_profile if @edit_source_semantics.present?
+
+    applicable_calculation_profile(estimate_calculation_profile)
+  end
+
+  def trusted_edit_calculation_profile
+    profile = {
+      tax_rounding_mode: @tax_rounding_mode,
+      discount_rounding_mode: @discount_rounding_mode
+    }.merge(@edit_source_semantics)
+
+    Amounts::CalculationProfileResult.new(
+      profile: profile,
+      applied_profile: profile
+    )
+  end
+
+  def evaluated_candidates_for_engine
+    return @estimated_candidates if @edit_source_semantics.blank?
+
+    native_profile_candidates.select do |candidate|
+      candidate_matches_edit_source_semantics?(candidate)
+    end
+  end
+
+  def candidate_matches_edit_source_semantics?(candidate)
+    resolver = Amounts::CandidateProfileResolver.new(candidate)
+
+    resolver.receipt_tax_basis == @edit_source_semantics[:receipt_tax_basis] &&
+      resolver.item_amount_basis == effective_edit_item_amount_basis
+  end
+
+  def effective_edit_item_amount_basis
+    return :line_total_as_recorded if @edit_source_semantics[:item_amount_basis] == :mixed_by_tax_rate_group
+
+    @edit_source_semantics[:item_amount_basis]
   end
 
   def applicable_calculation_profile(profile_estimation)
@@ -532,8 +575,41 @@ class ReceiptAmountService
       amount_total_amount_submitted: fetch_value(r, :amount_total_amount_submitted),
       amount_subtotal_amount_submitted: fetch_value(r, :amount_subtotal_amount_submitted),
       amount_tax_amount_submitted: fetch_value(r, :amount_tax_amount_submitted),
-      amount_tax_rate_submitted: fetch_value(r, :amount_tax_rate_submitted)
+      amount_tax_rate_submitted: fetch_value(r, :amount_tax_rate_submitted),
+      receipt_tax_basis: fetch_value(r, :receipt_tax_basis),
+      item_amount_basis: fetch_value(r, :item_amount_basis),
+      tax_detail_amount_basis: fetch_value(r, :tax_detail_amount_basis)
     }
+  end
+
+  def normalized_edit_source_semantics
+    return {} unless @context == :edit_save
+
+    receipt_tax_basis = normalized_source_semantic(@receipt[:receipt_tax_basis], RECEIPT_TAX_BASES)
+    item_amount_basis = normalized_source_semantic(@receipt[:item_amount_basis], ITEM_AMOUNT_BASES)
+    return {} unless receipt_tax_basis && item_amount_basis
+    return {} unless valid_edit_source_semantic_pair?(receipt_tax_basis, item_amount_basis)
+
+    semantics = {
+      receipt_tax_basis: receipt_tax_basis,
+      item_amount_basis: item_amount_basis
+    }
+    tax_detail_amount_basis = normalized_source_semantic(@receipt[:tax_detail_amount_basis], TAX_DETAIL_AMOUNT_BASES)
+    semantics[:tax_detail_amount_basis] = tax_detail_amount_basis if tax_detail_amount_basis
+    semantics
+  end
+
+  def normalized_source_semantic(value, allowed_values)
+    normalized = value.to_s.to_sym
+    normalized if allowed_values.include?(normalized)
+  end
+
+  def valid_edit_source_semantic_pair?(receipt_tax_basis, item_amount_basis)
+    [
+      [ :tax_added_to_subtotal, :line_total_as_net ],
+      [ :total_includes_tax, :line_total_as_recorded ],
+      [ :total_includes_tax, :mixed_by_tax_rate_group ]
+    ].include?([ receipt_tax_basis, item_amount_basis ])
   end
 
   def normalize_item(i)

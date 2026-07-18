@@ -53,6 +53,46 @@ class Receipt < ApplicationRecord
     index_receipts_on_public_id
     index_receipts_on_user_id_and_display_id
   ].freeze
+  AMOUNT_CALCULATION_PROFILE_SCHEMA_VERSION = 1
+  AMOUNT_RECEIPT_TAX_BASES = %w[
+    tax_added_to_subtotal
+    total_includes_tax
+  ].freeze
+  AMOUNT_ITEM_BASES = %w[
+    line_total_as_net
+    line_total_as_recorded
+    mixed_by_tax_rate_group
+  ].freeze
+  AMOUNT_TAX_DETAIL_BASES = %w[
+    gross
+    net
+    unknown
+  ].freeze
+  LEGACY_AMOUNT_SOURCE_SEMANTICS = {
+    "external_tax_from_receipt" => {
+      "receipt_tax_basis" => "tax_added_to_subtotal",
+      "item_amount_basis" => "line_total_as_net",
+      "tax_detail_amount_basis" => "net"
+    },
+    "items_as_tax_excluded" => {
+      "receipt_tax_basis" => "total_includes_tax",
+      "item_amount_basis" => "line_total_as_recorded"
+    },
+    "items_as_tax_included" => {
+      "receipt_tax_basis" => "total_includes_tax",
+      "item_amount_basis" => "line_total_as_recorded"
+    },
+    "mixed_by_tax_rate_group" => {
+      "receipt_tax_basis" => "total_includes_tax",
+      "item_amount_basis" => "line_total_as_recorded",
+      "tax_detail_amount_basis" => "gross"
+    },
+    "printed_tax_details_gross" => {
+      "receipt_tax_basis" => "total_includes_tax",
+      "item_amount_basis" => "line_total_as_recorded",
+      "tax_detail_amount_basis" => "gross"
+    }
+  }.freeze
 
   OCR_ERROR_CODES = %w[
     ocr_unreadable
@@ -263,7 +303,26 @@ class Receipt < ApplicationRecord
   end
 
   def receipt_tax_basis_for_form
+    saved_basis = amount_source_semantics_for_edit["receipt_tax_basis"]
+    return "external" if saved_basis == "tax_added_to_subtotal"
+    return "internal" if saved_basis == "total_includes_tax"
+
     external_tax_basis_from_details? ? "external" : "internal"
+  end
+
+  def amount_source_semantics_for_edit
+    snapshot = amount_calculation_profile
+    return {} unless snapshot.respond_to?(:with_indifferent_access)
+
+    snapshot = snapshot.with_indifferent_access
+    return {} unless snapshot[:schema_version].to_i == AMOUNT_CALCULATION_PROFILE_SCHEMA_VERSION
+    return {} if snapshot[:selected_candidate_status].to_s == "rejected"
+    return {} if snapshot.dig(:amount_engine, :no_safe_candidate) == true
+
+    profile_semantics = sanitized_amount_source_semantics(snapshot[:profile])
+    return edit_source_semantics_projection(profile_semantics) if profile_semantics.present?
+
+    legacy_amount_source_semantics(snapshot)
   end
 
   def receipt_items_limit
@@ -274,7 +333,11 @@ class Receipt < ApplicationRecord
 
   def external_tax_basis_from_details?
     complete_tax_details = receipt_tax_details.to_a.select do |tax_detail|
-      tax_detail.net_amount.to_i.positive? && tax_detail.amount.to_i.positive?
+      tax_detail.rate.to_d.positive? &&
+        tax_detail.net_amount.present? &&
+        tax_detail.net_amount.to_i.positive? &&
+        tax_detail.amount.present? &&
+        tax_detail.amount.to_i >= 0
     end
     return false if complete_tax_details.blank?
 
@@ -288,6 +351,75 @@ class Receipt < ApplicationRecord
       tax_amount.to_i == detail_tax_amount &&
       total_amount.to_i == detail_net_amount + detail_tax_amount
   end
+
+  def sanitized_amount_source_semantics(profile)
+    return {} unless profile.respond_to?(:with_indifferent_access)
+
+    profile = profile.with_indifferent_access
+    receipt_tax_basis = profile[:receipt_tax_basis].to_s
+    item_amount_basis = profile[:item_amount_basis].to_s
+    return {} unless AMOUNT_RECEIPT_TAX_BASES.include?(receipt_tax_basis)
+    return {} unless AMOUNT_ITEM_BASES.include?(item_amount_basis)
+    return {} unless valid_amount_source_basis_pair?(receipt_tax_basis, item_amount_basis)
+
+    semantics = {
+      "receipt_tax_basis" => receipt_tax_basis,
+      "item_amount_basis" => item_amount_basis
+    }
+    tax_detail_amount_basis = profile[:tax_detail_amount_basis].to_s
+    if AMOUNT_TAX_DETAIL_BASES.include?(tax_detail_amount_basis)
+      semantics["tax_detail_amount_basis"] = tax_detail_amount_basis
+    end
+    semantics
+  end
+
+  def legacy_amount_source_semantics(snapshot)
+    return {} unless snapshot[:selected_candidate_status].to_s == "accepted"
+
+    selected_basis = snapshot.dig(:amount_engine, :selected_basis).to_s
+    LEGACY_AMOUNT_SOURCE_SEMANTICS.fetch(selected_basis, {}).dup
+  end
+
+  def edit_source_semantics_projection(semantics)
+    pair = [ semantics["receipt_tax_basis"], semantics["item_amount_basis"] ]
+    case pair
+    when [ "tax_added_to_subtotal", "line_total_as_net" ],
+         [ "total_includes_tax", "line_total_as_recorded" ]
+      semantics
+    when [ "total_includes_tax", "mixed_by_tax_rate_group" ]
+      semantics.merge("item_amount_basis" => "line_total_as_recorded")
+    when [ "tax_added_to_subtotal", "line_total_as_recorded" ]
+      if external_tax_basis_from_details?
+        semantics.merge(
+          "item_amount_basis" => "line_total_as_net",
+          "tax_detail_amount_basis" => "net"
+        )
+      else
+        {
+          "receipt_tax_basis" => "total_includes_tax",
+          "item_amount_basis" => "line_total_as_recorded"
+        }
+      end
+    else
+      {}
+    end
+  end
+
+  def valid_amount_source_basis_pair?(receipt_tax_basis, item_amount_basis)
+    case receipt_tax_basis
+    when "tax_added_to_subtotal"
+      %w[line_total_as_net line_total_as_recorded].include?(item_amount_basis)
+    when "total_includes_tax"
+      %w[line_total_as_recorded mixed_by_tax_rate_group].include?(item_amount_basis)
+    else
+      false
+    end
+  end
+
+  private :sanitized_amount_source_semantics,
+    :legacy_amount_source_semantics,
+    :edit_source_semantics_projection,
+    :valid_amount_source_basis_pair?
 
   scope :active_for_user, -> { where(moderation_status: MODERATION_STATUS_ACTIVE) }
 

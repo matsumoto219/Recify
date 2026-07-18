@@ -19,6 +19,172 @@ RSpec.describe Receipt, type: :model do
     end.to raise_error(ActiveRecord::StaleObjectError)
   end
 
+  describe '#amount_source_semantics_for_edit' do
+    it '保存profileからbasis semanticsだけをallowlist抽出する' do
+      receipt = build_stubbed(
+        :receipt,
+        amount_calculation_profile: {
+          schema_version: 1,
+          profile: {
+            tax_rounding_mode: 'ceil',
+            receipt_tax_basis: 'tax_added_to_subtotal',
+            item_amount_basis: 'line_total_as_net',
+            tax_detail_amount_basis: 'net',
+            item_amount_basis_assignments: [ { tax_rate: 0.08, net_amount: 739 } ]
+          },
+          computed: { subtotal_amount: 742, tax_amount: 59, total_amount: 801 },
+          resolved: { total_amount: 801 }
+        }
+      )
+
+      expect(receipt.amount_source_semantics_for_edit).to eq(
+        'receipt_tax_basis' => 'tax_added_to_subtotal',
+        'item_amount_basis' => 'line_total_as_net',
+        'tax_detail_amount_basis' => 'net'
+      )
+    end
+
+    it 'top-level profileを競合するlegacy selected basisより優先する' do
+      receipt = build_stubbed(
+        :receipt,
+        amount_calculation_profile: {
+          schema_version: 1,
+          selected_candidate_status: 'accepted',
+          profile: {
+            receipt_tax_basis: 'total_includes_tax',
+            item_amount_basis: 'line_total_as_recorded'
+          },
+          amount_engine: { selected_basis: 'external_tax_from_receipt' }
+        }
+      )
+
+      expect(receipt.amount_source_semantics_for_edit).to eq(
+        'receipt_tax_basis' => 'total_includes_tax',
+        'item_amount_basis' => 'line_total_as_recorded'
+      )
+    end
+
+    it 'profileがないlegacy tax-excluded candidateは保存済みgross sourceへ投影する' do
+      receipt = build_stubbed(
+        :receipt,
+        amount_calculation_profile: {
+          schema_version: 1,
+          selected_candidate_status: 'accepted',
+          amount_engine: { selected_basis: 'items_as_tax_excluded' },
+          computed: { total_amount: 801 }
+        }
+      )
+
+      expect(receipt.amount_source_semantics_for_edit).to eq(
+        'receipt_tax_basis' => 'total_includes_tax',
+        'item_amount_basis' => 'line_total_as_recorded'
+      )
+    end
+
+    it 'mixed provenanceは保存済みgross itemを編集sourceにする' do
+      receipt = build_stubbed(
+        :receipt,
+        amount_calculation_profile: {
+          schema_version: 1,
+          profile: {
+            receipt_tax_basis: 'total_includes_tax',
+            item_amount_basis: 'mixed_by_tax_rate_group',
+            tax_detail_amount_basis: 'gross'
+          }
+        }
+      )
+
+      expect(receipt.amount_source_semantics_for_edit).to eq(
+        'receipt_tax_basis' => 'total_includes_tax',
+        'item_amount_basis' => 'line_total_as_recorded',
+        'tax_detail_amount_basis' => 'gross'
+      )
+    end
+
+    it 'external recorded profileは0円tax groupを含む現在値の整合時だけnet sourceへ投影する' do
+      receipt = create(
+        :receipt,
+        subtotal_amount: 742,
+        tax_amount: 59,
+        total_amount: 801,
+        amount_calculation_profile: {
+          schema_version: 1,
+          profile: {
+            receipt_tax_basis: 'tax_added_to_subtotal',
+            item_amount_basis: 'line_total_as_recorded'
+          }
+        }
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '8%対象',
+        price: 739,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 739,
+        tax_rate: BigDecimal('0.08'),
+        needs_review: false
+      )
+      receipt.receipt_items.create!(
+        confirmed_name: '10%対象',
+        price: 3,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 3,
+        tax_rate: BigDecimal('0.10'),
+        needs_review: false
+      )
+      receipt.receipt_tax_details.create!(rate: BigDecimal('0.08'), net_amount: 739, amount: 59)
+      receipt.receipt_tax_details.create!(rate: BigDecimal('0.10'), net_amount: 3, amount: 0)
+
+      aggregate_failures 'complete external evidence' do
+        expect(receipt.amount_source_semantics_for_edit).to include(
+          'receipt_tax_basis' => 'tax_added_to_subtotal',
+          'item_amount_basis' => 'line_total_as_net'
+        )
+        expect(receipt.receipt_tax_basis_for_form).to eq('external')
+      end
+
+      item.update!(line_total: 738)
+
+      aggregate_failures 'conflicting current evidence' do
+        expect(receipt.amount_source_semantics_for_edit).to eq(
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'line_total_as_recorded'
+        )
+        expect(receipt.receipt_tax_basis_for_form).to eq('internal')
+      end
+    end
+
+    it 'rejectedまたは不正なbasis pairのsnapshotをsourceとして信頼しない' do
+      rejected = build_stubbed(
+        :receipt,
+        amount_calculation_profile: {
+          schema_version: 1,
+          selected_candidate_status: 'rejected',
+          profile: {
+            receipt_tax_basis: 'tax_added_to_subtotal',
+            item_amount_basis: 'line_total_as_net'
+          }
+        }
+      )
+      invalid_pair = build_stubbed(
+        :receipt,
+        amount_calculation_profile: {
+          schema_version: 1,
+          profile: {
+            receipt_tax_basis: 'tax_added_to_subtotal',
+            item_amount_basis: 'mixed_by_tax_rate_group'
+          }
+        }
+      )
+
+      aggregate_failures do
+        expect(rejected.amount_source_semantics_for_edit).to eq({})
+        expect(invalid_pair.amount_source_semantics_for_edit).to eq({})
+      end
+    end
+  end
+
   include ActiveSupport::Testing::TimeHelpers
 
   def png_bytes(width:, height:, minimum_byte_size: nil)
