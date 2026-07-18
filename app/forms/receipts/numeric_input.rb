@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class Receipts::NumericInput
+  MAX_PERCENTAGE = BigDecimal("100")
+  private_constant :MAX_PERCENTAGE
+
   class InvalidValue < StandardError
     attr_reader :value
 
@@ -29,7 +32,9 @@ class Receipts::NumericInput
 
     def percentage(value)
       parsed = decimal(value)
-      parsed && parsed / 100
+      raise InvalidValue, value if parsed && parsed > MAX_PERCENTAGE
+
+      parsed && parsed / MAX_PERCENTAGE
     end
   end
 end

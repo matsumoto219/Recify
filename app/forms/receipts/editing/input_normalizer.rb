@@ -5,8 +5,7 @@ class Receipts::Editing::InputNormalizer
   RECEIPT_DECIMAL_FIELDS = %w[tax_rate].freeze
   ITEM_INTEGER_FIELDS = %w[price line_total].freeze
   ITEM_QUANTITY_FIELDS = %w[quantity].freeze
-  ITEM_PERCENTAGE_FIELDS = %w[tax_rate].freeze
-  ITEM_DISCOUNT_FIELDS = %w[discount_rate].freeze
+  ITEM_PERCENTAGE_FIELDS = %w[tax_rate discount_rate].freeze
   ADJUSTMENT_REVIEW_TARGET_FIELDS = %i[kind label amount sign tax_rate].freeze
 
   def self.call(receipt:, attributes:)
@@ -55,7 +54,6 @@ class Receipts::Editing::InputNormalizer
       normalize_numeric_fields!(item_attributes, ITEM_INTEGER_FIELDS, :integer)
       normalize_numeric_fields!(item_attributes, ITEM_QUANTITY_FIELDS, :decimal)
       normalize_numeric_fields!(item_attributes, ITEM_PERCENTAGE_FIELDS, :percentage)
-      normalize_numeric_fields!(item_attributes, ITEM_DISCOUNT_FIELDS, :decimal)
     end
 
     attributes["receipt_adjustments_attributes"]&.each_value do |adjustment_attributes|

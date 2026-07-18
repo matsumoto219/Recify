@@ -42,14 +42,18 @@ RSpec.describe Receipts::NumericInput do
   describe '.percentage' do
     it 'converts a valid percentage into a decimal rate' do
       aggregate_failures do
+        expect(described_class.percentage('0.5')).to eq(BigDecimal('0.005'))
+        expect(described_class.percentage('1')).to eq(BigDecimal('0.01'))
+        expect(described_class.percentage('1.1')).to eq(BigDecimal('0.011'))
         expect(described_class.percentage('10.5')).to eq(BigDecimal('0.105'))
+        expect(described_class.percentage('100')).to eq(BigDecimal('1'))
         expect(described_class.percentage('０')).to eq(BigDecimal('0'))
         expect(described_class.percentage('')).to be_nil
       end
     end
 
     it 'rejects invalid percentages instead of treating them as zero or nil' do
-      %w[abc 10percent 1e2 -1 ¥10].each do |value|
+      %w[abc 10percent 1e2 -1 100.1 ¥10].each do |value|
         expect { described_class.percentage(value) }
           .to raise_error(Receipts::NumericInput::InvalidValue), value
       end

@@ -44,7 +44,7 @@ RSpec.describe "Receipts input forms" do
           "line_total" => 900,
           "quantity" => BigDecimal("0.3"),
           "tax_rate" => BigDecimal("0.08"),
-          "discount_rate" => BigDecimal("5.5"),
+          "discount_rate" => BigDecimal("0.055"),
           "quantity_unit_code" => "kilogram"
         )
         expect(normalized.dig("receipt_adjustments_attributes", "0")).to include(
@@ -57,6 +57,44 @@ RSpec.describe "Receipts input forms" do
         )
         expect(normalized.dig("receipt_payments_attributes", "0", "amount")).to eq(1100)
       end
+    end
+
+
+    it "item割引率をbounded percentageからratioへ正規化する" do
+      receipt = build(:receipt)
+      attributes = {
+        "receipt_items_attributes" => {
+          "0" => { "discount_rate" => "0.5" },
+          "1" => { "discount_rate" => "1" },
+          "2" => { "discount_rate" => "1.1" },
+          "3" => { "discount_rate" => "5.5" },
+          "4" => { "discount_rate" => "100" }
+        }
+      }
+
+      normalized = normalize_with(form_class, receipt: receipt, attributes: attributes)
+
+      expect(normalized["receipt_items_attributes"].values.pluck("discount_rate")).to eq(
+        [
+          BigDecimal("0.005"),
+          BigDecimal("0.01"),
+          BigDecimal("0.011"),
+          BigDecimal("0.055"),
+          BigDecimal("1")
+        ]
+      )
+    end
+
+    it "100%を超えるitem割引率を拒否する" do
+      receipt = build(:receipt)
+
+      expect {
+        normalize_with(
+          form_class,
+          receipt: receipt,
+          attributes: { "receipt_items_attributes" => { "0" => { "discount_rate" => "100.1" } } }
+        )
+      }.to raise_error(Receipts::NumericInput::InvalidValue)
     end
 
     it "blank数量単位をdefaultへ補い、未知の入力値はvalidation用に保持する" do

@@ -905,6 +905,104 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(receipt.total_amount).to eq(600)
       end
     end
+
+
+    it '0.5%と1%の割引率でquantity保存往復をしても割引sourceと合計が変化しない' do
+      [
+        { input: '0.5', rate: BigDecimal('0.005'), q1: 995, q2: 1_990 },
+        { input: '1', rate: BigDecimal('0.01'), q1: 990, q2: 1_980 }
+      ].each do |contract|
+        receipt = create_completed_receipt(
+          subtotal_amount: contract[:q1],
+          tax_amount: 0,
+          total_amount: contract[:q1]
+        )
+        item = create_item(
+          receipt,
+          price: 1_000,
+          quantity: 1,
+          original_line_total: 1_000,
+          tax_rate: nil,
+          discount_rate: contract[:rate],
+          discount_amount: 1_000 - contract[:q1],
+          line_total: contract[:q1]
+        )
+
+        [ [ '2', contract[:q2] ], [ '1', contract[:q1] ] ].each do |quantity, expected_total|
+          patch_receipt(
+            receipt,
+            receipt_items_attributes: {
+              '0' => item_attributes(
+                item.reload,
+                quantity: quantity,
+                tax_rate: '',
+                discount_rate: contract[:input]
+              )
+            }
+          )
+          receipt.reload
+          item.reload
+
+          aggregate_failures "#{contract[:input]}% q#{quantity}" do
+            expect(response).to redirect_to(receipt_path(receipt))
+            expect(item.discount_rate).to eq(contract[:rate])
+            expect(item.discount_amount).to eq((1_000 * quantity.to_i) - expected_total)
+            expect(item.line_total).to eq(expected_total)
+            expect(receipt.total_amount).to eq(expected_total)
+          end
+        end
+      end
+    end
+
+    it '0.5%割引の422再表示と再送で百分率表示と保存sourceを維持する' do
+      receipt = create_completed_receipt(subtotal_amount: 995, tax_amount: 0, total_amount: 995)
+      item = create_item(
+        receipt,
+        price: 1_000,
+        quantity: 1,
+        original_line_total: 1_000,
+        tax_rate: nil,
+        discount_rate: BigDecimal('0.005'),
+        discount_amount: 5,
+        line_total: 995
+      )
+      submitted_items = {
+        '0' => item_attributes(item, tax_rate: '', discount_rate: '0.5')
+      }
+
+      patch_receipt(receipt, store_name: '', receipt_items_attributes: submitted_items)
+      document = Nokogiri::HTML(response.body)
+      displayed_rate = document.at_css('input[name$="[discount_rate]"]')['value']
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(displayed_rate).to eq('0.5')
+        expect(item.reload).to have_attributes(
+          discount_rate: BigDecimal('0.005'),
+          discount_amount: 5,
+          line_total: 995
+        )
+        expect(receipt.reload.total_amount).to eq(995)
+      end
+
+      patch_receipt(
+        receipt,
+        store_name: '再送成功店',
+        receipt_items_attributes: {
+          '0' => item_attributes(item, tax_rate: '', discount_rate: displayed_rate)
+        }
+      )
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.reload).to have_attributes(
+          discount_rate: BigDecimal('0.005'),
+          discount_amount: 5,
+          line_total: 995
+        )
+        expect(receipt.reload.total_amount).to eq(995)
+      end
+    end
   end
 
   describe 'optimistic locking' do
