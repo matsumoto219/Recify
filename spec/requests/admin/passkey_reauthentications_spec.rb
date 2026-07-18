@@ -191,13 +191,15 @@ RSpec.describe 'Admin passkey reauthentication', type: :request do
         post admin_passkey_reauthentication_path,
              params: { credential: credential },
              as: :json
+        expect(response).to have_http_status(:success)
+        reauthenticated_at = Time.zone.parse(session.fetch(:admin_passkey_reauthenticated_at))
 
-        travel minutes.minutes - 1.second do
+        travel_to reauthenticated_at + minutes.minutes - 1.second do
           get new_admin_passkey_reauthentication_path
           expect(response.body).to include('パスキー再認証済みです')
         end
 
-        travel minutes.minutes + 1.second do
+        travel_to reauthenticated_at + minutes.minutes + 1.second do
           get new_admin_passkey_reauthentication_path
           expect(response.body).not_to include('パスキー再認証済みです')
         end
