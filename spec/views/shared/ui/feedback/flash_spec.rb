@@ -44,7 +44,7 @@ RSpec.describe 'shared/ui/feedback/_flash', type: :view do
     end
   end
 
-  it 'toneごとにstatusとalertを使い分け、container単位の表示上限を持つ' do
+  it 'toneごとにstatusとalertを使い分け、共通stackへ渡すsurfaceだけを描画する' do
     document = render_flash(
       flash_messages: {
         info: '本人確認が必要です',
@@ -56,12 +56,11 @@ RSpec.describe 'shared/ui/feedback/_flash', type: :view do
 
     surfaces = document.css('[data-controller~="notice-surface"]')
     by_message = surfaces.index_by { |surface| surface.text }
-    container = document.at_css('[data-notice-surface-container]')
     info_surface = by_message.find { |text, _surface| text.include?('本人確認が必要です') }.last
     error_surface = by_message.find { |text, _surface| text.include?('検証に失敗しました') }.last
 
     aggregate_failures do
-      expect(container['data-notice-surface-max-visible']).to eq('3')
+      expect(document.at_css('[data-notice-surface-container]')).to be_nil
       expect(info_surface['role']).to eq('status')
       expect(info_surface['aria-live']).to eq('polite')
       expect(info_surface['aria-atomic']).to eq('true')
