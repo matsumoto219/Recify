@@ -45,7 +45,6 @@ class Receipts::Editing::ChangeSet
   ].freeze
   ADJUSTMENT_AMOUNT_FIELDS = %w[
     kind
-    label
     amount
     sign
     tax_rate
@@ -61,6 +60,7 @@ class Receipts::Editing::ChangeSet
     tax_rate
   ].freeze
   ITEM_AMOUNT_INPUT_FIELDS = (ITEM_AMOUNT_FIELDS + %w[discount_amount line_total _destroy]).freeze
+  ITEM_MONETARY_SOURCE_FIELDS = %w[price original_line_total line_total discount_amount].freeze
   ADJUSTMENT_AMOUNT_INPUT_FIELDS = (ADJUSTMENT_AMOUNT_FIELDS + %w[_destroy]).freeze
   PAYMENT_INPUT_FIELDS = (PAYMENT_FIELDS + %w[_destroy]).freeze
 
@@ -103,11 +103,34 @@ class Receipts::Editing::ChangeSet
   def item_amounts_changed?
     submitted_attributes("receipt_items_attributes").any? do |attributes|
       record = existing_record(:receipt_items, attributes["id"])
-      next record.present? if destroyed?(attributes)
-      next true if record.nil?
+      next item_monetary_source_present?(record) if destroyed?(attributes)
 
-      record_changed?(record, attributes, ITEM_AMOUNT_FIELDS) || item_line_total_source_changed?(record, attributes)
+      changed_record = merged_item(record, attributes)
+      next item_monetary_source_present?(changed_record) if record.nil?
+
+      changed = record_changed?(record, attributes, ITEM_AMOUNT_FIELDS) ||
+        item_line_total_source_changed?(record, attributes)
+      changed && (item_monetary_source_present?(record) || item_monetary_source_present?(changed_record))
     end
+  end
+
+  def merged_item(record, attributes)
+    changed_record = record ? record.dup : ReceiptItem.new
+    changed_record.assign_attributes(attributes.slice(*(ITEM_AMOUNT_FIELDS + ITEM_MONETARY_SOURCE_FIELDS)))
+    changed_record
+  end
+
+  def item_monetary_source_present?(record)
+    return false unless record
+
+    value_present?(record.price) ||
+      value_present?(record.line_total) ||
+      record.original_line_total.to_i.positive? ||
+      record.discount_amount.to_i.positive?
+  end
+
+  def value_present?(value)
+    !value.nil? && value.to_s.strip != ""
   end
 
   def item_line_total_source_changed?(record, attributes)
@@ -153,12 +176,18 @@ class Receipts::Editing::ChangeSet
 
     submitted_attributes("receipt_adjustments_attributes").each do |attributes|
       record = existing_record(:receipt_adjustments, attributes["id"])
-      changed = destroyed?(attributes) ? record.present? : record.nil? || record_changed?(record, attributes, ADJUSTMENT_AMOUNT_FIELDS)
-      next unless changed
-
       effects = []
       effects << ReceiptAmountService.adjustment_effect(record) if record
       effects << ReceiptAmountService.adjustment_effect(merged_record(record, attributes)) unless destroyed?(attributes)
+      changed =
+        if destroyed?(attributes)
+          record.present?
+        else
+          record.nil? ||
+            record_changed?(record, attributes, ADJUSTMENT_AMOUNT_FIELDS) ||
+            effects.uniq.many?
+        end
+      next unless changed
 
       payment_changed ||= effects.include?("payment_adjustment")
       purchase_changed ||= effects.any? { |effect| effect != "payment_adjustment" }

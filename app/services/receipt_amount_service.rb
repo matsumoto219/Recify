@@ -94,6 +94,14 @@ class ReceiptAmountService
     Amounts::AdjustmentClassifier::PAYMENT_ADJUSTMENT_KINDS
   end
 
+  def self.purchase_adjustment_kinds
+    Amounts::AdjustmentClassifier::EXPLICIT_PURCHASE_ADJUSTMENT_KINDS
+  end
+
+  def self.payment_adjustment_label_pattern_source
+    ReceiptAnalysisProfiles.default.analysis_cashless_reward_adjustment_pattern.source
+  end
+
   def self.payment_adjustment_summary(receipt:, receipt_adjustments: nil)
     Amounts::PaymentAdjustmentSummary.call(
       receipt: receipt,
@@ -149,13 +157,6 @@ class ReceiptAmountService
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
     @adjustments = Array(receipt_adjustments).map { |adjustment| normalize_adjustment(adjustment) }
     @payments = Array(receipt_payments).map { |payment| normalize_payment(payment) }
-    @adjustments = Amounts::AdjustmentTaxRateResolver.call(
-      adjustments: @adjustments,
-      items: @items,
-      tax_details: @tax_details
-    )
-    @adjustments = canonical_adjustments(@adjustments, @payments)
-    @payments = canonical_payments(@payments, @adjustments)
     @context = normalize_context(context)
     @tax_rounding_mode_explicit = !rounding_mode.nil? || !tax_rounding_mode.nil?
     @discount_rounding_mode_explicit = !discount_rounding_mode.nil?
@@ -165,6 +166,22 @@ class ReceiptAmountService
     @discount_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
       discount_rounding_mode || Amounts::Rounding::DISCOUNT_DEFAULT_MODE
     )
+    adjustment_rate_items = if @context == :analysis
+      @items
+    else
+      Amounts::ItemTotalAggregator.new(
+        items: @items,
+        context: @context,
+        discount_rounding_mode: @discount_rounding_mode
+      ).call[:items]
+    end
+    @adjustments = Amounts::AdjustmentTaxRateResolver.call(
+      adjustments: @adjustments,
+      items: adjustment_rate_items,
+      tax_details: @tax_details
+    )
+    @adjustments = canonical_adjustments(@adjustments, @payments)
+    @payments = canonical_payments(@payments, @adjustments)
     @edit_source_semantics = normalized_edit_source_semantics
   end
 
@@ -255,8 +272,19 @@ class ReceiptAmountService
     return @estimated_candidates if @edit_source_semantics.blank?
 
     native_profile_candidates.select do |candidate|
-      candidate_matches_edit_source_semantics?(candidate)
+      edit_receipt_input_without_item_amounts?(candidate) ||
+        (
+          candidate_matches_edit_source_semantics?(candidate) &&
+          candidate.rounding_scope == Amounts::RoundingScope::DEFAULT
+        )
     end
+  end
+
+  def edit_receipt_input_without_item_amounts?(candidate)
+    return false unless candidate.basis == "receipt_input_preserved"
+
+    evidence = candidate.evidence.find { |entry| fetch_value(entry, :source).to_s == "receipt_input" }
+    evidence.present? && !evidence.key?(:item_total) && !evidence.key?("item_total")
   end
 
   def candidate_matches_edit_source_semantics?(candidate)

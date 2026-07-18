@@ -133,6 +133,38 @@ RSpec.describe Receipts::Editing::InputBuilder do
     end
   end
 
+  it '送信対象の既存adjustmentでも非数値のsource provenanceを保持する' do
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'receipt_discount',
+      label: '還元額',
+      amount: 22,
+      sign: 'discount',
+      source: 'ai',
+      source_text: 'キャッシュレス還元額 -22',
+      needs_review: false
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_adjustments_attributes' => {
+          '0' => {
+            'id' => adjustment.id.to_s,
+            'kind' => adjustment.kind,
+            'label' => adjustment.label,
+            'amount' => adjustment.amount.to_s,
+            'sign' => adjustment.sign
+          }
+        }
+      }
+    )
+
+    expect(result.receipt_adjustments.first).to include(
+      'source' => 'ai',
+      'source_text' => 'キャッシュレス還元額 -22'
+    )
+  end
+
   it '同一の既存IDが複数送信された場合は保存後集合を構築しない' do
     item = receipt.receipt_items.create!(
       confirmed_name: '商品', price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100

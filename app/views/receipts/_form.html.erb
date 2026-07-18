@@ -38,6 +38,11 @@
                   "receipt-form-unset-label-value": t("receipts.common.not_available"),
                   "receipt-form-multiple-tax-rates-label-value": t("receipts.common.multiple_tax_rates"),
                   "receipt-form-adjustment-payment-kinds-value": form_presenter.adjustment_payment_kinds_value,
+                  "receipt-form-adjustment-purchase-kinds-value": form_presenter.adjustment_purchase_kinds_value,
+                  "receipt-form-adjustment-payment-label-pattern-value": form_presenter.adjustment_payment_label_pattern_value,
+                  "receipt-form-adjustment-tax-detail-rates-value": form_presenter.adjustment_tax_detail_rates_value.to_json,
+                  "receipt-form-adjustment-tax-detail-evidence-stale-value": form_presenter.adjustment_tax_detail_evidence_stale?,
+                  "receipt-form-purchase-inputs-changed-value": form_presenter.purchase_inputs_changed?,
                   "receipt-form-adjustment-surcharge-kinds-value": form_presenter.adjustment_surcharge_kinds_value,
                   "receipt-form-adjustment-discount-kinds-value": form_presenter.adjustment_discount_kinds_value,
                   "receipt-form-adjustment-surcharge-label-value": t("enums.receipt_adjustment.sign.surcharge"),
@@ -59,6 +64,9 @@
               } do |f| %>
 
   <%= f.hidden_field :lock_version if receipt.persisted? %>
+  <%= hidden_field_tag :receipt_form_initial_purchase_input_fingerprint,
+        @receipt_form_initial_purchase_input_fingerprint,
+        data: { receipt_form_target: "initialPurchaseInputFingerprint" } %>
 
   <% page_title = receipt.persisted? ? t("receipts.form.titles.edit") : t("receipts.form.titles.new") %>
   <% page_description = receipt.persisted? ? t("receipts.form.descriptions.edit") : t("receipts.form.descriptions.new") %>

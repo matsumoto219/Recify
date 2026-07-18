@@ -137,10 +137,12 @@ RSpec.describe "Receipt numeric JavaScript modules" do
         externalTaxFloor: externalTaxTotal(taxGroups, 'floor'),
         externalTaxCeil: externalTaxTotal(taxGroups, 'ceil'),
         externalTaxRound: externalTaxTotal(taxGroups, 'round'),
+        externalDecimalHalfRound: externalTaxTotal(new Map([[0.7, 5500]]), 'round'),
         externalNegativeHalfRound: externalTaxTotal(negativeHalfGroup, 'round'),
         discountUnset: discountedLineTotal(101, null, 'floor'),
         discountHalfPercent: discountedLineTotal(1000, 0.5, 'round'),
         discountOnePercent: discountedLineTotal(1000, 1, 'round'),
+        discountDecimalHalfRound: discountedLineTotal(5500, 0.7, 'round'),
         discountFull: discountedLineTotal(101, 100, 'floor'),
         discountFloor: discountedLineTotal(101, 50, 'floor'),
         discountCeil: discountedLineTotal(101, 50, 'ceil'),
@@ -152,10 +154,12 @@ RSpec.describe "Receipt numeric JavaScript modules" do
       "externalTaxFloor" => 18,
       "externalTaxCeil" => 20,
       "externalTaxRound" => 19,
+      "externalDecimalHalfRound" => 39,
       "externalNegativeHalfRound" => -1,
       "discountUnset" => 101,
       "discountHalfPercent" => 995,
       "discountOnePercent" => 990,
+      "discountDecimalHalfRound" => 5461,
       "discountFull" => 0,
       "discountFloor" => 51,
       "discountCeil" => 50,
@@ -176,6 +180,7 @@ RSpec.describe "Receipt numeric JavaScript modules" do
         adjustedFloor: internalTaxTotal(adjustedGroup, 'floor'),
         adjustedCeil: internalTaxTotal(adjustedGroup, 'ceil'),
         adjustedRound: internalTaxTotal(adjustedGroup, 'round'),
+        decimalExactCeil: internalTaxTotal(new Map([[0.1, 1001]]), 'ceil'),
         negativeHalfRound: internalTaxTotal(negativeHalfGroup, 'round')
       }))
     JAVASCRIPT
@@ -186,6 +191,7 @@ RSpec.describe "Receipt numeric JavaScript modules" do
       "adjustedFloor" => 55,
       "adjustedCeil" => 56,
       "adjustedRound" => 55,
+      "decimalExactCeil" => 1,
       "negativeHalfRound" => -1
     )
   end

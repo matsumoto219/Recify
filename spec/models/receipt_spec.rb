@@ -81,7 +81,7 @@ RSpec.describe Receipt, type: :model do
       )
     end
 
-    it 'mixed provenanceは保存済みgross itemを編集sourceにする' do
+    it 'mixed provenanceを保持し、計算時のgross source投影はAmount Engineへ委ねる' do
       receipt = build_stubbed(
         :receipt,
         amount_calculation_profile: {
@@ -96,7 +96,7 @@ RSpec.describe Receipt, type: :model do
 
       expect(receipt.amount_source_semantics_for_edit).to eq(
         'receipt_tax_basis' => 'total_includes_tax',
-        'item_amount_basis' => 'line_total_as_recorded',
+        'item_amount_basis' => 'mixed_by_tax_rate_group',
         'tax_detail_amount_basis' => 'gross'
       )
     end

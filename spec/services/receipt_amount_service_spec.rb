@@ -307,6 +307,50 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'analysisのadjustment税率継承は候補ごとのdiscount rounding推定を先取りしない' do
+      result = call_service(
+        receipt: { subtotal_amount: 10, tax_amount: 1, total_amount: 11 },
+        receipt_items: [
+          {
+            price: 1,
+            quantity: 1,
+            quantity_unit_code: 'each',
+            original_line_total: 1,
+            line_total: 1,
+            discount_rate: BigDecimal('0.5'),
+            tax_rate: BigDecimal('0.1')
+          }
+        ],
+        receipt_adjustments: [
+          { kind: 'delivery_fee', sign: 'surcharge', amount: 10, source: 'manual', tax_rate: nil }
+        ],
+        receipt_payments: [ { method: 'cash', amount: 11 } ],
+        context: :analysis
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 10, tax: 1, total: 11)
+        expect(result.dig(:computed, :amount_engine_candidate_id)).to eq(
+          'items_as_tax_included/floor/per_tax_rate_group'
+        )
+        expect(result[:calculation_profile]).to include(
+          tax_rounding_mode: :floor,
+          discount_rounding_mode: :floor,
+          receipt_tax_basis: :total_includes_tax,
+          item_amount_basis: :line_total_as_recorded
+        )
+        expect(result[:warning_inconsistencies]).not_to include(:adjustment_tax_rate_missing)
+        expect(result[:blocking_inconsistencies]).not_to include(:adjustment_tax_rate_missing)
+        expect(result.dig(:amount_engine, :selected_candidate, :evidence)).to include(
+          include(
+            source: 'receipt_adjustment',
+            tax_rate: BigDecimal('0.1'),
+            tax_rate_source: 'inherited_single_rate'
+          )
+        )
+      end
+    end
+
     it 'native engineでもdiscount_amountはoriginal_line_totalから差し引く' do
       result = call_service(
         receipt: {},
@@ -1767,6 +1811,44 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'edit_saveではstale hidden line_totalを正規化してから購入調整の継承税率を決める' do
+      result = call_service(
+        receipt: {
+          receipt_tax_basis: 'total_includes_tax',
+          item_amount_basis: 'line_total_as_recorded'
+        },
+        receipt_items: [
+          {
+            price: 100,
+            quantity: 1,
+            quantity_unit_code: 'each',
+            line_total: 0,
+            tax_rate: BigDecimal('0.10'),
+            amount_price_present: true,
+            amount_quantity_present: true,
+            amount_line_total_present: true,
+            amount_countable_source_changed: true
+          }
+        ],
+        receipt_adjustments: [
+          { kind: 'delivery_fee', sign: 'surcharge', amount: 10, source: 'manual' }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 100, tax: 10, total: 110)
+        expect(result[:warning_inconsistencies]).not_to include(:adjustment_tax_rate_missing)
+        expect(result.dig(:amount_engine, :selected_candidate, :evidence)).to include(
+          include(
+            source: 'receipt_adjustment',
+            tax_rate: BigDecimal('0.10'),
+            tax_rate_source: 'inherited_single_rate'
+          )
+        )
+      end
+    end
+
     it '同点なら国内内税を税率グループ単位で丸める' do
       result = call_service(
         receipt: { total_amount: 12 },
@@ -2699,6 +2781,95 @@ RSpec.describe ReceiptAmountService do
         expect(result.dig(:computed, :source_items).map { |item| item[:line_total] }).to eq([ 256, 198, 115, 298, 3 ])
         expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 276, 213, 124, 321, 3 ])
         expect(result.dig(:amount_engine, :selected_candidate, :computed_items).map { |item| item[:line_total] }).to eq([ 276, 213, 124, 321, 3 ])
+      end
+    end
+
+    it 'edit_saveではpayment一致より保存済みの税率group丸め契約を優先する' do
+      result = call_service(
+        receipt: {
+          receipt_tax_basis: 'tax_added_to_subtotal',
+          item_amount_basis: 'line_total_as_net',
+          tax_detail_amount_basis: 'net'
+        },
+        receipt_items: [
+          { price: 7, quantity: 1, quantity_unit_code: 'each', line_total: 7, tax_rate: BigDecimal('0.08') },
+          { price: 7, quantity: 1, quantity_unit_code: 'each', line_total: 7, tax_rate: BigDecimal('0.08') }
+        ],
+        receipt_payments: [ { method: 'cash', amount: 14 } ],
+        context: :edit_save,
+        tax_rounding_mode: :floor
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('items_as_tax_excluded/floor/per_tax_rate_group')
+        expect(result[:resolved]).to include(subtotal: 14, tax: 1, total: 15)
+        expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
+      end
+    end
+
+    it 'edit_saveでitem金額データがない場合は保存済みreceipt金額を保持する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 91,
+          tax_amount: 9,
+          total_amount: 100,
+          receipt_tax_basis: 'total_includes_tax',
+          item_amount_basis: 'line_total_as_recorded'
+        },
+        receipt_items: [],
+        context: :edit_save,
+        tax_rounding_mode: :floor
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+        expect(result[:resolved]).to include(subtotal: 91, tax: 9, total: 100)
+        expect(result[:blocking_inconsistencies]).to be_empty
+      end
+    end
+
+    it 'edit_saveで金額未入力のplaceholder itemだけなら保存済みreceipt金額を保持する' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 91,
+          tax_amount: 9,
+          total_amount: 100,
+          receipt_tax_basis: 'tax_added_to_subtotal',
+          item_amount_basis: 'line_total_as_net'
+        },
+        receipt_items: [
+          { confirmed_name: '金額未入力', price: nil, quantity: 1, quantity_unit_code: 'each', line_total: nil, tax_rate: nil }
+        ],
+        context: :edit_save,
+        tax_rounding_mode: :floor
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+        expect(result[:resolved]).to include(subtotal: 91, tax: 9, total: 100)
+        expect(result[:blocking_inconsistencies]).to be_empty
+      end
+    end
+
+    it 'edit_saveで明示0円itemがあればreceipt入力保持へ退避しない' do
+      result = call_service(
+        receipt: {
+          subtotal_amount: 91,
+          tax_amount: 9,
+          total_amount: 100,
+          receipt_tax_basis: 'tax_added_to_subtotal',
+          item_amount_basis: 'line_total_as_net'
+        },
+        receipt_items: [
+          { confirmed_name: '0円商品', price: 0, quantity: 1, quantity_unit_code: 'each', line_total: 0, tax_rate: BigDecimal('0.1') }
+        ],
+        context: :edit_save,
+        tax_rounding_mode: :floor
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).not_to eq('edit_saved_input')
+        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0)
       end
     end
 

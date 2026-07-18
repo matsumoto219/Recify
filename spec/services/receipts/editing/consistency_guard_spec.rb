@@ -57,6 +57,54 @@ RSpec.describe Receipts::Editing::ConsistencyGuard do
     end
   end
 
+  it 'item金額sourceがないreceipt input候補ではblank child合計との比較を省略する' do
+    result = described_class.call(
+      receipt_items: [ { price: nil, quantity: 2, line_total: nil } ],
+      receipt_adjustments: [],
+      receipt_payments: [],
+      amount_result: amount_result(
+        computed: {
+          amount_engine_basis: 'receipt_input_preserved',
+          adjusted_item_total: 0,
+          purchase_total: 110,
+          final_payment_total: 110,
+          purchase_adjustment_total: 0,
+          payment_adjustment_total: 0,
+          payment_amount_sum: 0
+        },
+        amount_engine: {
+          selected_candidate: { evidence: [ { source: 'receipt_input' } ] }
+        }
+      )
+    )
+
+    expect(result).to be_consistent
+  end
+
+  it 'item金額sourceがあるreceipt input候補ではchild合計不一致を検出する' do
+    result = described_class.call(
+      receipt_items: items,
+      receipt_adjustments: adjustments,
+      receipt_payments: payments,
+      amount_result: amount_result(
+        computed: {
+          amount_engine_basis: 'receipt_input_preserved',
+          adjusted_item_total: 110,
+          purchase_total: 60,
+          final_payment_total: 60
+        },
+        resolved: { total: 60 },
+        amount_engine: {
+          selected_candidate: {
+            evidence: [ { source: 'receipt_input', item_total: 110 } ]
+          }
+        }
+      )
+    )
+
+    expect(result.fatal_errors).to include(:child_purchase_total_mismatch)
+  end
+
   it '実際の支払合計とsnapshot値が異なる場合は保存不能にする' do
     result = described_class.call(
       receipt_items: items,

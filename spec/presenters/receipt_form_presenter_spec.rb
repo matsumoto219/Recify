@@ -1,6 +1,48 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptFormPresenter do
+  it '購入入力変更状態をJSへ渡す' do
+    presenter = described_class.new(
+      receipt: build(:receipt),
+      purchase_inputs_changed: true,
+      adjustment_tax_detail_evidence_stale: true
+    )
+
+    aggregate_failures do
+      expect(presenter.purchase_inputs_changed?).to be(true)
+      expect(presenter.adjustment_tax_detail_evidence_stale?).to be(true)
+    end
+  end
+
+  it 'adjustment分類のserver契約をJSへ渡す' do
+    presenter = described_class.new(receipt: build(:receipt))
+
+    aggregate_failures do
+      expect(presenter.adjustment_purchase_kinds_value.split(',')).to contain_exactly(
+        'service_charge',
+        'late_night_charge',
+        'delivery_fee',
+        'bag_fee',
+        'handling_fee',
+        'coupon',
+        'return_refund'
+      )
+      expect('キャッシュレス還元').to match(Regexp.new(presenter.adjustment_payment_label_pattern_value, Regexp::IGNORECASE))
+      expect('payment discount').to match(Regexp.new(presenter.adjustment_payment_label_pattern_value, Regexp::IGNORECASE))
+    end
+  end
+
+  describe '#adjustment_tax_detail_rates_value' do
+    it '金額を持つ保存済みtax detailの税率だけをpercentageで渡し、不明rateも保持する' do
+      receipt = create(:receipt)
+      receipt.receipt_tax_details.create!(rate: BigDecimal('0.1'), net_amount: 100, amount: 10)
+      receipt.receipt_tax_details.create!(rate: BigDecimal('0.08'), net_amount: 0, amount: 0)
+      receipt.receipt_tax_details.create!(rate: nil, net_amount: 50, amount: 0)
+
+      expect(described_class.new(receipt: receipt).adjustment_tax_detail_rates_value).to eq([ '10', nil ])
+    end
+  end
+
   describe 'submitted form values' do
     it '保存失敗後のtop-level値と新規child行を表示専用に再構築する' do
       receipt = build(:receipt, memo: '保存済みメモ')
@@ -83,6 +125,55 @@ RSpec.describe ReceiptFormPresenter do
         expect(row.warning_reason_labels).to be_present
       end
     end
+
+    it '保存済みoriginalが0の場合はline totalをsource baselineとして渡し、422ではsubmitted sourceを優先する' do
+      receipt = create(:receipt)
+      item = receipt.receipt_items.create!(
+        confirmed_name: '商品',
+        price: 500,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        original_line_total: 0,
+        line_total: 500,
+        tax_rate: 0
+      )
+
+      persisted_row = described_class.new(receipt: receipt).item_row(item, new_record: false)
+      submitted_row = described_class.new(
+        receipt: receipt,
+        submitted_params: {
+          receipt_items_attributes: {
+            '0' => { id: item.id, original_line_total: '700', line_total: '630' }
+          }
+        }
+      ).item_row(item, new_record: false)
+
+      aggregate_failures do
+        expect(persisted_row.original_line_total_value).to eq(500)
+        expect(persisted_row.line_total_data[:original_line_total]).to eq(500)
+        expect(submitted_row.original_line_total_value).to eq('700')
+        expect(submitted_row.line_total_value).to eq('630')
+      end
+    end
+
+    it 'original 0だけのplaceholderを明示line total 0へ昇格させない' do
+      receipt = build(:receipt)
+      item = ReceiptItem.new(
+        receipt: receipt,
+        price: nil,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        original_line_total: 0,
+        line_total: nil
+      )
+
+      row = described_class.new(receipt: receipt).item_row(item, new_record: false)
+
+      aggregate_failures do
+        expect(row.original_line_total_value).to be_nil
+        expect(row.line_total_value).to be_nil
+      end
+    end
   end
 
   describe '#adjustment_row' do
@@ -98,6 +189,27 @@ RSpec.describe ReceiptFormPresenter do
         expect(row.other_kind?).to be(true)
         expect(row.sign_select_disabled?).to be(false)
         expect(row.tax_rate_value).to eq(10)
+      end
+    end
+
+
+    it 'source_text由来のpayment分類を内容を露出せずrow stateへ渡す' do
+      receipt = build(:receipt)
+      adjustment = build(
+        :receipt_adjustment,
+        receipt: receipt,
+        kind: 'receipt_discount',
+        label: '還元額',
+        source_text: 'キャッシュレス還元額 -22',
+        source: 'ai'
+      )
+
+      row = described_class.new(receipt: receipt).adjustment_row(adjustment, new_record: false)
+
+      aggregate_failures do
+        expect(row.calculation_effect).to eq('payment_adjustment')
+        expect(row.source_text_payment_adjustment?).to be(true)
+        expect(row.source_non_manual?).to be(true)
       end
     end
   end

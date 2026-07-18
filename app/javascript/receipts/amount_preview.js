@@ -47,11 +47,65 @@ export function formatPaymentDifference (value) {
   return formatSignedAmount(value)
 }
 
+// Percentage inputs are decimal source values. Keep them as exact ratios so
+// binary floating-point error cannot cross a Ruby BigDecimal rounding boundary.
+function decimalRatio (value) {
+  const match = String(value).toLowerCase().match(/^([+-]?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/)
+  if (!match) return { numerator: 0n, denominator: 1n }
+
+  const sign = match[1] === '-' ? -1n : 1n
+  const fractionalDigits = match[3] || ''
+  const exponent = Number.parseInt(match[4] || '0', 10)
+  const digits = `${match[2]}${fractionalDigits}`.replace(/^0+(?=\d)/, '')
+  const scale = fractionalDigits.length - exponent
+  let numerator = BigInt(digits || '0') * sign
+  let denominator = 1n
+
+  if (scale > 0) {
+    denominator = 10n ** BigInt(scale)
+  } else if (scale < 0) {
+    numerator *= 10n ** BigInt(-scale)
+  }
+
+  return { numerator, denominator }
+}
+
+function roundedRatio (numerator, denominator, roundingMode) {
+  const negative = numerator < 0n
+  const magnitude = negative ? -numerator : numerator
+  const quotient = magnitude / denominator
+  const remainder = magnitude % denominator
+  let rounded = quotient
+
+  switch (normalizeRoundingMode(roundingMode)) {
+    case 'ceil':
+      if (!negative && remainder > 0n) rounded += 1n
+      break
+    case 'round':
+      if (remainder * 2n >= denominator) rounded += 1n
+      break
+    default:
+      if (negative && remainder > 0n) rounded += 1n
+  }
+
+  return Number(negative ? -rounded : rounded)
+}
+
+function roundedPercentageAmount (amount, percentage, roundingMode, taxIncluded = false) {
+  const percentageRatio = decimalRatio(percentage)
+  const numerator = BigInt(amount) * percentageRatio.numerator
+  const denominator = taxIncluded
+    ? (100n * percentageRatio.denominator) + percentageRatio.numerator
+    : 100n * percentageRatio.denominator
+
+  return roundedRatio(numerator, denominator, roundingMode)
+}
+
 export function externalTaxTotal (taxGroups, roundingMode) {
   let taxTotal = 0
 
   taxGroups.forEach((groupLineTotal, taxRatePercent) => {
-    taxTotal += applyRounding((groupLineTotal * taxRatePercent) / 100, roundingMode)
+    taxTotal += roundedPercentageAmount(groupLineTotal, taxRatePercent, roundingMode)
   })
 
   return taxTotal
@@ -61,7 +115,7 @@ export function internalTaxTotal (taxGroups, roundingMode) {
   let taxTotal = 0
 
   taxGroups.forEach((groupLineTotal, taxRatePercent) => {
-    taxTotal += applyRounding((groupLineTotal * taxRatePercent) / (100 + taxRatePercent), roundingMode)
+    taxTotal += roundedPercentageAmount(groupLineTotal, taxRatePercent, roundingMode, true)
   })
 
   return taxTotal
@@ -70,7 +124,7 @@ export function internalTaxTotal (taxGroups, roundingMode) {
 export function discountedLineTotal (originalLineTotal, discountRatePercent, roundingMode) {
   if (discountRatePercent === null) return originalLineTotal
 
-  const discountAmount = applyRounding((originalLineTotal * discountRatePercent) / 100, roundingMode)
+  const discountAmount = roundedPercentageAmount(originalLineTotal, discountRatePercent, roundingMode)
   return Math.max(originalLineTotal - discountAmount, 0)
 }
 

@@ -37,7 +37,9 @@
        data-action="pointerdown->swipe-action#start pointermove->swipe-action#move pointerup->swipe-action#end pointercancel->swipe-action#cancel">
     <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center rounded-lg border border-transparent receipt-form-adjustment-row p-3 transition-colors relative min-w-0"
          data-receipt-form-target="adjustmentRow"
-         data-receipt-form-adjustment-effect="<%= row_state.calculation_effect %>">
+         data-receipt-form-adjustment-effect="<%= row_state.calculation_effect %>"
+         data-receipt-form-adjustment-source-payment="<%= row_state.source_text_payment_adjustment? %>"
+         data-receipt-form-adjustment-source-non-manual="<%= row_state.source_non_manual? %>">
   <div class="col-span-2 md:col-span-4">
     <div class="flex items-center gap-2 md:block">
       <span class="w-16 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.adjustment_fields.label") %></span>
@@ -52,7 +54,11 @@
                    placeholder: t("receipts.adjustment_fields.label_placeholder"),
                    show_label: false,
                    size: :dense,
-                   html_options: { maxlength: 120, autocomplete: "off" } %>
+                   html_options: {
+                     maxlength: 120,
+                     autocomplete: "off",
+                     data: { action: "input->receipt-form#adjustmentLabelChanged" }
+                   } %>
       </div>
 
       <button type="button"

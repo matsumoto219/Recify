@@ -30,24 +30,50 @@ RSpec.describe "Receipt form Stimulus controller" do
     JSON.parse(stdout)
   end
 
-  def run_amount_round_trip(basis:, items:, adjustments: [])
+  def run_amount_round_trip(
+    basis:,
+    items:,
+    adjustments: [],
+    adjustment_tax_detail_rates: [],
+    adjustment_tax_detail_evidence_stale: false,
+    purchase_inputs_changed: false,
+    purchase_input_baseline_trusted: nil,
+    initial_receipt_amounts: nil,
+    initial_tax_rate_summary: nil,
+    add_blank_adjustment_after_initial: false,
+    changed_first_tax_rate: nil,
+    changed_discount_rate: nil,
+    changed_price: nil,
+    changed_price_before_discount: nil,
+    changed_quantity_unit: nil
+  )
     run_controller_script(<<~JAVASCRIPT)
       const itemDefinitions = #{items.to_json}
       const adjustmentDefinitions = #{adjustments.to_json}
       const amountTarget = () => ({ value: null, textContent: '', title: '', dataset: {} })
       const rows = itemDefinitions.map((definition) => {
         const inputs = {
-          quantityInput: { value: '1' },
+          quantityInput: { value: String(definition.quantity ?? 1) },
           quantityUnitInput: { value: 'each' },
-          priceInput: { value: String(definition.price) },
-          discountRateInput: { value: '', dataset: { originalDiscountRate: '' } },
+          priceInput: { value: definition.price === null ? '' : String(definition.price) },
+          discountRateInput: {
+            value: String(definition.discountRate ?? ''),
+            dataset: { originalDiscountRate: String(definition.discountRate ?? '') }
+          },
           taxRateInput: { value: String(definition.taxRate) },
           lineTotalInput: {
-            value: String(definition.lineTotal),
+            value: definition.lineTotal === null || definition.lineTotal === undefined ? '' : String(definition.lineTotal),
             dataset: {
-              originalLineTotal: String(definition.lineTotal),
-              originalSavedLineTotal: String(definition.lineTotal)
+              originalLineTotal: definition.originalLineTotal === null || definition.originalLineTotal === undefined
+                ? (definition.lineTotal === null || definition.lineTotal === undefined ? '' : String(definition.lineTotal))
+                : String(definition.originalLineTotal),
+              originalSavedLineTotal: definition.lineTotal === null || definition.lineTotal === undefined ? '' : String(definition.lineTotal)
             }
+          },
+          originalLineTotalInput: {
+            value: definition.originalLineTotal === null || definition.originalLineTotal === undefined
+              ? (definition.lineTotal === null || definition.lineTotal === undefined ? '' : String(definition.lineTotal))
+              : String(definition.originalLineTotal)
           }
         }
 
@@ -63,8 +89,8 @@ RSpec.describe "Receipt form Stimulus controller" do
       const controller = Object.create(ReceiptFormController.prototype)
       const adjustmentRows = adjustmentDefinitions.map((definition) => {
         const inputs = {
-          adjustmentAmountInput: { value: String(definition.amount) },
-          adjustmentTaxRateInput: { value: String(definition.taxRate) }
+          adjustmentAmountInput: { value: definition.amount === null ? '' : String(definition.amount) },
+          adjustmentTaxRateInput: { value: definition.taxRate === null ? '' : String(definition.taxRate) }
         }
 
         return {
@@ -75,16 +101,23 @@ RSpec.describe "Receipt form Stimulus controller" do
           }
         }
       })
+      const activeAdjustmentRows = #{add_blank_adjustment_after_initial.to_json} ? [] : adjustmentRows
       const subtotal = amountTarget()
       const tax = amountTarget()
       const total = amountTarget()
+      const taxRateSummary = { textContent: #{initial_tax_rate_summary.to_json} }
       let paymentAdjustmentSnapshot = null
 
       Object.defineProperties(controller, {
         itemRowTargets: { value: rows },
-        adjustmentRowTargets: { value: adjustmentRows },
+        adjustmentRowTargets: { value: activeAdjustmentRows },
         paymentRowTargets: { value: [] },
+        adjustmentTaxDetailRatesValue: { value: #{adjustment_tax_detail_rates.to_json} },
+        adjustmentTaxDetailEvidenceStaleValue: { value: #{adjustment_tax_detail_evidence_stale.to_json} },
+        purchaseInputsChangedValue: { value: #{purchase_inputs_changed.to_json} },
         receiptTaxBasisValue: { value: #{basis.to_json} },
+        unsetLabelValue: { value: 'Unset' },
+        multipleTaxRatesLabelValue: { value: 'Multiple tax rates' },
         roundingModeValue: { value: 'floor' },
         discountRoundingModeValue: { value: 'round' },
         countableQuantityUnitsValue: { value: 'each,piece,item,bottle,bag,box' },
@@ -100,7 +133,8 @@ RSpec.describe "Receipt form Stimulus controller" do
         subtotalAmountTarget: { value: subtotal },
         hasTaxAmountTarget: { value: true },
         taxAmountTarget: { value: tax },
-        hasTaxRateSummaryTarget: { value: false }
+        hasTaxRateSummaryTarget: { value: #{(!initial_tax_rate_summary.nil?).to_json} },
+        taxRateSummaryTarget: { value: taxRateSummary }
       })
 
       controller.previewNumericInputsValid = () => true
@@ -115,6 +149,13 @@ RSpec.describe "Receipt form Stimulus controller" do
       }
       controller.syncPaymentReconciliationSummary = () => {}
       controller.paymentAmountSum = () => 801
+      controller.initialReceiptAmounts = #{initial_receipt_amounts.to_json}
+      if (controller.initialReceiptAmounts && #{(!initial_tax_rate_summary.nil?).to_json}) {
+        controller.initialReceiptAmounts.taxRateSummary = #{initial_tax_rate_summary.to_json}
+      }
+      controller.initialPurchaseInputFingerprint = controller.purchaseInputFingerprint()
+      controller.purchaseInputBaselineTrusted = #{(purchase_input_baseline_trusted.nil? ? !purchase_inputs_changed : purchase_input_baseline_trusted).to_json}
+      if (#{add_blank_adjustment_after_initial.to_json}) activeAdjustmentRows.push(...adjustmentRows)
 
       const snapshot = () => {
         const amounts = {
@@ -128,20 +169,79 @@ RSpec.describe "Receipt form Stimulus controller" do
           amounts.paymentAdjustmentTotal = paymentAdjustmentSnapshot.adjustmentTotal
           amounts.finalPaymentTotal = paymentAdjustmentSnapshot.finalPaymentTotal
         }
+        if (itemDefinitions[0].captureOriginalLineTotal) {
+          amounts.sourceOriginalLineTotal = Number(rows[0].inputs.originalLineTotalInput.value)
+        }
+        if (itemDefinitions[0].captureBlankSources) {
+          amounts.sourceLineTotal = String(rows[0].inputs.lineTotalInput.value ?? '')
+          amounts.sourceOriginalLineTotal = String(rows[0].inputs.originalLineTotalInput.value ?? '')
+        }
+        if (#{(!initial_tax_rate_summary.nil?).to_json}) {
+          amounts.taxRateSummary = taxRateSummary.textContent
+        }
 
         return amounts
       }
 
       controller.recalculate()
       const initial = snapshot()
-      rows[0].inputs.quantityInput.value = '2'
-      controller.recalculate()
-      const doubled = snapshot()
-      rows[0].inputs.quantityInput.value = '1'
-      controller.recalculate()
-      const restored = snapshot()
+      const changedDiscountRate = #{changed_discount_rate.to_json}
+      const changedPrice = #{changed_price.to_json}
+      const changedPriceBeforeDiscount = #{changed_price_before_discount.to_json}
+      const changedQuantityUnit = #{changed_quantity_unit.to_json}
+      let doubled
+      let restored
+      let result
+      if (changedPriceBeforeDiscount !== null) {
+        const initialPrice = rows[0].inputs.priceInput.value
+        rows[0].inputs.priceInput.value = String(changedPriceBeforeDiscount)
+        controller.recalculate()
+        const priceEntered = snapshot()
+        rows[0].inputs.priceInput.value = initialPrice
+        controller.recalculate()
+        const priceRestored = snapshot()
+        if (changedQuantityUnit !== null) rows[0].inputs.quantityUnitInput.value = String(changedQuantityUnit)
+        rows[0].inputs.discountRateInput.value = String(changedDiscountRate)
+        controller.recalculate()
+        const discounted = snapshot()
+        result = { initial, priceEntered, priceRestored, discounted }
+      } else if (changedDiscountRate !== null) {
+        const initialDiscountRate = rows[0].inputs.discountRateInput.value
+        const initialQuantityUnit = rows[0].inputs.quantityUnitInput.value
+        if (changedQuantityUnit !== null) rows[0].inputs.quantityUnitInput.value = String(changedQuantityUnit)
+        rows[0].inputs.discountRateInput.value = String(changedDiscountRate)
+        controller.recalculate()
+        doubled = snapshot()
+        rows[0].inputs.discountRateInput.value = initialDiscountRate
+        rows[0].inputs.quantityUnitInput.value = initialQuantityUnit
+        controller.recalculate()
+        restored = snapshot()
+      } else if (changedPrice !== null) {
+        const initialPrice = rows[0].inputs.priceInput.value
+        rows[0].inputs.priceInput.value = String(changedPrice)
+        controller.recalculate()
+        doubled = snapshot()
+        rows[0].inputs.priceInput.value = initialPrice
+        controller.recalculate()
+        restored = snapshot()
+      } else {
+        rows[0].inputs.quantityInput.value = '2'
+        controller.recalculate()
+        doubled = snapshot()
+        rows[0].inputs.quantityInput.value = '1'
+        controller.recalculate()
+        restored = snapshot()
+      }
 
-      process.stdout.write(JSON.stringify({ initial, doubled, restored }))
+      if (!result) result = { initial, doubled, restored }
+      const changedFirstTaxRate = #{changed_first_tax_rate.to_json}
+      if (changedFirstTaxRate !== null) {
+        rows[0].inputs.taxRateInput.value = String(changedFirstTaxRate)
+        controller.recalculate()
+        result.changedFirstTaxRate = snapshot()
+      }
+
+      process.stdout.write(JSON.stringify(result))
     JAVASCRIPT
   end
 
@@ -168,11 +268,12 @@ RSpec.describe "Receipt form Stimulus controller" do
     end
   end
 
-  it "keeps the latest countable line total as the baseline for repeated recalculation" do
+  it "keeps persisted countable line total baselines immutable during recalculation" do
     aggregate_failures do
-      expect(source).to include("lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)")
-      expect(source).to include("lineTotalInput.dataset.originalSavedLineTotal = String(lineTotal)")
-      expect(source).to include("if (this.recalculatesQuantityUnit(quantityUnit))")
+      expect(source).not_to include("lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)")
+      expect(source).not_to include("lineTotalInput.dataset.originalSavedLineTotal = String(lineTotal)")
+      expect(source).to include("lineTotalInput.dataset.workingOriginalLineTotal = String(originalLineTotal)")
+      expect(source).to include("originalLineTotalInput.value = originalLineTotal")
     end
   end
 
@@ -308,6 +409,616 @@ RSpec.describe "Receipt form Stimulus controller" do
         "finalPaymentTotal" => 231
       )
     end
+  end
+
+  it "inherits a safe single item tax rate for a blank purchase adjustment like the Amount Engine" do
+    items = [ { price: 100, lineTotal: 100, taxRate: 10 } ]
+    adjustments = [ { amount: 10, taxRate: nil, effect: "purchase_adjustment", sign: "surcharge" } ]
+
+    internal = run_amount_round_trip(basis: "internal", items:, adjustments:)
+    external = run_amount_round_trip(basis: "external", items:, adjustments:)
+    incompatible = run_amount_round_trip(
+      basis: "external",
+      items:,
+      adjustments:,
+      adjustment_tax_detail_rates: [ 8 ]
+    )
+
+    aggregate_failures do
+      expect(internal["initial"]).to include("subtotal" => 100, "tax" => 10, "total" => 110)
+      expect(internal["doubled"]).to include("subtotal" => 191, "tax" => 19, "total" => 210)
+      expect(internal["restored"]).to eq(internal["initial"])
+      expect(external["initial"]).to include("subtotal" => 110, "tax" => 11, "total" => 121)
+      expect(external["doubled"]).to include("subtotal" => 210, "tax" => 21, "total" => 231)
+      expect(external["restored"]).to eq(external["initial"])
+      expect(incompatible["initial"]).to include("subtotal" => 110, "tax" => 10, "total" => 120)
+    end
+  end
+
+  it "drops stale tax-detail evidence after a purchase input changes" do
+    result = run_amount_round_trip(
+      basis: "external",
+      items: [ { price: 7, lineTotal: 7, taxRate: 8 } ],
+      adjustments: [ { amount: 7, taxRate: nil, effect: "purchase_adjustment", sign: "surcharge" } ],
+      adjustment_tax_detail_rates: [ 8 ],
+      changed_first_tax_rate: 10
+    )
+
+    aggregate_failures do
+      expect(result["initial"]).to include("subtotal" => 14, "tax" => 1, "total" => 15)
+      expect(result["restored"]).to eq(result["initial"])
+      expect(result["changedFirstTaxRate"]).to include("subtotal" => 14, "tax" => 1, "total" => 15)
+    end
+  end
+
+  it "drops stored tax-detail rates when the Amount Engine rejects their numeric evidence" do
+    result = run_amount_round_trip(
+      basis: "external",
+      items: [ { price: 100, lineTotal: 100, taxRate: 10 } ],
+      adjustments: [ { amount: 10, taxRate: nil, effect: "purchase_adjustment", sign: "surcharge" } ],
+      adjustment_tax_detail_rates: [ 8 ],
+      adjustment_tax_detail_evidence_stale: true
+    )
+
+    aggregate_failures do
+      expect(result["initial"]).to include("subtotal" => 110, "tax" => 11, "total" => 121)
+      expect(result["restored"]).to eq(result["initial"])
+    end
+  end
+
+  it "drops stored tax-detail rates on the initial preview after a failed changed purchase submission" do
+    result = run_amount_round_trip(
+      basis: "external",
+      items: [ { price: 100, lineTotal: 100, taxRate: 10 } ],
+      adjustments: [ { amount: 10, taxRate: nil, effect: "purchase_adjustment", sign: "surcharge" } ],
+      adjustment_tax_detail_rates: [ 8 ],
+      purchase_inputs_changed: true
+    )
+
+    aggregate_failures do
+      expect(result["initial"]).to include("subtotal" => 110, "tax" => 11, "total" => 121)
+      expect(result["restored"]).to eq(result["initial"])
+    end
+  end
+
+  it "restores the persisted line total when a discount rate is changed and returned" do
+    without_initial_discount = run_amount_round_trip(
+      basis: "external",
+      items: [ { price: 1_000, originalLineTotal: 1_000, lineTotal: 1_000, taxRate: 10, discountRate: nil } ],
+      changed_discount_rate: 10
+    )
+    with_initial_discount = run_amount_round_trip(
+      basis: "external",
+      items: [ { price: 1_000, originalLineTotal: 1_000, lineTotal: 900, taxRate: 10, discountRate: 10 } ],
+      changed_discount_rate: 20
+    )
+
+    aggregate_failures do
+      expect(without_initial_discount).to eq(
+        "initial" => { "subtotal" => 1_000, "tax" => 100, "total" => 1_100, "firstLineTotal" => 1_000 },
+        "doubled" => { "subtotal" => 900, "tax" => 90, "total" => 990, "firstLineTotal" => 900 },
+        "restored" => { "subtotal" => 1_000, "tax" => 100, "total" => 1_100, "firstLineTotal" => 1_000 }
+      )
+      expect(with_initial_discount).to eq(
+        "initial" => { "subtotal" => 900, "tax" => 90, "total" => 990, "firstLineTotal" => 900 },
+        "doubled" => { "subtotal" => 800, "tax" => 80, "total" => 880, "firstLineTotal" => 800 },
+        "restored" => { "subtotal" => 900, "tax" => 90, "total" => 990, "firstLineTotal" => 900 }
+      )
+    end
+  end
+
+  it "preserves an explicit countable line total when price is blank" do
+    quantity_result = run_amount_round_trip(
+      basis: "internal",
+      items: [ { price: nil, originalLineTotal: 500, lineTotal: 500, taxRate: 0 } ]
+    )
+    price_result = run_amount_round_trip(
+      basis: "internal",
+      items: [ { price: nil, originalLineTotal: 500, lineTotal: 500, taxRate: 0 } ],
+      changed_price: 100
+    )
+
+    aggregate_failures do
+      expect(quantity_result).to eq(
+        "initial" => { "subtotal" => 500, "tax" => 0, "total" => 500, "firstLineTotal" => 500 },
+        "doubled" => { "subtotal" => 500, "tax" => 0, "total" => 500, "firstLineTotal" => 500 },
+        "restored" => { "subtotal" => 500, "tax" => 0, "total" => 500, "firstLineTotal" => 500 }
+      )
+      expect(price_result).to eq(
+        "initial" => { "subtotal" => 500, "tax" => 0, "total" => 500, "firstLineTotal" => 500 },
+        "doubled" => { "subtotal" => 100, "tax" => 0, "total" => 100, "firstLineTotal" => 100 },
+        "restored" => { "subtotal" => 500, "tax" => 0, "total" => 500, "firstLineTotal" => 500 }
+      )
+    end
+  end
+
+  it "keeps amountless placeholder source fields blank while quantity changes" do
+    quantity_result = run_amount_round_trip(
+      basis: "external",
+      items: [
+        {
+          price: nil,
+          originalLineTotal: nil,
+          lineTotal: nil,
+          taxRate: 0,
+          captureBlankSources: true
+        }
+      ],
+      initial_receipt_amounts: { subtotal: 91, tax: 9, total: 100 }
+    )
+    price_result = run_amount_round_trip(
+      basis: "external",
+      items: [
+        {
+          price: nil,
+          originalLineTotal: nil,
+          lineTotal: nil,
+          taxRate: 0,
+          captureBlankSources: true
+        }
+      ],
+      initial_receipt_amounts: { subtotal: 91, tax: 9, total: 100 },
+      changed_price: 100
+    )
+    blank_adjustment_result = run_amount_round_trip(
+      basis: "external",
+      items: [
+        {
+          price: nil,
+          originalLineTotal: nil,
+          lineTotal: nil,
+          taxRate: 0,
+          captureBlankSources: true
+        }
+      ],
+      adjustments: [
+        { amount: nil, taxRate: nil, effect: "purchase_adjustment", sign: "discount" }
+      ],
+      initial_receipt_amounts: { subtotal: 91, tax: 9, total: 100 },
+      add_blank_adjustment_after_initial: true
+    )
+    tax_summary_result = run_amount_round_trip(
+      basis: "external",
+      items: [
+        {
+          price: nil,
+          originalLineTotal: nil,
+          lineTotal: nil,
+          taxRate: 0,
+          captureBlankSources: true
+        }
+      ],
+      initial_receipt_amounts: { subtotal: 91, tax: 9, total: 100 },
+      initial_tax_rate_summary: "10%"
+    )
+    purchase_adjustment_result = run_amount_round_trip(
+      basis: "external",
+      items: [ { price: nil, originalLineTotal: nil, lineTotal: nil, taxRate: 0 } ],
+      adjustments: [
+        { amount: 10, taxRate: 10, effect: "purchase_adjustment", sign: "surcharge" }
+      ],
+      initial_receipt_amounts: { subtotal: 91, tax: 9, total: 100 }
+    )
+    payment_adjustment_result = run_amount_round_trip(
+      basis: "external",
+      items: [ { price: nil, originalLineTotal: nil, lineTotal: nil, taxRate: 0 } ],
+      adjustments: [
+        { amount: 10, taxRate: nil, effect: "payment_adjustment", sign: "discount" }
+      ],
+      initial_receipt_amounts: { subtotal: 91, tax: 9, total: 100 }
+    )
+    explicit_zero_result = run_amount_round_trip(
+      basis: "external",
+      items: [ { price: nil, originalLineTotal: nil, lineTotal: nil, taxRate: 0 } ],
+      initial_receipt_amounts: { subtotal: 91, tax: 9, total: 100 },
+      changed_price: 0
+    )
+    corrected_after_422_result = run_amount_round_trip(
+      basis: "external",
+      items: [ { price: nil, originalLineTotal: nil, lineTotal: nil, taxRate: 0 } ],
+      initial_receipt_amounts: { subtotal: 91, tax: 9, total: 100 },
+      purchase_inputs_changed: true,
+      purchase_input_baseline_trusted: true
+    )
+
+    expected = {
+      "subtotal" => 91,
+      "tax" => 9,
+      "total" => 100,
+      "firstLineTotal" => 0,
+      "sourceLineTotal" => "",
+      "sourceOriginalLineTotal" => ""
+    }
+    aggregate_failures do
+      expect(quantity_result).to eq(
+        "initial" => expected,
+        "doubled" => expected,
+        "restored" => expected
+      )
+      expect(price_result).to eq(
+        "initial" => expected,
+        "doubled" => {
+          "subtotal" => 100,
+          "tax" => 0,
+          "total" => 100,
+          "firstLineTotal" => 100,
+          "sourceLineTotal" => "100",
+          "sourceOriginalLineTotal" => "100"
+        },
+        "restored" => expected
+      )
+      expect(blank_adjustment_result["initial"]).to include(
+        "subtotal" => 91,
+        "tax" => 9,
+        "total" => 100,
+        "sourceLineTotal" => "",
+        "sourceOriginalLineTotal" => ""
+      )
+      expect(tax_summary_result.values).to all(include("taxRateSummary" => "10%"))
+      expect(purchase_adjustment_result["initial"]).to include(
+        "subtotal" => 91,
+        "tax" => 9,
+        "total" => 100,
+        "paymentAdjustmentTotal" => 0,
+        "finalPaymentTotal" => 100
+      )
+      expect(payment_adjustment_result["initial"]).to include(
+        "subtotal" => 91,
+        "tax" => 9,
+        "total" => 100,
+        "paymentAdjustmentTotal" => -10,
+        "finalPaymentTotal" => 90
+      )
+      expect(explicit_zero_result["doubled"]).to include(
+        "subtotal" => 0,
+        "tax" => 0,
+        "total" => 0,
+        "firstLineTotal" => 0
+      )
+      expect(explicit_zero_result["restored"]).to include(
+        "subtotal" => 91,
+        "tax" => 9,
+        "total" => 100
+      )
+      expect(corrected_after_422_result.values).to all(include(
+        "subtotal" => 91,
+        "tax" => 9,
+        "total" => 100
+      ))
+    end
+  end
+
+  it "uses the trusted pre-submit fingerprint after a 422 correction" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const baseline = JSON.stringify({ items: [], adjustments: [] })
+      const hiddenBaseline = { value: baseline }
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        element: { value: { dataset: {} } },
+        purchaseInputsChangedValue: { value: true },
+        hasInitialPurchaseInputFingerprintTarget: { value: true },
+        initialPurchaseInputFingerprintTarget: { value: hiddenBaseline }
+      })
+      controller.purchaseInputFingerprint = () => baseline
+
+      controller.captureInitialPurchaseInputFingerprint()
+
+      process.stdout.write(JSON.stringify({
+        initial: controller.initialPurchaseInputFingerprint,
+        trusted: controller.purchaseInputBaselineTrusted,
+        changed: controller.purchaseInputsChangedForPreview(),
+        hidden: hiddenBaseline.value
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "initial" => '{"items":[],"adjustments":[]}',
+      "trusted" => true,
+      "changed" => false,
+      "hidden" => '{"items":[],"adjustments":[]}'
+    )
+  end
+
+  it "keeps the initial receipt amount snapshot across Turbo reconnects" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const element = { dataset: {} }
+      const subtotal = { textContent: '¥91', dataset: {} }
+      const tax = { textContent: '¥9', dataset: {} }
+      const total = { textContent: '¥100', dataset: {} }
+      const taxRateSummary = { textContent: '10%' }
+      Object.defineProperties(controller, {
+        element: { value: element },
+        hasSubtotalAmountTarget: { value: true },
+        subtotalAmountTarget: { value: subtotal },
+        hasTaxAmountTarget: { value: true },
+        taxAmountTarget: { value: tax },
+        hasTotalAmountTarget: { value: true },
+        totalAmountTarget: { value: total },
+        hasTaxRateSummaryTarget: { value: true },
+        taxRateSummaryTarget: { value: taxRateSummary }
+      })
+
+      controller.captureInitialReceiptAmounts()
+      const first = controller.initialReceiptAmounts
+      subtotal.textContent = '¥0'
+      tax.textContent = '¥0'
+      total.textContent = '¥0'
+      controller.captureInitialReceiptAmounts()
+
+      process.stdout.write(JSON.stringify({ first, reconnected: controller.initialReceiptAmounts }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "first" => { "subtotal" => 91, "tax" => 9, "total" => 100, "taxRateSummary" => "10%" },
+      "reconnected" => { "subtotal" => 91, "tax" => 9, "total" => 100, "taxRateSummary" => "10%" }
+    )
+  end
+
+  it "drops a transient countable working source before switching to a measurement unit" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [
+        {
+          price: nil,
+          originalLineTotal: 500,
+          lineTotal: 500,
+          taxRate: 0,
+          captureOriginalLineTotal: true
+        }
+      ],
+      changed_discount_rate: 10,
+      changed_price_before_discount: 100,
+      changed_quantity_unit: "kilogram"
+    )
+
+    expect(result["discounted"]).to eq(
+      "subtotal" => 450,
+      "tax" => 0,
+      "total" => 450,
+      "firstLineTotal" => 450,
+      "sourceOriginalLineTotal" => 500
+    )
+  end
+
+  it "restores the submitted pre-discount source after a transient countable price" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [
+        {
+          price: nil,
+          originalLineTotal: 500,
+          lineTotal: 500,
+          taxRate: 0,
+          captureOriginalLineTotal: true
+        }
+      ],
+      changed_discount_rate: 10,
+      changed_price_before_discount: 100
+    )
+
+    expect(result).to eq(
+      "initial" => {
+        "subtotal" => 500,
+        "tax" => 0,
+        "total" => 500,
+        "firstLineTotal" => 500,
+        "sourceOriginalLineTotal" => 500
+      },
+      "priceEntered" => {
+        "subtotal" => 100,
+        "tax" => 0,
+        "total" => 100,
+        "firstLineTotal" => 100,
+        "sourceOriginalLineTotal" => 100
+      },
+      "priceRestored" => {
+        "subtotal" => 500,
+        "tax" => 0,
+        "total" => 500,
+        "firstLineTotal" => 500,
+        "sourceOriginalLineTotal" => 500
+      },
+      "discounted" => {
+        "subtotal" => 450,
+        "tax" => 0,
+        "total" => 450,
+        "firstLineTotal" => 450,
+        "sourceOriginalLineTotal" => 500
+      }
+    )
+  end
+
+  it "submits the current pre-discount source after changing a countable item to measurement" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [
+        {
+          price: 100,
+          quantity: 2,
+          originalLineTotal: 0,
+          lineTotal: 0,
+          taxRate: 0,
+          captureOriginalLineTotal: true
+        }
+      ],
+      changed_discount_rate: 10,
+      changed_quantity_unit: "kilogram"
+    )
+
+    expect(result).to eq(
+      "initial" => {
+        "subtotal" => 200,
+        "tax" => 0,
+        "total" => 200,
+        "firstLineTotal" => 200,
+        "sourceOriginalLineTotal" => 200
+      },
+      "doubled" => {
+        "subtotal" => 180,
+        "tax" => 0,
+        "total" => 180,
+        "firstLineTotal" => 180,
+        "sourceOriginalLineTotal" => 200
+      },
+      "restored" => {
+        "subtotal" => 200,
+        "tax" => 0,
+        "total" => 200,
+        "firstLineTotal" => 200,
+        "sourceOriginalLineTotal" => 200
+      }
+    )
+  end
+
+  it "uses the server adjustment classification contract after a label change" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        adjustmentPaymentKindsValue: { value: 'point_usage' },
+        adjustmentPurchaseKindsValue: { value: 'service_charge,late_night_charge,delivery_fee,bag_fee,handling_fee,coupon,return_refund' },
+        adjustmentPaymentLabelPatternValue: { value: 'キャッシュレス|cashless|payment\\s*discount' }
+      })
+      const input = (value) => ({ value })
+      const row = ({ kind, label, effect, sourcePayment = false, sourceNonManual = false }) => {
+        const kindInput = input(kind)
+        const labelInput = input(label)
+        return {
+          dataset: {
+            receiptFormAdjustmentEffect: effect,
+            receiptFormAdjustmentSourcePayment: String(sourcePayment),
+            receiptFormAdjustmentSourceNonManual: String(sourceNonManual)
+          },
+          kindInput,
+          labelInput,
+          querySelector (selector) {
+            if (selector.includes('adjustmentKindInput')) return kindInput
+            if (selector.includes('[label]')) return labelInput
+            return null
+          }
+        }
+      }
+
+      const labelOnly = row({ kind: 'receipt_discount', label: '通常値引き', effect: 'purchase_adjustment' })
+      const sourceOnly = row({ kind: 'receipt_discount', label: '還元額', effect: 'payment_adjustment', sourcePayment: true })
+      const explicitPurchase = row({ kind: 'coupon', label: 'キャッシュレス還元', effect: 'purchase_adjustment', sourcePayment: true })
+      const labelInitiallyPayment = row({
+        kind: 'receipt_discount',
+        label: 'キャッシュレス還元',
+        effect: 'payment_adjustment'
+      })
+      const nonManual = row({
+        kind: 'receipt_discount',
+        label: '通常値引き',
+        effect: 'purchase_adjustment',
+        sourceNonManual: true
+      })
+      const snapshots = [controller.adjustmentEffectForRow(labelOnly)]
+      labelOnly.labelInput.value = 'キャッシュレス還元'
+      snapshots.push(controller.adjustmentEffectForRow(labelOnly))
+      labelOnly.labelInput.value = '通常値引き'
+      snapshots.push(controller.adjustmentEffectForRow(labelOnly))
+      labelInitiallyPayment.labelInput.value = '通常値引き'
+      nonManual.kindInput.value = 'other'
+      const nonManualOther = controller.adjustmentEffectForRow(nonManual)
+      nonManual.kindInput.value = 'receipt_discount'
+
+      process.stdout.write(JSON.stringify({
+        labelOnly: snapshots,
+        sourceOnly: controller.adjustmentEffectForRow(sourceOnly),
+        explicitPurchase: controller.adjustmentEffectForRow(explicitPurchase),
+        labelInitiallyPayment: controller.adjustmentEffectForRow(labelInitiallyPayment),
+        nonManualOther,
+        nonManualReceiptDiscount: controller.adjustmentEffectForRow(nonManual)
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "labelOnly" => %w[purchase_adjustment payment_adjustment purchase_adjustment],
+      "sourceOnly" => "payment_adjustment",
+      "explicitPurchase" => "purchase_adjustment",
+      "labelInitiallyPayment" => "purchase_adjustment",
+      "nonManualOther" => "unknown_adjustment",
+      "nonManualReceiptDiscount" => "purchase_adjustment"
+    )
+  end
+
+  it "uses the Amount Engine nonnegative draft when a purchase candidate contains a negative amount" do
+    items = [
+      { price: 100, lineTotal: 100, taxRate: 10 },
+      { price: 100, lineTotal: 100, taxRate: 8 }
+    ]
+    adjustments = [
+      { amount: 190, taxRate: 10, effect: "purchase_adjustment", sign: "discount" }
+    ]
+
+    internal = run_amount_round_trip(basis: "internal", items:, adjustments:)
+    external = run_amount_round_trip(basis: "external", items:, adjustments:)
+
+    aggregate_failures do
+      expect(internal["initial"]).to include("subtotal" => 0, "tax" => 0, "total" => 0)
+      expect(internal["restored"]).to eq(internal["initial"])
+      expect(external["initial"]).to include("subtotal" => 0, "tax" => 0, "total" => 0)
+      expect(external["restored"]).to eq(external["initial"])
+    end
+  end
+
+  it "keeps the raw negative candidate when deriving final payment for server-side review" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [ { price: 100, lineTotal: 100, taxRate: 0 } ],
+      adjustments: [
+        { amount: 200, taxRate: 0, effect: "purchase_adjustment", sign: "discount" },
+        { amount: 10, taxRate: 0, effect: "payment_adjustment", sign: "discount" }
+      ]
+    )
+
+    expect(result["initial"]).to include(
+      "subtotal" => 0,
+      "tax" => 0,
+      "total" => 0,
+      "paymentAdjustmentTotal" => -10,
+      "finalPaymentTotal" => -110
+    )
+  end
+
+  it "preserves a negative final payment amount for server-side review" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [ { price: 100, lineTotal: 100, taxRate: 0 } ],
+      adjustments: [ { amount: 200, taxRate: 0, effect: "payment_adjustment", sign: "discount" } ]
+    )
+
+    aggregate_failures do
+      expect(result["initial"]).to include(
+        "subtotal" => 100,
+        "tax" => 0,
+        "total" => 100,
+        "paymentAdjustmentTotal" => -200,
+        "finalPaymentTotal" => -100
+      )
+      expect(result["restored"]).to eq(result["initial"])
+    end
+  end
+
+  it "does not write a negative amount through the payment synchronization action" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const input = { value: '100' }
+      const row = { querySelector: () => input }
+      controller.visiblePaymentRows = () => [row]
+      controller.currentFinalPaymentTotal = () => -100
+      controller.paymentAmountSum = () => 100
+      controller.parseIntegerInput = (value) => Number(value)
+      let recalculated = false
+      controller.recalculate = () => { recalculated = true }
+
+      controller.syncPaymentAmountToFinal({ preventDefault () {} })
+
+      process.stdout.write(JSON.stringify({ value: input.value, recalculated }))
+    JAVASCRIPT
+
+    expect(result).to eq("value" => "100", "recalculated" => false)
   end
 
   it "suspends and restores the preview without rewriting an invalid field" do

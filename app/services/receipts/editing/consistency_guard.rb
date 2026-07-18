@@ -62,6 +62,7 @@ class Receipts::Editing::ConsistencyGuard
 
   def child_purchase_total_mismatch?
     return false if @receipt_items.empty?
+    return false if receipt_input_without_item_amounts?
 
     computed_adjusted_item_total = amount_result_value(:computed, :adjusted_item_total)
     resolved_total = amount_result_value(:resolved, :total)
@@ -77,6 +78,28 @@ class Receipts::Editing::ConsistencyGuard
       end
 
     expected_purchase_total != resolved_total
+  end
+
+  def receipt_input_without_item_amounts?
+    computed = fetch_value(@amount_result, :computed)
+    return false unless fetch_value(computed, :amount_engine_basis).to_s == "receipt_input_preserved"
+
+    @receipt_items.none? { |item| item_amount_source_present?(item) }
+  end
+
+  def item_amount_source_present?(item)
+    value_present?(fetch_value(item, :price)) ||
+      value_present?(fetch_value(item, :line_total)) ||
+      positive_amount?(fetch_value(item, :original_line_total)) ||
+      positive_amount?(fetch_value(item, :discount_amount))
+  end
+
+  def value_present?(value)
+    !value.nil? && value.to_s.strip != ""
+  end
+
+  def positive_amount?(value)
+    ReceiptAmountService.parse_amount(value).positive?
   end
 
   def final_payment_total_mismatch?

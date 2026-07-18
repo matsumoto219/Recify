@@ -49,6 +49,57 @@ RSpec.describe Receipts::Editing::ChangeSet do
     expect(result.purchase_amounts_changed?).to be(true)
   end
 
+  it '金額sourceを持たないplaceholderのquantity変更をpurchase amount変更にしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '金額未入力', price: nil, quantity: 1,
+      quantity_unit_code: 'each', original_line_total: nil, line_total: nil
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'price' => '',
+            'quantity' => '2',
+            'quantity_unit_code' => 'each',
+            'original_line_total' => '',
+            'line_total' => ''
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.purchase_amounts_changed?).to be(false)
+      expect(result.amount_inputs_submitted?).to be(true)
+    end
+  end
+
+  it 'originalとdiscountの0だけを持つplaceholderも金額source扱いにしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '金額未入力', price: nil, quantity: 1,
+      quantity_unit_code: 'each', original_line_total: 0, discount_amount: 0, line_total: nil
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'quantity' => '2',
+            'original_line_total' => '',
+            'line_total' => ''
+          }
+        }
+      }
+    )
+
+    expect(result.purchase_amounts_changed?).to be(false)
+  end
+
   it 'countable itemのstale hidden line_totalだけをpurchase amount変更にしない' do
     item = receipt.receipt_items.create!(
       confirmed_name: '商品', price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100
@@ -289,6 +340,39 @@ RSpec.describe Receipts::Editing::ChangeSet do
       expect(result.purchase_adjustments_changed).to be(true)
       expect(result.payment_adjustments_changed).to be(true)
       expect(result.amount_related_changed?).to be(true)
+    end
+  end
+
+  it 'labelのnilとblankの差だけでは購入金額sourceをstaleにしない' do
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'delivery_fee',
+      label: nil,
+      amount: 10,
+      sign: 'surcharge',
+      tax_rate: nil,
+      source: 'manual'
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_adjustments_attributes' => {
+          '0' => {
+            'id' => adjustment.id.to_s,
+            'kind' => adjustment.kind,
+            'label' => '',
+            'amount' => adjustment.amount.to_s,
+            'sign' => adjustment.sign,
+            'tax_rate' => ''
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.purchase_adjustments_changed).to be(false)
+      expect(result.payment_adjustments_changed).to be(false)
+      expect(result.derived_purchase_inputs_changed?).to be(false)
     end
   end
 end

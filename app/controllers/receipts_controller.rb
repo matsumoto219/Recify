@@ -12,6 +12,7 @@ class ReceiptsController < ApplicationController
              if: :rate_limit_signed_in?
 
   MAX_SEARCH_QUERY_LENGTH = 100
+  RECEIPT_FORM_FINGERPRINT_MAX_BYTES = 65_536
   SUSPICIOUS_SEARCH_PATTERN = /(--|;|\/\*|\*\/|\b(drop|delete|insert|update|alter|truncate|union|select)\b)/i
 
   def index
@@ -133,6 +134,7 @@ class ReceiptsController < ApplicationController
   end
 
   def create
+    carry_receipt_form_initial_purchase_input_fingerprint
     rebuild_blank_item_row_after_failure = blank_new_receipt_item_rows_submitted?
     rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
     @receipt = current_user.receipts.new
@@ -239,6 +241,7 @@ class ReceiptsController < ApplicationController
   end
 
   def update
+    carry_receipt_form_initial_purchase_input_fingerprint
     rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
 
     if storage_quota_exceeded_for?(uploaded_receipt_image, excluding_blob: existing_receipt_image_blob)
@@ -274,6 +277,10 @@ class ReceiptsController < ApplicationController
       )
       return
     end
+    @receipt_form_purchase_inputs_changed = receipt_edit_save_change_set(
+      update_params,
+      :edit_save
+    )&.derived_purchase_inputs_changed? == true
 
     if manual_child_count_limit_exceeded?(update_params)
       render_manual_child_count_limit_exceeded(
@@ -373,6 +380,14 @@ class ReceiptsController < ApplicationController
 
   private
 
+  def carry_receipt_form_initial_purchase_input_fingerprint
+    fingerprint = params[:receipt_form_initial_purchase_input_fingerprint]
+    return unless fingerprint.is_a?(String)
+    return if fingerprint.bytesize > RECEIPT_FORM_FINGERPRINT_MAX_BYTES
+
+    @receipt_form_initial_purchase_input_fingerprint = fingerprint
+  end
+
   def set_receipt
     @receipt = current_user.receipts.active_for_user.find_by!(public_id: params[:public_id])
   end
@@ -380,8 +395,21 @@ class ReceiptsController < ApplicationController
   def prepare_receipt_form_presenter(submitted_params: nil)
     @receipt_form_presenter = ReceiptFormPresenter.new(
       receipt: @receipt,
-      submitted_params: submitted_params
+      submitted_params: submitted_params,
+      purchase_inputs_changed: @receipt_form_purchase_inputs_changed,
+      adjustment_tax_detail_evidence_stale: receipt_form_adjustment_tax_detail_evidence_stale?
     )
+  end
+
+  def receipt_form_adjustment_tax_detail_evidence_stale?
+    if defined?(@receipt_form_adjustment_tax_detail_evidence_stale)
+      return @receipt_form_adjustment_tax_detail_evidence_stale
+    end
+    return false unless @receipt&.persisted?
+    return false if @receipt.receipt_tax_details.empty?
+
+    result = calculate_receipt_amounts({}, :edit_save, false, amount_receipt_tax_details(:edit_save))
+    Array(result[:blocking_inconsistencies]).map(&:to_sym).include?(:tax_detail_mismatch)
   end
 
   def prepare_upload_page_presenter
@@ -624,6 +652,12 @@ class ReceiptsController < ApplicationController
 
   def render_invalid_numeric_input(template:, rebuild_blank_item_row_after_failure: false, rebuild_blank_adjustment_row_after_failure: false)
     submitted_params = receipt_params.to_h
+    if @receipt.persisted?
+      @receipt_form_purchase_inputs_changed = Receipts::EditForm.purchase_inputs_changed?(
+        receipt: @receipt,
+        attributes: submitted_params
+      )
+    end
     @receipt.errors.add(:base, t("receipts.form.errors.invalid_numeric_input"))
     if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty? && submitted_params["receipt_items_attributes"].blank?
       build_receipt_item_row_for_render
@@ -703,6 +737,7 @@ class ReceiptsController < ApplicationController
         :product_code,
         :tax_rate,
         :discount_rate,
+        :original_line_total,
         :line_total,
         :position_index,
         :_destroy
@@ -1095,6 +1130,7 @@ class ReceiptsController < ApplicationController
 
   def apply_amount_calculation!(permitted, attributes: permitted, context:)
     change_set = receipt_edit_save_change_set(permitted, context)
+    @receipt_form_purchase_inputs_changed = change_set&.derived_purchase_inputs_changed? == true
     clear_amounts = clear_amounts_for_deleted_receipt_items?(permitted, context) || change_set&.derived_purchase_inputs_changed?
     receipt_tax_details = clear_amounts ? [] : amount_receipt_tax_details(context)
     result = calculate_receipt_amounts(permitted, context, clear_amounts, receipt_tax_details)
@@ -1103,6 +1139,7 @@ class ReceiptsController < ApplicationController
       result = calculate_receipt_amounts(permitted, context, clear_amounts, [])
       tax_details_recalculated = true
     end
+    @receipt_form_adjustment_tax_detail_evidence_stale = tax_details_recalculated
 
     Receipts::Editing.apply_amount_result!(
       receipt: @receipt,

@@ -1,10 +1,25 @@
 class ReceiptFormPresenter
   attr_reader :receipt
 
-  def initialize(receipt:, submitted_params: nil)
+  def initialize(
+    receipt:,
+    submitted_params: nil,
+    purchase_inputs_changed: false,
+    adjustment_tax_detail_evidence_stale: false
+  )
     @receipt = receipt
     @submitted_params = submitted_params.to_h.with_indifferent_access
     @submitted_values_by_object_id = {}
+    @purchase_inputs_changed = purchase_inputs_changed == true
+    @adjustment_tax_detail_evidence_stale = adjustment_tax_detail_evidence_stale == true
+  end
+
+  def purchase_inputs_changed?
+    @purchase_inputs_changed
+  end
+
+  def adjustment_tax_detail_evidence_stale?
+    @adjustment_tax_detail_evidence_stale
   end
 
   def form_dom_id
@@ -66,6 +81,29 @@ class ReceiptFormPresenter
 
   def adjustment_payment_kinds_value
     ReceiptAmountService.payment_adjustment_kinds.join(",")
+  end
+
+  def adjustment_purchase_kinds_value
+    ReceiptAmountService.purchase_adjustment_kinds.join(",")
+  end
+
+  def adjustment_payment_label_pattern_value
+    ReceiptAmountService.payment_adjustment_label_pattern_source
+  end
+
+  def adjustment_tax_detail_rates_value
+    receipt.receipt_tax_details.each_with_object([]) do |tax_detail, rates|
+      next unless tax_detail.amount.to_i.abs + tax_detail.net_amount.to_i.abs > 0
+
+      percentage = tax_detail.rate&.to_d&.*(100)
+      rates << if percentage.nil?
+        nil
+      elsif percentage.frac.zero?
+        percentage.to_i.to_s
+      else
+        percentage.to_s("F")
+      end
+    end
   end
 
   def decimal_quantity_units_value
@@ -259,7 +297,17 @@ class ReceiptFormPresenter
     end
 
     def original_line_total_value
-      new_record? ? 0 : (item.original_line_total.presence || item.line_total.to_i)
+      submitted_value(:original_line_total) do
+        if new_record?
+          nil
+        elsif item.original_line_total.to_i.positive?
+          item.original_line_total.to_i
+        elsif !item.line_total.nil?
+          item.line_total
+        else
+          nil
+        end
+      end
     end
 
     def line_total_data
@@ -432,7 +480,16 @@ class ReceiptFormPresenter
     end
 
     def calculation_effect
-      ReceiptAmountService.adjustment_effect(adjustment)
+      ReceiptAmountService.adjustment_effect(classification_input)
+    end
+
+    def source_text_payment_adjustment?
+      pattern = Regexp.new(ReceiptAmountService.payment_adjustment_label_pattern_source, Regexp::IGNORECASE)
+      adjustment.source_text.to_s.match?(pattern)
+    end
+
+    def source_non_manual?
+      adjustment.source.to_s != "manual"
     end
 
     def kind_options
@@ -462,6 +519,14 @@ class ReceiptFormPresenter
     private
 
     attr_reader :submitted_values
+
+    def classification_input
+      adjustment.attributes.symbolize_keys.merge(
+        kind: selected_kind,
+        label: label_value,
+        sign: selected_sign
+      )
+    end
 
     def submitted_value(field)
       return submitted_values[field] if submitted_values.key?(field)

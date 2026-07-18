@@ -50,6 +50,7 @@ export default class extends Controller {
     'paymentRow',
     'paymentDestroyField',
     'paymentAmountInput',
+    'initialPurchaseInputFingerprint',
     'adjustmentKindInput',
     'adjustmentSignInput',
     'adjustmentSignLabel',
@@ -69,6 +70,7 @@ export default class extends Controller {
     'lineTotalDisplay',
     'lineTotalTooltip',
     'lineTotalInput',
+    'originalLineTotalInput',
     'itemDetailsPanel',
     'itemDetailsToggle',
     'itemDetailsIcon',
@@ -106,6 +108,11 @@ export default class extends Controller {
     unsetLabel: { type: String, default: 'Unset' },
     multipleTaxRatesLabel: { type: String, default: 'Multiple tax rates' },
     adjustmentPaymentKinds: { type: String, default: 'point_usage' },
+    adjustmentPurchaseKinds: { type: String, default: 'service_charge,late_night_charge,delivery_fee,bag_fee,handling_fee,coupon,return_refund' },
+    adjustmentPaymentLabelPattern: { type: String, default: '' },
+    adjustmentTaxDetailRates: Array,
+    adjustmentTaxDetailEvidenceStale: { type: Boolean, default: false },
+    purchaseInputsChanged: { type: Boolean, default: false },
     adjustmentSurchargeKinds: { type: String, default: 'service_charge,late_night_charge,delivery_fee,bag_fee,handling_fee' },
     adjustmentDiscountKinds: { type: String, default: 'receipt_discount,coupon,point_usage,return_refund' },
     adjustmentSurchargeLabel: { type: String, default: 'Surcharge' },
@@ -138,6 +145,8 @@ export default class extends Controller {
     this.syncAdjustmentDetailsPanels()
     this.syncQuantityInputSteps()
     this.syncAdjustmentSigns()
+    this.captureInitialReceiptAmounts()
+    this.captureInitialPurchaseInputFingerprint()
     this.syncPaymentSummaryLayout()
     this.expandItemDetailsFromHash()
   }
@@ -273,6 +282,12 @@ export default class extends Controller {
     const row = event.currentTarget.closest('[data-receipt-form-target="adjustmentRow"]')
     this.syncAdjustmentEffectForRow(row)
     this.syncAdjustmentSignForRow(row)
+    this.recalculate()
+  }
+
+  adjustmentLabelChanged (event) {
+    const row = event.currentTarget.closest('[data-receipt-form-target="adjustmentRow"]')
+    this.syncAdjustmentEffectForRow(row)
     this.recalculate()
   }
 
@@ -641,6 +656,10 @@ export default class extends Controller {
     const taxRates = new Set()
     const taxGroups = new Map()
     const externalTax = this.usesExternalTax()
+    const amountBearingItemTaxRates = new Set()
+    let amountBearingItemCount = 0
+    let hasItemAmountSource = false
+    let allAmountBearingItemsHaveTaxRate = true
 
     this.itemRowTargets.forEach((row) => {
       if (this.previewRowExcluded(row, 'destroyField')) return
@@ -652,22 +671,46 @@ export default class extends Controller {
       const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
       const lineTotalDisplays = row.querySelectorAll('[data-receipt-form-target="lineTotalDisplay"]')
       const lineTotalInput = row.querySelector('[data-receipt-form-target="lineTotalInput"]')
+      const originalLineTotalInput = row.querySelector('[data-receipt-form-target="originalLineTotalInput"]')
 
       let quantity = this.clampNumber(this.parseDecimalInput(quantityInput?.value), 0, 9999)
       if (quantity <= 0) quantity = 1
+      const priceInputPresent = String(priceInput?.value ?? '').trim() !== ''
       const price = this.clampNumber(this.parseIntegerInput(priceInput?.value), 0, this.receiptItemPriceMaxValue)
       const discountRatePercent = this.parseDiscountRateInput(discountRateInput?.value)
       const taxRatePercent = this.clampNumber(this.parseDecimalInput(taxRateInput?.value), 0, 100)
       const quantityUnit = quantityUnitInput?.value
+      const itemAmountSourcePresent = this.itemAmountSourcePresentFor({
+        lineTotalInput,
+        priceInputPresent,
+        quantityUnit
+      })
+      hasItemAmountSource ||= itemAmountSourcePresent
 
       if (taxRatePercent > 0) {
         taxRates.add(taxRatePercent)
       }
 
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
-      const originalLineTotal = this.originalLineTotalFor({ quantity, price, quantityUnit, lineTotalInput })
-      let lineTotal = this.lineTotalFor({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput })
+      const originalLineTotal = this.originalLineTotalFor({
+        quantity,
+        price,
+        priceInputPresent,
+        quantityUnit,
+        lineTotalInput
+      })
+      let lineTotal = itemAmountSourcePresent
+        ? this.lineTotalFor({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput })
+        : 0
       lineTotal = this.clampNumber(lineTotal, 0, this.receiptItemLineTotalMaxValue)
+      if (lineTotal > 0) {
+        amountBearingItemCount += 1
+        if (String(taxRateInput?.value ?? '').trim() === '') {
+          allAmountBearingItemsHaveTaxRate = false
+        } else {
+          amountBearingItemTaxRates.add(taxRatePercent)
+        }
+      }
       if (taxRatePercent > 0) {
         taxGroups.set(taxRatePercent, (taxGroups.get(taxRatePercent) || 0) + lineTotal)
       }
@@ -681,7 +724,22 @@ export default class extends Controller {
         this.animateLineTotal(lineTotalDisplay, lineTotal, { withLabel })
       })
 
-      this.syncLineTotalState({ lineTotalInput, quantityUnit, originalLineTotal, lineTotal })
+      this.syncLineTotalState({
+        lineTotalInput,
+        originalLineTotalInput,
+        itemAmountSourcePresent,
+        priceInputPresent,
+        quantityUnit,
+        originalLineTotal,
+        lineTotal
+      })
+    })
+
+    const inheritedAdjustmentTaxRate = this.inheritedAdjustmentTaxRate({
+      amountBearingItemCount,
+      allAmountBearingItemsHaveTaxRate,
+      amountBearingItemTaxRates,
+      purchaseInputsChanged: this.purchaseInputsChangedForPreview()
     })
 
     this.adjustmentRowTargets.forEach((row) => {
@@ -694,7 +752,9 @@ export default class extends Controller {
       const effect = this.adjustmentEffectForRow(row)
       const sign = this.adjustmentSignForRow(row)
       const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, this.receiptAdjustmentAmountMaxValue)
-      const taxRatePercent = this.clampNumber(this.parseDecimalInput(taxRateInput?.value), 0, 100)
+      const explicitTaxRate = String(taxRateInput?.value ?? '').trim() !== ''
+      const submittedTaxRatePercent = this.clampNumber(this.parseDecimalInput(taxRateInput?.value), 0, 100)
+      const taxRatePercent = explicitTaxRate ? submittedTaxRatePercent : inheritedAdjustmentTaxRate
       if (amount <= 0) return
 
       if (taxRatePercent > 0 && effect !== 'payment_adjustment') {
@@ -723,10 +783,24 @@ export default class extends Controller {
       subtotalSum = total - taxSum
     }
 
-    total = this.clampNumber(total, 0, this.receiptTotalAmountMaxValue)
-    subtotalSum = this.clampNumber(subtotalSum, 0, this.receiptTotalAmountMaxValue)
-    taxSum = this.clampNumber(taxSum, 0, this.receiptTaxAmountMaxValue)
-    const finalPaymentTotal = this.clampNumber(total + paymentAdjustmentTotal, 0, this.receiptTotalAmountMaxValue)
+    const preserveInitialReceiptAmounts = this.preserveInitialReceiptAmountsForPreview({ hasItemAmountSource })
+    if (preserveInitialReceiptAmounts) {
+      subtotalSum = this.initialReceiptAmounts.subtotal
+      taxSum = this.initialReceiptAmounts.tax
+      total = this.initialReceiptAmounts.total
+    }
+
+    const rawPurchaseTotal = total
+    if ([subtotalSum, taxSum, total].some((amount) => amount < 0)) {
+      subtotalSum = 0
+      taxSum = 0
+      total = 0
+    } else {
+      total = this.clampNumber(total, 0, this.receiptTotalAmountMaxValue)
+      subtotalSum = this.clampNumber(subtotalSum, 0, this.receiptTotalAmountMaxValue)
+      taxSum = this.clampNumber(taxSum, 0, this.receiptTaxAmountMaxValue)
+    }
+    const finalPaymentTotal = rawPurchaseTotal + paymentAdjustmentTotal
     this.lastFinalPaymentTotal = finalPaymentTotal
 
     // 合計更新（存在する場合のみ）
@@ -743,11 +817,161 @@ export default class extends Controller {
     }
 
     if (this.hasTaxRateSummaryTarget) {
-      this.taxRateSummaryTarget.textContent = this.formatTaxRateSummary(taxRates)
+      const initialTaxRateSummary = this.initialReceiptAmounts?.taxRateSummary
+      this.taxRateSummaryTarget.textContent = preserveInitialReceiptAmounts && typeof initialTaxRateSummary === 'string'
+        ? initialTaxRateSummary
+        : this.formatTaxRateSummary(taxRates)
     }
 
     this.syncPaymentAdjustmentSummary(paymentAdjustmentTotal, finalPaymentTotal)
     this.syncPaymentReconciliationSummary(this.paymentAmountSum(), finalPaymentTotal)
+  }
+
+  inheritedAdjustmentTaxRate ({ amountBearingItemCount, allAmountBearingItemsHaveTaxRate, amountBearingItemTaxRates, purchaseInputsChanged }) {
+    if (amountBearingItemCount === 0 || !allAmountBearingItemsHaveTaxRate) return null
+    if (amountBearingItemTaxRates.size !== 1) return null
+
+    const [itemTaxRate] = amountBearingItemTaxRates
+    if (itemTaxRate <= 0) return null
+
+    const detailRates = !purchaseInputsChanged &&
+      !this.adjustmentTaxDetailEvidenceStaleValue &&
+      Array.isArray(this.adjustmentTaxDetailRatesValue)
+      ? this.adjustmentTaxDetailRatesValue
+      : []
+    if (detailRates.length === 0) return itemTaxRate
+
+    const parsedDetailRates = detailRates.map((rate) => {
+      if (rate === null || String(rate).trim() === '') return Number.NaN
+
+      return this.parseDecimalInput(rate)
+    })
+    if (parsedDetailRates.some((rate) => !Number.isFinite(rate))) return null
+
+    const uniqueDetailRates = new Set(parsedDetailRates)
+    return uniqueDetailRates.size === 1 && uniqueDetailRates.has(itemTaxRate) ? itemTaxRate : null
+  }
+
+  captureInitialPurchaseInputFingerprint () {
+    const dataKey = 'receiptFormInitialPurchaseInputFingerprint'
+    const storedFingerprint = this.element?.dataset?.[dataKey]
+    const submittedFingerprint = this.hasInitialPurchaseInputFingerprintTarget
+      ? String(this.initialPurchaseInputFingerprintTarget.value ?? '')
+      : ''
+    const carriedFingerprint = storedFingerprint || submittedFingerprint
+    this.purchaseInputBaselineTrusted = Boolean(carriedFingerprint) || !this.purchaseInputsChangedValue
+    this.initialPurchaseInputFingerprint = carriedFingerprint || this.purchaseInputFingerprint()
+
+    if (this.purchaseInputBaselineTrusted && this.element?.dataset && !storedFingerprint) {
+      this.element.dataset[dataKey] = this.initialPurchaseInputFingerprint
+    }
+    if (this.purchaseInputBaselineTrusted && this.hasInitialPurchaseInputFingerprintTarget) {
+      this.initialPurchaseInputFingerprintTarget.value = this.initialPurchaseInputFingerprint
+    }
+  }
+
+  captureInitialReceiptAmounts () {
+    const dataKey = 'receiptFormInitialReceiptAmounts'
+    const storedAmounts = this.element?.dataset?.[dataKey]
+    if (storedAmounts) {
+      try {
+        const parsedAmounts = JSON.parse(storedAmounts)
+        if (this.validReceiptAmounts(parsedAmounts)) {
+          this.initialReceiptAmounts = parsedAmounts
+          return
+        }
+      } catch (_) {
+        // Turbo cache dataが不正な場合は現在表示から安全に取り直す。
+      }
+    }
+
+    const amounts = {
+      subtotal: this.hasSubtotalAmountTarget ? this.currentAmountValue(this.subtotalAmountTarget) : 0,
+      tax: this.hasTaxAmountTarget ? this.currentAmountValue(this.taxAmountTarget) : 0,
+      total: this.hasTotalAmountTarget ? this.currentAmountValue(this.totalAmountTarget) : 0,
+      taxRateSummary: this.hasTaxRateSummaryTarget ? this.taxRateSummaryTarget.textContent : null
+    }
+    this.initialReceiptAmounts = amounts
+    if (this.element?.dataset) this.element.dataset[dataKey] = JSON.stringify(amounts)
+  }
+
+  validReceiptAmounts (amounts) {
+    return amounts && [amounts.subtotal, amounts.tax, amounts.total].every(Number.isFinite)
+  }
+
+  preserveInitialReceiptAmountsForPreview ({ hasItemAmountSource }) {
+    if (hasItemAmountSource) return false
+    if (!this.validReceiptAmounts(this.initialReceiptAmounts)) return false
+
+    return !this.purchaseInputsChangedForPreview()
+  }
+
+  purchaseInputsChangedForPreview () {
+    if (typeof this.initialPurchaseInputFingerprint === 'string' && this.purchaseInputBaselineTrusted !== false) {
+      return this.purchaseInputFingerprint() !== this.initialPurchaseInputFingerprint
+    }
+
+    return this.purchaseInputsChangedValue
+  }
+
+  purchaseInputFingerprint () {
+    const items = this.itemRowTargets
+      .filter((row) => !this.previewRowExcluded(row, 'destroyField'))
+      .map((row) => {
+        const inputValue = (target) => row.querySelector(`[data-receipt-form-target="${target}"]`)?.value
+
+        const lineTotalInput = row.querySelector('[data-receipt-form-target="lineTotalInput"]')
+        const price = inputValue('priceInput')
+        const quantityUnit = inputValue('quantityUnitInput')
+        const sourcePresent = this.itemAmountSourcePresentFor({
+          lineTotalInput,
+          priceInputPresent: String(price ?? '').trim() !== '',
+          quantityUnit
+        })
+        if (!sourcePresent) return null
+
+        return [
+          this.normalizedOptionalDecimalInput(inputValue('quantityInput')),
+          String(quantityUnit ?? '').trim(),
+          this.normalizedOptionalIntegerInput(price),
+          this.normalizedOptionalDecimalInput(inputValue('discountRateInput')),
+          this.normalizedOptionalDecimalInput(inputValue('taxRateInput')),
+          this.normalizedOptionalIntegerInput(inputValue('lineTotalInput'))
+        ]
+      })
+      .filter((item) => item !== null)
+    const adjustments = this.adjustmentRowTargets
+      .filter((row) => !this.previewRowExcluded(row, 'adjustmentDestroyField'))
+      .filter((row) => this.adjustmentEffectForRow(row) !== 'payment_adjustment')
+      .map((row) => {
+        const inputValue = (target) => row.querySelector(`[data-receipt-form-target="${target}"]`)?.value
+        const persisted = String(row.querySelector('input[name$="[id]"]')?.value ?? '').trim() !== ''
+        const labelPresent = String(row.querySelector('input[name$="[label]"]')?.value ?? '').trim() !== ''
+        const amount = inputValue('adjustmentAmountInput')
+        const taxRate = inputValue('adjustmentTaxRateInput')
+        const meaningfulInput = labelPresent || String(amount ?? '').trim() !== '' ||
+          this.parseDecimalInput(taxRate) > 0
+        if (!persisted && !meaningfulInput) return null
+
+        return [
+          this.adjustmentEffectForRow(row),
+          String(inputValue('adjustmentKindInput') ?? '').trim(),
+          this.normalizedOptionalIntegerInput(amount),
+          this.adjustmentSignForRow(row),
+          this.normalizedOptionalDecimalInput(taxRate)
+        ]
+      })
+      .filter((adjustment) => adjustment !== null)
+
+    return JSON.stringify({ items, adjustments })
+  }
+
+  normalizedOptionalIntegerInput (value) {
+    const rawValue = String(value ?? '').trim()
+    if (rawValue === '') return ''
+
+    const parsedValue = this.parseIntegerInput(rawValue)
+    return Number.isFinite(parsedValue) ? String(parsedValue) : rawValue
   }
 
   syncAdjustmentSigns () {
@@ -757,29 +981,23 @@ export default class extends Controller {
   syncAdjustmentEffectForRow (row) {
     if (!row) return
 
-    const kindInput = row.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
-    // 新規行やkind変更時だけJS側でeffectを推定する。既存行の初期effectはサーバー側分類を正とする。
-    row.dataset.receiptFormAdjustmentEffect = this.adjustmentEffectForKind(kindInput?.value)
+    row.dataset.receiptFormAdjustmentEffect = this.adjustmentEffectForRow(row)
   }
 
   adjustmentEffectForRow (row) {
-    const effect = String(row?.dataset.receiptFormAdjustmentEffect ?? '').trim()
-    // 初期data属性のeffectを優先し、kind判定は新規行/フォールバック用に限定する。
-    if (this.validAdjustmentEffect(effect)) return effect
-
     const kindInput = row?.querySelector('[data-receipt-form-target="adjustmentKindInput"]')
-    return this.adjustmentEffectForKind(kindInput?.value)
-  }
-
-  adjustmentEffectForKind (kind) {
-    const normalizedKind = String(kind ?? '').trim()
+    const normalizedKind = String(kindInput?.value ?? '').trim() || 'other'
     if (this.adjustmentPaymentKindList().includes(normalizedKind)) return 'payment_adjustment'
+    if (this.adjustmentPurchaseKindList().includes(normalizedKind)) return 'purchase_adjustment'
+
+    const label = row?.querySelector('input[name$="[label]"]')?.value
+    const sourcePayment = row?.dataset?.receiptFormAdjustmentSourcePayment === 'true'
+    if (sourcePayment || this.adjustmentPaymentLabelMatches(label)) return 'payment_adjustment'
+
+    const sourceNonManual = row?.dataset?.receiptFormAdjustmentSourceNonManual === 'true'
+    if (normalizedKind === 'other' && sourceNonManual) return 'unknown_adjustment'
 
     return 'purchase_adjustment'
-  }
-
-  validAdjustmentEffect (effect) {
-    return ['purchase_adjustment', 'payment_adjustment', 'unknown_adjustment'].includes(effect)
   }
 
   syncAdjustmentSignForRow (row) {
@@ -866,6 +1084,24 @@ export default class extends Controller {
       .filter((kind) => kind !== '')
   }
 
+  adjustmentPurchaseKindList () {
+    return this.adjustmentPurchaseKindsValue
+      .split(',')
+      .map((kind) => kind.trim())
+      .filter((kind) => kind !== '')
+  }
+
+  adjustmentPaymentLabelMatches (label) {
+    const pattern = String(this.adjustmentPaymentLabelPatternValue ?? '')
+    if (pattern === '') return false
+
+    try {
+      return new RegExp(pattern, 'i').test(String(label ?? ''))
+    } catch (_error) {
+      return false
+    }
+  }
+
   syncPaymentAdjustmentSummary (paymentAdjustmentTotal, finalPaymentTotal) {
     const visible = paymentAdjustmentTotal !== 0
 
@@ -887,6 +1123,7 @@ export default class extends Controller {
     const hasPaymentRows = this.visiblePaymentRows().length > 0
     const paymentDifference = paymentAmountSum - finalPaymentTotal
     const mismatch = hasPaymentRows && paymentDifference !== 0
+    const syncableMismatch = mismatch && finalPaymentTotal >= 0
 
     if (this.hasPaymentAmountSumTarget) {
       this.animateAmount(this.paymentAmountSumTarget, paymentAmountSum)
@@ -903,7 +1140,7 @@ export default class extends Controller {
     }
 
     this.paymentMismatchWarningTargets.forEach((warning) => warning.classList.toggle('hidden', !mismatch))
-    this.syncPaymentAmountButtonTargets.forEach((button) => button.classList.toggle('hidden', !mismatch))
+    this.syncPaymentAmountButtonTargets.forEach((button) => button.classList.toggle('hidden', !syncableMismatch))
     this.syncPaymentSummaryLayout()
   }
 
@@ -942,6 +1179,8 @@ export default class extends Controller {
     if (rows.length === 0) return
 
     const finalPaymentTotal = this.currentFinalPaymentTotal()
+    if (finalPaymentTotal < 0) return
+
     const currentPaymentSum = this.paymentAmountSum()
     const delta = finalPaymentTotal - currentPaymentSum
     const firstInput = rows[0].querySelector('[data-receipt-form-target="paymentAmountInput"]')
@@ -1048,12 +1287,14 @@ export default class extends Controller {
     return roundLineAmount(value)
   }
 
-  originalLineTotalFor ({ quantity, price, quantityUnit, lineTotalInput }) {
+  originalLineTotalFor ({ quantity, price, priceInputPresent, quantityUnit, lineTotalInput }) {
     if (this.recalculatesQuantityUnit(quantityUnit)) {
-      return this.roundLineAmount(quantity * price)
+      return priceInputPresent
+        ? this.roundLineAmount(quantity * price)
+        : this.persistedOriginalLineTotalInputValue(lineTotalInput)
     }
 
-    return this.originalLineTotalInputValue(lineTotalInput)
+    return this.workingOriginalLineTotalInputValue(lineTotalInput)
   }
 
   discountedLineTotalFor (originalLineTotal, discountRatePercent) {
@@ -1072,7 +1313,7 @@ export default class extends Controller {
     if (!lineTotalInput) return false
     if (this.discountRateWasEdited(discountRateInput)) return false
 
-    const persistedOriginalLineTotal = this.originalLineTotalInputValue(lineTotalInput)
+    const persistedOriginalLineTotal = this.persistedOriginalLineTotalInputValue(lineTotalInput)
     if (originalLineTotal !== persistedOriginalLineTotal) return false
 
     return String(lineTotalInput.value ?? '').trim() !== ''
@@ -1102,18 +1343,57 @@ export default class extends Controller {
     return this.lineTotalInputValue(lineTotalInput)
   }
 
-  originalLineTotalInputValue (lineTotalInput) {
+  persistedOriginalLineTotalInputValue (lineTotalInput) {
     return this.parseIntegerInput(lineTotalInput?.dataset.originalLineTotal || lineTotalInput?.value)
   }
 
-  syncLineTotalState ({ lineTotalInput, quantityUnit, originalLineTotal, lineTotal }) {
+  workingOriginalLineTotalInputValue (lineTotalInput) {
+    return this.parseIntegerInput(
+      lineTotalInput?.dataset.workingOriginalLineTotal ||
+      lineTotalInput?.dataset.originalLineTotal ||
+      lineTotalInput?.value
+    )
+  }
+
+  itemAmountSourcePresentFor ({ lineTotalInput, priceInputPresent, quantityUnit }) {
+    if (priceInputPresent) return true
+
+    const persistedSourcePresent = [
+      lineTotalInput?.dataset.originalLineTotal,
+      lineTotalInput?.dataset.originalSavedLineTotal
+    ].some((value) => String(value ?? '').trim() !== '')
+    if (persistedSourcePresent) return true
+
+    return !this.recalculatesQuantityUnit(quantityUnit) &&
+      String(lineTotalInput?.dataset.workingOriginalLineTotal ?? '').trim() !== ''
+  }
+
+  syncLineTotalState ({
+    lineTotalInput,
+    originalLineTotalInput,
+    itemAmountSourcePresent,
+    priceInputPresent,
+    quantityUnit,
+    originalLineTotal,
+    lineTotal
+  }) {
     if (!lineTotalInput) return
+    if (!itemAmountSourcePresent) {
+      lineTotalInput.value = ''
+      if (originalLineTotalInput) originalLineTotalInput.value = ''
+      delete lineTotalInput.dataset.workingOriginalLineTotal
+      return
+    }
 
     lineTotalInput.value = lineTotal
+    if (originalLineTotalInput) originalLineTotalInput.value = originalLineTotal
 
     if (this.recalculatesQuantityUnit(quantityUnit)) {
-      lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)
-      lineTotalInput.dataset.originalSavedLineTotal = String(lineTotal)
+      if (priceInputPresent) {
+        lineTotalInput.dataset.workingOriginalLineTotal = String(originalLineTotal)
+      } else {
+        delete lineTotalInput.dataset.workingOriginalLineTotal
+      }
     }
   }
 

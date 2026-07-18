@@ -3,7 +3,7 @@
 class Receipts::Editing::InputNormalizer
   RECEIPT_INTEGER_FIELDS = %w[total_amount subtotal_amount tax_amount].freeze
   RECEIPT_DECIMAL_FIELDS = %w[tax_rate].freeze
-  ITEM_INTEGER_FIELDS = %w[price line_total].freeze
+  ITEM_INTEGER_FIELDS = %w[price original_line_total line_total].freeze
   ITEM_QUANTITY_FIELDS = %w[quantity].freeze
   ITEM_PERCENTAGE_FIELDS = %w[tax_rate discount_rate].freeze
   ADJUSTMENT_REVIEW_TARGET_FIELDS = %i[kind label amount sign tax_rate].freeze

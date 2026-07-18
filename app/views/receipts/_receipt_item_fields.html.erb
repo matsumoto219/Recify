@@ -304,9 +304,13 @@
     <%= item_form.hidden_field :id %>
   <% end %>
 
+  <%= item_form.hidden_field :original_line_total,
+        value: row_state.original_line_total_value,
+        data: { receipt_form_target: "originalLineTotalInput" } %>
+
   <% if new_record %>
     <%= item_form.hidden_field :line_total,
-          value: 0,
+          value: nil,
           data: line_total_data %>
   <% else %>
     <%= item_form.hidden_field :line_total,

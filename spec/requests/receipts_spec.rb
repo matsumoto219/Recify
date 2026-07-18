@@ -5796,6 +5796,8 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '編集画面の主要文言をlocale経由で描画しJS用文言をform data属性へ渡す' do
+      receipt.receipt_tax_details.create!(rate: BigDecimal('0.1'), net_amount: 100, amount: 10)
+
       get edit_receipt_path(receipt)
 
       document = Nokogiri::HTML(response.body)
@@ -5815,6 +5817,19 @@ RSpec.describe 'Receipts', type: :request do
         expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.not_available'))
         expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
         expect(form['data-receipt-form-adjustment-payment-kinds-value']).to eq('point_usage')
+        expect(form['data-receipt-form-adjustment-purchase-kinds-value'].split(',')).to contain_exactly(
+          'service_charge',
+          'late_night_charge',
+          'delivery_fee',
+          'bag_fee',
+          'handling_fee',
+          'coupon',
+          'return_refund'
+        )
+        expect('キャッシュレス還元').to match(
+          Regexp.new(form['data-receipt-form-adjustment-payment-label-pattern-value'], Regexp::IGNORECASE)
+        )
+        expect(JSON.parse(form['data-receipt-form-adjustment-tax-detail-rates-value'])).to eq([ '10' ])
         expect(form['data-receipt-form-review-item-target-prefix-value']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX)
         expect(form['data-receipt-form-review-items-target-value']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
       end
@@ -5854,6 +5869,8 @@ RSpec.describe 'Receipts', type: :request do
         # 検算: 購入合計 1,161 + 支払調整 -22 = 実支払額 1,139。
         expect(response).to have_http_status(:success)
         expect(adjustment_row['data-receipt-form-adjustment-effect']).to eq('payment_adjustment')
+        expect(adjustment_row['data-receipt-form-adjustment-source-payment']).to eq('true')
+        expect(adjustment_row['data-receipt-form-adjustment-source-non-manual']).to eq('true')
         expect(document.at_css('[data-receipt-form-target="totalAmount"]').text.strip).to eq('¥1,161')
         expect(document.at_css('[data-receipt-form-target="paymentAdjustmentAmount"]').text.strip).to eq('-¥22')
         expect(document.at_css('[data-receipt-form-target="finalPaymentAmount"]').text.strip).to eq('¥1,139')
@@ -6460,7 +6477,7 @@ RSpec.describe 'Receipts', type: :request do
 
         line_total_input = item_row.at_css('[data-receipt-form-target="lineTotalInput"]')
         expect(line_total_input['data-original-line-total']).to eq('310')
-        expect(template_html).to include('data-original-line-total="0"')
+        expect(template_html).to include('data-receipt-form-target="originalLineTotalInput"')
 
         expect(item_row.at_css('[data-receipt-form-target="destroyField"]')).to be_present
         expect(template_html).not_to include('data-receipt-form-target="destroyField"')
@@ -6640,7 +6657,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(line_total_input['data-receipt-form-target']).to eq('lineTotalInput')
-        expect(line_total_input['data-original-line-total']).to eq('0')
+        expect(line_total_input['data-original-line-total']).to be_nil.or eq('')
         expect(line_total_input['data-original-saved-line-total']).to be_nil
       end
     end
@@ -6703,12 +6720,13 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(template_html).to include('data-original-line-total="0"')
+        expect(template_html).to include('data-receipt-form-target="originalLineTotalInput"')
         expect(template_html).to include('data-receipt-form-target="quantityUnitInput"')
         expect(template_html).to include('change-&gt;receipt-form#quantityUnitChanged')
         expect(template_html).not_to include('change-&gt;receipt-form#recalculate')
         expect(controller_source).to include('syncLineTotalState')
-        expect(controller_source).to include('lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)')
+        expect(controller_source).to include('lineTotalInput.dataset.workingOriginalLineTotal = String(originalLineTotal)')
+        expect(controller_source).to include('originalLineTotalInput.value = originalLineTotal')
       end
     end
 

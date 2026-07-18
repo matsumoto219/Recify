@@ -16,6 +16,7 @@ RSpec.describe "Receipts input forms" do
         "receipt_items_attributes" => {
           "0" => {
             "price" => "1,000",
+            "original_line_total" => "１，０００",
             "line_total" => "９００",
             "quantity" => "0,300",
             "tax_rate" => "８",
@@ -41,6 +42,7 @@ RSpec.describe "Receipts input forms" do
         expect(normalized["tax_rate"]).to eq(BigDecimal("10.5"))
         expect(normalized.dig("receipt_items_attributes", "0")).to include(
           "price" => 1000,
+          "original_line_total" => 1000,
           "line_total" => 900,
           "quantity" => BigDecimal("0.3"),
           "tax_rate" => BigDecimal("0.08"),
@@ -123,6 +125,22 @@ RSpec.describe "Receipts input forms" do
       }.to raise_error(Receipts::NumericInput::InvalidValue)
 
       expect(attributes).to eq("total_amount" => "12abc")
+    end
+
+    it "不正なitem original_line_totalを拒否する" do
+      receipt = build(:receipt)
+
+      expect {
+        normalize_with(
+          form_class,
+          receipt: receipt,
+          attributes: {
+            "receipt_items_attributes" => {
+              "0" => { "original_line_total" => "12abc" }
+            }
+          }
+        )
+      }.to raise_error(Receipts::NumericInput::InvalidValue)
     end
   end
 

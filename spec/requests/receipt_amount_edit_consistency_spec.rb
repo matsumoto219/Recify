@@ -98,6 +98,53 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     }
   end
 
+  def create_mixed_basis_receipt
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 1_066,
+      tax_amount: 95,
+      total_amount: 1_161,
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'mixed_by_tax_rate_group',
+          'tax_detail_amount_basis' => 'gross'
+        }
+      }
+    )
+    items = [
+      [ 140, BigDecimal('0.08') ],
+      [ 151, BigDecimal('0.08') ],
+      [ 330, BigDecimal('0.10') ],
+      [ 490, BigDecimal('0.10') ],
+      [ 50, BigDecimal('0') ]
+    ].each_with_index.map do |(amount, tax_rate), position|
+      receipt.receipt_items.create!(
+        confirmed_name: "mixed item #{position}",
+        price: amount,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        original_line_total: amount,
+        line_total: amount,
+        tax_rate: tax_rate,
+        position_index: position,
+        needs_review: false,
+        review_reasons: []
+      )
+    end
+    receipt.receipt_tax_details.create!(rate: BigDecimal('0.08'), net_amount: 270, amount: 21)
+    receipt.receipt_tax_details.create!(rate: BigDecimal('0.10'), net_amount: 746, amount: 74)
+    receipt.receipt_payments.create!(method: 'cash', amount: 1_161)
+
+    [ receipt, items ]
+  end
+
   def item_attributes(item, quantity: item.quantity, line_total: item.line_total)
     {
       id: item.id,
@@ -109,6 +156,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       product_code: item.product_code,
       tax_rate: item.tax_rate.to_d * 100,
       discount_rate: item.discount_rate&.*(100),
+      original_line_total: item.original_line_total,
       line_total: line_total.to_s,
       position_index: item.position_index,
       _destroy: '0'
@@ -185,6 +233,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
           quantity_unit_code: selected_option_value(row, '[data-receipt-form-target="quantityUnitInput"]'),
           tax_rate: row.at_css('[data-receipt-form-target="taxRateInput"]')&.[]('value'),
           discount_rate: row.at_css('[data-receipt-form-target="discountRateInput"]')&.[]('value'),
+          original_line_total: row.at_css('[data-receipt-form-target="originalLineTotalInput"]')&.[]('value'),
           line_total: row.at_css('[data-receipt-form-target="lineTotalInput"]')&.[]('value'),
           _destroy: '0'
         }
@@ -316,6 +365,910 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       expect(amount_result.dig(:resolved, :total)).to eq(939)
       expect(saved_profile['receipt_tax_basis']).to eq('tax_added_to_subtotal')
       expect(saved_profile['item_amount_basis']).to eq('line_total_as_net')
+    end
+  end
+
+  it 'mixed basisは計算時だけrecordedへ投影し、編集保存後のprovenanceに保持する' do
+    receipt, items = create_mixed_basis_receipt
+
+    submit_first_quantity(receipt, items, 1)
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 1_066,
+        'tax_amount' => 95,
+        'total_amount' => 1_161
+      )
+      expect(receipt.amount_calculation_profile.dig('profile', 'item_amount_basis')).to eq('mixed_by_tax_rate_group')
+      expect(receipt.amount_source_semantics_for_edit).to include(
+        'receipt_tax_basis' => 'total_includes_tax',
+        'item_amount_basis' => 'mixed_by_tax_rate_group'
+      )
+    end
+  end
+
+  it 'source_textだけが示すpayment adjustmentを編集保存後も購入金額から分離する' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 100,
+      tax_amount: 0,
+      total_amount: 100,
+      amount_calculation_profile: {
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'line_total_as_recorded'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '商品',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 100,
+      line_total: 100,
+      tax_rate: 0,
+      needs_review: false,
+      review_reasons: []
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'receipt_discount',
+      label: '還元額',
+      amount: 22,
+      sign: 'discount',
+      source: 'ai',
+      source_text: 'キャッシュレス還元額 -22',
+      needs_review: false
+    )
+    receipt.receipt_payments.create!(method: 'cash', amount: 78)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: { '0' => item_attributes(item) },
+        receipt_adjustments_attributes: {
+          '0' => {
+            id: adjustment.id,
+            kind: adjustment.kind,
+            label: adjustment.label,
+            amount: adjustment.amount,
+            sign: adjustment.sign,
+            tax_rate: '',
+            _destroy: '0'
+          }
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 100,
+        'tax_amount' => 0,
+        'total_amount' => 100
+      )
+      expect(receipt.amount_calculation_profile.fetch('computed')).to include(
+        'total_amount' => 100,
+        'payment_adjustment_total' => -22,
+        'final_payment_total' => 78
+      )
+      expect(adjustment.reload.source_text).to eq('キャッシュレス還元額 -22')
+    end
+  end
+
+  it 'adjustment labelをpayment分類へ変更するとserver保存も同じeffectを使う' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 90,
+      tax_amount: 0,
+      total_amount: 90,
+      amount_calculation_profile: {
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'line_total_as_recorded'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '商品',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 100,
+      line_total: 100,
+      tax_rate: 0,
+      needs_review: false,
+      review_reasons: []
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'receipt_discount',
+      label: '通常値引き',
+      amount: 10,
+      sign: 'discount',
+      source: 'manual',
+      needs_review: false
+    )
+    receipt.receipt_payments.create!(method: 'cash', amount: 90)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: { '0' => item_attributes(item) },
+        receipt_adjustments_attributes: {
+          '0' => {
+            id: adjustment.id,
+            kind: adjustment.kind,
+            label: 'キャッシュレス還元',
+            amount: adjustment.amount,
+            sign: adjustment.sign,
+            tax_rate: '',
+            _destroy: '0'
+          }
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 100,
+        'tax_amount' => 0,
+        'total_amount' => 100
+      )
+      expect(receipt.amount_calculation_profile.fetch('computed')).to include(
+        'total_amount' => 100,
+        'payment_adjustment_total' => -10,
+        'final_payment_total' => 90
+      )
+    end
+  end
+
+  it 'discount rateを変更して元へ戻す保存往復でも初期金額へ復帰する' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 1_000,
+      tax_amount: 100,
+      total_amount: 1_100,
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'tax_added_to_subtotal',
+          'item_amount_basis' => 'line_total_as_net'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '割引対象商品',
+      price: 1_000,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 1_000,
+      line_total: 1_000,
+      tax_rate: BigDecimal('0.1'),
+      needs_review: false,
+      review_reasons: []
+    )
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, line_total: 900).merge(discount_rate: '10')
+        }
+      }
+    }
+    discounted = receipt.reload.attributes.slice('subtotal_amount', 'tax_amount', 'total_amount')
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item.reload, line_total: 900).merge(discount_rate: '')
+        }
+      }
+    }
+    restored = receipt.reload.attributes.slice('subtotal_amount', 'tax_amount', 'total_amount')
+
+    aggregate_failures do
+      expect(discounted).to eq('subtotal_amount' => 900, 'tax_amount' => 90, 'total_amount' => 990)
+      expect(response).to have_http_status(:redirect)
+      expect(restored).to eq('subtotal_amount' => 1_000, 'tax_amount' => 100, 'total_amount' => 1_100)
+      expect(item.reload.attributes).to include(
+        'price' => 1_000,
+        'discount_rate' => nil,
+        'original_line_total' => 1_000,
+        'line_total' => 1_000
+      )
+    end
+  end
+
+  it 'countableから重量単位へ変更してもcurrent pre-discount sourceへ割引を一度だけ適用する' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 100,
+      tax_amount: 0,
+      total_amount: 100,
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'line_total_as_recorded'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '量り売り商品',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 100,
+      line_total: 100,
+      tax_rate: 0,
+      needs_review: false,
+      review_reasons: []
+    )
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, quantity: 2, line_total: 180).merge(
+            quantity_unit_code: 'kilogram',
+            discount_rate: '10',
+            original_line_total: '200'
+          )
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 180,
+        'tax_amount' => 0,
+        'total_amount' => 180
+      )
+      expect(item.reload.attributes).to include(
+        'quantity_unit_code' => 'kilogram',
+        'original_line_total' => 200,
+        'discount_rate' => BigDecimal('0.1'),
+        'line_total' => 180
+      )
+    end
+  end
+
+  it 'price空欄のcountable itemは再計算と保存でも明示line_totalを失わない' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 500,
+      tax_amount: 0,
+      total_amount: 500,
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'line_total_as_recorded'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '総額のみ商品',
+      price: nil,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 500,
+      line_total: 500,
+      tax_rate: 0,
+      needs_review: false,
+      review_reasons: []
+    )
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, quantity: 2, line_total: 500)
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 500,
+        'tax_amount' => 0,
+        'total_amount' => 500
+      )
+      expect(item.reload.attributes).to include(
+        'price' => nil,
+        'quantity' => BigDecimal('2'),
+        'original_line_total' => 500,
+        'line_total' => 500
+      )
+    end
+  end
+
+  it '一時的なprice入力を空欄へ戻した後もcurrent sourceへ割引を一度だけ適用する' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 500,
+      tax_amount: 0,
+      total_amount: 500,
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'line_total_as_recorded'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '総額のみ割引商品',
+      price: nil,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 500,
+      line_total: 500,
+      tax_rate: 0,
+      needs_review: false,
+      review_reasons: []
+    )
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, line_total: 450).merge(
+            price: '',
+            discount_rate: '10',
+            original_line_total: '500'
+          )
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 450,
+        'tax_amount' => 0,
+        'total_amount' => 450
+      )
+      expect(item.reload.attributes).to include(
+        'price' => nil,
+        'original_line_total' => 500,
+        'discount_rate' => BigDecimal('0.1'),
+        'line_total' => 450
+      )
+    end
+  end
+
+  it '金額未入力のplaceholder itemだけなら保存済みreceipt金額とblank sourceを維持する' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      memo: '変更前',
+      subtotal_amount: 91,
+      tax_amount: 9,
+      total_amount: 100,
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'tax_added_to_subtotal',
+          'item_amount_basis' => 'line_total_as_net'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '金額未入力',
+      price: nil,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: nil,
+      line_total: nil,
+      tax_rate: nil,
+      needs_review: true,
+      review_reasons: [ 'item_amount_missing' ]
+    )
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        memo: '変更後',
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            confirmed_name: item.confirmed_name,
+            price: '',
+            quantity: '2',
+            quantity_unit_code: 'each',
+            tax_rate: '',
+            discount_rate: '',
+            original_line_total: '',
+            line_total: '',
+            _destroy: '0'
+          }
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'memo' => '変更後',
+        'subtotal_amount' => 91,
+        'tax_amount' => 9,
+        'total_amount' => 100
+      )
+      expect(item.reload.attributes).to include(
+        'price' => nil,
+        'quantity' => BigDecimal('2'),
+        'original_line_total' => nil,
+        'line_total' => nil
+      )
+    end
+  end
+
+  it '保存済みtax detailの数値証拠が不整合ならJSと再計算の双方で除外する' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 110,
+      tax_amount: 10,
+      total_amount: 120,
+      amount_calculation_profile: external_net_profile
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '課税商品',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 100,
+      line_total: 100,
+      tax_rate: BigDecimal('0.1'),
+      needs_review: false,
+      review_reasons: []
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'delivery_fee',
+      label: '送料',
+      amount: 10,
+      sign: 'surcharge',
+      tax_rate: nil,
+      source: 'manual',
+      needs_review: false
+    )
+    receipt.receipt_tax_details.create!(rate: BigDecimal('0.08'), net_amount: 100, amount: 99)
+
+    get edit_receipt_path(receipt)
+    form = Nokogiri::HTML(response.body).at_css('[data-controller~="receipt-form"]')
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: { '0' => item_attributes(item) },
+        receipt_adjustments_attributes: {
+          '0' => {
+            id: adjustment.id,
+            kind: adjustment.kind,
+            label: adjustment.label,
+            amount: adjustment.amount,
+            sign: adjustment.sign,
+            tax_rate: '',
+            _destroy: '0'
+          }
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(form['data-receipt-form-adjustment-tax-detail-evidence-stale-value']).to eq('true')
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 110,
+        'tax_amount' => 11,
+        'total_amount' => 121
+      )
+    end
+  end
+
+  it '数値入力不正の早期422でもsubmitted purchase変更をJSへ渡し再送結果と一致させる' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 110,
+      tax_amount: 8,
+      total_amount: 118,
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'tax_added_to_subtotal',
+          'item_amount_basis' => 'line_total_as_net'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '課税商品',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 100,
+      line_total: 100,
+      tax_rate: BigDecimal('0.08'),
+      needs_review: false,
+      review_reasons: []
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'delivery_fee',
+      label: '送料',
+      amount: 10,
+      sign: 'surcharge',
+      tax_rate: nil,
+      source: 'manual',
+      needs_review: false
+    )
+    payment = receipt.receipt_payments.create!(method: 'cash', amount: 118)
+    receipt.receipt_tax_details.create!(rate: BigDecimal('0.08'), net_amount: 110, amount: 8)
+    changed_items = {
+      '0' => item_attributes(item).merge(tax_rate: '10', original_line_total: '100', line_total: '100')
+    }
+    changed_adjustments = {
+      '0' => {
+        id: adjustment.id,
+        kind: adjustment.kind,
+        label: adjustment.label,
+        amount: adjustment.amount,
+        sign: adjustment.sign,
+        tax_rate: '',
+        _destroy: '0'
+      }
+    }
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: changed_items,
+        receipt_adjustments_attributes: changed_adjustments,
+        receipt_payments_attributes: {
+          '0' => { id: payment.id, method: payment.method, amount: 'invalid', _destroy: '0' }
+        }
+      }
+    }
+
+    document = Nokogiri::HTML(response.body)
+    form = document.at_css('[data-controller~="receipt-form"]')
+    submitted_tax_rate = document.at_css('[data-receipt-form-target="taxRateInput"]')
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(form['data-receipt-form-purchase-inputs-changed-value']).to eq('true')
+      expect(form['data-receipt-form-adjustment-tax-detail-rates-value']).to eq('["8"]')
+      expect(submitted_tax_rate['value']).to eq('10')
+      expect(receipt.reload.attributes).to include(
+        'subtotal_amount' => 110,
+        'tax_amount' => 8,
+        'total_amount' => 118
+      )
+    end
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: changed_items,
+        receipt_adjustments_attributes: changed_adjustments,
+        receipt_payments_attributes: {
+          '0' => { id: payment.id, method: payment.method, amount: '121', _destroy: '0' }
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 110,
+        'tax_amount' => 11,
+        'total_amount' => 121
+      )
+    end
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: { '0' => item_attributes(item.reload) },
+        receipt_adjustments_attributes: {
+          '0' => {
+            id: adjustment.reload.id,
+            kind: adjustment.kind,
+            label: adjustment.label,
+            amount: adjustment.amount,
+            sign: adjustment.sign,
+            tax_rate: '',
+            _destroy: '0'
+          }
+        },
+        receipt_payments_attributes: {
+          '0' => { id: payment.reload.id, method: payment.method, amount: 'invalid', _destroy: '0' }
+        }
+      }
+    }
+    unchanged_form = Nokogiri::HTML(response.body).at_css('[data-controller~="receipt-form"]')
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(unchanged_form['data-receipt-form-purchase-inputs-changed-value']).to eq('false')
+      expect(receipt.reload.total_amount).to eq(121)
+    end
+  end
+
+  it '不正なoriginal_line_totalを422でsource表示しDBへ保存しない' do
+    receipt, items = create_external_net_receipt
+    initial_purchase_fingerprint = '{"items":[],"adjustments":[]}'
+    get edit_receipt_path(
+      receipt,
+      receipt_form_initial_purchase_input_fingerprint: 'query-injected-fingerprint'
+    )
+    clean_get_fingerprint = Nokogiri::HTML(response.body).at_css(
+      "input[name='receipt_form_initial_purchase_input_fingerprint']"
+    )
+    submitted_items = items.each_with_index.to_h do |item, index|
+      attributes = item_attributes(item)
+      attributes[:original_line_total] = '12abc' if index.zero?
+      [ index.to_s, attributes ]
+    end
+
+    patch receipt_path(receipt), params: {
+      receipt_form_initial_purchase_input_fingerprint: initial_purchase_fingerprint,
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: submitted_items
+      }
+    }
+
+    document = Nokogiri::HTML(response.body)
+    form = document.at_css('[data-controller~="receipt-form"]')
+    submitted_source = document.at_css(
+      "input[name='receipt[receipt_items_attributes][0][original_line_total]']"
+    )
+    submitted_fingerprint = document.at_css(
+      "input[name='receipt_form_initial_purchase_input_fingerprint']"
+    )
+
+    aggregate_failures do
+      expect(clean_get_fingerprint['value']).to be_blank
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(form['data-receipt-form-purchase-inputs-changed-value']).to eq('true')
+      expect(submitted_source['value']).to eq('12abc')
+      expect(submitted_fingerprint['value']).to eq(initial_purchase_fingerprint)
+      expect(receipt.reload.attributes).to include(
+        'subtotal_amount' => 742,
+        'tax_amount' => 59,
+        'total_amount' => 801
+      )
+      expect(items.first.reload.attributes).to include(
+        'price' => 128,
+        'original_line_total' => 128,
+        'line_total' => 128
+      )
+    end
+  end
+
+  it '金額上限の早期422でもsubmitted purchase変更をJSへ渡す' do
+    receipt, items = create_external_net_receipt
+    create(
+      :system_setting,
+      key: 'limits.receipt_payment_amount_max',
+      value: SystemSettings.stored_value(500)
+    )
+    submitted_items = items.each_with_index.to_h do |item, index|
+      attributes = item_attributes(item)
+      attributes[:tax_rate] = '10' if index.zero?
+      [ index.to_s, attributes ]
+    end
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: submitted_items
+      }
+    }
+
+    document = Nokogiri::HTML(response.body)
+    form = document.at_css('[data-controller~="receipt-form"]')
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(form['data-receipt-form-purchase-inputs-changed-value']).to eq('true')
+      expect(receipt.reload.attributes).to include(
+        'subtotal_amount' => 742,
+        'tax_amount' => 59,
+        'total_amount' => 801
+      )
+      expect(items.first.reload.tax_rate).to eq(BigDecimal('0.08'))
+    end
+  end
+
+  it 'adjustment labelのnilとblankの差だけでは保存済みtax rate evidenceを破棄しない' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 101,
+      tax_amount: 9,
+      total_amount: 110,
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'line_total_as_recorded'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '課税商品',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 100,
+      line_total: 100,
+      tax_rate: BigDecimal('0.1'),
+      needs_review: false,
+      review_reasons: []
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'delivery_fee',
+      label: nil,
+      amount: 10,
+      sign: 'surcharge',
+      tax_rate: nil,
+      source: 'manual',
+      needs_review: false
+    )
+    receipt.receipt_tax_details.create!(rate: BigDecimal('0.08'), net_amount: 101, amount: 9)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: { '0' => item_attributes(item) },
+        receipt_adjustments_attributes: {
+          '0' => {
+            id: adjustment.id,
+            kind: adjustment.kind,
+            label: '',
+            amount: adjustment.amount,
+            sign: adjustment.sign,
+            tax_rate: '',
+            _destroy: '0'
+          }
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 101,
+        'tax_amount' => 9,
+        'total_amount' => 110
+      )
+      expect(receipt.receipt_tax_details.sole.rate).to eq(BigDecimal('0.08'))
+    end
+  end
+
+  it '購入入力変更後はstale tax detailを外し、blank購入調整へ現在の単一税率を継承する' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 14,
+      tax_amount: 1,
+      total_amount: 15,
+      amount_calculation_profile: external_net_profile
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '単一税率商品',
+      price: 7,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 7,
+      line_total: 7,
+      tax_rate: BigDecimal('0.08'),
+      needs_review: false,
+      review_reasons: []
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'delivery_fee',
+      label: '送料',
+      amount: 7,
+      sign: 'surcharge',
+      tax_rate: nil,
+      source: 'manual',
+      needs_review: false
+    )
+    receipt.receipt_tax_details.create!(rate: BigDecimal('0.08'), net_amount: 14, amount: 1)
+    receipt.receipt_payments.create!(method: 'cash', amount: 15)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => item_attributes(item).merge(tax_rate: '10')
+        },
+        receipt_adjustments_attributes: {
+          '0' => {
+            id: adjustment.id,
+            kind: adjustment.kind,
+            label: adjustment.label,
+            amount: adjustment.amount,
+            sign: adjustment.sign,
+            tax_rate: '',
+            _destroy: '0'
+          }
+        }
+      }
+    }
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:redirect)
+      expect(receipt.attributes).to include(
+        'subtotal_amount' => 14,
+        'tax_amount' => 1,
+        'total_amount' => 15
+      )
+      expect(adjustment.reload.tax_rate).to be_nil
+      expect(receipt.receipt_tax_details.reload.map { |detail| [ detail.rate.to_s('F'), detail.net_amount, detail.amount ] }).to eq(
+        [ [ '0.1', 14, 1 ] ]
+      )
     end
   end
 

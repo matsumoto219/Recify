@@ -34,9 +34,53 @@ class Receipts::Editing::AmountResultApplicator
   def persistence_items
     candidate_items = amount_result.dig(:computed, :items)
     return candidate_items unless context == :edit_save
+    return [] if receipt_input_without_item_amounts?
 
     source_items = amount_result.dig(:computed, :source_items)
     source_items.nil? ? candidate_items : source_items
+  end
+
+  def receipt_input_without_item_amounts?
+    return false unless fetch_value(fetch_value(amount_result, :computed), :amount_engine_basis).to_s == "receipt_input_preserved"
+
+    !submitted_item_amount_source_present? && !normalized_source_item_amount_present?
+  end
+
+  def submitted_item_amount_source_present?
+    item_attributes = attributes["receipt_items_attributes"]
+    return false unless item_attributes.respond_to?(:each_value)
+
+    item_attributes.each_value.any? do |item|
+      next false if ActiveModel::Type::Boolean.new.cast(item["_destroy"])
+
+      value_present?(item["price"]) ||
+        value_present?(item["line_total"]) ||
+        positive_amount?(item["original_line_total"]) ||
+        positive_amount?(item["discount_amount"])
+    end
+  end
+
+  def normalized_source_item_amount_present?
+    source_items = Array(fetch_value(fetch_value(amount_result, :computed), :source_items))
+    source_items.any? do |item|
+      value_present?(fetch_value(item, :price)) ||
+        value_present?(fetch_value(item, :amount_persisted_line_total)) ||
+        fetch_value(item, :amount_price_present) == true ||
+        fetch_value(item, :amount_line_total_present) == true ||
+        positive_amount?(fetch_value(item, :original_line_total)) ||
+        positive_amount?(fetch_value(item, :amount_persisted_original_line_total)) ||
+        positive_amount?(fetch_value(item, :discount_amount)) ||
+        positive_amount?(fetch_value(item, :amount_persisted_discount_amount)) ||
+        positive_amount?(fetch_value(item, :line_total))
+    end
+  end
+
+  def value_present?(value)
+    !value.nil? && value.to_s.strip != ""
+  end
+
+  def positive_amount?(value)
+    ReceiptAmountService.parse_amount(value).positive?
   end
 
   def apply_item_totals!(calculated_items)
@@ -78,6 +122,13 @@ class Receipts::Editing::AmountResultApplicator
 
   def calculated_item_key?(calculated_item, key)
     calculated_item.key?(key) || calculated_item.key?(key.to_s)
+  end
+
+  def fetch_value(value, key)
+    return nil unless value.respond_to?(:key?)
+    return value[key] if value.key?(key)
+
+    value[key.to_s]
   end
 
   def receipt_tax_detail_attributes(tax_details)

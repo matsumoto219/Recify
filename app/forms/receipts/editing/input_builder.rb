@@ -39,6 +39,7 @@ class Receipts::Editing::InputBuilder
     source
     source_provider
     source_field_path
+    source_text
     source_line_index
     source_span_start
     source_span_end

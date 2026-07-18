@@ -159,6 +159,70 @@ RSpec.describe Receipts::Editing::AmountResultApplicator do
     )
   end
 
+  it 'receipt input候補でもitem金額sourceがあればnormalized source itemsを投影する' do
+    attributes = {
+      'receipt_items_attributes' => {
+        '0' => { 'quantity' => '1', 'price' => '100', 'line_total' => '150' }
+      }
+    }
+    amount_result[:computed].merge!(
+      amount_engine_basis: 'receipt_input_preserved',
+      source_items: [ { quantity: 1, price: 100, original_line_total: 100, line_total: 100 } ]
+    )
+    amount_result[:amount_engine] = {
+      selected_candidate: {
+        evidence: [ { source: 'receipt_input', item_total: 100 } ]
+      }
+    }
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      amount_result: amount_result,
+      context: :edit_save,
+      change_set: nil,
+      tax_details_recalculated: false
+    )
+
+    expect(attributes.dig('receipt_items_attributes', '0')).to include(
+      'original_line_total' => 100,
+      'line_total' => 100
+    )
+  end
+
+  it 'item金額sourceがないreceipt input候補ではblank child sourceを投影しない' do
+    attributes = {
+      'receipt_items_attributes' => {
+        '0' => { 'quantity' => '2', 'price' => '', 'original_line_total' => '', 'line_total' => '' }
+      }
+    }
+    amount_result[:computed].merge!(
+      amount_engine_basis: 'receipt_input_preserved',
+      source_items: [ { quantity: 2, price: nil, original_line_total: 0, line_total: 0 } ]
+    )
+    amount_result[:amount_engine] = {
+      selected_candidate: {
+        evidence: [ { source: 'receipt_input' } ]
+      }
+    }
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      amount_result: amount_result,
+      context: :edit_save,
+      change_set: nil,
+      tax_details_recalculated: false
+    )
+
+    expect(attributes.dig('receipt_items_attributes', '0')).to include(
+      'quantity' => '2',
+      'price' => '',
+      'original_line_total' => '',
+      'line_total' => ''
+    )
+  end
+
   it 'keeps candidate-derived item projection for analysis' do
     attributes = {
       'receipt_items_attributes' => {

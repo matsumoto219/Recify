@@ -384,10 +384,9 @@ class Receipt < ApplicationRecord
     pair = [ semantics["receipt_tax_basis"], semantics["item_amount_basis"] ]
     case pair
     when [ "tax_added_to_subtotal", "line_total_as_net" ],
-         [ "total_includes_tax", "line_total_as_recorded" ]
+         [ "total_includes_tax", "line_total_as_recorded" ],
+         [ "total_includes_tax", "mixed_by_tax_rate_group" ]
       semantics
-    when [ "total_includes_tax", "mixed_by_tax_rate_group" ]
-      semantics.merge("item_amount_basis" => "line_total_as_recorded")
     when [ "tax_added_to_subtotal", "line_total_as_recorded" ]
       if external_tax_basis_from_details?
         semantics.merge(

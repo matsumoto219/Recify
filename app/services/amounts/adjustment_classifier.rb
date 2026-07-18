@@ -5,6 +5,7 @@ module Amounts
     PAYMENT_ADJUSTMENT_KINDS = %w[point_usage].freeze
     PURCHASE_DISCOUNT_KINDS = %w[receipt_discount coupon return_refund].freeze
     SURCHARGE_KINDS = %w[service_charge late_night_charge delivery_fee bag_fee handling_fee].freeze
+    EXPLICIT_PURCHASE_ADJUSTMENT_KINDS = (SURCHARGE_KINDS + %w[coupon return_refund]).freeze
     TAX_RATE_SOURCES = %w[explicit inherited_single_rate unknown not_applicable].freeze
 
     class << self
@@ -66,7 +67,7 @@ module Amounts
     end
 
     def explicit_purchase_adjustment_kind?
-      (SURCHARGE_KINDS + %w[coupon return_refund]).include?(adjustment[:kind].to_s)
+      EXPLICIT_PURCHASE_ADJUSTMENT_KINDS.include?(adjustment[:kind].to_s)
     end
 
     def cashless_payment_adjustment?
