@@ -189,6 +189,54 @@ RSpec.describe Amounts::ItemTotalAggregator do
     end
   end
 
+  it 'edit_saveではcountable itemの明示priceとquantityをstale hidden line_totalより優先する' do
+    cases = [
+      {
+        price: 100,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        original_line_total: 100,
+        line_total: 110
+      },
+      {
+        price: 100,
+        quantity: 2,
+        quantity_unit_code: 'each',
+        original_line_total: 200,
+        line_total: 120
+      }
+    ]
+
+    results = cases.map { |item| aggregate([ item ], context: :edit_save) }
+
+    aggregate_failures do
+      expect(results.map { |result| result[:total] }).to eq([ 100, 200 ])
+      expect(results.map { |result| result[:items].first[:original_line_total] }).to eq([ 100, 200 ])
+      expect(results.map { |result| result[:items].first[:line_total] }).to eq([ 100, 200 ])
+    end
+  end
+
+  it 'edit_saveでもmeasurement itemの明示line_totalはpriceとquantityから上書きしない' do
+    result = aggregate(
+      [
+        {
+          price: 14_400,
+          quantity: BigDecimal('0.300'),
+          quantity_unit_code: 'kilogram',
+          original_line_total: 4_320,
+          line_total: 4_321
+        }
+      ],
+      context: :edit_save
+    )
+
+    aggregate_failures do
+      expect(result[:total]).to eq(4_321)
+      expect(result[:items].first[:original_line_total]).to eq(4_321)
+      expect(result[:items].first[:line_total]).to eq(4_321)
+    end
+  end
+
   it 'parses decimal comma quantity as decimal when filling line_total' do
     result = aggregate([
       { price: 14_400, quantity: '0,300', quantity_unit_code: 'each', line_total: nil }

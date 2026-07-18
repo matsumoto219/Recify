@@ -30,6 +30,91 @@ RSpec.describe "Receipt form Stimulus controller" do
     JSON.parse(stdout)
   end
 
+  def run_amount_round_trip(basis:, items:)
+    run_controller_script(<<~JAVASCRIPT)
+      const itemDefinitions = #{items.to_json}
+      const amountTarget = () => ({ value: null, textContent: '', title: '', dataset: {} })
+      const rows = itemDefinitions.map((definition) => {
+        const inputs = {
+          quantityInput: { value: '1' },
+          quantityUnitInput: { value: 'each' },
+          priceInput: { value: String(definition.price) },
+          discountRateInput: { value: '', dataset: { originalDiscountRate: '' } },
+          taxRateInput: { value: String(definition.taxRate) },
+          lineTotalInput: {
+            value: String(definition.lineTotal),
+            dataset: {
+              originalLineTotal: String(definition.lineTotal),
+              originalSavedLineTotal: String(definition.lineTotal)
+            }
+          }
+        }
+
+        return {
+          inputs,
+          querySelector (selector) {
+            const match = selector.match(/receipt-form-target="([^"]+)"/)
+            return match ? inputs[match[1]] : null
+          },
+          querySelectorAll () { return [] }
+        }
+      })
+      const controller = Object.create(ReceiptFormController.prototype)
+      const subtotal = amountTarget()
+      const tax = amountTarget()
+      const total = amountTarget()
+
+      Object.defineProperties(controller, {
+        itemRowTargets: { value: rows },
+        adjustmentRowTargets: { value: [] },
+        paymentRowTargets: { value: [] },
+        receiptTaxBasisValue: { value: #{basis.to_json} },
+        roundingModeValue: { value: 'floor' },
+        discountRoundingModeValue: { value: 'round' },
+        countableQuantityUnitsValue: { value: 'each,piece,item,bottle,bag,box' },
+        receiptItemPriceMaxValue: { value: 999999999 },
+        receiptItemLineTotalMaxValue: { value: 999999999 },
+        receiptAdjustmentAmountMaxValue: { value: 999999999 },
+        receiptPaymentAmountMaxValue: { value: 999999999 },
+        receiptTotalAmountMaxValue: { value: 999999999 },
+        receiptTaxAmountMaxValue: { value: 999999999 },
+        hasTotalAmountTarget: { value: true },
+        totalAmountTarget: { value: total },
+        hasSubtotalAmountTarget: { value: true },
+        subtotalAmountTarget: { value: subtotal },
+        hasTaxAmountTarget: { value: true },
+        taxAmountTarget: { value: tax },
+        hasTaxRateSummaryTarget: { value: false }
+      })
+
+      controller.previewNumericInputsValid = () => true
+      controller.previewRowExcluded = () => false
+      controller.animateAmount = (target, value) => { target.value = value }
+      controller.animateLineTotal = () => {}
+      controller.syncPaymentAdjustmentSummary = () => {}
+      controller.syncPaymentReconciliationSummary = () => {}
+      controller.paymentAmountSum = () => 801
+
+      const snapshot = () => ({
+        subtotal: subtotal.value,
+        tax: tax.value,
+        total: total.value,
+        firstLineTotal: Number(rows[0].inputs.lineTotalInput.value)
+      })
+
+      controller.recalculate()
+      const initial = snapshot()
+      rows[0].inputs.quantityInput.value = '2'
+      controller.recalculate()
+      const doubled = snapshot()
+      rows[0].inputs.quantityInput.value = '1'
+      controller.recalculate()
+      const restored = snapshot()
+
+      process.stdout.write(JSON.stringify({ initial, doubled, restored }))
+    JAVASCRIPT
+  end
+
   it "opens item detail panels from item review target hashes without toggling them closed" do
     aggregate_failures do
       expect(source).to include("reviewItemTargetPrefix: String")
@@ -120,6 +205,44 @@ RSpec.describe "Receipt form Stimulus controller" do
       "zeroDifference" => "¥0",
       "noTaxRate" => "Unset",
       "multipleTaxRates" => "Multiple tax rates"
+    )
+  end
+
+  it "recalculates the external net receipt from quantity 1 to 2 and back without drift" do
+    result = run_amount_round_trip(
+      basis: 'external',
+      items: [
+        { price: 128, lineTotal: 128, taxRate: 8 },
+        { price: 198, lineTotal: 198, taxRate: 8 },
+        { price: 115, lineTotal: 115, taxRate: 8 },
+        { price: 298, lineTotal: 298, taxRate: 8 },
+        { price: 3, lineTotal: 3, taxRate: 10 }
+      ]
+    )
+
+    expect(result).to eq(
+      'initial' => { 'subtotal' => 742, 'tax' => 59, 'total' => 801, 'firstLineTotal' => 128 },
+      'doubled' => { 'subtotal' => 870, 'tax' => 69, 'total' => 939, 'firstLineTotal' => 256 },
+      'restored' => { 'subtotal' => 742, 'tax' => 59, 'total' => 801, 'firstLineTotal' => 128 }
+    )
+  end
+
+  it "rounds internal tax once per tax-rate group like the Amount Engine" do
+    result = run_amount_round_trip(
+      basis: 'internal',
+      items: [
+        { price: 138, lineTotal: 138, taxRate: 8 },
+        { price: 213, lineTotal: 213, taxRate: 8 },
+        { price: 124, lineTotal: 124, taxRate: 8 },
+        { price: 321, lineTotal: 321, taxRate: 8 },
+        { price: 3, lineTotal: 3, taxRate: 10 }
+      ]
+    )
+
+    expect(result).to eq(
+      'initial' => { 'subtotal' => 741, 'tax' => 58, 'total' => 799, 'firstLineTotal' => 138 },
+      'doubled' => { 'subtotal' => 868, 'tax' => 69, 'total' => 937, 'firstLineTotal' => 276 },
+      'restored' => { 'subtotal' => 741, 'tax' => 58, 'total' => 799, 'firstLineTotal' => 138 }
     )
   end
 
