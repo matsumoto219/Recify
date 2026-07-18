@@ -31,7 +31,6 @@ class Receipts::Editing::ChangeSet
     quantity_unit_code
     tax_rate
     discount_rate
-    line_total
   ].freeze
   ADJUSTMENT_AMOUNT_FIELDS = %w[
     kind
@@ -64,11 +63,7 @@ class Receipts::Editing::ChangeSet
     purchase_adjustments_changed, payment_adjustments_changed = adjustment_changes
 
     Result.new(
-      item_amounts_changed: collection_changed?(
-        :receipt_items,
-        "receipt_items_attributes",
-        ITEM_AMOUNT_FIELDS
-      ),
+      item_amounts_changed: item_amounts_changed?,
       purchase_adjustments_changed: purchase_adjustments_changed,
       payment_adjustments_changed: payment_adjustments_changed,
       payments_changed: collection_changed?(
@@ -81,6 +76,26 @@ class Receipts::Editing::ChangeSet
   end
 
   private
+
+  def item_amounts_changed?
+    submitted_attributes("receipt_items_attributes").any? do |attributes|
+      record = existing_record(:receipt_items, attributes["id"])
+      next record.present? if destroyed?(attributes)
+      next true if record.nil?
+
+      record_changed?(record, attributes, ITEM_AMOUNT_FIELDS) || item_line_total_source_changed?(record, attributes)
+    end
+  end
+
+  def item_line_total_source_changed?(record, attributes)
+    return false unless attributes.key?("line_total")
+
+    quantity_unit_code = attributes.fetch("quantity_unit_code", record.quantity_unit_code)
+    price = attributes.fetch("price", record.price)
+    return false if ReceiptQuantityUnit.countable?(quantity_unit_code) && price.present?
+
+    record_changed?(record, attributes, %w[line_total])
+  end
 
   def collection_changed?(association_name, attributes_key, fields)
     submitted_attributes(attributes_key).any? do |attributes|

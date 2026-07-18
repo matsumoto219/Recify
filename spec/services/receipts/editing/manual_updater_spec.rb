@@ -33,6 +33,40 @@ RSpec.describe Receipts::Editing::ManualUpdater do
     end
   end
 
+  it 'validation失敗時は保存用derived attrsから元のsource attrsへ戻してerrorを維持する' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '商品', price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100
+    )
+    source_attributes = {
+      'store_name' => '',
+      'receipt_items_attributes' => {
+        '0' => { 'id' => item.id.to_s, 'price' => 100, 'line_total' => 100 }
+      }
+    }
+    source_snapshot = source_attributes.deep_dup
+
+    result = described_class.call(
+      receipt: receipt,
+      attributes: {
+        'store_name' => '',
+        'receipt_items_attributes' => {
+          '0' => { 'id' => item.id.to_s, 'price' => 110, 'line_total' => 110 }
+        }
+      },
+      source_attributes: source_attributes,
+      items_missing: false
+    )
+
+    aggregate_failures do
+      expect(result).not_to be_saved
+      expect(result.receipt.errors[:store_name]).to be_present
+      expect(result.receipt.receipt_items.first.price).to eq(100)
+      expect(result.receipt.receipt_items.first.line_total).to eq(100)
+      expect(source_attributes).to eq(source_snapshot)
+      expect(item.reload.price).to eq(100)
+    end
+  end
+
   it 'assigns attributes without persistence for the missing-item render path' do
     result = described_class.call(
       receipt: receipt,
@@ -89,6 +123,7 @@ RSpec.describe Receipts::Editing::ManualUpdater do
     aggregate_failures do
       expect(result).not_to be_saved
       expect(result.receipt.errors).to be_of_kind(:image, :storage_quota_exceeded)
+      expect(result.receipt.errors[:image].size).to eq(1)
       expect(receipt.reload.image).not_to be_attached
     end
   end

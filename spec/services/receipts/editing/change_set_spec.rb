@@ -46,6 +46,57 @@ RSpec.describe Receipts::Editing::ChangeSet do
     expect(result.purchase_amounts_changed?).to be(true)
   end
 
+  it 'countable itemのstale hidden line_totalだけをpurchase amount変更にしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '商品', price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => { 'id' => item.id.to_s, 'line_total' => '150' }
+        }
+      }
+    )
+
+    expect(result.purchase_amounts_changed?).to be(false)
+  end
+
+  it 'measurement itemの明示line_total変更をpurchase amount変更にする' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '量り売り', price: 1_000, quantity: 0.5, quantity_unit_code: 'kilogram', line_total: 500
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => { 'id' => item.id.to_s, 'line_total' => '550' }
+        }
+      }
+    )
+
+    expect(result.purchase_amounts_changed?).to be(true)
+  end
+
+  it '単価のないcountable itemの明示line_total変更をpurchase amount変更にする' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '総額のみ', price: nil, quantity: 1, quantity_unit_code: 'each', line_total: 500
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => { 'id' => item.id.to_s, 'line_total' => '550' }
+        }
+      }
+    )
+
+    expect(result.purchase_amounts_changed?).to be(true)
+  end
+
   it '購入調整と支払調整の変更を分離する' do
     coupon = receipt.receipt_adjustments.create!(
       kind: 'coupon', amount: 10, sign: 'discount', source: 'manual', needs_review: false

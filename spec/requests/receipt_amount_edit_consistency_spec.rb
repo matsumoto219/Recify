@@ -426,4 +426,83 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       expect(second_item_values).to eq(original_item_values)
     end
   end
+
+  it 'model validation失敗でもcomputed grossを再表示sourceへ昇格させない' do
+    receipt, items = create_external_net_receipt
+    original_receipt_values = receipt.attributes.slice('store_name', 'subtotal_amount', 'tax_amount', 'total_amount')
+    original_item_values = items.map do |item|
+      item.attributes.slice('price', 'quantity', 'original_line_total', 'line_total')
+    end
+    attributes = items.each_with_index.to_h do |item, index|
+      [ index.to_s, item_attributes(item) ]
+    end
+
+    allow(ReceiptAmountService).to receive(:call).and_return(forced_external_result)
+    allow(Receipts::Editing).to receive(:check_consistency).and_return(
+      Receipts::Editing::ConsistencyGuard::Result.new(fatal_errors: [], review_reasons: [])
+    )
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        store_name: '',
+        receipt_items_attributes: attributes
+      }
+    }
+
+    rendered_items = rendered_item_attributes(Nokogiri::HTML(response.body))
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(rendered_values_in_item_order(rendered_items, items, :price).map(&:to_i)).to eq([ 128, 198, 115, 298, 3 ])
+      expect(rendered_values_in_item_order(rendered_items, items, :line_total).map(&:to_i)).to eq([ 128, 198, 115, 298, 3 ])
+      expect(receipt.reload.attributes.slice(*original_receipt_values.keys)).to eq(original_receipt_values)
+      expect(items.map { |item| item.reload.attributes.slice(*original_item_values.first.keys) }).to eq(original_item_values)
+    end
+  end
+
+  it '新規nested itemを含むvalidation失敗でも行を重複させずsourceとchild errorを維持する' do
+    receipt, items = create_external_net_receipt
+    invalid_name = '長' * 501
+    attributes = items.each_with_index.to_h do |item, index|
+      [ index.to_s, item_attributes(item) ]
+    end
+    attributes['5'] = {
+      confirmed_name: invalid_name,
+      price: '50',
+      quantity: '1',
+      quantity_unit_code: 'each',
+      tax_rate: '10',
+      line_total: '50',
+      _destroy: '0'
+    }
+
+    allow(ReceiptAmountService).to receive(:call).and_return(forced_external_result)
+    allow(Receipts::Editing).to receive(:check_consistency).and_return(
+      Receipts::Editing::ConsistencyGuard::Result.new(fatal_errors: [], review_reasons: [])
+    )
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        store_name: '',
+        receipt_items_attributes: attributes
+      }
+    }
+
+    document = Nokogiri::HTML(response.body)
+    rows = document.css(
+      '[data-receipt-form-target="itemsContainer"] > [data-controller~="swipe-action"] [data-receipt-form-target="itemRow"]'
+    )
+    invalid_name_input = rows.filter_map { |row| row.at_css('input[name$="[confirmed_name]"]') }
+      .find { |input| input['value'] == invalid_name }
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(rows.size).to eq(6)
+      expect(invalid_name_input).to be_present
+      expect(invalid_name_input['class']).to include('input-field-error')
+      expect(receipt.reload.receipt_items.count).to eq(5)
+    end
+  end
 end

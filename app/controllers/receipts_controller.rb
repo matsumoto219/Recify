@@ -294,24 +294,28 @@ class ReceiptsController < ApplicationController
       return
     end
 
+    source_params = update_params
+    persistence_params = source_params.deep_dup
+    persistence_params["image"] = source_params["image"] if source_params.key?("image")
+
     if uploaded_receipt_image.present?
-      apply_current_image_retention_snapshot!(update_params, purge_eligible: true)
+      apply_current_image_retention_snapshot!(persistence_params, purge_eligible: true)
     end
-    clear_review_flags_for_edited_items!(update_params)
-    amount_result = apply_amount_calculation!(update_params, context: :edit_save)
-    if manual_amount_limit_exceeded?(update_params, context: :edit_save)
+    clear_review_flags_for_edited_items!(persistence_params)
+    amount_result = apply_amount_calculation!(source_params, attributes: persistence_params, context: :edit_save)
+    if manual_amount_limit_exceeded?(persistence_params, context: :edit_save)
       render_manual_amount_limit_exceeded(
-        update_params,
-        manual_amount_limit_violations(update_params, context: :edit_save),
+        source_params,
+        manual_amount_limit_violations(persistence_params, context: :edit_save),
         template: :edit,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
       return
     end
-    consistency_guard = receipt_edit_save_consistency_guard(update_params, amount_result)
+    consistency_guard = receipt_edit_save_consistency_guard(persistence_params, amount_result)
     unless consistency_guard.consistent?
       render_manual_amount_consistency_error!(
-        update_params,
+        source_params,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
       return
@@ -319,19 +323,21 @@ class ReceiptsController < ApplicationController
 
     Receipts::Editing.prepare_update_state!(
       receipt: @receipt,
-      attributes: update_params,
+      attributes: persistence_params,
       review_state_arguments: manual_review_state_arguments(
-        update_params,
+        persistence_params,
         amount_result,
-        consistency_guard: consistency_guard
+        consistency_guard: consistency_guard,
+        source_permitted: source_params
       )
     )
 
-    items_missing = manual_receipt_items_missing?(update_params, context: :edit_save)
+    items_missing = manual_receipt_items_missing?(source_params, context: :edit_save)
     begin
       result = Receipts::Editing.update_manual(
         receipt: @receipt,
-        attributes: update_params,
+        attributes: persistence_params,
+        source_attributes: source_params,
         items_missing: items_missing
       )
     rescue ActiveRecord::StaleObjectError
@@ -340,7 +346,7 @@ class ReceiptsController < ApplicationController
     end
 
     if result.items_missing?
-      prepare_manual_receipt_items_missing_error!(update_params)
+      prepare_manual_receipt_items_missing_error!(source_params)
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
       prepare_receipt_form_presenter
       flash.now[:alert] = @receipt.errors.full_messages
@@ -1087,7 +1093,7 @@ class ReceiptsController < ApplicationController
     @receipt.errors.add(:base, message)
   end
 
-  def apply_amount_calculation!(permitted, context:)
+  def apply_amount_calculation!(permitted, attributes: permitted, context:)
     change_set = receipt_edit_save_change_set(permitted, context)
     clear_amounts = clear_amounts_for_deleted_receipt_items?(permitted, context) || change_set&.derived_purchase_inputs_changed?
     receipt_tax_details = clear_amounts ? [] : amount_receipt_tax_details(context)
@@ -1100,13 +1106,13 @@ class ReceiptsController < ApplicationController
 
     Receipts::Editing.apply_amount_result!(
       receipt: @receipt,
-      attributes: permitted,
+      attributes: attributes,
       amount_result: result,
       context: context,
       change_set: change_set,
       tax_details_recalculated: tax_details_recalculated
     )
-    reset_receipt_edit_save_input!
+    reset_receipt_edit_save_input! if attributes.equal?(permitted)
     result
   end
 
@@ -1131,14 +1137,14 @@ class ReceiptsController < ApplicationController
   end
 
 
-  def manual_review_state_arguments(permitted, amount_result, consistency_guard: nil)
+  def manual_review_state_arguments(permitted, amount_result, consistency_guard: nil, source_permitted: permitted)
     return unless manual_review_state_rebuild_target?(permitted)
 
     {
       amount_result: amount_result,
       consistency_review_reasons: consistency_guard&.review_reasons,
       child_review_remaining: manual_update_child_review_remaining?(permitted),
-      nested_amount_inputs_submitted: manual_amount_inputs_changed?(permitted),
+      nested_amount_inputs_submitted: manual_amount_inputs_changed?(source_permitted),
       item_inputs_submitted: item_inputs_submitted?
     }
   end
