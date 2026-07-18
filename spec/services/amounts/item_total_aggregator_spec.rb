@@ -196,14 +196,20 @@ RSpec.describe Amounts::ItemTotalAggregator do
         quantity: 1,
         quantity_unit_code: 'each',
         original_line_total: 100,
-        line_total: 110
+        line_total: 110,
+        amount_price_present: true,
+        amount_quantity_present: true,
+        amount_line_total_present: true
       },
       {
         price: 100,
         quantity: 2,
         quantity_unit_code: 'each',
         original_line_total: 200,
-        line_total: 120
+        line_total: 120,
+        amount_price_present: true,
+        amount_quantity_present: true,
+        amount_line_total_present: true
       }
     ]
 
@@ -214,6 +220,89 @@ RSpec.describe Amounts::ItemTotalAggregator do
       expect(results.map { |result| result[:items].first[:original_line_total] }).to eq([ 100, 200 ])
       expect(results.map { |result| result[:items].first[:line_total] }).to eq([ 100, 200 ])
     end
+  end
+
+  it 'edit_saveの未送信countable itemは保存済みgross line_totalの互換経路を維持する' do
+    result = aggregate(
+      [
+        {
+          price: 130,
+          quantity: 1,
+          quantity_unit_code: 'each',
+          original_line_total: 130,
+          line_total: 140,
+          amount_price_present: false,
+          amount_quantity_present: false,
+          amount_line_total_present: false
+        }
+      ],
+      context: :edit_save
+    )
+
+    aggregate_failures do
+      expect(result[:total]).to eq(140)
+      expect(result[:items].first[:original_line_total]).to eq(140)
+      expect(result[:items].first[:line_total]).to eq(140)
+    end
+  end
+
+  it 'edit_saveで無変更送信されたcountable itemも保存済みgross line_totalを維持する' do
+    result = aggregate(
+      [
+        {
+          price: 130,
+          quantity: 1,
+          quantity_unit_code: 'each',
+          original_line_total: 130,
+          line_total: 140,
+          amount_price_present: true,
+          amount_quantity_present: true,
+          amount_line_total_present: true,
+          amount_countable_source_changed: false,
+          amount_line_total_changed: true,
+          amount_persisted_item: true,
+          amount_persisted_original_line_total: 130,
+          amount_persisted_line_total: 140
+        }
+      ],
+      context: :edit_save
+    )
+
+    aggregate_failures do
+      expect(result[:total]).to eq(140)
+      expect(result[:items].first[:original_line_total]).to eq(130)
+      expect(result[:items].first[:line_total]).to eq(140)
+    end
+  end
+
+  it 'edit_saveでsource不変の割引countable itemは保存済みamount投影を再計算しない' do
+    result = aggregate(
+      [
+        {
+          price: 100,
+          quantity: 1,
+          quantity_unit_code: 'each',
+          original_line_total: 100,
+          discount_rate: BigDecimal('0.1'),
+          discount_amount: 10,
+          line_total: 110,
+          amount_countable_source_changed: false,
+          amount_persisted_item: true,
+          amount_persisted_original_line_total: 100,
+          amount_persisted_discount_rate: BigDecimal('0.1'),
+          amount_persisted_discount_amount: 10,
+          amount_persisted_line_total: 110
+        }
+      ],
+      context: :edit_save
+    )
+
+    expect(result[:items].first).to include(
+      original_line_total: 100,
+      discount_rate: BigDecimal('0.1'),
+      discount_amount: 10,
+      line_total: 110
+    )
   end
 
   it 'edit_saveでもmeasurement itemの明示line_totalはpriceとquantityから上書きしない' do

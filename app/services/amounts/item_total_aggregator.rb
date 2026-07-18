@@ -23,6 +23,9 @@ module Amounts
 
     def normalized_items
       @items.map do |item|
+        persisted_item = persisted_countable_item(item)
+        next persisted_item if persisted_item
+
         original_line_total = original_line_total_for(item)
         submitted_discount_rate = normalize_discount_rate(fetch_value(item, :discount_rate))
         discount_amount = discount_amount_for(item, original_line_total, submitted_discount_rate)
@@ -55,15 +58,32 @@ module Amounts
       item_line_total(item)
     end
 
+    def persisted_countable_item(item)
+      return nil unless manual_countable_unit_price_input?(item)
+      return nil unless fetch_value(item, :amount_persisted_item) == true
+      return nil unless fetch_value(item, :amount_countable_source_changed) == false
+
+      line_total = to_i_or_nil(fetch_value(item, :amount_persisted_line_total))
+      return nil if line_total.nil?
+
+      item_to_hash(item).merge(
+        quantity: normalized_quantity_for(item),
+        original_line_total: to_i_or_nil(fetch_value(item, :amount_persisted_original_line_total)),
+        discount_amount: to_i_or_nil(fetch_value(item, :amount_persisted_discount_amount)),
+        discount_rate: normalize_discount_rate(fetch_value(item, :amount_persisted_discount_rate)),
+        line_total: line_total
+      )
+    end
+
     def manual_input_line_total_for(item)
       if manual_countable_unit_price_input?(item)
         unit_total = countable_unit_line_total(item)
+        return unit_total if countable_source_recalculation_required?(item)
         return unit_total if manual_discount_input?(item)
 
         original_line_total = to_i(fetch_value(item, :original_line_total))
         return normalized_saved_line_total_for(item, unit_total) || unit_total
       end
-
 
       original_line_total = to_i(fetch_value(item, :original_line_total))
       return original_line_total if manual_discount_input?(item) && original_line_total.positive?
@@ -231,6 +251,18 @@ module Amounts
       return flag if flag == true || flag == false
 
       value_present?(fetch_value(item, :quantity))
+    end
+
+    def countable_source_recalculation_required?(item)
+      source_changed = fetch_value(item, :amount_countable_source_changed)
+      return source_changed if source_changed == true || source_changed == false
+
+      presence_flags = %i[amount_price_present amount_quantity_present amount_line_total_present].map do |key|
+        fetch_value(item, key)
+      end
+      return presence_flags.any?(true) if presence_flags.any? { |flag| flag == true || flag == false }
+
+      value_present?(fetch_value(item, :price)) || value_present?(fetch_value(item, :quantity))
     end
 
     def value_present?(value)

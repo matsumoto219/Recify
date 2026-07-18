@@ -767,6 +767,86 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
 
+    it '無変更のcountable itemは単価へ割り切れない保存済みgross line_totalを維持する' do
+      receipt = create_completed_receipt(subtotal_amount: 390, tax_amount: 31, total_amount: 421)
+      item = create_item(
+        receipt,
+        price: 130,
+        quantity: 3,
+        original_line_total: 390,
+        line_total: 421,
+        tax_rate: BigDecimal('0.08')
+      )
+
+      patch_receipt(
+        receipt,
+        memo: '金額以外の更新',
+        receipt_items_attributes: {
+          '0' => item_attributes(item)
+        }
+      )
+      receipt.reload
+      item.reload
+
+      patch_receipt(
+        receipt,
+        memo: '金額以外の再更新',
+        receipt_items_attributes: {
+          '0' => item_attributes(item, line_total: '390')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.price).to eq(130)
+        expect(item.quantity).to eq(BigDecimal('3'))
+        expect(item.original_line_total).to eq(390)
+        expect(item.line_total).to eq(421)
+        expect(receipt.subtotal_amount).to eq(390)
+        expect(receipt.tax_amount).to eq(31)
+        expect(receipt.total_amount).to eq(421)
+      end
+    end
+
+    it '非金額編集では保存済みgrossへ投影された割引countable itemを再計算しない' do
+      receipt = create_completed_receipt(subtotal_amount: 100, tax_amount: 10, total_amount: 110)
+      item = create_item(
+        receipt,
+        price: 100,
+        quantity: 1,
+        original_line_total: 100,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 10,
+        line_total: 110
+      )
+
+      2.times do |index|
+        patch_receipt(
+          receipt,
+          memo: "金額以外の更新#{index}",
+          receipt_items_attributes: {
+            '0' => item_attributes(item.reload)
+          }
+        )
+        receipt.reload
+      end
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.price).to eq(100)
+        expect(item.original_line_total).to eq(100)
+        expect(item.discount_rate).to eq(BigDecimal('0.1'))
+        expect(item.discount_amount).to eq(10)
+        expect(item.line_total).to eq(110)
+        expect(receipt.subtotal_amount).to eq(100)
+        expect(receipt.tax_amount).to eq(10)
+        expect(receipt.total_amount).to eq(110)
+      end
+    end
+
     it '割引済みcountable itemのquantity変更は現在の単価と数量から割引額を再計算する' do
       receipt = create_completed_receipt(subtotal_amount: 273, tax_amount: 27, total_amount: 300)
       item = create_item(

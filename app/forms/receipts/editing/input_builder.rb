@@ -53,6 +53,7 @@ class Receipts::Editing::InputBuilder
     source_span_start
     source_span_end
   ].freeze
+  ITEM_SOURCE_FIELDS = %w[price quantity quantity_unit_code discount_rate discount_amount].freeze
 
   def self.call(receipt:, permitted:)
     new(receipt: receipt, permitted: permitted).call
@@ -98,7 +99,7 @@ class Receipts::Editing::InputBuilder
 
       existing = id && existing_by_id[id]
       merged = serialized_record(existing, fields).merge(attributes.except("_destroy"))
-      apply_item_input_presence!(merged, attributes) if association_name == :receipt_items
+      apply_item_input_presence!(merged, attributes, existing) if association_name == :receipt_items
       merged
     end
 
@@ -106,7 +107,7 @@ class Receipts::Editing::InputBuilder
       next if referenced_ids.include?(record.id.to_s)
 
       serialized = serialized_record(record, fields)
-      apply_item_input_presence!(serialized, {}) if association_name == :receipt_items
+      apply_item_input_presence!(serialized, {}, record) if association_name == :receipt_items
       serialized
     end
 
@@ -137,12 +138,53 @@ class Receipts::Editing::InputBuilder
     ActiveModel::Type::Boolean.new.cast(attributes["_destroy"])
   end
 
-  def apply_item_input_presence!(item, submitted_attributes)
+  def apply_item_input_presence!(item, submitted_attributes, existing)
+    %w[price quantity line_total].each do |field|
+      item["amount_#{field}_present"] = submitted_attributes.key?(field) && submitted_attributes[field].present?
+    end
+    item["amount_countable_source_changed"] = ITEM_SOURCE_FIELDS.any? do |field|
+      submitted_item_field_changed?(existing, submitted_attributes, field)
+    end
+    item["amount_line_total_changed"] = submitted_item_field_changed?(existing, submitted_attributes, "line_total")
+    apply_persisted_item_amounts!(item, existing) if existing
     item["amount_discount_amount_present"] =
       if submitted_attributes.key?("discount_rate")
         false
       else
         item["discount_amount"].present?
       end
+  end
+
+  def submitted_item_field_changed?(existing, submitted_attributes, field)
+    return false unless submitted_attributes.key?(field)
+    return true unless existing
+
+    comparable_item_value(field, existing.public_send(field)) != comparable_item_value(field, submitted_attributes[field])
+  end
+
+  def comparable_item_value(field, value)
+    case field
+    when "price", "line_total", "discount_amount"
+      value.blank? ? nil : value.to_i
+    when "quantity"
+      value.blank? ? nil : BigDecimal(value.to_s)
+    when "discount_rate"
+      return nil if value.blank?
+
+      rate = BigDecimal(value.to_s.delete("%"))
+      rate > 1 ? rate / 100 : rate
+    when "quantity_unit_code"
+      value.to_s
+    end
+  rescue ArgumentError
+    value
+  end
+
+  def apply_persisted_item_amounts!(item, existing)
+    item["amount_persisted_item"] = true
+    item["amount_persisted_original_line_total"] = existing.original_line_total
+    item["amount_persisted_discount_amount"] = existing.discount_amount
+    item["amount_persisted_discount_rate"] = existing.discount_rate
+    item["amount_persisted_line_total"] = existing.line_total
   end
 end
