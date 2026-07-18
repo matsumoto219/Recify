@@ -6,7 +6,8 @@ class Receipts::Editing::ChangeSet
     :purchase_adjustments_changed,
     :payment_adjustments_changed,
     :payments_changed,
-    :receipt_amounts_changed
+    :receipt_amounts_changed,
+    :amount_inputs_submitted
   ) do
     def derived_purchase_inputs_changed?
       item_amounts_changed || purchase_adjustments_changed
@@ -23,6 +24,10 @@ class Receipts::Editing::ChangeSet
     def amount_related_changed?
       purchase_amounts_changed? || payment_adjustments_changed || payments_changed
     end
+
+    def amount_inputs_submitted?
+      amount_inputs_submitted == true
+    end
   end
 
   ITEM_AMOUNT_FIELDS = %w[
@@ -31,6 +36,12 @@ class Receipts::Editing::ChangeSet
     quantity_unit_code
     tax_rate
     discount_rate
+  ].freeze
+  ITEM_NON_AMOUNT_FIELDS = %w[
+    confirmed_name
+    category
+    product_code
+    position_index
   ].freeze
   ADJUSTMENT_AMOUNT_FIELDS = %w[
     kind
@@ -49,6 +60,9 @@ class Receipts::Editing::ChangeSet
     total_amount
     tax_rate
   ].freeze
+  ITEM_AMOUNT_INPUT_FIELDS = (ITEM_AMOUNT_FIELDS + %w[discount_amount line_total _destroy]).freeze
+  ADJUSTMENT_AMOUNT_INPUT_FIELDS = (ADJUSTMENT_AMOUNT_FIELDS + %w[_destroy]).freeze
+  PAYMENT_INPUT_FIELDS = (PAYMENT_FIELDS + %w[_destroy]).freeze
 
   def self.call(receipt:, permitted:)
     new(receipt: receipt, permitted: permitted).call
@@ -61,17 +75,26 @@ class Receipts::Editing::ChangeSet
 
   def call
     purchase_adjustments_changed, payment_adjustments_changed = adjustment_changes
+    item_amounts_changed = item_amounts_changed?
+    payments_changed = collection_changed?(
+      :receipt_payments,
+      "receipt_payments_attributes",
+      PAYMENT_FIELDS
+    )
+    receipt_amounts_changed = record_changed?(@receipt, @permitted, RECEIPT_AMOUNT_FIELDS)
+    amount_related_changed = item_amounts_changed ||
+      purchase_adjustments_changed ||
+      payment_adjustments_changed ||
+      payments_changed ||
+      receipt_amounts_changed
 
     Result.new(
-      item_amounts_changed: item_amounts_changed?,
+      item_amounts_changed: item_amounts_changed,
       purchase_adjustments_changed: purchase_adjustments_changed,
       payment_adjustments_changed: payment_adjustments_changed,
-      payments_changed: collection_changed?(
-        :receipt_payments,
-        "receipt_payments_attributes",
-        PAYMENT_FIELDS
-      ),
-      receipt_amounts_changed: record_changed?(@receipt, @permitted, RECEIPT_AMOUNT_FIELDS)
+      payments_changed: payments_changed,
+      receipt_amounts_changed: receipt_amounts_changed,
+      amount_inputs_submitted: amount_related_changed || unchanged_nested_amount_confirmation_submitted?
     )
   end
 
@@ -92,9 +115,26 @@ class Receipts::Editing::ChangeSet
 
     quantity_unit_code = attributes.fetch("quantity_unit_code", record.quantity_unit_code)
     price = attributes.fetch("price", record.price)
-    return false if ReceiptQuantityUnit.countable?(quantity_unit_code) && price.present?
+    if ReceiptQuantityUnit.countable?(quantity_unit_code) && price.present?
+      return unexplained_countable_total?(record, attributes)
+    end
 
     record_changed?(record, attributes, %w[line_total])
+  end
+
+  def unexplained_countable_total?(record, attributes)
+    changed_record = record.dup
+    changed_record.assign_attributes(attributes.slice(*ITEM_AMOUNT_FIELDS, "line_total"))
+    expected_line_total = (
+      BigDecimal(changed_record.price.to_s) * BigDecimal(changed_record.quantity.to_s)
+    ).round(0).to_i
+    return false if record.line_total.to_i == expected_line_total
+    return true unless record.original_line_total.to_i == expected_line_total
+    return false if record.discount_rate.present? || record.discount_amount.present?
+
+    record.line_total.to_i < expected_line_total
+  rescue ArgumentError
+    false
   end
 
   def collection_changed?(association_name, attributes_key, fields)
@@ -136,6 +176,29 @@ class Receipts::Editing::ChangeSet
 
     fields.any? do |field|
       comparable_attributes.key?(field) && changed_record.public_send(field) != record.public_send(field)
+    end
+  end
+
+  def unchanged_nested_amount_confirmation_submitted?
+    return false if item_non_amount_fields_changed?
+
+    collection_input_submitted?("receipt_items_attributes", ITEM_AMOUNT_INPUT_FIELDS) ||
+      collection_input_submitted?("receipt_adjustments_attributes", ADJUSTMENT_AMOUNT_INPUT_FIELDS) ||
+      collection_input_submitted?("receipt_payments_attributes", PAYMENT_INPUT_FIELDS)
+  end
+
+  def item_non_amount_fields_changed?
+    submitted_attributes("receipt_items_attributes").any? do |attributes|
+      record = existing_record(:receipt_items, attributes["id"])
+      next false unless record
+
+      record_changed?(record, attributes, ITEM_NON_AMOUNT_FIELDS)
+    end
+  end
+
+  def collection_input_submitted?(key, fields)
+    submitted_attributes(key).any? do |attributes|
+      fields.any? { |field| attributes.key?(field) }
     end
   end
 

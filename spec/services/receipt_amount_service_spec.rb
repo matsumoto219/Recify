@@ -2696,6 +2696,9 @@ RSpec.describe ReceiptAmountService do
           tax_detail_amount_basis: :net
         )
         expect(result.dig(:amount_engine, :selected_basis)).to eq('items_as_tax_excluded')
+        expect(result.dig(:computed, :source_items).map { |item| item[:line_total] }).to eq([ 256, 198, 115, 298, 3 ])
+        expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 276, 213, 124, 321, 3 ])
+        expect(result.dig(:amount_engine, :selected_candidate, :computed_items).map { |item| item[:line_total] }).to eq([ 276, 213, 124, 321, 3 ])
       end
     end
 

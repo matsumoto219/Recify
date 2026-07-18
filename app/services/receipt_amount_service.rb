@@ -208,6 +208,15 @@ class ReceiptAmountService
     ).call[:items]
     adjustment_summary = adjustment_totals_for(receipt_tax_basis, rounding_mode: tax_rounding_mode)
     item_total = items.sum { |item| to_i(item[:line_total]) }
+    computed = {
+      adjustment_discount_total: adjustment_summary[:discount_total],
+      adjustment_surcharge_total: adjustment_summary[:surcharge_total],
+      payment_adjustment_total: adjustment_summary[:payment_adjustment_total],
+      adjustment_tax_rate_missing_total: adjustment_summary[:tax_rate_missing_adjustment_total],
+      adjusted_item_total: [ item_total + adjustment_summary[:receipt_total_delta].to_i, 0 ].max,
+      items: items
+    }
+    computed[:source_items] = items if @context == :edit_save
 
     {
       context: @context,
@@ -215,14 +224,7 @@ class ReceiptAmountService
         tax: tax_rounding_mode,
         discount: discount_rounding_mode
       },
-      computed: {
-        adjustment_discount_total: adjustment_summary[:discount_total],
-        adjustment_surcharge_total: adjustment_summary[:surcharge_total],
-        payment_adjustment_total: adjustment_summary[:payment_adjustment_total],
-        adjustment_tax_rate_missing_total: adjustment_summary[:tax_rate_missing_adjustment_total],
-        adjusted_item_total: [ item_total + adjustment_summary[:receipt_total_delta].to_i, 0 ].max,
-        items: items
-      },
+      computed: computed,
       resolved: {},
       tax_details: [],
       inconsistencies: [],

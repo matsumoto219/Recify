@@ -275,6 +275,34 @@ RSpec.describe Amounts::ItemTotalAggregator do
     end
   end
 
+  it 'edit_saveで説明不能な保存済みcountable line_totalは明示priceとquantityから正規化する' do
+    result = aggregate(
+      [
+        {
+          price: 100,
+          quantity: 2,
+          quantity_unit_code: 'each',
+          line_total: 200,
+          amount_price_present: true,
+          amount_quantity_present: true,
+          amount_line_total_present: true,
+          amount_countable_source_changed: false,
+          amount_line_total_changed: true,
+          amount_persisted_item: true,
+          amount_persisted_original_line_total: nil,
+          amount_persisted_line_total: 100
+        }
+      ],
+      context: :edit_save
+    )
+
+    aggregate_failures do
+      expect(result[:total]).to eq(200)
+      expect(result[:items].first[:original_line_total]).to eq(200)
+      expect(result[:items].first[:line_total]).to eq(200)
+    end
+  end
+
   it 'edit_saveでsource不変の割引countable itemは保存済みamount投影を再計算しない' do
     result = aggregate(
       [

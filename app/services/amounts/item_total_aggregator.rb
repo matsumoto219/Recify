@@ -65,6 +65,7 @@ module Amounts
 
       line_total = to_i_or_nil(fetch_value(item, :amount_persisted_line_total))
       return nil if line_total.nil?
+      return nil unless explainable_persisted_countable_total?(item, line_total)
 
       item_to_hash(item).merge(
         quantity: normalized_quantity_for(item),
@@ -73,6 +74,18 @@ module Amounts
         discount_rate: normalize_discount_rate(fetch_value(item, :amount_persisted_discount_rate)),
         line_total: line_total
       )
+    end
+
+    def explainable_persisted_countable_total?(item, line_total)
+      unit_total = countable_unit_line_total(item)
+      return true if line_total == unit_total
+
+      original_line_total = to_i_or_nil(fetch_value(item, :amount_persisted_original_line_total))
+      return false unless original_line_total == unit_total
+      return true if value_present?(fetch_value(item, :amount_persisted_discount_rate))
+      return true if value_present?(fetch_value(item, :amount_persisted_discount_amount))
+
+      line_total >= original_line_total
     end
 
     def manual_input_line_total_for(item)

@@ -1144,7 +1144,7 @@ class ReceiptsController < ApplicationController
       amount_result: amount_result,
       consistency_review_reasons: consistency_guard&.review_reasons,
       child_review_remaining: manual_update_child_review_remaining?(permitted),
-      nested_amount_inputs_submitted: manual_amount_inputs_changed?(source_permitted),
+      nested_amount_inputs_submitted: manual_amount_inputs_submitted?(source_permitted),
       item_inputs_submitted: item_inputs_submitted?
     }
   end
@@ -1199,8 +1199,8 @@ class ReceiptsController < ApplicationController
     end
   end
 
-  def manual_amount_inputs_changed?(permitted)
-    receipt_edit_save_change_set(permitted, :edit_save)&.amount_related_changed? == true
+  def manual_amount_inputs_submitted?(permitted)
+    receipt_edit_save_change_set(permitted, :edit_save)&.amount_inputs_submitted? == true
   end
 
   def item_inputs_submitted?

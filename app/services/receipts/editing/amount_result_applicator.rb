@@ -19,7 +19,7 @@ class Receipts::Editing::AmountResultApplicator
     attributes["total_amount"] = resolved[:total]
     attributes["tax_rate"] = resolved[:tax_rate]
     attributes["amount_calculation_profile"] = ReceiptAmountService.calculation_profile_snapshot(amount_result)
-    apply_item_totals!(amount_result.dig(:computed, :items))
+    apply_item_totals!(persistence_items)
     if replace_receipt_tax_details?
       attributes["receipt_tax_details_attributes"] = receipt_tax_detail_attributes(amount_result[:tax_details])
     end
@@ -30,6 +30,14 @@ class Receipts::Editing::AmountResultApplicator
   private
 
   attr_reader :receipt, :attributes, :amount_result, :context, :change_set, :tax_details_recalculated
+
+  def persistence_items
+    candidate_items = amount_result.dig(:computed, :items)
+    return candidate_items unless context == :edit_save
+
+    source_items = amount_result.dig(:computed, :source_items)
+    source_items.nil? ? candidate_items : source_items
+  end
 
   def apply_item_totals!(calculated_items)
     items_attributes = attributes["receipt_items_attributes"]

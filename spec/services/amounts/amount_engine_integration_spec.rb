@@ -579,6 +579,7 @@ RSpec.describe 'Amount Engine integration' do
       expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('external_tax_from_receipt/floor')
       expect(result[:resolved]).to include(subtotal: 1_000, tax: 100, total: 1_100, tax_rate: BigDecimal('0.10'))
       expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 400, 600 ])
+      expect(result.dig(:computed)).not_to have_key(:source_items)
     end
   end
 
@@ -607,6 +608,11 @@ RSpec.describe 'Amount Engine integration' do
         expect(result.dig(:amount_engine, :selected_candidate_id)).to start_with('items_as_tax_excluded/')
         expect(result[:resolved]).to include(subtotal: 200, tax: 20, total: 220)
         expect(result.dig(:computed, :items).first).to include(price: 110, line_total: 220)
+        if context == :edit_save
+          expect(result.dig(:computed, :source_items).first).to include(price: 100, line_total: 200)
+        else
+          expect(result.dig(:computed)).not_to have_key(:source_items)
+        end
       end
     end
   end

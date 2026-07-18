@@ -26,7 +26,10 @@ RSpec.describe Receipts::Editing::ChangeSet do
       }
     )
 
-    expect(result.purchase_amounts_changed?).to be(false)
+    aggregate_failures do
+      expect(result.purchase_amounts_changed?).to be(false)
+      expect(result.amount_inputs_submitted?).to be(false)
+    end
   end
 
   it 'itemのquantity変更をpurchase amount変更にする' do
@@ -60,7 +63,78 @@ RSpec.describe Receipts::Editing::ChangeSet do
       }
     )
 
-    expect(result.purchase_amounts_changed?).to be(false)
+    aggregate_failures do
+      expect(result.purchase_amounts_changed?).to be(false)
+      expect(result.amount_inputs_submitted?).to be(true)
+    end
+  end
+
+  it 'itemの非金額変更と同時に送られた同値金額を再確認扱いにしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '商品', category: nil, price: 100, quantity: 1,
+      quantity_unit_code: 'each', tax_rate: BigDecimal('0.1'), line_total: 100
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'category' => 'food',
+            'price' => '100',
+            'quantity' => '1',
+            'quantity_unit_code' => 'each',
+            'tax_rate' => BigDecimal('0.1'),
+            'line_total' => '100'
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.amount_related_changed?).to be(false)
+      expect(result.amount_inputs_submitted?).to be(false)
+    end
+  end
+
+  it '同値のreceipt金額だけの送信を再確認扱いにしない' do
+    result = described_class.call(
+      receipt: receipt,
+      permitted: { 'total_amount' => receipt.total_amount.to_s }
+    )
+
+    aggregate_failures do
+      expect(result.amount_related_changed?).to be(false)
+      expect(result.amount_inputs_submitted?).to be(false)
+    end
+  end
+
+  it '説明不能な保存済みcountable totalは同値priceとquantityの送信でも変更として扱う' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '商品', price: 100, quantity: 2,
+      quantity_unit_code: 'each', line_total: 100
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'price' => '100',
+            'quantity' => '2',
+            'quantity_unit_code' => 'each',
+            'line_total' => '200'
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.purchase_amounts_changed?).to be(true)
+      expect(result.amount_inputs_submitted?).to be(true)
+    end
   end
 
   it 'measurement itemの明示line_total変更をpurchase amount変更にする' do
@@ -179,7 +253,10 @@ RSpec.describe Receipts::Editing::ChangeSet do
       }
     )
 
-    expect(result.amount_related_changed?).to be(false)
+    aggregate_failures do
+      expect(result.amount_related_changed?).to be(false)
+      expect(result.amount_inputs_submitted?).to be(true)
+    end
   end
 
   it 'labelだけで購入調整から支払調整へ変わる変更を両側の変更として検出する' do
