@@ -101,6 +101,29 @@ RSpec.describe 'Rails rate limits', type: :request do
         expect(json).to eq('error' => rate_limit_message)
       end
     end
+
+    it 'Turbo requestの429通知を既存toastを置換せず共通stackへ追加する' do
+      5.times do
+        post user_session_path,
+             params: { user: { email: 'turbo-limit@example.com', password: 'wrong-password' } }
+      end
+
+      post user_session_path,
+           params: { user: { email: 'turbo-limit@example.com', password: 'wrong-password' } },
+           headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
+
+      document = Nokogiri::HTML(response.body)
+      stream = document.at_css('turbo-stream[action="append"][target="toast-stream"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:too_many_requests)
+        expect(response.media_type).to eq('text/vnd.turbo-stream.html')
+        expect(stream).to be_present
+        expect(stream.at_css('[data-controller~="notice-surface"]')).to be_present
+        expect(stream.text).to include(rate_limit_message)
+        expect(document.at_css('turbo-stream[target="flash"]')).to be_nil
+      end
+    end
   end
 
   describe 'POST /users/password' do

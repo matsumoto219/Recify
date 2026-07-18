@@ -362,7 +362,7 @@ class ApplicationController < ActionController::Base
     respond_to do |format|
       format.turbo_stream do
         flash.now[:alert] = message
-        render turbo_stream: turbo_stream.update("flash", partial: "shared/ui/feedback/flash"),
+        render turbo_stream: turbo_stream.append("toast-stream", partial: "shared/ui/feedback/flash"),
                status: :too_many_requests
       end
 

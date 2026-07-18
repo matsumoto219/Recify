@@ -61,7 +61,7 @@ class SettingsController < ApplicationController
 
         format.turbo_stream do
           flash.now[:alert] = message
-          render turbo_stream: turbo_stream.update("flash", partial: "shared/ui/feedback/flash"),
+          render turbo_stream: turbo_stream.append("toast-stream", partial: "shared/ui/feedback/flash"),
                  status: :unprocessable_content
         end
       end
@@ -90,7 +90,7 @@ class SettingsController < ApplicationController
 
   def settings_update_streams
     [
-      turbo_stream.update("flash", partial: "shared/ui/feedback/flash"),
+      turbo_stream.append("toast-stream", partial: "shared/ui/feedback/flash"),
       turbo_stream.replace(
         "notifications_dropdown_content",
         partial: "shared/notifications/dropdown_content",

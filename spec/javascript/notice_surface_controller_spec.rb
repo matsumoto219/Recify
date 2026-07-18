@@ -13,12 +13,20 @@ RSpec.describe "Notice surface Stimulus controller" do
     end
   end
 
-  it "keeps the newest notices within their own container" do
+  it "keeps the newest notices within their closest common container" do
     aggregate_failures do
       expect(source).to include("data-notice-surface-container")
-      expect(source).to include("this.element.parentElement")
-      expect(source).to include("container.children")
+      expect(source).to include("this.element.closest")
+      expect(source).to include("container.querySelectorAll")
       expect(source).not_to include("document.querySelectorAll(selector)")
+    end
+  end
+
+  it "restarts each notice timer once after a Stimulus reconnect" do
+    aggregate_failures do
+      expect(source).to include("startAutoDismissTimer")
+      expect(source).to include("dismissDeadline")
+      expect(source).not_to include("dataset.noticeInitialized === 'true') return")
     end
   end
 end

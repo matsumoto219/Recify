@@ -2076,20 +2076,20 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
-    it 'Turbo Streamでflash targetを更新する' do
+    it 'Turbo Streamで共通toast stackへflashを追加する' do
       patch settings_path,
             params: { user: { theme_preference: 'dark' } },
             headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
 
       document = Nokogiri::HTML(response.body)
-      stream = document.at_css('turbo-stream[target="flash"]')
+      stream = document.at_css('turbo-stream[target="toast-stream"]')
       notice_surface = stream.at_css('[data-controller~="notice-surface"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.media_type).to eq('text/vnd.turbo-stream.html')
         expect(stream).to be_present
-        expect(stream['action']).to eq('update')
+        expect(stream['action']).to eq('append')
         expect(notice_surface).to be_present
         expect(stream.text).to include(I18n.t('flash.settings.update_success'))
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
@@ -2133,7 +2133,7 @@ RSpec.describe 'Settings', type: :request do
             headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
 
       document = Nokogiri::HTML(response.body)
-      stream = document.at_css('turbo-stream[target="flash"]')
+      stream = document.at_css('turbo-stream[target="toast-stream"]')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -2153,7 +2153,7 @@ RSpec.describe 'Settings', type: :request do
             headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
 
       document = Nokogiri::HTML(response.body)
-      stream = document.at_css('turbo-stream[target="flash"]')
+      stream = document.at_css('turbo-stream[target="toast-stream"]')
       notice_surface = stream.at_css('[data-controller~="notice-surface"]')
 
       aggregate_failures do
@@ -2181,7 +2181,7 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
-    it 'Turbo flash replaceはappend toast containerをtargetにしない' do
+    it 'Turbo flashは既存通知を置換せず共通stackの受付口へappendする' do
       patch settings_path,
             params: { user: { theme_preference: 'dark' } },
             headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
@@ -2190,8 +2190,8 @@ RSpec.describe 'Settings', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(document.at_css('turbo-stream[target="flash"]')).to be_present
-        expect(document.at_css('turbo-stream[target="toast-stream"]')).to be_nil
+        expect(document.at_css('turbo-stream[action="append"][target="toast-stream"]')).to be_present
+        expect(document.at_css('turbo-stream[target="flash"]')).to be_nil
       end
     end
 

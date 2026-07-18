@@ -74,7 +74,7 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
     initial_flash_text = find("#flash [data-controller~='notice-surface']").text
 
     append_notice(
-      target: "flash",
+      target: "toast-stream",
       notice_type: :notice,
       message: "後から届いた通知B",
       dismissible: true,
@@ -86,7 +86,7 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
       align: :center
     )
     append_notice(
-      target: "flash",
+      target: "toast-stream",
       notice_type: :notice,
       message: "さらに届いた通知C",
       dismissible: true,
@@ -106,12 +106,14 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
       expect(toast_b_rect.fetch("top")).to be >= flash_rect.fetch("bottom")
       expect(toast_c_rect.fetch("top")).to be >= toast_b_rect.fetch("bottom")
       expect(page).to have_css("#flash[data-notice-surface-container][data-notice-surface-max-visible='5']")
-      expect(page).to have_css("#flash > [data-controller~='notice-surface']", count: 3)
+      expect(page).to have_css("#flash [data-controller~='notice-surface']", count: 3)
+      expect(page).to have_css("#flash > #toast-stream:not([data-notice-surface-container])")
+      expect(page).to have_css("[data-notice-surface-container]", count: 1)
     end
 
     %w[d e f].each do |suffix|
       append_notice(
-        target: "flash",
+        target: "toast-stream",
         notice_type: :notice,
         message: "追加通知#{suffix.upcase}",
         auto_dismiss: false,
@@ -121,8 +123,8 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
     end
 
     aggregate_failures do
-      expect(page).to have_css("#flash > [data-controller~='notice-surface']", count: 5)
-      expect(page).to have_no_css("#flash > [data-controller~='notice-surface']", text: initial_flash_text)
+      expect(page).to have_css("#flash [data-controller~='notice-surface']", count: 5)
+      expect(page).to have_no_css("#flash [data-controller~='notice-surface']", text: initial_flash_text)
       expect(page).to have_css("#generic-toast-b")
       expect(page).to have_css("#generic-toast-f")
     end
@@ -205,7 +207,7 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
   it "Stimulus再接続後もauto-dismiss timerを一つだけ再開する" do
     sign_in_through_browser(create_system_test_user)
     append_notice(
-      target: "flash",
+      target: "toast-stream",
       message: "再接続される通知",
       auto_dismiss: true,
       auto_dismiss_delay: 300,
@@ -217,7 +219,7 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
     disconnected_and_reconnected = page.evaluate_async_script(<<~JAVASCRIPT)
       const done = arguments[arguments.length - 1]
       const element = document.getElementById('reconnected-toast')
-      const container = document.getElementById('flash')
+      const container = document.getElementById('toast-stream')
       const deadline = window.performance.now() + 3000
       element.remove()
 
@@ -256,10 +258,40 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
     expect_browser_console_clean
   end
 
+  it "設定保存のTurbo flashを既存toastの後ろへ追加する" do
+    sign_in_through_browser(create_system_test_user(theme_preference: "system"))
+    visit settings_path
+    append_notice(
+      target: "toast-stream",
+      message: "保存前から残る通知",
+      auto_dismiss: false,
+      remove_before_cache: true,
+      surface_id: "existing-toast"
+    )
+
+    find("label[for='theme_preference_light']").click
+
+    expect(page).to have_css("#existing-toast", text: "保存前から残る通知")
+    expect(page).to have_css(
+      "#toast-stream [data-controller~='notice-surface']",
+      text: I18n.t("flash.settings.update_success")
+    )
+    messages = page.evaluate_script(<<~JAVASCRIPT)
+      Array.from(document.querySelectorAll('#flash [data-controller~="notice-surface"]')).map((element) => element.textContent)
+    JAVASCRIPT
+
+    aggregate_failures do
+      expect(messages.first).to include("保存前から残る通知")
+      expect(messages.last).to include(I18n.t("flash.settings.update_success"))
+      expect(page).to have_css("[data-notice-surface-container]", count: 1)
+    end
+    expect_browser_console_clean
+  end
+
   it "実Turbo遷移とcache復帰で古いtoastを復活させない" do
     sign_in_through_browser(create_system_test_user)
     append_notice(
-      target: "flash",
+      target: "toast-stream",
       message: "cache前に削除する通知",
       auto_dismiss: false,
       remove_before_cache: true,
@@ -288,7 +320,7 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
 
     page.evaluate_async_script(<<~JAVASCRIPT)
       const done = arguments[arguments.length - 1]
-      const stream = document.getElementById('flash')
+      const stream = document.getElementById('toast-stream')
 
       const appendNotice = (container, id, message) => {
         const notice = document.createElement('div')
@@ -310,12 +342,12 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
       })()
     JAVASCRIPT
 
-    expect(page).to have_css("#flash > [data-controller~='notice-surface']", count: 5)
+    expect(page).to have_css("#flash [data-controller~='notice-surface']", count: 5)
     expect(page).not_to have_css("#dynamic-toast-1")
     expect(page).to have_css("#dynamic-toast-6")
 
     visible_ids = page.evaluate_script(<<~JAVASCRIPT)
-      Array.from(document.querySelectorAll('#flash > [data-controller~="notice-surface"]')).map((element) => element.id)
+      Array.from(document.querySelectorAll('#flash [data-controller~="notice-surface"]')).map((element) => element.id)
     JAVASCRIPT
 
     aggregate_failures do

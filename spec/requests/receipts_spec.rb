@@ -3043,8 +3043,11 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(flash).to be_present
-        expect(toast_stream['data-notice-surface-container']).to eq('')
-        expect(toast_stream['data-notice-surface-max-visible']).to eq('5')
+        expect(flash['data-notice-surface-container']).to eq('')
+        expect(flash['data-notice-surface-max-visible']).to eq('5')
+        expect(toast_stream.ancestors).to include(flash)
+        expect(toast_stream['data-notice-surface-container']).to be_nil
+        expect(toast_stream['data-notice-surface-max-visible']).to be_nil
         expect(notice_surface).to be_present
         expect(notice_surface['data-notice-surface-auto-dismiss-value']).to eq('true')
         expect(notice_surface.at_css('button[data-action="click->notice-surface#close"]')).to be_present

@@ -55,37 +55,30 @@
 %>
 
 <% if grouped_messages.any? %>
-  <%# トーストコンテナ %>
-  <div
-    class="fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm"
-    data-notice-surface-container
-    data-notice-surface-max-visible="3">
-    <% grouped_messages.each_with_index do |(type, auto_dismiss, messages), i| %>
-      <% body_content = nil %>
-      <% if messages.many? %>
-        <% body_content = capture do %>
-          <ul class="token-text-muted min-w-0 max-w-full space-y-2 text-xs leading-relaxed break-words">
-            <% messages.each do |message| %>
-              <li class="flex min-w-0 max-w-full items-start gap-2 break-words">
-                <span class="ui-no-select mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true"></span>
-                <span class="min-w-0 max-w-full break-words"><%= message %></span>
-              </li>
-            <% end %>
-          </ul>
-        <% end %>
+  <% grouped_messages.each do |type, auto_dismiss, messages| %>
+    <% body_content = nil %>
+    <% if messages.many? %>
+      <% body_content = capture do %>
+        <ul class="token-text-muted min-w-0 max-w-full space-y-2 text-xs leading-relaxed break-words">
+          <% messages.each do |message| %>
+            <li class="flex min-w-0 max-w-full items-start gap-2 break-words">
+              <span class="ui-no-select mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true"></span>
+              <span class="min-w-0 max-w-full break-words"><%= message %></span>
+            </li>
+          <% end %>
+        </ul>
       <% end %>
-
-      <%= render "shared/ui/feedback/notice_surface",
-                 notice_type: type,
-                 message: (messages.first if messages.one?),
-                 body: body_content,
-                 dismissible: true,
-                 animated: true,
-                 animation_name: "slide_right",
-                 auto_dismiss: auto_dismiss,
-                 remove_before_cache: true,
-                 surface_id: "toast-#{i}",
-                 align: :center %>
     <% end %>
-  </div>
+
+    <%= render "shared/ui/feedback/notice_surface",
+               notice_type: type,
+               message: (messages.first if messages.one?),
+               body: body_content,
+               dismissible: true,
+               animated: true,
+               animation_name: "slide_right",
+               auto_dismiss: auto_dismiss,
+               remove_before_cache: true,
+               align: :center %>
+  <% end %>
 <% end %>

@@ -485,16 +485,10 @@ export default class extends Controller {
   }
 
   showSearchErrorNotice (messageText = this.errorMessageValue) {
-    const flash = document.getElementById('flash')
-    if (!flash) return
+    const toastStream = document.getElementById('toast-stream')
+    if (!toastStream) return
 
     this.removeSearchErrorNotice()
-
-    const container = document.createElement('div')
-    container.id = 'search-error-toast-container'
-    container.className = 'fixed top-4 md:top-20 left-1/2 -translate-x-1/2 md:left-auto md:right-4 md:translate-x-0 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-[calc(100%-2rem)] md:max-w-sm'
-    container.setAttribute('data-notice-surface-container', '')
-    container.setAttribute('data-notice-surface-max-visible', '3')
 
     const notice = document.createElement('div')
     notice.id = 'search-error-toast'
@@ -539,20 +533,12 @@ export default class extends Controller {
     closeButton.textContent = 'close'
 
     notice.append(iconWrapper, content, closeButton)
-    container.appendChild(notice)
-    flash.appendChild(container)
+    toastStream.appendChild(notice)
   }
 
   removeSearchErrorNotice () {
-    const toastContainer = document.getElementById('search-error-toast-container')
     const notice = document.getElementById('search-error-toast')
-    const container = notice?.parentElement
 
     notice?.remove()
-    toastContainer?.remove()
-
-    if (container?.childElementCount === 0) {
-      container.remove()
-    }
   }
 }
