@@ -24,6 +24,7 @@ RSpec.describe "アカウントとsecurityの実Chrome回帰", type: :system do
   def sign_in_through_browser(user)
     submit_password_login(email: user.email)
     expect(page).to have_current_path(receipts_path, ignore_query: true)
+    expect(page).to have_button(I18n.t("common.logout"))
   end
 
   def open_logout_confirmation
@@ -35,9 +36,7 @@ RSpec.describe "アカウントとsecurityの実Chrome回帰", type: :system do
     original_path = page.current_path
 
     if verify_cancel
-      within(open_logout_confirmation) do
-        click_button I18n.t("shared.confirm_dialog.cancel")
-      end
+      open_logout_confirmation.send_keys(:escape)
       expect(page).to have_no_css("dialog#confirm-dialog[open]")
       expect(page).to have_current_path(original_path, ignore_query: true)
       expect(page).to have_button(I18n.t("common.logout"))
@@ -58,6 +57,19 @@ RSpec.describe "アカウントとsecurityの実Chrome回帰", type: :system do
 
   def totp_code(secret)
     ROTP::TOTP.new(secret, issuer: "Recify").now
+  end
+
+  def with_mobile_viewport
+    page.driver.browser.execute_cdp(
+      "Emulation.setDeviceMetricsOverride",
+      width: 390,
+      height: 844,
+      deviceScaleFactor: 1,
+      mobile: true
+    )
+    yield
+  ensure
+    page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
   end
 
   it "signupで法務同意を記録し、confirmation後にsettings更新とlogoutができる" do
@@ -124,6 +136,26 @@ RSpec.describe "アカウントとsecurityの実Chrome回帰", type: :system do
     expect(page).to have_content(I18n.t("settings.security.guest_registration.title"))
     sign_out_through_browser
     expect_browser_console_clean
+  end
+
+  it "Turbo遷移後の390pxでもlogout確認をcancelして再openできる", :mobile do
+    with_mobile_viewport do
+      user = create_system_test_user
+      sign_in_through_browser(user)
+
+      within(open_logout_confirmation) do
+        click_button I18n.t("shared.confirm_dialog.cancel")
+      end
+      expect(page).to have_no_css("dialog#confirm-dialog[open]")
+
+      page.execute_script("Turbo.visit(arguments[0])", settings_security_path)
+      expect(page).to have_current_path(settings_security_path, ignore_query: true)
+      expect(page).to have_css("#two-factor")
+      expect(page.evaluate_script("window.innerWidth")).to eq(390)
+
+      sign_out_through_browser(verify_cancel: true)
+      expect_browser_console_clean
+    end
   end
 
   it "TOTPを設定し、TOTPとrecovery codeの両方でstep-upできる" do
