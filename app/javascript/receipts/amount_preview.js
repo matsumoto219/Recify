@@ -7,7 +7,7 @@ export function applyRounding (value, roundingMode) {
     case 'ceil':
       return Math.ceil(value)
     case 'round':
-      return Math.round(value)
+      return value < 0 ? -Math.round(Math.abs(value)) : Math.round(value)
     default:
       return Math.floor(value)
   }
@@ -52,6 +52,16 @@ export function externalTaxTotal (taxGroups, roundingMode) {
 
   taxGroups.forEach((groupLineTotal, taxRatePercent) => {
     taxTotal += applyRounding((groupLineTotal * taxRatePercent) / 100, roundingMode)
+  })
+
+  return taxTotal
+}
+
+export function internalTaxTotal (taxGroups, roundingMode) {
+  let taxTotal = 0
+
+  taxGroups.forEach((groupLineTotal, taxRatePercent) => {
+    taxTotal += applyRounding((groupLineTotal * taxRatePercent) / (100 + taxRatePercent), roundingMode)
   })
 
   return taxTotal

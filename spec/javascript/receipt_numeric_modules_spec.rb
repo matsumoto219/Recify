@@ -71,6 +71,7 @@ RSpec.describe "Receipt numeric JavaScript modules" do
         floor: applyRounding(10.9, 'floor'),
         ceil: applyRounding(10.1, 'ceil'),
         round: applyRounding(10.5, 'round'),
+        negativeRound: applyRounding(-10.5, 'round'),
         invalidMode: applyRounding(10.9, 'invalid'),
         clamped: clampNumber(11, 0, 10),
         invalidClamped: clampNumber(Number.NaN, 2, 10),
@@ -84,6 +85,7 @@ RSpec.describe "Receipt numeric JavaScript modules" do
       "floor" => 10,
       "ceil" => 11,
       "round" => 11,
+      "negativeRound" => -11,
       "invalidMode" => 10,
       "clamped" => 10,
       "invalidClamped" => 2,
@@ -129,11 +131,13 @@ RSpec.describe "Receipt numeric JavaScript modules" do
   it "rounds external tax per group and discounts with the configured mode" do
     result = run_module_script("amount_preview", <<~JAVASCRIPT)
       const taxGroups = new Map([[8, 101], [10, 105]])
+      const negativeHalfGroup = new Map([[50, -1]])
 
       process.stdout.write(JSON.stringify({
         externalTaxFloor: externalTaxTotal(taxGroups, 'floor'),
         externalTaxCeil: externalTaxTotal(taxGroups, 'ceil'),
         externalTaxRound: externalTaxTotal(taxGroups, 'round'),
+        externalNegativeHalfRound: externalTaxTotal(negativeHalfGroup, 'round'),
         discountUnset: discountedLineTotal(101, null, 'floor'),
         discountFull: discountedLineTotal(101, 100, 'floor'),
         discountFloor: discountedLineTotal(101, 50, 'floor'),
@@ -146,11 +150,39 @@ RSpec.describe "Receipt numeric JavaScript modules" do
       "externalTaxFloor" => 18,
       "externalTaxCeil" => 20,
       "externalTaxRound" => 19,
+      "externalNegativeHalfRound" => -1,
       "discountUnset" => 101,
       "discountFull" => 0,
       "discountFloor" => 51,
       "discountCeil" => 50,
       "discountRound" => 50
+    )
+  end
+
+  it "rounds internal tax once per signed tax-rate group" do
+    result = run_module_script("amount_preview", <<~JAVASCRIPT)
+      const initialGroups = new Map([[8, 796], [10, 3]])
+      const doubledGroups = new Map([[8, 934], [10, 3]])
+      const adjustedGroup = new Map([[8, 796 - 50]])
+      const negativeHalfGroup = new Map([[100, -1]])
+
+      process.stdout.write(JSON.stringify({
+        initialFloor: internalTaxTotal(initialGroups, 'floor'),
+        doubledFloor: internalTaxTotal(doubledGroups, 'floor'),
+        adjustedFloor: internalTaxTotal(adjustedGroup, 'floor'),
+        adjustedCeil: internalTaxTotal(adjustedGroup, 'ceil'),
+        adjustedRound: internalTaxTotal(adjustedGroup, 'round'),
+        negativeHalfRound: internalTaxTotal(negativeHalfGroup, 'round')
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "initialFloor" => 58,
+      "doubledFloor" => 69,
+      "adjustedFloor" => 55,
+      "adjustedCeil" => 56,
+      "adjustedRound" => 55,
+      "negativeHalfRound" => -1
     )
   end
 end

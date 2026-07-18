@@ -14,7 +14,6 @@ import {
   quantityUnitList
 } from 'receipts/numeric_input'
 import {
-  applyRounding,
   clampNumber,
   discountedLineTotal,
   easeOutCubic,
@@ -23,6 +22,7 @@ import {
   formatPaymentDifference,
   formatSignedAmount,
   formatTaxRateSummary,
+  internalTaxTotal,
   normalizeRoundingMode,
   roundLineAmount
 } from 'receipts/amount_preview'
@@ -639,7 +639,7 @@ export default class extends Controller {
     let total = 0
     let paymentAdjustmentTotal = 0
     const taxRates = new Set()
-    const externalTaxGroups = new Map()
+    const taxGroups = new Map()
     const externalTax = this.usesExternalTax()
 
     this.itemRowTargets.forEach((row) => {
@@ -667,26 +667,12 @@ export default class extends Controller {
       // 税込単価前提（浮動小数点誤差回避のため整数計算）
       const originalLineTotal = this.originalLineTotalFor({ quantity, price, quantityUnit, lineTotalInput })
       let lineTotal = this.lineTotalFor({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput })
-      let tax = 0
-      let subtotal = lineTotal
-
-      if (externalTax) {
-        if (taxRatePercent > 0) {
-          externalTaxGroups.set(taxRatePercent, (externalTaxGroups.get(taxRatePercent) || 0) + lineTotal)
-        }
-      } else {
-        tax = taxRatePercent > 0
-          ? this.applyTaxRounding((lineTotal * taxRatePercent) / (100 + taxRatePercent))
-          : 0
-        subtotal = lineTotal - tax
+      lineTotal = this.clampNumber(lineTotal, 0, this.receiptItemLineTotalMaxValue)
+      if (taxRatePercent > 0) {
+        taxGroups.set(taxRatePercent, (taxGroups.get(taxRatePercent) || 0) + lineTotal)
       }
 
-      lineTotal = this.clampNumber(lineTotal, 0, this.receiptItemLineTotalMaxValue)
-      subtotal = this.clampNumber(subtotal, 0, this.receiptTotalAmountMaxValue)
-      tax = this.clampNumber(tax, 0, this.receiptTaxAmountMaxValue)
-
-      subtotalSum += subtotal
-      taxSum += tax
+      subtotalSum += lineTotal
       total += lineTotal
 
       // 表示更新（PCツールチップ / スマホ小計など、同一行内の複数表示に対応）
@@ -721,27 +707,20 @@ export default class extends Controller {
         return
       }
 
-      let adjustmentTax = 0
-      let adjustmentSubtotal = signedAmount
-
-      if (externalTax) {
-        if (taxRatePercent > 0) {
-          externalTaxGroups.set(taxRatePercent, (externalTaxGroups.get(taxRatePercent) || 0) + signedAmount)
-        }
-      } else if (taxRatePercent > 0) {
-        const signMultiplier = signedAmount < 0 ? -1 : 1
-        adjustmentTax = signMultiplier * this.applyTaxRounding((Math.abs(signedAmount) * taxRatePercent) / (100 + taxRatePercent))
-        adjustmentSubtotal = signedAmount - adjustmentTax
+      if (taxRatePercent > 0) {
+        taxGroups.set(taxRatePercent, (taxGroups.get(taxRatePercent) || 0) + signedAmount)
       }
 
-      subtotalSum += adjustmentSubtotal
-      taxSum += adjustmentTax
+      subtotalSum += signedAmount
       total += signedAmount
     })
 
     if (externalTax) {
-      taxSum = this.externalTaxTotal(externalTaxGroups)
+      taxSum = this.externalTaxTotal(taxGroups)
       total = subtotalSum + taxSum
+    } else {
+      taxSum = this.internalTaxTotal(taxGroups)
+      subtotalSum = total - taxSum
     }
 
     total = this.clampNumber(total, 0, this.receiptTotalAmountMaxValue)
@@ -1045,14 +1024,6 @@ export default class extends Controller {
     return normalizeRoundingMode(value)
   }
 
-  applyRounding (value, roundingMode) {
-    return applyRounding(value, roundingMode)
-  }
-
-  applyTaxRounding (value) {
-    return this.applyRounding(value, this.roundingModeValue)
-  }
-
   formatSignedAmount (value) {
     return formatSignedAmount(value)
   }
@@ -1067,6 +1038,10 @@ export default class extends Controller {
 
   externalTaxTotal (taxGroups) {
     return externalTaxTotal(taxGroups, this.roundingModeValue)
+  }
+
+  internalTaxTotal (taxGroups) {
+    return internalTaxTotal(taxGroups, this.roundingModeValue)
   }
 
   roundLineAmount (value) {

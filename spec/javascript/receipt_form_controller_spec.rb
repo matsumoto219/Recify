@@ -30,9 +30,10 @@ RSpec.describe "Receipt form Stimulus controller" do
     JSON.parse(stdout)
   end
 
-  def run_amount_round_trip(basis:, items:)
+  def run_amount_round_trip(basis:, items:, adjustments: [])
     run_controller_script(<<~JAVASCRIPT)
       const itemDefinitions = #{items.to_json}
+      const adjustmentDefinitions = #{adjustments.to_json}
       const amountTarget = () => ({ value: null, textContent: '', title: '', dataset: {} })
       const rows = itemDefinitions.map((definition) => {
         const inputs = {
@@ -60,13 +61,28 @@ RSpec.describe "Receipt form Stimulus controller" do
         }
       })
       const controller = Object.create(ReceiptFormController.prototype)
+      const adjustmentRows = adjustmentDefinitions.map((definition) => {
+        const inputs = {
+          adjustmentAmountInput: { value: String(definition.amount) },
+          adjustmentTaxRateInput: { value: String(definition.taxRate) }
+        }
+
+        return {
+          definition,
+          querySelector (selector) {
+            const match = selector.match(/receipt-form-target="([^"]+)"/)
+            return match ? inputs[match[1]] : null
+          }
+        }
+      })
       const subtotal = amountTarget()
       const tax = amountTarget()
       const total = amountTarget()
+      let paymentAdjustmentSnapshot = null
 
       Object.defineProperties(controller, {
         itemRowTargets: { value: rows },
-        adjustmentRowTargets: { value: [] },
+        adjustmentRowTargets: { value: adjustmentRows },
         paymentRowTargets: { value: [] },
         receiptTaxBasisValue: { value: #{basis.to_json} },
         roundingModeValue: { value: 'floor' },
@@ -91,16 +107,30 @@ RSpec.describe "Receipt form Stimulus controller" do
       controller.previewRowExcluded = () => false
       controller.animateAmount = (target, value) => { target.value = value }
       controller.animateLineTotal = () => {}
-      controller.syncPaymentAdjustmentSummary = () => {}
+      controller.syncAdjustmentSignForRow = () => {}
+      controller.adjustmentEffectForRow = (row) => row.definition.effect
+      controller.adjustmentSignForRow = (row) => row.definition.sign
+      controller.syncPaymentAdjustmentSummary = (adjustmentTotal, finalPaymentTotal) => {
+        paymentAdjustmentSnapshot = { adjustmentTotal, finalPaymentTotal }
+      }
       controller.syncPaymentReconciliationSummary = () => {}
       controller.paymentAmountSum = () => 801
 
-      const snapshot = () => ({
-        subtotal: subtotal.value,
-        tax: tax.value,
-        total: total.value,
-        firstLineTotal: Number(rows[0].inputs.lineTotalInput.value)
-      })
+      const snapshot = () => {
+        const amounts = {
+          subtotal: subtotal.value,
+          tax: tax.value,
+          total: total.value,
+          firstLineTotal: Number(rows[0].inputs.lineTotalInput.value)
+        }
+
+        if (adjustmentDefinitions.length > 0) {
+          amounts.paymentAdjustmentTotal = paymentAdjustmentSnapshot.adjustmentTotal
+          amounts.finalPaymentTotal = paymentAdjustmentSnapshot.finalPaymentTotal
+        }
+
+        return amounts
+      }
 
       controller.recalculate()
       const initial = snapshot()
@@ -244,6 +274,40 @@ RSpec.describe "Receipt form Stimulus controller" do
       'doubled' => { 'subtotal' => 868, 'tax' => 69, 'total' => 937, 'firstLineTotal' => 276 },
       'restored' => { 'subtotal' => 741, 'tax' => 58, 'total' => 799, 'firstLineTotal' => 138 }
     )
+  end
+
+  it "groups purchase adjustments with items but keeps payment and zero-tax adjustments separate" do
+    adjustments = [
+      { amount: 15, taxRate: 8, effect: "purchase_adjustment", sign: "surcharge" },
+      { amount: 5, taxRate: 8, effect: "payment_adjustment", sign: "discount" },
+      { amount: 3, taxRate: 0, effect: "purchase_adjustment", sign: "surcharge" }
+    ]
+    items = [
+      { price: 101, lineTotal: 101, taxRate: 8 },
+      { price: 100, lineTotal: 100, taxRate: 8 }
+    ]
+
+    internal = run_amount_round_trip(basis: "internal", items:, adjustments:)
+    external = run_amount_round_trip(basis: "external", items:, adjustments:)
+
+    aggregate_failures do
+      expect(internal["initial"]).to eq(
+        "subtotal" => 203,
+        "tax" => 16,
+        "total" => 219,
+        "firstLineTotal" => 101,
+        "paymentAdjustmentTotal" => -5,
+        "finalPaymentTotal" => 214
+      )
+      expect(external["initial"]).to eq(
+        "subtotal" => 219,
+        "tax" => 17,
+        "total" => 236,
+        "firstLineTotal" => 101,
+        "paymentAdjustmentTotal" => -5,
+        "finalPaymentTotal" => 231
+      )
+    end
   end
 
   it "suspends and restores the preview without rewriting an invalid field" do
