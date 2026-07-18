@@ -2,11 +2,15 @@
 
 Recifyの利用者、管理者、運用者に影響する主な変更を、v0.1.0以降のリリースタグを基準に記録します。v0.xは初回公開前の開発版です。
 
-開発・リリース管理向けの詳細は、該当する版のrelease notesに記載します。この変更履歴の形式は[Keep a Changelog]を参考にしています。Recifyは`X.Y.Z`形式のバージョン番号を使用していますが、現時点ではSemantic Versioningへの準拠を宣言していません。
+開発・リリース管理向けの詳細は、該当する版のrelease notesに記載します。この変更履歴の形式は[Keep a Changelog]を参考にしています。
+
+Recifyは`v1.2.0`を互換性判断の基準とし、方針採用後に公開するリリースへ[Semantic Versioning 2.0.0]を適用します。`v1.2.0`以前のバージョンには、Semantic Versioningへの準拠を遡及的には保証しません。詳細は[Versioning Policy]を参照してください。
 
 ## [Unreleased]
 
-現時点で公開対象となる変更はありません。
+### Added
+
+- Semantic Versioning 2.0.0に基づく公開互換性契約と、major・minor・patchの判断基準を明文化しました。
 
 ## [1.2.0] - 2026-07-15
 
@@ -269,6 +273,8 @@ Recifyの初回公開版です。
 - 入力検証と、レシート処理に失敗した場合のエラー表示を追加しました。
 
 [Keep a Changelog]: https://keepachangelog.com/ja/1.1.0/
+[Semantic Versioning 2.0.0]: https://semver.org/spec/v2.0.0.html
+[Versioning Policy]: VERSIONING.md
 [Unreleased]: https://github.com/matsumoto219/Recify/compare/v1.2.0..develop
 [1.2.0]: https://github.com/matsumoto219/Recify/compare/v1.1.0..v1.2.0
 [1.1.0]: https://github.com/matsumoto219/Recify/compare/v1.0.0..v1.1.0
