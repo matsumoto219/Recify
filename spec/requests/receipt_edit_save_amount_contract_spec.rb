@@ -441,6 +441,47 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(receipt.reload.purchased_at).to eq(purchased_at)
       end
     end
+
+    it 'item追加を保存してからそのitemだけ削除すると元の合計へ戻る' do
+      receipt = create_completed_receipt(subtotal_amount: 100, tax_amount: 0, total_amount: 100)
+      original_item = create_item(receipt, tax_rate: nil)
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(original_item, tax_rate: ''),
+          '1' => {
+            confirmed_name: '追加商品',
+            price: '50',
+            quantity: '1',
+            quantity_unit_code: 'each',
+            tax_rate: '',
+            discount_rate: '',
+            line_total: '50',
+            _destroy: '0'
+          }
+        }
+      )
+      receipt.reload
+      added_item = receipt.receipt_items.find_by!(confirmed_name: '追加商品')
+      added_snapshot = [ receipt.subtotal_amount, receipt.tax_amount, receipt.total_amount ]
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(original_item.reload, tax_rate: ''),
+          '1' => item_attributes(added_item, tax_rate: '', _destroy: '1')
+        }
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(added_snapshot).to eq([ 150, 0, 150 ])
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.receipt_items).to contain_exactly(original_item)
+        expect(receipt).to have_attributes(subtotal_amount: 100, tax_amount: 0, total_amount: 100)
+      end
+    end
   end
 
   describe 'nested child conflict handling' do
