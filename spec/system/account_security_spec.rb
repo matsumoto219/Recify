@@ -26,10 +26,26 @@ RSpec.describe "アカウントとsecurityの実Chrome回帰", type: :system do
     expect(page).to have_current_path(receipts_path, ignore_query: true)
   end
 
-  def sign_out_through_browser
+  def open_logout_confirmation
     click_button I18n.t("common.logout")
-    expect(page).to have_css("dialog#confirm-dialog[open]")
-    within("dialog#confirm-dialog") do
+    find("dialog#confirm-dialog[open]")
+  end
+
+  def sign_out_through_browser(verify_cancel: false)
+    original_path = page.current_path
+
+    if verify_cancel
+      within(open_logout_confirmation) do
+        click_button I18n.t("shared.confirm_dialog.cancel")
+      end
+      expect(page).to have_no_css("dialog#confirm-dialog[open]")
+      expect(page).to have_current_path(original_path, ignore_query: true)
+      expect(page).to have_button(I18n.t("common.logout"))
+    end
+
+    dialog = open_logout_confirmation
+    expect(page).to have_current_path(original_path, ignore_query: true)
+    within(dialog) do
       click_button I18n.t("common.logout")
     end
     expect(page).to have_current_path(root_path, ignore_query: true)
@@ -85,9 +101,13 @@ RSpec.describe "アカウントとsecurityの実Chrome回帰", type: :system do
     fill_in "user_name", with: "Chrome確認ユーザー"
     click_button I18n.t("settings.account.buttons.save")
 
-    expect(page).to have_current_path(settings_account_path, ignore_query: true)
+    expect(page).to have_current_path(settings_path, ignore_query: true)
+    expect(page).to have_link(
+      I18n.t("settings.index.user.edit_profile"),
+      href: settings_account_path
+    )
     expect(user.reload.name).to eq("Chrome確認ユーザー")
-    sign_out_through_browser
+    sign_out_through_browser(verify_cancel: true)
     expect_browser_console_clean
   end
 
