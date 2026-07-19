@@ -176,6 +176,25 @@ RSpec.describe ProductionDataPlaneValidator do
     expect(result.missing_items).to include("queue.production.solid_queue_maintenance")
   end
 
+  it "Solid Queueと同じprefix selectorでrecurring queueをcoverする" do
+    config = queue_config.deep_dup
+    config["production"]["workers"].reject! { |worker| worker["queues"] == "solid_queue_recurring" }
+    config["production"]["workers"] << { "queues" => "solid_queue_*" }
+
+    result = validator(queue_config: config).call
+
+    expect(result).to be_success
+  end
+
+  it "queue未指定のclass形式taskはjob classのqueueを解決する" do
+    config = recurring_config.deep_dup
+    config["production"]["class_queue_contract"] = { "class" => "ExternalServiceMonitorJob" }
+
+    result = validator(recurring_config: config).call
+
+    expect(result).to be_success
+  end
+
   it "ActiveStorage local volumeのdeploy受け皿不足を検出する" do
     result = validator(deploy_config: { "volumes" => [] }).call
 

@@ -19,6 +19,10 @@ default: &default
       threads: <%= ENV.fetch("RECEIPT_FINALIZE_THREADS", 1) %>
       processes: <%= ENV.fetch("RECEIPT_FINALIZE_CONCURRENCY", 1) %>
       polling_interval: 0.1
+    - queues: solid_queue_recurring
+      threads: 1
+      processes: 1
+      polling_interval: 1
 
 development:
   <<: *default

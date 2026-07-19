@@ -126,8 +126,11 @@ class ProductionDataPlaneValidator
       missing << "solid_queue.connects_to.queue"
     end
 
-    queues = Array(production_section(queue_config)["workers"]).filter_map { |worker| worker["queues"].presence }
-    missing + REQUIRED_QUEUE_NAMES.reject { |queue| queues.include?(queue) }.map { |queue| "queue.production.#{queue}" }
+    selectors = production_worker_queue_selectors
+    required_queues = (REQUIRED_QUEUE_NAMES + recurring_queue_names).uniq
+    uncovered_queues = required_queues.reject { |queue| queue_covered?(queue, selectors) }
+
+    missing + uncovered_queues.map { |queue| "queue.production.#{queue}" }
   end
 
   def missing_solid_cable_items
@@ -202,6 +205,32 @@ class ProductionDataPlaneValidator
     return false if task.blank?
 
     Array(task["args"]).any? { |arg| arg.is_a?(Hash) && arg["dry_run"] == true }
+  end
+
+  def recurring_queue_names
+    production_section(recurring_config).values.filter_map do |task|
+      next unless task.is_a?(Hash)
+
+      explicit_queue = task["queue"].presence
+      next explicit_queue.to_s if explicit_queue
+      next SolidQueue::RecurringJob.queue_name.to_s if task["command"].present?
+
+      task["class"].to_s.safe_constantize&.queue_name&.to_s
+    end
+  end
+
+  def production_worker_queue_selectors
+    Array(production_section(queue_config)["workers"]).flat_map do |worker|
+      configured_queues = Array(worker["queues"]).presence || [ "*" ]
+      configured_queues.flat_map { |queues| queues.to_s.split(",") }
+    end.map(&:strip).reject(&:empty?)
+  end
+
+  def queue_covered?(queue, selectors)
+    selectors.any? do |selector|
+      selector == "*" || selector == queue ||
+        (selector.end_with?("*") && queue.start_with?(selector.delete_suffix("*")))
+    end
   end
 
   def queue_config
