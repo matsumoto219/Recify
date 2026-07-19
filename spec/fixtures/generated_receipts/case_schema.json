@@ -4,6 +4,48 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["case_id", "category", "intent", "receipt_kind", "expected", "render", "degradation", "assertions"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "receipt_kind": { "const": "receipt" }
+        }
+      },
+      "then": {
+        "properties": {
+          "expected": {
+            "required": [
+              "store_name",
+              "store_address",
+              "purchased_at",
+              "currency",
+              "amount_basis",
+              "tax_rate",
+              "rounding",
+              "items",
+              "receipt_adjustments",
+              "tax_details",
+              "subtotal",
+              "tax",
+              "total",
+              "payments",
+              "payment_sum",
+              "payment_method",
+              "status",
+              "review_reasons"
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "expected": {
+            "required": ["status", "review_reasons", "processing_error_code"]
+          }
+        }
+      }
+    }
+  ],
   "properties": {
     "case_id": { "type": "string" },
     "category": { "enum": ["normal", "payment", "discount_adjustment", "tax_rounding", "ocr_anomaly", "non_receipt", "conflict"] },
@@ -12,32 +54,12 @@
     "expected": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "store_name",
-        "store_address",
-        "purchased_at",
-        "currency",
-        "amount_basis",
-        "tax_rate",
-        "rounding",
-        "items",
-        "receipt_adjustments",
-        "tax_details",
-        "subtotal",
-        "tax",
-        "total",
-        "payments",
-        "payment_sum",
-        "payment_method",
-        "status",
-        "review_reasons"
-      ],
       "properties": {
         "store_name": { "type": "string" },
         "store_address": { "type": "string" },
         "purchased_at": { "type": "string" },
         "currency": { "type": "string" },
-        "amount_basis": { "enum": ["tax_included", "tax_excluded"] },
+        "amount_basis": { "enum": ["tax_included", "tax_excluded", "mixed"] },
         "tax_rate": { "type": ["number", "null"] },
         "rounding": {
           "type": "object",

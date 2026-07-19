@@ -13,6 +13,27 @@ RSpec.describe GeneratedReceipts::Validator do
   end
 
   let(:case_paths) { Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort }
+  let(:case_schema) do
+    JSON.parse(File.read(File.expand_path("../../fixtures/generated_receipts/case_schema.json", __dir__)))
+  end
+
+  it "keeps the JSON schema amount basis enum in sync with the validator" do
+    amount_bases = case_schema.dig("properties", "expected", "properties", "amount_basis", "enum")
+
+    expect(amount_bases).to match_array(described_class::AMOUNT_BASES)
+  end
+
+  it "keeps receipt and non-receipt required keys in sync with the validator" do
+    expected_condition = case_schema.dig("allOf", 0)
+    receipt_required = expected_condition&.dig("then", "properties", "expected", "required")
+    non_receipt_required = expected_condition&.dig("else", "properties", "expected", "required")
+
+    aggregate_failures do
+      expect(receipt_required).to match_array(described_class::EXPECTED_REQUIRED_KEYS)
+      expect(non_receipt_required).to match_array(described_class::NON_RECEIPT_EXPECTED_REQUIRED_KEYS)
+      expect(case_schema.dig("properties", "expected", "required")).to be_nil
+    end
+  end
 
   it "validates generated receipt cases through g112" do
     results = case_paths.map { |path| [ File.basename(path), described_class.call(described_class.load_file(path)) ] }
