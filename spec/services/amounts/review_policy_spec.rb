@@ -17,12 +17,19 @@ RSpec.describe Amounts::ReviewPolicy do
     described_class.new(candidate: candidate, existing_inconsistencies: existing_inconsistencies).call
   end
 
+  it 'contextによりreviewへ昇格する一覧をwarning reasonだけに限定する' do
+    expect(described_class::REVIEW_REQUIRED_WARNINGS).to all(
+      satisfy { |reason| Amounts::MismatchSeverity.warning?(reason) }
+    )
+  end
+
   it 'blocking inconsistencyをreview reasonにする' do
     result = apply_policy(candidate(warnings: [ :payment_amount_mismatch ]))
 
     aggregate_failures do
+      expect(Amounts::MismatchSeverity.severity(:payment_amount_mismatch)).to eq(:blocking)
       expect(result[:inconsistencies]).to include(:payment_amount_mismatch)
-      expect(result[:review_reasons]).to include('payment_amount_mismatch')
+      expect(result[:review_reasons]).to eq([ 'payment_amount_mismatch' ])
       expect(result[:needs_review]).to be(true)
     end
   end

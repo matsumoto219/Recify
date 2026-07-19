@@ -41,7 +41,7 @@ RSpec.describe Receipts::Editing::ManualCreator, type: :service do
   end
 
   it 'uses review_needed when blocking review reasons remain' do
-    attributes['review_reasons'] = [ 'total_amount_mismatch' ]
+    attributes['review_reasons'] = [ 'total_mismatch' ]
 
     result = described_class.call(
       receipt: receipt,
@@ -51,7 +51,7 @@ RSpec.describe Receipts::Editing::ManualCreator, type: :service do
     )
 
     expect(result.receipt).to be_review_needed
-    expect(result.receipt.review_reasons).to eq([ 'total_amount_mismatch' ])
+    expect(result.receipt.review_reasons).to eq([ 'total_mismatch' ])
   end
 
   it 'assigns status and attributes but does not validate or consume usage when items are missing' do
