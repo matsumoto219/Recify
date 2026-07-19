@@ -19,7 +19,7 @@ module Recify
     ].freeze
     SENSITIVE_KEY_PATTERN = /
       email|password|token|secret|authorization|cookie|api_key|access_token|refresh_token|
-      signed_id|blob_key|active_storage_key|raw_text|\Alines\z|ocr_result|filtered_content|
+      signed_id|signed_stream_name|blob_key|active_storage_key|raw_text|\Alines\z|ocr_result|filtered_content|
       ai_raw_response|\Aprompt\z|messages|response_body|receipt_image|image|attachment|
       active_storage|blob|file|upload|arguments|credential_id|challenge|session_uid|
       session_uid_digest|\Acode\z|authentication_code|verification_code|auth_code|otp_code|
@@ -82,6 +82,15 @@ module Recify
       default
     end
 
+    def configure_event_callbacks(config)
+      sanitize_event = lambda do |event, _hint|
+        Recify::SentrySanitizer.sanitize_event(event)
+      end
+
+      config.before_send = sanitize_event
+      config.before_send_transaction = sanitize_event
+    end
+
     def sanitize_event_user!(event)
       return unless event.respond_to?(:user) && event.respond_to?(:user=)
 
@@ -134,8 +143,6 @@ if Rails.env.production? && ENV["SENTRY_DSN"].present?
     config.breadcrumbs_logger = []
     config.sample_rate = Recify::SentrySanitizer.float_env("SENTRY_SAMPLE_RATE", 1.0)
     config.traces_sample_rate = Recify::SentrySanitizer.float_env("SENTRY_TRACES_SAMPLE_RATE", 0.0)
-    config.before_send = lambda do |event, _hint|
-      Recify::SentrySanitizer.sanitize_event(event)
-    end
+    Recify::SentrySanitizer.configure_event_callbacks(config)
   end
 end

@@ -1,6 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Recify::SentrySanitizer do
+  FakeConfig = Struct.new(:before_send, :before_send_transaction, keyword_init: true)
   FakeRequest = Struct.new(:data, :headers, :cookies, :env, :query_string, keyword_init: true)
   FakeExceptionValue = Struct.new(:value, keyword_init: true)
   FakeException = Struct.new(:values, keyword_init: true)
@@ -213,6 +214,33 @@ RSpec.describe Recify::SentrySanitizer do
       expect(event.contexts[:security][:totpSecret]).to eq(described_class::FILTERED)
       expect(event.contexts[:security][:provisioningUri]).to eq(described_class::FILTERED)
       expect(event.contexts[:security][:rawResponse]).to eq(described_class::FILTERED)
+    end
+  end
+
+  it 'filters signed stream capability by key regardless of value length' do
+    event = FakeEvent.new(
+      extra: {
+        action_cable: {
+          signed_stream_name: 'short-capability'
+        }
+      }
+    )
+
+    described_class.sanitize_event(event)
+
+    expect(event.extra[:action_cable][:signed_stream_name]).to eq(described_class::FILTERED)
+  end
+
+  it 'applies the same sanitizer to error and transaction events' do
+    config = FakeConfig.new
+    described_class.configure_event_callbacks(config)
+
+    error_event = FakeEvent.new(extra: { signed_stream_name: 'error-capability' })
+    transaction_event = FakeEvent.new(extra: { signed_stream_name: 'transaction-capability' })
+
+    aggregate_failures do
+      expect(config.before_send.call(error_event, nil).extra[:signed_stream_name]).to eq(described_class::FILTERED)
+      expect(config.before_send_transaction.call(transaction_event, nil).extra[:signed_stream_name]).to eq(described_class::FILTERED)
     end
   end
 end

@@ -190,6 +190,17 @@ RSpec.describe 'filter_parameter_logging' do
     end
   end
 
+  it 'filters signed stream capability regardless of value length' do
+    filtered = filter.filter(signed_stream_name: 'short-capability')
+    action_cable_filter = ActiveSupport::ParameterFilter.new(ActionCable.server.config.filter_parameters)
+    action_cable_filtered = action_cable_filter.filter(signed_stream_name: 'short-capability')
+
+    aggregate_failures do
+      expect(filtered[:signed_stream_name]).to eq('[FILTERED]')
+      expect(action_cable_filtered[:signed_stream_name]).to eq('[FILTERED]')
+    end
+  end
+
   it 'filters authentication and recovery token query parameters' do
     query = Rack::Utils.parse_nested_query(
       [
