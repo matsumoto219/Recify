@@ -49,7 +49,13 @@ RSpec.describe ProductionDataPlaneValidator do
           { "queues" => "default" },
           { "queues" => "receipt_ocr" },
           { "queues" => "receipt_ai" },
-          { "queues" => "receipt_finalize" }
+          { "queues" => "receipt_finalize" },
+          {
+            "queues" => "solid_queue_recurring",
+            "threads" => 1,
+            "processes" => 1,
+            "polling_interval" => 1
+          }
         ]
       }
     }
@@ -150,6 +156,24 @@ RSpec.describe ProductionDataPlaneValidator do
     result = validator(queue_config: config).call
 
     expect(result.missing_items).to include("queue.production.receipt_ai")
+  end
+
+  it "command形式のrecurring queueを処理するworker不足を検出する" do
+    config = queue_config.deep_dup
+    config["production"]["workers"].reject! { |worker| worker["queues"] == "solid_queue_recurring" }
+
+    result = validator(queue_config: config).call
+
+    expect(result.missing_items).to include("queue.production.solid_queue_recurring")
+  end
+
+  it "recurring taskの明示queueとworker selectorのdriftを検出する" do
+    config = recurring_config.deep_dup
+    config["production"]["clear_solid_queue_finished_jobs"]["queue"] = "solid_queue_maintenance"
+
+    result = validator(recurring_config: config).call
+
+    expect(result.missing_items).to include("queue.production.solid_queue_maintenance")
   end
 
   it "ActiveStorage local volumeのdeploy受け皿不足を検出する" do
