@@ -8,13 +8,13 @@
 
 ## Current release
 
-**Current release: v1.2.0**
+**Current release: v1.2.1**
 
 - Version: [`VERSION`](VERSION)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
-- Release notes: [`release_notes/v1.2.0.md`](release_notes/v1.2.0.md)
+- Release notes: [`release_notes/v1.2.1.md`](release_notes/v1.2.1.md)
 - Versioning policy: [`VERSIONING.md`](VERSIONING.md)
-- Release tag: [`v1.2.0`](https://github.com/matsumoto219/Recify/tree/v1.2.0)
+- Release tag: [`v1.2.1`](https://github.com/matsumoto219/Recify/tree/v1.2.1)
 
 ## プロダクト概要
 
@@ -189,13 +189,13 @@ AIを利用できない場合でも、OCR結果をもとに確認・編集へ進
 
 ## 最新リリース
 
-### v1.2.0
+### v1.2.1
 
-v1.2.0では、レシート解析の進行表示、ゲスト本登録、設定保存、画像の代替表示、メールアドレスのコピーを改善しました。あわせて、セッション失効、本人確認、添付ファイル保護、機微情報の取り扱いを強化しました。
+v1.2.1では、新しい利用者向け機能を追加せず、レシート編集時の即時計算と保存結果、画面通知とリアルタイム通知の表示契約を修正しました。あわせて、HTMLサニタイザーとリアルタイム配信ログの機微情報保護を強化しました。
 
 このリリースにデータベースマイグレーションはありません。
 
-主な変更は[`CHANGELOG.md`](CHANGELOG.md)と[`release_notes/v1.2.0.md`](release_notes/v1.2.0.md)をご覧ください。
+主な変更は[`CHANGELOG.md`](CHANGELOG.md)と[`release_notes/v1.2.1.md`](release_notes/v1.2.1.md)をご覧ください。
 
 ## 今後の改善候補
 

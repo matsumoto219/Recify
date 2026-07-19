@@ -8,13 +8,25 @@ Recifyは`v1.2.0`を互換性判断の基準とし、方針採用後に公開す
 
 ## [Unreleased]
 
-### Added
+## [1.2.1] - 2026-07-19
 
-- Semantic Versioning 2.0.0に基づく公開互換性契約と、major・minor・patchの判断基準を明文化しました。
+開発・リリース管理向けの詳細は[v1.2.1 release notes](release_notes/v1.2.1.md)を参照してください。
+
+### Changed
+
+- 公開互換性契約とリリース番号の判断基準を、`v1.2.0`を基準とするSemantic Versioning方針として明文化しました。
+
+### Fixed
+
+- 税抜レシートの数量や単価を編集した際、画面上の即時計算と保存後の小計・税額・合計が一致せず、編集を繰り返すと金額がずれる問題を修正しました。
+- 保存エラー後の再表示や古いフォーム値を含む再送信で、元の単価・数量・税込／税抜区分が派生値へ置き換わる問題を修正しました。
+- 0.5%や1%など小数の割引率を編集した際、保存値と表示結果が一致しない問題を修正しました。
+- 画面通知とリアルタイム通知を合計最大5件の共通表示枠へ古い順に並べ、個別の表示時間、手動終了、画面遷移後の復帰が互いに干渉する問題を修正しました。
 
 ### Security
 
 - HTMLのサニタイズに使用する依存ライブラリを、既知のセキュリティ問題へ対応したバージョンに更新しました。
+- リアルタイム配信の購読識別子と配信内容が、アプリケーションログやエラー監視へ生値で残らないよう秘匿処理を強化しました。
 
 ## [1.2.0] - 2026-07-15
 
@@ -279,7 +291,8 @@ Recifyの初回公開版です。
 [Keep a Changelog]: https://keepachangelog.com/ja/1.1.0/
 [Semantic Versioning 2.0.0]: https://semver.org/spec/v2.0.0.html
 [Versioning Policy]: VERSIONING.md
-[Unreleased]: https://github.com/matsumoto219/Recify/compare/v1.2.0..develop
+[Unreleased]: https://github.com/matsumoto219/Recify/compare/v1.2.1..develop
+[1.2.1]: https://github.com/matsumoto219/Recify/compare/v1.2.0..v1.2.1
 [1.2.0]: https://github.com/matsumoto219/Recify/compare/v1.1.0..v1.2.0
 [1.1.0]: https://github.com/matsumoto219/Recify/compare/v1.0.0..v1.1.0
 [1.0.0]: https://github.com/matsumoto219/Recify/compare/v0.9.0..v1.0.0
