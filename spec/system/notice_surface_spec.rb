@@ -25,6 +25,29 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
       </turbo-stream>
     HTML
 
+    turbo_ready = page.evaluate_async_script(<<~JAVASCRIPT, Capybara.default_max_wait_time * 1000)
+      const timeoutMilliseconds = arguments[0]
+      const done = arguments[arguments.length - 1]
+      const deadline = window.performance.now() + timeoutMilliseconds
+
+      const check = () => {
+        if (typeof window.Turbo?.renderStreamMessage === 'function') {
+          done(true)
+          return
+        }
+
+        if (window.performance.now() >= deadline) {
+          done(false)
+          return
+        }
+
+        window.setTimeout(check, 25)
+      }
+
+      check()
+    JAVASCRIPT
+    expect(turbo_ready).to be(true), "Turbo stream renderer did not become available"
+
     page.execute_script("Turbo.renderStreamMessage(#{stream.to_json})")
     expect(page).to have_css("##{locals.fetch(:surface_id)}")
   end
