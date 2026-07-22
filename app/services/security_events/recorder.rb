@@ -139,7 +139,10 @@ module SecurityEvents
     end
 
     def path_from_context
-      safe_string(path || request_value(:path))
+      Recify::RequestPathSanitizer.sanitize(
+        path || request_value(:path),
+        max_length: SecurityEvent::PATH_MAX_LENGTH
+      )
     end
 
     def method_from_context

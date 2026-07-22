@@ -81,6 +81,47 @@ RSpec.describe SecurityEvents::Recorder do
     end
   end
 
+  it '長いscanner pathを過剰redactせず別pathとして集約する' do
+    first_path = "/#{'a' * 48}.php"
+    second_path = "/#{'b' * 48}.php"
+
+    first_event = described_class.call(
+      event_type: 'rate_limit_triggered',
+      severity: 'medium',
+      request: request,
+      path: first_path,
+      matched_rule: 'fail2ban/scanner_paths'
+    )
+    second_event = described_class.call(
+      event_type: 'rate_limit_triggered',
+      severity: 'medium',
+      request: request,
+      path: second_path,
+      matched_rule: 'fail2ban/scanner_paths'
+    )
+
+    aggregate_failures do
+      expect(first_event.path).to eq(first_path)
+      expect(second_event.path).to eq(second_path)
+      expect(SecurityEvent.where(event_type: 'rate_limit_triggered').count).to eq(2)
+    end
+  end
+
+  it 'pathをpayload上限ではなくSecurityEventのpath上限まで保持する' do
+    long_path = "/#{Array.new(170) { |index| "segment-#{index}" }.join('/')}"
+    expect(long_path.length).to be_between(1_001, SecurityEvent::PATH_MAX_LENGTH)
+
+    event = described_class.call(
+      event_type: 'rate_limit_triggered',
+      severity: 'medium',
+      request: request,
+      path: long_path,
+      matched_rule: 'fail2ban/scanner_paths'
+    )
+
+    expect(event.path).to eq(long_path)
+  end
+
   it 'metadataからsecret風keyを除去する' do
     event = described_class.call(
       event_type: 'suspicious_payload',

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require Rails.root.join("lib/recify/request_path_sanitizer").to_s
+
 module Recify
   module SentrySanitizer
     FILTERED = "[Filtered]"
@@ -16,6 +18,14 @@ module Recify
     SAFE_COUNT_KEYS = %w[
       backup_codes_count
       recovery_codes_count
+    ].freeze
+    REQUEST_PATH_ENV_KEYS = %w[
+      action_dispatch.original_fullpath
+      action_dispatch.original_path
+      original_fullpath
+      path_info
+      request_path
+      request_uri
     ].freeze
     SENSITIVE_KEY_PATTERN = /
       email|password|token|secret|authorization|cookie|api_key|access_token|refresh_token|
@@ -111,8 +121,23 @@ module Recify
       request.data = sanitize_request_data(request.data) if request.respond_to?(:data=)
       request.headers = sanitize(request.headers) if request.respond_to?(:headers=)
       request.cookies = sanitize(request.cookies, :cookie) if request.respond_to?(:cookies=)
-      request.env = sanitize(request.env) if request.respond_to?(:env=)
+      request.env = sanitize_request_env(request.env) if request.respond_to?(:env=)
+      if request.respond_to?(:url) && request.respond_to?(:url=)
+        request.url = RequestPathSanitizer.sanitize(request.url)
+      end
       request.query_string = nil if request.respond_to?(:query_string=)
+    end
+
+    def sanitize_request_env(env)
+      return sanitize(env) unless env.is_a?(Hash)
+
+      env.each_with_object({}) do |(key, value), sanitized|
+        sanitized[key] = if REQUEST_PATH_ENV_KEYS.include?(key.to_s.downcase)
+          RequestPathSanitizer.sanitize(value)
+        else
+          sanitize(value, key)
+        end
+      end
     end
 
     def sanitize_request_data(data)

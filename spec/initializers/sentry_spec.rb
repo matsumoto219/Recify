@@ -2,7 +2,7 @@ require 'rails_helper'
 
 RSpec.describe Recify::SentrySanitizer do
   FakeConfig = Struct.new(:before_send, :before_send_transaction, keyword_init: true)
-  FakeRequest = Struct.new(:data, :headers, :cookies, :env, :query_string, keyword_init: true)
+  FakeRequest = Struct.new(:data, :headers, :cookies, :env, :query_string, :url, keyword_init: true)
   FakeExceptionValue = Struct.new(:value, keyword_init: true)
   FakeException = Struct.new(:values, keyword_init: true)
   FakeEvent = Struct.new(:user, :extra, :contexts, :request, :exception, :attachments, keyword_init: true)
@@ -122,6 +122,66 @@ RSpec.describe Recify::SentrySanitizer do
     described_class.sanitize_event(event)
 
     expect(event.request.data).to eq(described_class::FILTERED)
+  end
+
+  it 'request URLとpath envだけをpath契約でsanitizeする' do
+    long_path = "/#{'a' * 48}.php"
+    request = FakeRequest.new(
+      url: "https://user:pass@example.test#{long_path}?token=secret#fragment",
+      env: {
+        'PATH_INFO' => long_path,
+        'action_dispatch.original_fullpath' => "#{long_path}?token=secret"
+      }
+    )
+    event = FakeEvent.new(request: request)
+
+    described_class.sanitize_event(event)
+
+    aggregate_failures do
+      expect(event.request.url).to eq("https://example.test#{long_path}")
+      expect(event.request.env['PATH_INFO']).to eq(long_path)
+      expect(event.request.env['action_dispatch.original_fullpath']).to eq(long_path)
+    end
+  end
+
+  it 'request URLのActive Storage capabilityをredactする' do
+    request = FakeRequest.new(
+      url: 'https://example.test/rails/active_storage/blobs/redirect/signed-capability/file.png?disposition=inline'
+    )
+    event = FakeEvent.new(request: request)
+
+    described_class.sanitize_event(event)
+
+    aggregate_failures do
+      expect(event.request.url).to eq(Recify::ActiveStorageLogRedactor::FILTERED_URL)
+      expect(event.request.url).not_to include('signed-capability')
+    end
+  end
+
+  it '実際のSentry request interfaceでもcapability URLをredactする' do
+    storage_path = '/rails/active_storage/blobs/redirect/signed-capability/file.png'
+    request = Sentry::RequestInterface.new(
+      env: {
+        'REQUEST_METHOD' => 'GET',
+        'PATH_INFO' => storage_path,
+        'QUERY_STRING' => 'disposition=inline',
+        'rack.url_scheme' => 'https',
+        'SERVER_NAME' => 'example.test',
+        'SERVER_PORT' => '443',
+        'rack.input' => StringIO.new('')
+      },
+      send_default_pii: false,
+      rack_env_whitelist: [ 'PATH_INFO' ]
+    )
+    event = FakeEvent.new(request: request)
+
+    described_class.sanitize_event(event)
+
+    aggregate_failures do
+      expect(event.request.url).to eq(Recify::ActiveStorageLogRedactor::FILTERED_URL)
+      expect(event.request.env['PATH_INFO']).to eq(Recify::ActiveStorageLogRedactor::FILTERED_URL)
+      expect(event.request.query_string).to be_nil
+    end
   end
 
   it 'filters authentication and digest material recursively while preserving safe counts' do
