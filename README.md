@@ -8,13 +8,13 @@
 
 ## Current release
 
-**Current release: v1.2.1**
+**Current release: v1.2.2**
 
 - Version: [`VERSION`](VERSION)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
-- Release notes: [`release_notes/v1.2.1.md`](release_notes/v1.2.1.md)
+- Release notes: [`release_notes/v1.2.2.md`](release_notes/v1.2.2.md)
 - Versioning policy: [`VERSIONING.md`](VERSIONING.md)
-- Release tag: [`v1.2.1`](https://github.com/matsumoto219/Recify/tree/v1.2.1)
+- Release tag: [`v1.2.2`](https://github.com/matsumoto219/Recify/tree/v1.2.2)
 
 ## プロダクト概要
 
@@ -189,13 +189,13 @@ AIを利用できない場合でも、OCR結果をもとに確認・編集へ進
 
 ## 最新リリース
 
-### v1.2.1
+### v1.2.2
 
-v1.2.1では、新しい利用者向け機能を追加せず、レシート編集時の即時計算と保存結果、画面通知とリアルタイム通知の表示契約を修正しました。あわせて、HTMLサニタイザーとリアルタイム配信ログの機微情報保護を強化しました。
+v1.2.2では、新しい利用者向け機能を追加せず、完了済みジョブの定期クリーンアップとリアルタイム配信の再接続を安定化しました。あわせて、問題報告の案内を更新しました。
 
-このリリースにデータベースマイグレーションはありません。
+v1.2.1からv1.2.2への新しいデータベースマイグレーションはありません。
 
-主な変更は[`CHANGELOG.md`](CHANGELOG.md)と[`release_notes/v1.2.1.md`](release_notes/v1.2.1.md)をご覧ください。
+主な変更は[`CHANGELOG.md`](CHANGELOG.md)と[`release_notes/v1.2.2.md`](release_notes/v1.2.2.md)をご覧ください。
 
 ## 今後の改善候補
 
