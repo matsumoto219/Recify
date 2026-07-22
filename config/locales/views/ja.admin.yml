@@ -722,7 +722,7 @@ ja:
             needs_attention: needs attention
             error_code: error code
             run_key: run key
-            receipt_public_id: receipt public_id
+            receipt_public_id: Receipt ID
             user_id: user id
             limit: 表示件数
           submit: 絞り込む
