@@ -20,8 +20,10 @@ ja:
         count_total: "全 %{total} 件中"
         count_range: "%{start}-%{finish} 件を表示"
         sort_options:
-          newest: 新しい順
-          oldest: 古い順
+          newest: 登録日時が新しい順
+          oldest: 登録日時が古い順
+          purchased_at_desc: 購入日時が新しい順
+          purchased_at_asc: 購入日時が古い順
           amount_desc: 金額が大きい順
           amount_asc: 金額が小さい順
           store_name: 店名順

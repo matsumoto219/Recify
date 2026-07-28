@@ -3,7 +3,7 @@
 <%= turbo_stream_from [current_user, :receipts] %>
 <%
   searching = @query.present?
-  refresh_on_terminal = searching || %w[amount_desc amount_asc store_name updated review_priority].include?(@sort)
+  refresh_on_terminal = searching || %w[purchased_at_desc purchased_at_asc amount_desc amount_asc store_name updated review_priority].include?(@sort)
   page_header_action_classes = [
     "w-full justify-end md:w-auto md:block",
     searching ? "hidden md:block" : "flex"

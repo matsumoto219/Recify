@@ -78,6 +78,8 @@ RSpec.describe ReceiptsHelper, type: :helper do
       expect(helper.receipt_index_sort_options).to eq([
         [ I18n.t('receipts.index.controls.sort_options.newest'), 'newest' ],
         [ I18n.t('receipts.index.controls.sort_options.oldest'), 'oldest' ],
+        [ I18n.t('receipts.index.controls.sort_options.purchased_at_desc'), 'purchased_at_desc' ],
+        [ I18n.t('receipts.index.controls.sort_options.purchased_at_asc'), 'purchased_at_asc' ],
         [ I18n.t('receipts.index.controls.sort_options.amount_desc'), 'amount_desc' ],
         [ I18n.t('receipts.index.controls.sort_options.amount_asc'), 'amount_asc' ],
         [ I18n.t('receipts.index.controls.sort_options.store_name'), 'store_name' ],

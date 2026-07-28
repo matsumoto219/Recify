@@ -67,6 +67,8 @@ module ReceiptsHelper
   RECEIPT_INDEX_SORT_OPTIONS = %w[
     newest
     oldest
+    purchased_at_desc
+    purchased_at_asc
     amount_desc
     amount_asc
     store_name

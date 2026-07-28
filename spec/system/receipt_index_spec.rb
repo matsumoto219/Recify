@@ -105,4 +105,109 @@ RSpec.describe "レシート一覧の実Chrome検索と並び替え", type: :sys
     )
     expect_browser_console_clean
   end
+
+  it "購入日時順を検索条件とURLへ保持し、両方向でnilを末尾にする" do
+    user = create_system_test_user
+    common_name = "購入日時ブラウザ"
+    older = create(
+      :receipt,
+      :completed,
+      user:,
+      store_name: common_name,
+      purchased_at: Time.zone.local(2026, 7, 10, 9, 0)
+    )
+    newer = create(
+      :receipt,
+      :completed,
+      user:,
+      store_name: common_name,
+      purchased_at: Time.zone.local(2026, 7, 12, 15, 0)
+    )
+    nil_purchased_at = create(:receipt, :completed, user:, store_name: common_name)
+    nil_purchased_at.update_column(:purchased_at, nil)
+
+    sign_in_through_browser(user)
+    wait_for_stimulus_controller("search")
+    search_input = find("[data-search-query-input]", visible: true, match: :first)
+    search_input.set(common_name)
+    expect(page).to have_current_path(receipts_path(q: common_name))
+
+    sort_control = find("#receipts-sort-control")
+    sort_control.select(I18n.t("receipts.index.controls.sort_options.purchased_at_desc"))
+    page.execute_script(
+      "arguments[0].dispatchEvent(new Event('change', { bubbles: true }))",
+      sort_control.native
+    )
+
+    expect(page).to have_current_path(%r{\A/receipts\?.*sort=purchased_at_desc})
+    expect(page).to have_css("#receipts-sort-control option[value='purchased_at_desc']:checked")
+    expect(receipt_card_ids).to eq([ newer.public_id, older.public_id, nil_purchased_at.public_id ])
+    expect(Rack::Utils.parse_query(URI.parse(page.current_url).query)).to include(
+      "q" => common_name,
+      "sort" => "purchased_at_desc"
+    )
+
+    sort_control = find("#receipts-sort-control")
+    sort_control.select(I18n.t("receipts.index.controls.sort_options.purchased_at_asc"))
+    page.execute_script(
+      "arguments[0].dispatchEvent(new Event('change', { bubbles: true }))",
+      sort_control.native
+    )
+
+    expect(page).to have_current_path(%r{\A/receipts\?.*sort=purchased_at_asc})
+    expect(page).to have_css("#receipts-sort-control option[value='purchased_at_asc']:checked")
+    expect(receipt_card_ids).to eq([ older.public_id, newer.public_id, nil_purchased_at.public_id ])
+
+    page.go_back
+
+    expect(page).to have_current_path(%r{\A/receipts\?.*sort=purchased_at_desc})
+    expect(find("#receipts-sort-control").value).to eq("purchased_at_desc")
+    expect(receipt_card_ids).to eq([ newer.public_id, older.public_id, nil_purchased_at.public_id ])
+    expect_browser_console_clean
+  end
+
+  it "390pxでも購入日時sortを選択でき、横overflowを起こさない", :mobile do
+    user = create_system_test_user
+    older = create(
+      :receipt,
+      :completed,
+      user:,
+      purchased_at: Time.zone.local(2026, 7, 10, 9, 0)
+    )
+    newer = create(
+      :receipt,
+      :completed,
+      user:,
+      purchased_at: Time.zone.local(2026, 7, 12, 15, 0)
+    )
+
+    page.driver.browser.execute_cdp(
+      "Emulation.setDeviceMetricsOverride",
+      width: 390,
+      height: 844,
+      deviceScaleFactor: 1,
+      mobile: true
+    )
+    sign_in_through_browser(user)
+    sort_control = find("#receipts-sort-control")
+
+    aggregate_failures do
+      expect(sort_control["aria-label"]).to eq(I18n.t("receipts.index.controls.sort_label"))
+      expect(page.evaluate_script("window.innerWidth")).to eq(390)
+      expect(page.evaluate_script("document.documentElement.scrollWidth")).to eq(390)
+    end
+
+    sort_control.select(I18n.t("receipts.index.controls.sort_options.purchased_at_desc"))
+    page.execute_script(
+      "arguments[0].dispatchEvent(new Event('change', { bubbles: true }))",
+      sort_control.native
+    )
+
+    expect(page).to have_current_path(%r{\A/receipts\?.*sort=purchased_at_desc})
+    expect(receipt_card_ids.index(newer.public_id)).to be < receipt_card_ids.index(older.public_id)
+    expect(page.evaluate_script("document.documentElement.scrollWidth")).to eq(390)
+    expect_browser_console_clean
+  ensure
+    page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
+  end
 end
