@@ -8,13 +8,13 @@
 
 ## Current release
 
-**Current release: v1.2.2**
+**Current release: v1.2.3**
 
 - Version: [`VERSION`](VERSION)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
-- Release notes: [`release_notes/v1.2.2.md`](release_notes/v1.2.2.md)
+- Release notes: [`release_notes/v1.2.3.md`](release_notes/v1.2.3.md)
 - Versioning policy: [`VERSIONING.md`](VERSIONING.md)
-- Release tag: [`v1.2.2`](https://github.com/matsumoto219/Recify/tree/v1.2.2)
+- Release tag: [`v1.2.3`](https://github.com/matsumoto219/Recify/tree/v1.2.3)
 
 ## プロダクト概要
 
@@ -122,7 +122,7 @@ AIを利用できない場合でも、OCR結果をもとに確認・編集へ進
 | 技術 | 用途 |
 | --- | --- |
 | Ruby 4.0.5 | アプリケーション実行環境 |
-| Ruby on Rails 8.1.3 | Webアプリケーションフレームワーク |
+| Ruby on Rails 8.1.3.1 | Webアプリケーションフレームワーク |
 | PostgreSQL | ユーザーとレシート関連データの保存 |
 | Turbo / Stimulus | 画面遷移、フォーム操作、処理状態の更新 |
 | Tailwind CSS | UIスタイリング |
@@ -189,13 +189,13 @@ AIを利用できない場合でも、OCR結果をもとに確認・編集へ進
 
 ## 最新リリース
 
-### v1.2.2
+### v1.2.3
 
-v1.2.2では、新しい利用者向け機能を追加せず、完了済みジョブの定期クリーンアップとリアルタイム配信の再接続を安定化しました。あわせて、問題報告の案内を更新しました。
+v1.2.3では、新しい利用者向け機能を追加せず、Active Storageの画像処理に関するセキュリティ更新を適用しました。
 
-v1.2.1からv1.2.2への新しいデータベースマイグレーションはありません。
+v1.2.2からv1.2.3への新しいデータベースマイグレーションはありません。
 
-主な変更は[`CHANGELOG.md`](CHANGELOG.md)と[`release_notes/v1.2.2.md`](release_notes/v1.2.2.md)をご覧ください。
+主な変更は[`CHANGELOG.md`](CHANGELOG.md)と[`release_notes/v1.2.3.md`](release_notes/v1.2.3.md)をご覧ください。
 
 ## 今後の改善候補
 
