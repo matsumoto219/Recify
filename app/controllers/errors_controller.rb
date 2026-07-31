@@ -86,7 +86,7 @@ class ErrorsController < ApplicationController
       request.env["action_dispatch.original_fullpath"].presence ||
       request.path
 
-    raw_path.to_s.split("?").first.presence || request.path
+    Recify::RequestPathSanitizer.sanitize(raw_path) || Recify::RequestPathSanitizer::FILTERED_VALUE
   end
 
   def format_log_fields(fields)

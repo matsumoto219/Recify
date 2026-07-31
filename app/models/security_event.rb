@@ -38,7 +38,7 @@ class SecurityEvent < ApplicationRecord
 
   SEVERITIES = %w[low medium high critical].freeze
   PAYLOAD_EXCERPT_MAX_BYTES = 1_000
-  PATH_MAX_LENGTH = 2048
+  PATH_MAX_LENGTH = Recify::RequestPathSanitizer::MAX_LENGTH
   USER_AGENT_MAX_LENGTH = 1000
   METHOD_MAX_LENGTH = 16
   STRING_FIELD_MAX_LENGTH = 255
@@ -87,7 +87,7 @@ class SecurityEvent < ApplicationRecord
     self.event_type = event_type.to_s.strip
     self.severity = severity.to_s.strip
     self.method = truncate_string(method.to_s.upcase.presence, METHOD_MAX_LENGTH)
-    self.path = truncate_string(path.to_s.presence, PATH_MAX_LENGTH)
+    self.path = Recify::RequestPathSanitizer.sanitize(path, max_length: PATH_MAX_LENGTH)
     self.user_agent = truncate_string(user_agent.to_s.presence, USER_AGENT_MAX_LENGTH)
     self.request_id = truncate_string(request_id.to_s.presence, STRING_FIELD_MAX_LENGTH)
     self.field_name = truncate_string(field_name.to_s.presence, STRING_FIELD_MAX_LENGTH)

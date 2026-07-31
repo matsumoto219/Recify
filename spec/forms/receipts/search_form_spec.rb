@@ -40,5 +40,21 @@ RSpec.describe Receipts::SearchForm do
         end
       end
     end
+
+    it 'display ID、public ID、malformed R-like tokenはdate validationの対象にしない' do
+      queries = [
+        'R-A1B2C3',
+        'r-a1b2c3 店舗',
+        'rcpt_AbCdEf1234567890',
+        'R-ABC',
+        'R-AB!123'
+      ]
+
+      aggregate_failures do
+        queries.each do |query|
+          expect(described_class.call(query)).to be_valid
+        end
+      end
+    end
   end
 end
