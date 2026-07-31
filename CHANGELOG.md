@@ -8,6 +8,14 @@ Recifyは`v1.2.0`を互換性判断の基準とし、方針採用後に公開す
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-07-30
+
+開発・リリース管理向けの詳細は[v1.2.3 release notes](release_notes/v1.2.3.md)を参照してください。
+
+### Security
+
+- RailsとActive Storageを、画像処理に関する既知のセキュリティ問題へ対応したバージョンに更新しました。
+
 ## [1.2.2] - 2026-07-22
 
 開発・リリース管理向けの詳細は[v1.2.2 release notes](release_notes/v1.2.2.md)を参照してください。
@@ -304,7 +312,8 @@ Recifyの初回公開版です。
 [Keep a Changelog]: https://keepachangelog.com/ja/1.1.0/
 [Semantic Versioning 2.0.0]: https://semver.org/spec/v2.0.0.html
 [Versioning Policy]: VERSIONING.md
-[Unreleased]: https://github.com/matsumoto219/Recify/compare/v1.2.2..develop
+[Unreleased]: https://github.com/matsumoto219/Recify/compare/v1.2.3..develop
+[1.2.3]: https://github.com/matsumoto219/Recify/compare/v1.2.2..v1.2.3
 [1.2.2]: https://github.com/matsumoto219/Recify/compare/v1.2.1..v1.2.2
 [1.2.1]: https://github.com/matsumoto219/Recify/compare/v1.2.0..v1.2.1
 [1.2.0]: https://github.com/matsumoto219/Recify/compare/v1.1.0..v1.2.0
