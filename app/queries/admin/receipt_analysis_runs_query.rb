@@ -111,7 +111,11 @@ module Admin
     private
 
     def filtered_relation
-      relation = ReceiptAnalysisRun.includes(:requested_by_user, receipt: :user)
+      relation = ReceiptAnalysisRun.includes(
+        :requested_by_user,
+        { ocr_response_artifact_attachment: :blob },
+        receipt: :user
+      )
       relation = filter_by_run_key(relation)
       relation = filter_by_receipt(relation)
       relation = filter_by_user(relation)
@@ -136,11 +140,29 @@ module Admin
         relation.where(receipt_id: @receipt.id)
       elsif @receipt_id.present?
         relation.where(receipt_id: @receipt_id)
-      elsif @receipt_public_id.present?
-        relation.joins(:receipt).where(receipts: { public_id: @receipt_public_id })
-      else
+      elsif receipt_identifier_blank?
         relation
+      else
+        filter_by_receipt_identifier(relation)
       end
+    end
+
+    def filter_by_receipt_identifier(relation)
+      identifier = Receipts::IdentifierInput.call(@receipt_public_id)
+
+      case identifier.kind
+      when :public_id
+        relation.joins(:receipt).where(receipts: { public_id: identifier.value })
+      when :display_id
+        relation.joins(:receipt).where(receipts: { display_id: identifier.value })
+      else
+        relation.none
+      end
+    end
+
+    def receipt_identifier_blank?
+      @receipt_public_id.nil? ||
+        (@receipt_public_id.is_a?(String) && @receipt_public_id.strip.empty?)
     end
 
     def filter_by_user(relation)

@@ -20,7 +20,7 @@ module Receipts
       return scope.none if tokens.empty?
 
       tokens.reduce(scope) do |result_scope, token|
-        result_scope.merge(scope_for_token(token))
+        result_scope.and(scope_for_token(token))
       end
     end
 
@@ -29,6 +29,9 @@ module Receipts
     attr_reader :scope, :query
 
     def scope_for_token(token)
+      identifier = Receipts::IdentifierInput.call(token)
+      return scope.where(display_id: identifier.value) if identifier.kind == :display_id
+
       token_scope = text_scope(token)
       token_scope = add_exact_date_scope(token_scope, token)
       token_scope = add_date_operator_scope(token_scope, token)

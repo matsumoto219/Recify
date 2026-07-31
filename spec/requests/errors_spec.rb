@@ -263,6 +263,19 @@ RSpec.describe 'Error pages', type: :request do
       end
     end
 
+    it 'Active Storage capabilityをoriginal pathからログへ出さない' do
+      messages = capture_error_page_logs(:warn)
+      storage_path = '/rails/active_storage/blobs/redirect/signed-capability/file.png'
+
+      get '/404', headers: { 'action_dispatch.original_path' => storage_path }
+
+      log = messages.join("\n")
+      aggregate_failures do
+        expect(log).to include("[ErrorPage] status=404 path=#{Recify::ActiveStorageLogRedactor::FILTERED_URL}")
+        expect(log).not_to include('signed-capability')
+      end
+    end
+
     it 'direct /500 はexceptionなしでもerrorで記録する' do
       messages = capture_error_page_logs(:error)
 
