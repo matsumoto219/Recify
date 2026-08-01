@@ -60,6 +60,18 @@ RSpec.describe SecurityEvent, type: :model do
     end
   end
 
+  it '直接保存されたpathにもpath専用sanitizerを適用する' do
+    event = create(
+      :security_event,
+      path: '/rails/active_storage/blobs/redirect/signed-capability/file.png?token=secret'
+    )
+
+    aggregate_failures do
+      expect(event.path).to eq(Recify::ActiveStorageLogRedactor::FILTERED_URL)
+      expect(event.path).not_to include('signed-capability', 'token=secret')
+    end
+  end
+
   it 'metadataはHashだけ許可する' do
     event = build(:security_event, metadata: [ 'unsafe' ])
 

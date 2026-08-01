@@ -64,6 +64,18 @@ RSpec.describe Receipts::IndexQuery do
       expect(result.scope).to contain_exactly(coffee)
     end
 
+    it 'lowercase display IDは比較時だけ正規化し、queryとURL用parameterは原文を維持する' do
+      target = create(:receipt, :completed, user:, display_id: 'R-A1B2C3')
+
+      result = call_query(scope: user.receipts.active_for_user, query: 'r-a1b2c3')
+
+      aggregate_failures do
+        expect(result.scope).to contain_exactly(target)
+        expect(result.query).to eq('r-a1b2c3')
+        expect(result.sanitized_params).to eq(q: 'r-a1b2c3')
+      end
+    end
+
     it 'newestは作成日時の降順を維持する' do
       older = create(:receipt, :completed, user:, created_at: 2.days.ago)
       newer = create(:receipt, :completed, user:, created_at: 1.hour.ago)

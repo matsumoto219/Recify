@@ -344,6 +344,31 @@ RSpec.describe 'Rack::Attack', type: :request do
     end
   end
 
+  it 'active adaptive cacheが失われても永続stateから全path制限を継続する' do
+    ip = '8.8.4.4'
+
+    3.times do
+      get '/wp-login.php', headers: remote_addr(ip)
+      expect_blocklisted_html_response(path: 'wp-login.php')
+      travel 2.seconds
+    end
+
+    restriction = Security::AdaptiveScannerRestriction.new(ip_address: ip)
+    Rack::Attack.cache.store.delete(restriction.send(:active_key))
+    get root_path, headers: remote_addr(ip)
+
+    aggregate_failures do
+      expect_blocklisted_html_response
+      expect(
+        SecurityIpAction.where(
+          ip_address: ip,
+          matched_rule: Security::AdaptiveScannerRestriction::DURABLE_STATE_MATCHED_RULE,
+          status: 'active'
+        )
+      ).to exist
+    end
+  end
+
   it 'persistent WordPress probesを30分から段階制限し、制限中は全pathを遮断する' do
     ip = '8.8.4.4'
 
@@ -489,6 +514,33 @@ RSpec.describe 'Rack::Attack', type: :request do
       expect(SecurityEvent.last.ip_address.to_s).to eq(ip)
       expect(SecurityIpAction.where(ip_address: ip, matched_rule: 'manual/ip_blocks')).not_to exist
     end
+  end
+
+  it '制限前の判定後に追加された手動IP制限も次のrequestから拒否する' do
+    ip = '8.8.4.4'
+    expect(Security.ip_blocked?(ip)).to be(false)
+    create(:security_ip_block, ip_address: ip)
+
+    get root_path, headers: remote_addr(ip)
+
+    expect_blocklisted_html_response
+  end
+
+  it '手動IP制限の解除を次のrequestから許可へ反映する' do
+    ip = '9.9.9.9'
+    block = create(:security_ip_block, ip_address: ip)
+    admin = create(:user, :admin)
+    expect(Security.ip_blocked?(ip)).to be(true)
+    block.update!(
+      status: 'revoked',
+      revoked_at: Time.current,
+      revoked_by: admin,
+      revoked_reason: 'false positive'
+    )
+
+    get root_path, headers: remote_addr(ip)
+
+    expect(response).to have_http_status(:ok)
   end
 
   it 'treats Rails and secret file probes as scanner requests' do

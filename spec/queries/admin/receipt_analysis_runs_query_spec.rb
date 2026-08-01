@@ -3,6 +3,18 @@ require 'rails_helper'
 RSpec.describe Admin::ReceiptAnalysisRunsQuery do
   include ActiveSupport::Testing::TimeHelpers
 
+  def count_application_queries
+    queries = []
+    subscriber = lambda do |_name, _started, _finished, _id, payload|
+      next if %w[SCHEMA TRANSACTION CACHE].include?(payload[:name].to_s)
+
+      queries << payload[:sql]
+    end
+
+    ActiveSupport::Notifications.subscribed(subscriber, 'sql.active_record') { yield }
+    queries.size
+  end
+
   around do |example|
     travel_to(Time.zone.parse('2026-05-23 10:00:00')) { example.run }
   end
@@ -57,6 +69,150 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
         expect(described_class.call(receipt_public_id: target_receipt.public_id).records.map { |record| record[:run] }).to eq([ target_run ])
         expect(described_class.call(user: target_user).records.map { |record| record[:run] }).to contain_exactly(target_run, other_receipt_run)
         expect(described_class.call(user: other_user_run.receipt.user).records.map { |record| record[:run] }).to eq([ other_user_run ])
+      end
+    end
+
+    describe 'Receipt ID filter contract' do
+      it 'public IDをtrim後もcase-sensitiveな完全一致で検索する' do
+        receipt = create(:receipt, public_id: 'rcpt_Ab12Cd34Ef56Gh78')
+        runs = [
+          create(:receipt_analysis_run, :succeeded, receipt:, created_at: 2.minutes.ago),
+          create(:receipt_analysis_run, :failed, receipt:, created_at: 1.minute.ago)
+        ]
+        create(:receipt_analysis_run, :succeeded)
+
+        aggregate_failures do
+          expect(described_class.call(receipt_public_id: " \trcpt_Ab12Cd34Ef56Gh78\n").records.map { |record| record[:run] })
+            .to eq(runs.reverse)
+          expect(described_class.call(receipt_public_id: 'rcpt_ab12cd34ef56gh78').records).to be_empty
+          expect(described_class.call(receipt_public_id: 'rcpt_Ab12Cd34').records).to be_empty
+          expect(described_class.call(receipt_public_id: 'rcpt_%').records).to be_empty
+        end
+      end
+
+      it 'display IDをtrimしlowercaseだけを正規化して完全一致検索する' do
+        receipt = create(:receipt, display_id: 'R-ABC123')
+        run = create(:receipt_analysis_run, :succeeded, receipt:)
+        create(:receipt_analysis_run, :succeeded)
+
+        aggregate_failures do
+          expect(described_class.call(receipt_public_id: 'R-ABC123').records.map { |record| record[:run] }).to eq([ run ])
+          expect(described_class.call(receipt_public_id: " \tr-abc123\n").records.map { |record| record[:run] }).to eq([ run ])
+          expect(described_class.call(receipt_public_id: 'R-ABC12').records).to be_empty
+          expect(described_class.call(receipt_public_id: 'R-ABC123%').records).to be_empty
+          expect(described_class.call(receipt_public_id: receipt.id.to_s).records).to be_empty
+        end
+      end
+
+      it '衝突するdisplay IDを持つ全Receiptの全runを重複なく安定順で返す' do
+        first_receipt = create(:receipt, display_id: 'R-ABC123')
+        second_receipt = create(:receipt, display_id: 'R-ABC123')
+        unrelated_receipt = create(:receipt, display_id: 'R-OTHER1')
+        shared_time = 30.minutes.ago
+        matching_runs = [
+          create(:receipt_analysis_run, :succeeded, receipt: first_receipt, created_at: 2.hours.ago),
+          create(:receipt_analysis_run, :failed, receipt: first_receipt, created_at: shared_time),
+          create(:receipt_analysis_run, :succeeded, receipt: second_receipt, created_at: 1.hour.ago),
+          create(:receipt_analysis_run, :failed, receipt: second_receipt, created_at: shared_time)
+        ]
+        create(:receipt_analysis_run, :succeeded, receipt: unrelated_receipt, created_at: 1.minute.ago)
+
+        result = described_class.call(receipt_public_id: 'R-ABC123', limit: 2, offset: 0)
+        next_page = described_class.call(receipt_public_id: 'R-ABC123', limit: 2, offset: 2)
+        expected = matching_runs.sort_by { |run| [ run.created_at, run.id ] }.reverse
+        records = result.records + next_page.records
+
+        aggregate_failures do
+          expect(result.total_count).to eq(4)
+          expect(next_page.total_count).to eq(4)
+          expect(records.map { |record| record[:run] }).to eq(expected)
+          expect(records.map { |record| record[:run].id }.uniq.size).to eq(4)
+          expect(records.map { |record| record[:receipt] }).to include(first_receipt, second_receipt)
+          expect(records).to all(include(:run_key, :display_id, :public_id, :user_info))
+        end
+      end
+
+      it 'display/public IDと既存user_id filterをANDで結合する' do
+        first_user = create(:user)
+        second_user = create(:user)
+        unrelated_user = create(:user)
+        first_receipt = create(:receipt, user: first_user, display_id: 'R-ABC123', public_id: 'rcpt_Aa11Bb22Cc33Dd44')
+        second_receipt = create(:receipt, user: second_user, display_id: 'R-ABC123', public_id: 'rcpt_Ee55Ff66Gg77Hh88')
+        first_run = create(:receipt_analysis_run, :succeeded, receipt: first_receipt)
+        second_run = create(:receipt_analysis_run, :succeeded, receipt: second_receipt)
+
+        aggregate_failures do
+          expect(described_class.call(receipt_public_id: 'R-ABC123', user_id: first_user.id).records.map { |record| record[:run] }).to eq([ first_run ])
+          expect(described_class.call(receipt_public_id: 'R-ABC123', user_id: second_user.id).records.map { |record| record[:run] }).to eq([ second_run ])
+          expect(described_class.call(receipt_public_id: 'R-ABC123', user_id: unrelated_user.id).records).to be_empty
+          expect(described_class.call(receipt_public_id: first_receipt.public_id, user_id: first_user.id).records.map { |record| record[:run] }).to eq([ first_run ])
+          expect(described_class.call(receipt_public_id: first_receipt.public_id, user_id: second_user.id).records).to be_empty
+        end
+      end
+
+      it 'Receipt IDと既存run filterをANDで結合する' do
+        receipt = create(:receipt, display_id: 'R-ABC123')
+        matching_run = create(:receipt_analysis_run, :failed, receipt:, source: 'admin_retry')
+        create(:receipt_analysis_run, :succeeded, receipt:, source: 'upload')
+        create(:receipt_analysis_run, :failed, source: 'admin_retry')
+
+        result = described_class.call(
+          receipt_public_id: 'R-ABC123',
+          status: 'failed',
+          source: 'admin_retry'
+        )
+
+        expect(result.records.map { |record| record[:run] }).to eq([ matching_run ])
+      end
+
+      it 'malformedまたは非IDのnonblank入力を例外なく0件にし全件表示へ戻さない' do
+        create(:receipt_analysis_run, :succeeded)
+        abnormal_object = Object.new
+        abnormal_object.define_singleton_method(:to_s) { raise 'must not coerce' }
+        malformed_values = [
+          'ordinary text',
+          'R-ABC',
+          'R-ABCDEFG',
+          'R-AB!123',
+          'rcpt_Ab12',
+          'rcpt_Ab12Cd34Ef56Gh789',
+          'RCPT_Ab12Cd34Ef56Gh78',
+          '%',
+          '_',
+          '*',
+          '123',
+          "R-AB\0C12",
+          'Ｒ－ＡＢＣ１２３',
+          'R-' + ('A' * 10_000),
+          [],
+          {},
+          abnormal_object
+        ]
+
+        aggregate_failures do
+          malformed_values.each do |value|
+            result = nil
+            expect { result = described_class.call(receipt_public_id: value) }.not_to raise_error
+            next unless result
+
+            expect(result.records).to be_empty, "expected #{value.inspect} to return no records"
+            expect(result.total_count).to eq(0)
+          end
+        end
+      end
+
+      it 'nil、blank、whitespaceだけはReceipt ID filterなしとして扱う' do
+        runs = [
+          create(:receipt_analysis_run, :succeeded, created_at: 2.minutes.ago),
+          create(:receipt_analysis_run, :failed, created_at: 1.minute.ago)
+        ]
+
+        aggregate_failures do
+          [ nil, '', " \t\n" ].each do |value|
+            expect(described_class.call(receipt_public_id: value).records.map { |record| record[:run] })
+              .to eq(runs.reverse)
+          end
+        end
       end
     end
 
@@ -151,7 +307,29 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
 
       described_class.call
 
-      expect(ReceiptAnalysisRun).to have_received(:includes).with(:requested_by_user, receipt: :user)
+      expect(ReceiptAnalysisRun).to have_received(:includes).with(
+        :requested_by_user,
+        { ocr_response_artifact_attachment: :blob },
+        receipt: :user
+      )
+    end
+
+    it 'display ID衝突でrun数が増えてもartifact参照をN+1にしない' do
+      single_receipt = create(:receipt, display_id: 'R-SINGL1')
+      create(:receipt_analysis_run, :succeeded, receipt: single_receipt)
+      collision_receipts = Array.new(4) { create(:receipt, display_id: 'R-COLLID') }
+      collision_receipts.each do |receipt|
+        create_list(:receipt_analysis_run, 2, :succeeded, receipt:)
+      end
+
+      single_query_count = count_application_queries do
+        described_class.call(receipt_public_id: 'R-SINGL1')
+      end
+      collision_query_count = count_application_queries do
+        described_class.call(receipt_public_id: 'R-COLLID')
+      end
+
+      expect(collision_query_count).to eq(single_query_count)
     end
 
     it '一覧向けrecordではretry_optionsを作らない' do

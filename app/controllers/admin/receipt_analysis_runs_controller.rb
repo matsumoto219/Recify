@@ -17,7 +17,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
 
   def index
     @filters = filter_params
-    @result = Admin.receipt_analysis_runs(**@filters)
+    @result = Admin.receipt_analysis_runs(**receipt_analysis_run_query_filters)
     @filter_options = Admin.receipt_analysis_run_filter_options
   end
 
@@ -262,6 +262,13 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
 
       filters[key.to_sym] = value
     end
+  end
+
+  def receipt_analysis_run_query_filters
+    value = params[:receipt_public_id]
+    return @filters unless params.key?(:receipt_public_id) && !value.is_a?(String)
+
+    @filters.merge(receipt_public_id: value)
   end
 
   def raise_not_found

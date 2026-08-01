@@ -23,18 +23,36 @@ RSpec.describe Security::IpAccessRules do
     expect(described_class.blocked?(ip_address)).to be(false)
   end
 
-  it 'cacheをclearできる' do
-    Rails.cache.write(described_class.send(:cache_key, ip_address), false, expires_in: 1.minute)
-    create(:security_ip_block, ip_address: ip_address)
-
+  it '制限前の判定結果が残っていても新しい手動IP制限を即時反映する' do
     expect(described_class.blocked?(ip_address)).to be(false)
-
-    described_class.clear_cache!(ip_address)
+    create(:security_ip_block, ip_address: ip_address)
 
     expect(described_class.blocked?(ip_address)).to be(true)
   end
 
+  it '制限中の判定結果が残っていても解除を即時反映する' do
+    block = create(:security_ip_block, ip_address: ip_address)
+    admin = create(:user, :admin)
+    expect(described_class.blocked?(ip_address)).to be(true)
+    block.update!(
+      status: 'revoked',
+      revoked_at: Time.current,
+      revoked_by: admin,
+      revoked_reason: 'false positive'
+    )
+
+    expect(described_class.blocked?(ip_address)).to be(false)
+  end
+
   it 'invalid IPはblockedにしない' do
     expect(described_class.blocked?('not-an-ip')).to be(false)
+  end
+
+  it 'DB判定が利用できない場合は既存どおりrequestをfail openにする' do
+    allow(SecurityIpBlock).to receive(:currently_effective_for_ip)
+      .with(IPAddr.new(ip_address))
+      .and_raise(ActiveRecord::NoDatabaseError)
+
+    expect(described_class.blocked?(ip_address)).to be(false)
   end
 end

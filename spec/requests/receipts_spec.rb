@@ -372,6 +372,93 @@ RSpec.describe 'Receipts', type: :request do
       expect(document.at_css('input[name="q"]')['value']).to eq(my_receipt.store_name)
     end
 
+    it 'lowercase display IDと通常tokenでactiveな自分のレシートだけを検索しraw queryを保持する' do
+      raw_query = "#{my_receipt.display_id.downcase} #{my_receipt.store_name}"
+      text_only = create(
+        :receipt,
+        :completed,
+        user: user,
+        store_name: my_receipt.store_name,
+        memo: "参照 #{my_receipt.display_id}",
+        total_amount: 123
+      )
+      other_receipt.update!(display_id: my_receipt.display_id)
+
+      get receipts_path(q: raw_query, sort: 'oldest', per_page: 50)
+
+      document = Nokogiri::HTML(response.body)
+      card_ids = receipt_card_ids(document)
+      search_forms = document.css("form[action='#{receipts_path}']")
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(card_ids).to contain_exactly("receipt_#{my_receipt.public_id}")
+        expect(card_ids).not_to include("receipt_#{text_only.public_id}", "receipt_#{other_receipt.public_id}")
+        expect(document.css('input[name="q"]').map { |input| input['value'] }.uniq).to eq([ raw_query ])
+        expect(search_forms.any? { |form| form.at_css("input[name='sort'][value='oldest']").present? }).to be(true)
+        expect(search_forms.any? { |form| form.at_css("input[name='per_page'][value='50']").present? }).to be(true)
+      end
+    end
+
+    it '他利用者、quarantine、存在しないdisplay IDを同じ通常の0件表示にする' do
+      other_user = create(:user)
+      create(:receipt, :completed, user: other_user, display_id: 'R-OTHER9', store_name: '他利用者だけ')
+      create(
+        :receipt,
+        :completed,
+        :quarantined,
+        user: user,
+        display_id: 'R-QUAR99',
+        store_name: '隔離中だけ'
+      )
+
+      %w[R-OTHER9 R-QUAR99 R-MISS99].each do |query|
+        get receipts_path(q: query)
+
+        document = Nokogiri::HTML(response.body)
+        empty_state = document.at_css('#receipts-empty-state')
+
+        aggregate_failures query do
+          expect(response).to have_http_status(:success)
+          expect(receipt_card_ids(document)).to be_empty
+          expect(empty_state).to be_present
+          expect(empty_state.text).to include(I18n.t('receipt_cards.empty.search.title'))
+          expect(empty_state.text).not_to include('他利用者', '隔離', '削除')
+        end
+      end
+    end
+
+    it 'public ID列は検索せずpublic-ID-shaped textの既存検索を維持する' do
+      text_match = create(
+        :receipt,
+        :completed,
+        user: user,
+        store_name: '公開IDメモ',
+        memo: "参照 #{my_receipt.public_id}",
+        total_amount: 321
+      )
+
+      get receipts_path(q: my_receipt.public_id)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(receipt_card_ids(document)).to contain_exactly("receipt_#{text_match.public_id}")
+        expect(receipt_card_ids(document)).not_to include("receipt_#{my_receipt.public_id}")
+      end
+    end
+
+    it 'display ID検索の範囲外pageをraw queryとsort/per_pageを保った1ページ目へcanonicalizeする' do
+      raw_query = my_receipt.display_id.downcase
+
+      get receipts_path(q: raw_query, sort: 'oldest', per_page: 50, page: 2)
+
+      expect(response).to redirect_to(
+        receipts_path(q: raw_query, sort: 'oldest', per_page: 50, page: 1)
+      )
+    end
+
     it '不正パターンを含む検索語の本文をログへ記録しない' do
       query = 'select person@example.test'
       messages = []
@@ -533,6 +620,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(header.at_css('#desktop-search-help').text).to include('数字8桁で YYYY-MM-DD 形式')
         expect(header.at_css('#desktop-search-help').text).to include('そのほかの検索方法')
         expect(header.at_css('#desktop-search-help').text).to include('店舗名・メモ・商品名は通常キーワードで検索できます。')
+        expect(header.at_css('#desktop-search-help').text).to include('表示ID（R-XXXXXX）は完全一致で検索できます。')
+        expect(header.at_css('#desktop-search-help').text).not_to include('rcpt_')
         expect(header.at_css('#desktop-search-help').text).to include('例: 1000')
         expect(header.at_css('#desktop-search-help').text).to include('例: >=1000, <=5000')
         expect(header.at_css('#desktop-search-help').text).to include('例: 2026-01-01')
@@ -903,6 +992,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(mobile_panel.at_css('#mobile-search-help')['class']).not_to include('max-w-[min(28rem')
         expect(search_prefixes).to contain_exactly('date>=', 'date<=', 'amount>=', 'amount<=')
         expect(mobile_panel.at_css('#mobile-search-help').text).to include('そのほかの検索方法')
+        expect(mobile_panel.at_css('#mobile-search-help').text).to include('表示ID（R-XXXXXX）は完全一致で検索できます。')
+        expect(mobile_panel.at_css('#mobile-search-help').text).not_to include('rcpt_')
         expect(mobile_panel.at_css('#mobile-search-help').text).to include('例: date:2026-01-01..2026-01-31')
       end
     end

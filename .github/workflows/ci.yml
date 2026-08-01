@@ -129,6 +129,12 @@ jobs:
         with:
           bundler-cache: true
 
+      - name: Install and verify libvips
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libvips-tools
+          vips --version
+
       - name: Check for duplicate workspace files
         run: bin/check_duplicate_files
 

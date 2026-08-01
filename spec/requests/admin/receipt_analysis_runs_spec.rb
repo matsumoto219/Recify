@@ -180,6 +180,154 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
       end
     end
 
+    it 'Receipt ID欄でraw入力を再表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_receipt_analysis_runs_path, params: { receipt_public_id: ' r-abc123 ' }
+
+      document = Nokogiri::HTML(response.body)
+      input = document.at_css('input[name="receipt_public_id"]')
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(document.at_css('label[for="receipt_public_id"]').text.strip).to eq('Receipt ID')
+        expect(input['value']).to eq(' r-abc123 ')
+      end
+    end
+
+    it 'public IDとdisplay IDで対応Receiptのrunだけを取得する' do
+      admin = create(:user, :admin)
+      public_receipt = create(:receipt, public_id: 'rcpt_Ab12Cd34Ef56Gh78', display_id: 'R-PUB123')
+      display_receipt = create(:receipt, public_id: 'rcpt_Zy98Xw76Vu54Ts32', display_id: 'R-ABC123')
+      public_run = create(:receipt_analysis_run, :succeeded, receipt: public_receipt)
+      display_run = create(:receipt_analysis_run, :failed, receipt: display_receipt)
+      unrelated_run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+
+      get admin_receipt_analysis_runs_path, params: { receipt_public_id: public_receipt.public_id }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(public_run.run_key)
+        expect(response.body).not_to include(display_run.run_key, unrelated_run.run_key)
+      end
+
+      get admin_receipt_analysis_runs_path, params: { receipt_public_id: ' r-abc123 ' }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(display_run.run_key)
+        expect(response.body).not_to include(public_run.run_key, unrelated_run.run_key)
+      end
+    end
+
+    it 'display ID衝突時は全利用者の全runを表示しuser_idとのANDで絞り込む' do
+      admin = create(:user, :admin)
+      first_user = create(:user)
+      second_user = create(:user)
+      first_receipt = create(:receipt, user: first_user, display_id: 'R-ABC123')
+      second_receipt = create(:receipt, user: second_user, display_id: 'R-ABC123')
+      first_runs = create_list(:receipt_analysis_run, 2, :succeeded, receipt: first_receipt)
+      second_runs = create_list(:receipt_analysis_run, 2, :failed, receipt: second_receipt)
+      unrelated_run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+
+      get admin_receipt_analysis_runs_path, params: { receipt_public_id: 'R-ABC123' }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        (first_runs + second_runs).each { |run| expect(response.body).to include(run.run_key) }
+        expect(response.body).not_to include(unrelated_run.run_key)
+        expect(response.body).to include(first_receipt.public_id, second_receipt.public_id)
+        expect(response.body).to include("##{first_user.id}", "##{second_user.id}")
+      end
+
+      get admin_receipt_analysis_runs_path,
+          params: { receipt_public_id: 'R-ABC123', user_id: first_user.id }
+
+      aggregate_failures do
+        first_runs.each { |run| expect(response.body).to include(run.run_key) }
+        second_runs.each { |run| expect(response.body).not_to include(run.run_key) }
+      end
+    end
+
+    it 'malformed nonblankとnon-scalar Receipt IDを0件にしblankだけはfilterなしにする' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+
+      [ 'R-ABC', 'ordinary text', '%', '123', [ 'R-ABC123' ], { value: 'R-ABC123' } ].each do |value|
+        get admin_receipt_analysis_runs_path, params: { receipt_public_id: value }
+
+        aggregate_failures do
+          expect(response).to have_http_status(:success)
+          expect(response.body).to include(I18n.t('admin.receipt_analysis_runs.index.results.empty', locale: :ja))
+          expect(response.body).not_to include(run.run_key)
+        end
+      end
+
+      get admin_receipt_analysis_runs_path, params: { receipt_public_id: " \t " }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(run.run_key)
+      end
+    end
+
+    it 'Receipt IDと他filterをpagination URLへ保持する' do
+      admin = create(:user, :admin)
+      user = create(:user)
+      receipt = create(:receipt, user:, display_id: 'R-ABC123')
+      create_list(:receipt_analysis_run, 3, :failed, receipt:, source: 'admin_retry')
+      sign_in admin
+
+      get admin_receipt_analysis_runs_path,
+          params: {
+            receipt_public_id: 'r-abc123',
+            user_id: user.id,
+            status: 'failed',
+            source: 'admin_retry',
+            limit: '1',
+            offset: '1'
+          }
+
+      document = Nokogiri::HTML(response.body)
+      previous_href = document.css('a').find { |link| link.text.strip == '前へ' }['href']
+      next_href = document.css('a').find { |link| link.text.strip == '次へ' }['href']
+      previous_query = Rack::Utils.parse_nested_query(URI.parse(previous_href).query)
+      next_query = Rack::Utils.parse_nested_query(URI.parse(next_href).query)
+
+      aggregate_failures do
+        expect(response.body).to include('3件中 2-2件を表示')
+        expect(previous_query).to include(
+          'receipt_public_id' => 'r-abc123',
+          'user_id' => user.id.to_s,
+          'status' => 'failed',
+          'source' => 'admin_retry',
+          'limit' => '1',
+          'offset' => '0'
+        )
+        expect(next_query).to include(
+          'receipt_public_id' => 'r-abc123',
+          'user_id' => user.id.to_s,
+          'status' => 'failed',
+          'source' => 'admin_retry',
+          'limit' => '1',
+          'offset' => '2'
+        )
+      end
+    end
+
+    it 'admin属性付きguestにも既存404を返す' do
+      guest_admin = create(:user, :admin, guest: true)
+      sign_in guest_admin
+
+      get admin_receipt_analysis_runs_path, params: { receipt_public_id: 'R-ABC123' }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
     it 'filter paramsをAdmin queryへ渡す' do
       admin = create(:user, :admin)
       sign_in admin
