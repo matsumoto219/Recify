@@ -15,4 +15,13 @@ RSpec.describe "Search Stimulus controller" do
       expect(source).to include("notice.setAttribute('aria-atomic', 'true')")
     end
   end
+
+  it "restores server-selected index control values before Turbo caches the page" do
+    aggregate_failures do
+      expect(source).to include("'cacheValue'")
+      expect(source).to include("this.restoreCacheValues()")
+      expect(source).to include("option.defaultSelected")
+      expect(source).to include("control.value = serverSelectedOption.value")
+    end
+  end
 end

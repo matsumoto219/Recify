@@ -1,7 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
 
 export default class extends Controller {
-  static targets = ['panel', 'input', 'toggle']
+  static targets = ['panel', 'input', 'toggle', 'cacheValue']
 
   static values = {
     errorTitle: { type: String, default: 'Error' },
@@ -127,6 +127,16 @@ export default class extends Controller {
     this.close({ animated: false })
     this.hideAllHelp()
     this.removeSearchErrorNotice()
+    this.restoreCacheValues()
+  }
+
+  restoreCacheValues () {
+    this.cacheValueTargets.forEach((control) => {
+      if (!(control instanceof HTMLSelectElement)) return
+
+      const serverSelectedOption = Array.from(control.options).find((option) => option.defaultSelected)
+      if (serverSelectedOption) control.value = serverSelectedOption.value
+    })
   }
 
   handleInput (event) {

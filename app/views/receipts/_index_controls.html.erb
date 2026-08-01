@@ -50,7 +50,8 @@
           html_options: {
             id: "receipts-sort-control",
             onchange: "this.form.requestSubmit()",
-            aria: { label: sort_label }
+            aria: { label: sort_label },
+            data: { search_target: "cacheValue" }
           } %>
       </div>
     </div>
@@ -73,7 +74,8 @@
             html_options: {
               id: "receipts-per-page-control",
               onchange: "this.form.requestSubmit()",
-              aria: { label: per_page_label }
+              aria: { label: per_page_label },
+              data: { search_target: "cacheValue" }
             } %>
         </div>
       </div>

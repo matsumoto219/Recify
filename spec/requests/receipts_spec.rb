@@ -335,8 +335,8 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '金額や店舗名に依存するsortではterminal更新時に並び順を再取得する' do
-      %w[amount_desc amount_asc store_name updated review_priority].each do |sort|
+    it '処理結果に依存するsortではterminal更新時に並び順を再取得する' do
+      %w[purchased_at_desc purchased_at_asc amount_desc amount_asc store_name updated review_priority].each do |sort|
         get receipts_path(sort: sort)
 
         document = Nokogiri::HTML(response.body)
@@ -1089,6 +1089,98 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(card_ids.index("receipt_#{older_receipt.public_id}")).to be < card_ids.index("receipt_#{newer_receipt.public_id}")
         expect(selected_receipt_index_control(document, 'sort')).to eq('oldest')
+      end
+    end
+
+    it '購入日時sortでは両方向でnilを末尾にし、同日時をidで安定化する' do
+      common_name = '購入日時sort対象'
+      older = create(
+        :receipt,
+        :completed,
+        user:,
+        store_name: common_name,
+        purchased_at: Time.zone.local(2026, 7, 10, 9, 0)
+      )
+      newer = create(
+        :receipt,
+        :completed,
+        user:,
+        store_name: common_name,
+        purchased_at: Time.zone.local(2026, 7, 12, 15, 0)
+      )
+      tied_lower_id = create(
+        :receipt,
+        :completed,
+        user:,
+        store_name: common_name,
+        purchased_at: Time.zone.local(2026, 7, 11, 12, 0)
+      )
+      tied_higher_id = create(
+        :receipt,
+        :completed,
+        user:,
+        store_name: common_name,
+        purchased_at: Time.zone.local(2026, 7, 11, 12, 0)
+      )
+      nil_lower_id = create(:receipt, :completed, user:, store_name: common_name)
+      nil_higher_id = create(:receipt, :completed, user:, store_name: common_name)
+      nil_lower_id.update_column(:purchased_at, nil)
+      nil_higher_id.update_column(:purchased_at, nil)
+      create(:receipt, :completed, store_name: common_name, purchased_at: Time.current)
+      create(:receipt, :completed, :quarantined, user:, store_name: common_name, purchased_at: Time.current)
+
+      get receipts_path(q: common_name, sort: 'purchased_at_desc')
+      desc_document = Nokogiri::HTML(response.body)
+
+      get receipts_path(q: common_name, sort: 'purchased_at_asc')
+      asc_document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(receipt_card_ids(desc_document)).to eq([
+          "receipt_#{newer.public_id}",
+          "receipt_#{tied_higher_id.public_id}",
+          "receipt_#{tied_lower_id.public_id}",
+          "receipt_#{older.public_id}",
+          "receipt_#{nil_higher_id.public_id}",
+          "receipt_#{nil_lower_id.public_id}"
+        ])
+        expect(receipt_card_ids(asc_document)).to eq([
+          "receipt_#{older.public_id}",
+          "receipt_#{tied_lower_id.public_id}",
+          "receipt_#{tied_higher_id.public_id}",
+          "receipt_#{newer.public_id}",
+          "receipt_#{nil_lower_id.public_id}",
+          "receipt_#{nil_higher_id.public_id}"
+        ])
+        expect(selected_receipt_index_control(desc_document, 'sort')).to eq('purchased_at_desc')
+        expect(selected_receipt_index_control(asc_document, 'sort')).to eq('purchased_at_asc')
+      end
+    end
+
+    it '購入日時sortは同一日時のpagination境界で重複や欠落を起こさずparameterを保持する' do
+      common_name = '購入日時pagination対象'
+      purchased_at = Time.zone.local(2026, 7, 15, 12, 0)
+      receipts = Array.new(25) do
+        create(:receipt, :completed, user:, store_name: common_name, purchased_at:)
+      end
+
+      %w[purchased_at_desc purchased_at_asc].each do |sort|
+        get receipts_path(q: common_name, sort:, per_page: 20)
+        page_one_document = Nokogiri::HTML(response.body)
+        pagination_urls = page_one_document.css('nav[aria-label] a').map { |node| node['href'] }
+
+        get receipts_path(q: common_name, sort:, per_page: 20, page: 2)
+        page_two_document = Nokogiri::HTML(response.body)
+
+        expected = sort.end_with?('desc') ? receipts.reverse : receipts
+        actual_ids = (receipt_card_ids(page_one_document) + receipt_card_ids(page_two_document))
+
+        aggregate_failures do
+          expect(actual_ids).to eq(expected.map { |receipt| "receipt_#{receipt.public_id}" })
+          expect(actual_ids.uniq.size).to eq(receipts.size)
+          expect(pagination_urls).to include(receipts_path(q: common_name, sort:, page: 2))
+          expect(selected_receipt_index_control(page_two_document, 'sort')).to eq(sort)
+        end
       end
     end
 

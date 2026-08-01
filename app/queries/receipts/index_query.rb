@@ -5,6 +5,8 @@ module Receipts
     SORT_OPTIONS = %w[
       newest
       oldest
+      purchased_at_desc
+      purchased_at_asc
       amount_desc
       amount_asc
       store_name
@@ -50,10 +52,15 @@ module Receipts
 
     def sorted_scope
       search_scope = SearchQuery.call(scope: scope, query: query)
+      receipts = search_scope.klass.arel_table
 
       case sort
       when "oldest"
         search_scope.reorder(created_at: :asc)
+      when "purchased_at_desc"
+        search_scope.reorder(receipts[:purchased_at].desc.nulls_last, receipts[:id].desc)
+      when "purchased_at_asc"
+        search_scope.reorder(receipts[:purchased_at].asc.nulls_last, receipts[:id].asc)
       when "amount_desc"
         search_scope.reorder(Arel.sql("CASE WHEN receipts.total_amount IS NULL THEN 1 ELSE 0 END ASC, receipts.total_amount DESC"))
       when "amount_asc"
