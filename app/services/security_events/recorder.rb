@@ -1,8 +1,26 @@
+require "zlib"
+
 module SecurityEvents
   class Recorder
     AGGREGATION_WINDOW = 1.hour
     STALE_CANDIDATE_RETRY_LIMIT = 1
     PAYLOAD_DIGEST_EMPTY = nil
+    AGGREGATION_IDENTITY_FIELDS = %i[
+      event_type
+      severity
+      actor_user_id
+      ip_address
+      path
+      method
+      field_name
+      matched_rule
+      payload_sha256
+    ].freeze
+    # These values must stay stable so every application process competes for the same locks.
+    ADVISORY_LOCK_NAMESPACE = 992_996_087
+    ADVISORY_LOCK_SQL = "SELECT pg_advisory_xact_lock($1, $2) IS NULL AS lock_result_ignored".freeze
+    ADVISORY_LOCK_INTEGER = ActiveRecord::Type::Integer.new(limit: 4).freeze
+    PROCESS_LOCK_STRIPES = Array.new(64) { Mutex.new }.freeze
 
     class << self
       def call(...)
@@ -51,20 +69,41 @@ module SecurityEvents
     end
 
     def call
+      lock_id = advisory_lock_id
+
+      process_lock(lock_id).synchronize do
+        record_with_lock(lock_id)
+      end
+    end
+
+    private
+
+    attr_reader :event_type, :severity, :request, :actor_user, :ip_address, :user_agent,
+                :request_id, :path, :method, :field_name, :matched_rule, :payload,
+                :payload_excerpt, :metadata, :occurred_at
+
+    def record_with_lock(lock_id)
       stale_candidate_retries = 0
 
       begin
         SecurityEvent.transaction do
+          acquire_database_lock(lock_id)
           existing = aggregation_candidate
 
           if existing
             existing.count += 1
-            existing.last_seen_at = occurred_at
+            existing.first_seen_at, existing.last_seen_at = [
+              existing.first_seen_at,
+              existing.last_seen_at,
+              new_event.first_seen_at,
+              new_event.last_seen_at
+            ].compact.minmax
             existing.metadata = merge_metadata(existing.metadata)
             existing.save!
             existing
           else
-            SecurityEvent.create!(event_attributes)
+            new_event.save!
+            new_event
           end
         end
       rescue ActiveRecord::RecordNotFound
@@ -74,12 +113,6 @@ module SecurityEvents
         raise
       end
     end
-
-    private
-
-    attr_reader :event_type, :severity, :request, :actor_user, :ip_address, :user_agent,
-                :request_id, :path, :method, :field_name, :matched_rule, :payload,
-                :payload_excerpt, :metadata, :occurred_at
 
     def event_attributes
       {
@@ -102,19 +135,52 @@ module SecurityEvents
       }
     end
 
+    def new_event
+      @new_event ||= SecurityEvent.new(event_attributes).tap(&:valid?)
+    end
+
     def aggregation_candidate
       SecurityEvent
         .unresolved
-        .where(
-          event_type: event_type,
-          ip_address: ip_address_from_context,
-          path: path_from_context,
-          payload_sha256: payload_digest,
-          last_seen_at: self.class.aggregation_window.ago..
-        )
+        .where(aggregation_identity)
+        .where(last_seen_at: self.class.aggregation_window.ago..)
         .order(last_seen_at: :desc, id: :desc)
         .lock
         .first
+    end
+
+    def aggregation_identity
+      @aggregation_identity ||= AGGREGATION_IDENTITY_FIELDS.index_with do |attribute|
+        new_event.public_send(attribute)
+      end
+    end
+
+    def advisory_lock_id
+      values = AGGREGATION_IDENTITY_FIELDS.map { |attribute| new_event.public_send(attribute).as_json }
+      unsigned = Zlib.crc32(values.to_json)
+      unsigned >= (2**31) ? unsigned - (2**32) : unsigned
+    end
+
+    def process_lock(lock_id)
+      PROCESS_LOCK_STRIPES.fetch(lock_id % PROCESS_LOCK_STRIPES.length)
+    end
+
+    def acquire_database_lock(lock_id)
+      binds = [
+        ActiveRecord::Relation::QueryAttribute.new(
+          "namespace",
+          ADVISORY_LOCK_NAMESPACE,
+          ADVISORY_LOCK_INTEGER
+        ),
+        ActiveRecord::Relation::QueryAttribute.new("lock_id", lock_id, ADVISORY_LOCK_INTEGER)
+      ]
+
+      SecurityEvent.connection.exec_query(
+        ADVISORY_LOCK_SQL,
+        "SecurityEvents::Recorder",
+        binds,
+        prepare: true
+      )
     end
 
     def actor_user_from_context
@@ -175,7 +241,7 @@ module SecurityEvents
     end
 
     def merge_metadata(existing_metadata)
-      existing_metadata.to_h.merge(sanitized_metadata) do |_key, old_value, new_value|
+      existing_metadata.to_h.merge(new_event.metadata.to_h) do |_key, old_value, new_value|
         new_value.presence || old_value
       end
     end

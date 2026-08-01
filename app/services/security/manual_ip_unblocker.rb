@@ -36,7 +36,6 @@ module Security
         )
         block
       end
-      clear_ip_access_cache
 
       Result.new(success: true, block: revoked_block, ip_address: ip_address)
     rescue Security::ValidationError => e
@@ -66,11 +65,6 @@ module Security
 
       source_ip = IpAddress.normalize(source_security_event.ip_address)
       source_ip.present? && source_ip != ip_address
-    end
-
-    def clear_ip_access_cache
-      IpAccessRules.clear_cache!(ip_address)
-      ActiveRecord.after_all_transactions_commit { IpAccessRules.clear_cache!(ip_address) }
     end
   end
 end

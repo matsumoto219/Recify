@@ -203,6 +203,208 @@ RSpec.describe SecurityEvents::Recorder do
     expect(SecurityEvent.first.count).to eq(2)
   end
 
+  it '遅れて到着したeventを集約してもfirst/last seenを発生順に保つ' do
+    latest_occurred_at = Time.current.change(usec: 0)
+    earliest_occurred_at = latest_occurred_at - 5.minutes
+    attributes = {
+      event_type: 'path_traversal_attempt',
+      severity: 'high',
+      request: request,
+      path: '/receipts',
+      payload: '../config/master.key'
+    }
+    event = described_class.call(**attributes, occurred_at: latest_occurred_at)
+
+    described_class.call(**attributes, occurred_at: earliest_occurred_at)
+
+    expect(event.reload).to have_attributes(
+      count: 2,
+      first_seen_at: earliest_occurred_at,
+      last_seen_at: latest_occurred_at
+    )
+  end
+
+  it '既存rowのfirst/last seenが逆転していても次の集約時に時系列を修復する' do
+    occurred_at = Time.current.change(usec: 0)
+    attributes = {
+      event_type: 'path_traversal_attempt',
+      severity: 'high',
+      request: request,
+      path: '/receipts',
+      payload: '../config/master.key'
+    }
+    event = described_class.call(**attributes, occurred_at: occurred_at)
+    event.update_columns(
+      first_seen_at: occurred_at,
+      last_seen_at: occurred_at - 5.minutes
+    )
+
+    described_class.call(**attributes, occurred_at: occurred_at + 5.minutes)
+
+    expect(event.reload).to have_attributes(
+      count: 2,
+      first_seen_at: occurred_at - 5.minutes,
+      last_seen_at: occurred_at + 5.minutes
+    )
+  end
+
+  context 'aggregation identity' do
+    let(:identity_attributes) do
+      {
+        event_type: 'path_traversal_attempt',
+        severity: 'high',
+        ip_address: '192.0.2.25',
+        path: '/receipts',
+        method: 'POST',
+        field_name: 'q',
+        matched_rule: 'path_traversal',
+        payload: '../config/master.key'
+      }
+    end
+
+    {
+      severity: 'medium',
+      method: 'GET',
+      field_name: 'redirect_to',
+      matched_rule: 'alternate_path_traversal'
+    }.each do |attribute, alternate_value|
+      it "#{attribute}が異なるeventを別々に記録する" do
+        described_class.call(**identity_attributes)
+        described_class.call(**identity_attributes.merge(attribute => alternate_value))
+
+        events = SecurityEvent.where(
+          event_type: identity_attributes.fetch(:event_type),
+          ip_address: identity_attributes.fetch(:ip_address),
+          path: identity_attributes.fetch(:path)
+        )
+
+        expect(events.pluck(:count)).to contain_exactly(1, 1)
+      end
+    end
+
+    it 'actorが異なるeventを別々に記録する' do
+      first_actor = create(:user)
+      second_actor = create(:user)
+
+      described_class.call(**identity_attributes, actor_user: first_actor)
+      described_class.call(**identity_attributes, actor_user: second_actor)
+
+      events = SecurityEvent.where(
+        event_type: identity_attributes.fetch(:event_type),
+        ip_address: identity_attributes.fetch(:ip_address),
+        path: identity_attributes.fetch(:path)
+      )
+
+      aggregate_failures do
+        expect(events.pluck(:count)).to contain_exactly(1, 1)
+        expect(events.pluck(:actor_user_id)).to contain_exactly(first_actor.id, second_actor.id)
+      end
+    end
+  end
+
+  context '同一identityの同時初回記録' do
+    self.use_transactional_tests = false
+
+    let(:race_marker) { "recorder-race-#{SecureRandom.hex(8)}" }
+    let(:race_attributes) do
+      {
+        event_type: 'path_traversal_attempt',
+        severity: 'high',
+        ip_address: '192.0.2.26',
+        path: '/synthetic/security-events-race',
+        method: 'GET',
+        field_name: 'path',
+        matched_rule: race_marker,
+        payload: race_marker
+      }
+    end
+
+    after do
+      SecurityEvent.where(
+        ip_address: race_attributes.fetch(:ip_address),
+        path: race_attributes.fetch(:path),
+        matched_rule: race_marker
+      ).delete_all
+    end
+
+    it '初回insertが並行しても1 rowへ集約する' do
+      barrier_mutex = Mutex.new
+      barrier_condition = ConditionVariable.new
+      arrivals = 0
+      errors = Queue.new
+      recorders = 2.times.map do
+        described_class.new(**race_attributes).tap do |recorder|
+          recorder.define_singleton_method(:aggregation_candidate) do
+            candidate = super()
+            deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 0.5
+
+            barrier_mutex.synchronize do
+              arrivals += 1
+              barrier_condition.broadcast
+
+              while arrivals < 2
+                remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+                break unless remaining.positive?
+
+                barrier_condition.wait(barrier_mutex, remaining)
+              end
+            end
+
+            candidate
+          end
+        end
+      end
+      threads = recorders.map do |recorder|
+        Thread.new do
+          ActiveRecord::Base.connection_pool.with_connection { recorder.call }
+        rescue StandardError => error
+          errors << error
+        end
+      end
+
+      threads.each(&:join)
+      raise errors.pop unless errors.empty?
+
+      events = SecurityEvent.where(
+        ip_address: race_attributes.fetch(:ip_address),
+        path: race_attributes.fetch(:path),
+        matched_rule: race_marker
+      )
+
+      aggregate_failures do
+        expect(events.count).to eq(1)
+        expect(events.sum(:count)).to eq(2)
+      end
+    end
+  end
+
+  it 'aggregation identityをSQLへ埋め込まずdatabase advisory transaction lockを取得する' do
+    connection = SecurityEvent.connection
+    unsafe_rule = "rule'); SELECT pg_sleep(1); --"
+    allow(SecurityEvent).to receive(:connection).and_return(connection)
+    expect(connection).to receive(:exec_query)
+      .with(
+        'SELECT pg_advisory_xact_lock($1, $2) IS NULL AS lock_result_ignored',
+        'SecurityEvents::Recorder',
+        satisfy do |binds|
+          values = binds.map(&:value_for_database)
+          values.size == 2 &&
+            values.all?(Integer) &&
+            values.first == described_class::ADVISORY_LOCK_NAMESPACE
+        end,
+        prepare: true
+      )
+      .and_call_original
+
+    described_class.call(
+      event_type: 'path_traversal_attempt',
+      severity: 'high',
+      request: request,
+      matched_rule: unsafe_rule,
+      payload: '../config/master.key'
+    )
+  end
+
   it 'retention cleanupとの競合で集約候補が消えても発生中のeventを再記録する' do
     recorder = described_class.new(
       event_type: 'path_traversal_attempt',
