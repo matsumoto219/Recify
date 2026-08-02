@@ -30,6 +30,221 @@ RSpec.describe "Receipt form Stimulus controller" do
     JSON.parse(stdout)
   end
 
+  def run_review_target_script(script)
+    run_controller_script(<<~JAVASCRIPT)
+      const listeners = {
+        document: new Map(),
+        element: new Map(),
+        window: new Map()
+      }
+      const location = new URL('https://recify.example/receipts/rcpt_1/edit')
+      const rows = []
+      const links = []
+      let fetchCount = 0
+
+      const classList = (initial = []) => {
+        const values = new Set(initial)
+        return {
+          contains: (name) => values.has(name),
+          remove: (...names) => names.forEach((name) => values.delete(name)),
+          toggle: (name, force) => {
+            const enabled = force === undefined ? !values.has(name) : force
+            if (enabled) values.add(name)
+            else values.delete(name)
+            return enabled
+          }
+        }
+      }
+
+      const makeToggle = ({ visible = true } = {}) => {
+        const attributes = new Map()
+        return {
+          visible,
+          hidden: !visible,
+          offsetParent: visible ? {} : null,
+          focusCount: 0,
+          focusOptions: [],
+          checkVisibility: () => visible,
+          getClientRects: () => visible ? [ {} ] : [],
+          getAttribute: (name) => attributes.get(name) ?? null,
+          setAttribute: (name, value) => attributes.set(name, String(value)),
+          focus (options) {
+            this.focusCount += 1
+            this.focusOptions.push(options ?? null)
+            document.activeElement = this
+          }
+        }
+      }
+
+      const makeRow = ({
+        id,
+        type,
+        open = false,
+        destroyed = false,
+        inside = true,
+        hidden = false,
+        reviewTarget = true
+      }) => {
+        const panelTarget = type === 'item' ? 'itemDetailsPanel' : 'adjustmentDetailsPanel'
+        const toggleTarget = type === 'item' ? 'itemDetailsToggle' : 'adjustmentDetailsToggle'
+        const iconTarget = type === 'item' ? 'itemDetailsIcon' : 'adjustmentDetailsIcon'
+        const destroyTarget = type === 'item' ? 'destroyField' : 'adjustmentDestroyField'
+        const openClass = type === 'item' ? 'receipt-form-item-details-open' : 'receipt-form-adjustment-details-open'
+        const panelAttributes = new Map([ [ 'aria-hidden', String(!open) ] ])
+        const panel = {
+          classList: classList(open ? [ 'is-open' ] : []),
+          inert: !open,
+          getAttribute: (name) => panelAttributes.get(name) ?? null,
+          setAttribute: (name, value) => panelAttributes.set(name, String(value)),
+          toggleAttribute (name, force) {
+            if (name === 'inert') this.inert = force
+          }
+        }
+        const hiddenToggle = makeToggle({ visible: false })
+        const visibleToggle = makeToggle({ visible: true })
+        const icons = [ { classList: classList() }, { classList: classList() } ]
+        const destroyField = { value: destroyed ? '1' : '0' }
+        const row = {
+          id,
+          type,
+          inside,
+          isConnected: true,
+          style: { display: hidden ? 'none' : '' },
+          classList: classList(open ? [ openClass ] : []),
+          dataset: type === 'item'
+            ? { receiptReviewItemRow: 'true' }
+            : (reviewTarget ? { receiptReviewAdjustmentRow: 'true' } : {}),
+          panel,
+          toggles: [ hiddenToggle, visibleToggle ],
+          hiddenToggle,
+          visibleToggle,
+          icons,
+          destroyField,
+          scrollCount: 0,
+          matches (selector) {
+            if (selector.includes(`receipt-review-${type}-row`)) return reviewTarget
+
+            return selector.includes(`${type}Row`)
+          },
+          closest: () => null,
+          querySelector (selector) {
+            if (selector.includes(panelTarget)) return panel
+            if (selector.includes(destroyTarget)) return destroyField
+            return null
+          },
+          querySelectorAll (selector) {
+            if (selector.includes(toggleTarget)) return this.toggles
+            if (selector.includes(iconTarget)) return this.icons
+            return []
+          },
+          scrollIntoView () { this.scrollCount += 1 }
+        }
+        hiddenToggle.row = row
+        visibleToggle.row = row
+        rows.push(row)
+        return row
+      }
+
+      const section = (id) => ({
+        id,
+        inside: true,
+        scrollCount: 0,
+        scrollIntoView () { this.scrollCount += 1 }
+      })
+      const itemSection = section('receipt-section-items')
+      const adjustmentSection = section('receipt-section-adjustments')
+      const sections = new Map([
+        [ itemSection.id, itemSection ],
+        [ adjustmentSection.id, adjustmentSection ]
+      ])
+      const nodesForId = (id) => rows.filter((row) => row.id === id)
+
+      const element = {
+        contains: (node) => Boolean(node?.inside),
+        addEventListener: (name, callback) => listeners.element.set(name, callback),
+        removeEventListener: (name, callback) => {
+          if (listeners.element.get(name) === callback) listeners.element.delete(name)
+        },
+        querySelectorAll (selector) {
+          const idMatch = selector.match(/#([^ ]+)/) || selector.match(/\[id=["']?([^"'\]]+)/)
+          return idMatch ? nodesForId(idMatch[1]) : []
+        }
+      }
+
+      const makeLink = (targetId, fallbackTarget = adjustmentSection.id) => {
+        const link = {
+          inside: true,
+          dataset: { reviewReasonTarget: fallbackTarget },
+          getAttribute: (name) => name === 'href' ? `/receipts/rcpt_1/edit#${targetId}` : null,
+          closest: (selector) => selector === 'a[data-review-reason-target-link]' ? link : null
+        }
+        links.push(link)
+        return link
+      }
+
+      const makeClickEvent = (link) => ({
+        target: link,
+        prevented: false,
+        preventDefault () { this.prevented = true }
+      })
+
+      globalThis.CSS = { escape: (value) => value }
+      globalThis.fetch = () => { fetchCount += 1 }
+      globalThis.document = {
+        activeElement: null,
+        addEventListener: (name, callback) => listeners.document.set(name, callback),
+        removeEventListener: (name, callback) => {
+          if (listeners.document.get(name) === callback) listeners.document.delete(name)
+        },
+        getElementById (id) {
+          return nodesForId(id)[0] || sections.get(id) || null
+        },
+        querySelectorAll (selector) {
+          const idMatch = selector.match(/#([^ ]+)/) || selector.match(/\[id=["']?([^"'\]]+)/)
+          return idMatch ? nodesForId(idMatch[1]) : []
+        }
+      }
+      globalThis.window = {
+        location,
+        history: {
+          pushState (_state, _title, value) {
+            location.hash = new URL(value, location.href).hash
+          }
+        },
+        requestAnimationFrame: (callback) => callback(),
+        setTimeout: (callback) => {
+          callback()
+          return 1
+        },
+        clearTimeout: () => {},
+        getComputedStyle: (node) => ({
+          display: node.visible === false ? 'none' : 'block',
+          visibility: node.visible === false ? 'hidden' : 'visible'
+        }),
+        addEventListener: (name, callback) => listeners.window.set(name, callback),
+        removeEventListener: (name, callback) => {
+          if (listeners.window.get(name) === callback) listeners.window.delete(name)
+        }
+      }
+
+      const makeController = () => {
+        const controller = Object.create(ReceiptFormController.prototype)
+        Object.defineProperties(controller, {
+          element: { value: element },
+          itemRowTargets: { get: () => rows.filter((row) => row.type === 'item') },
+          adjustmentRowTargets: { get: () => rows.filter((row) => row.type === 'adjustment') },
+          reviewItemTargetPrefixValue: { value: 'receipt-item-' },
+          reviewItemsTargetValue: { value: itemSection.id },
+          reviewAdjustmentTargetPrefixValue: { value: 'receipt-adjustment-' },
+          reviewAdjustmentsTargetValue: { value: adjustmentSection.id }
+        })
+        return controller
+      }
+
+      #{script}
+    JAVASCRIPT
+  end
+
   def run_amount_round_trip(
     basis:,
     items:,
@@ -266,6 +481,191 @@ RSpec.describe "Receipt form Stimulus controller" do
       expect(source).to include("const fallback = document.getElementById(targetId) || document.getElementById(this.reviewItemsTargetValue)")
       expect(source).not_to include("RECEIPT_REVIEW_TARGET_ITEMS = 'receipt-section-items'")
     end
+  end
+
+  it "opens only the linked adjustment and focuses its visible toggle for a same-page activation" do
+    result = run_review_target_script(<<~JAVASCRIPT)
+      const target = makeRow({ id: 'receipt-adjustment-42', type: 'adjustment' })
+      const openAdjustment = makeRow({ id: 'receipt-adjustment-43', type: 'adjustment', open: true })
+      const openItem = makeRow({ id: 'receipt-item-7', type: 'item', open: true })
+      const link = makeLink(target.id)
+      const event = makeClickEvent(link)
+      const controller = makeController()
+
+      controller.handleReviewTargetClick(event)
+      controller.handleReviewTargetClick(makeClickEvent(link))
+
+      process.stdout.write(JSON.stringify({
+        prevented: event.prevented,
+        hash: window.location.hash,
+        targetOpen: target.panel.classList.contains('is-open'),
+        targetAriaHidden: target.panel.getAttribute('aria-hidden'),
+        targetInert: target.panel.inert,
+        targetToggleExpanded: target.toggles.map((toggle) => toggle.getAttribute('aria-expanded')),
+        hiddenToggleFocus: target.hiddenToggle.focusCount,
+        visibleToggleFocus: target.visibleToggle.focusCount,
+        visibleTogglePreventScroll: target.visibleToggle.focusOptions.every((options) => options?.preventScroll === true),
+        otherAdjustmentOpen: openAdjustment.panel.classList.contains('is-open'),
+        itemOpen: openItem.panel.classList.contains('is-open'),
+        targetScrolls: target.scrollCount,
+        fetchCount
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "prevented" => true,
+      "hash" => "#receipt-adjustment-42",
+      "targetOpen" => true,
+      "targetAriaHidden" => "false",
+      "targetInert" => false,
+      "targetToggleExpanded" => [ "true", "true" ],
+      "hiddenToggleFocus" => 0,
+      "visibleToggleFocus" => 2,
+      "visibleTogglePreventScroll" => true,
+      "otherAdjustmentOpen" => true,
+      "itemOpen" => true,
+      "targetScrolls" => 2,
+      "fetchCount" => 0
+    )
+  end
+
+  it "opens adjustment hashes without moving focus and keeps previously opened rows expanded" do
+    result = run_review_target_script(<<~JAVASCRIPT)
+      const first = makeRow({ id: 'receipt-adjustment-42', type: 'adjustment' })
+      const second = makeRow({ id: 'receipt-adjustment-43', type: 'adjustment' })
+      const openItem = makeRow({ id: 'receipt-item-7', type: 'item', open: true })
+      const controller = makeController()
+
+      window.location.hash = '#receipt-adjustment-42'
+      controller.handleHashChange()
+      window.location.hash = '#receipt-adjustment-43'
+      controller.handleHashChange()
+      window.location.hash = '#receipt-adjustment-42'
+      controller.handleHashChange()
+
+      process.stdout.write(JSON.stringify({
+        firstOpen: first.panel.classList.contains('is-open'),
+        secondOpen: second.panel.classList.contains('is-open'),
+        itemOpen: openItem.panel.classList.contains('is-open'),
+        firstFocus: first.toggles.reduce((sum, toggle) => sum + toggle.focusCount, 0),
+        secondFocus: second.toggles.reduce((sum, toggle) => sum + toggle.focusCount, 0),
+        firstScrolls: first.scrollCount,
+        secondScrolls: second.scrollCount,
+        fetchCount
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "firstOpen" => true,
+      "secondOpen" => true,
+      "itemOpen" => true,
+      "firstFocus" => 0,
+      "secondFocus" => 0,
+      "firstScrolls" => 2,
+      "secondScrolls" => 1,
+      "fetchCount" => 0
+    )
+  end
+
+  it "falls back to the adjustment section for unusable same-page adjustment targets" do
+    result = run_review_target_script(<<~JAVASCRIPT)
+      makeRow({ id: 'receipt-adjustment-deleted', type: 'adjustment', destroyed: true })
+      makeRow({ id: 'receipt-adjustment-hidden', type: 'adjustment', hidden: true })
+      makeRow({ id: 'receipt-adjustment-foreign', type: 'adjustment', inside: false })
+      makeRow({ id: 'receipt-adjustment-unsaved', type: 'adjustment', reviewTarget: false })
+      makeRow({ id: 'receipt-adjustment-duplicate', type: 'adjustment' })
+      makeRow({ id: 'receipt-adjustment-duplicate', type: 'adjustment' })
+      const controller = makeController()
+      const targetIds = [
+        'receipt-adjustment-missing',
+        'receipt-adjustment-deleted',
+        'receipt-adjustment-hidden',
+        'receipt-adjustment-foreign',
+        'receipt-adjustment-unsaved',
+        'receipt-adjustment-NEW_ADJUSTMENT_RECORD',
+        'receipt-adjustment-duplicate'
+      ]
+      const results = targetIds.map((targetId) => {
+        window.location.hash = ''
+        const event = makeClickEvent(makeLink(targetId, itemSection.id))
+        controller.handleReviewTargetClick(event)
+        return { targetId, prevented: event.prevented, hash: window.location.hash }
+      })
+
+      process.stdout.write(JSON.stringify({
+        results,
+        fallbackScrolls: adjustmentSection.scrollCount,
+        openedRows: rows.filter((row) => row.panel.classList.contains('is-open')).map((row) => row.id),
+        focusedToggles: rows.flatMap((row) => row.toggles).reduce((sum, toggle) => sum + toggle.focusCount, 0),
+        fetchCount
+      }))
+    JAVASCRIPT
+
+    aggregate_failures do
+      expect(result["results"]).to all(include(
+        "prevented" => true,
+        "hash" => "#receipt-section-adjustments"
+      ))
+      expect(result).to include(
+        "fallbackScrolls" => 7,
+        "openedRows" => [],
+        "focusedToggles" => 0,
+        "fetchCount" => 0
+      )
+    end
+  end
+
+  it "restores adjustment targets idempotently across Turbo cache and Stimulus reconnects" do
+    result = run_review_target_script(<<~JAVASCRIPT)
+      const target = makeRow({ id: 'receipt-adjustment-42', type: 'adjustment' })
+      const controller = makeController()
+      controller.syncQuantityInputSteps = () => {}
+      controller.syncAdjustmentSigns = () => {}
+      controller.captureInitialReceiptAmounts = () => {}
+      controller.captureInitialPurchaseInputFingerprint = () => {}
+      controller.syncPaymentSummaryLayout = () => {}
+      controller.clearLineTotalTooltipTimer = () => {}
+      controller.amountAnimationTargets = () => []
+
+      window.location.hash = '#receipt-adjustment-42'
+      controller.connect()
+      const firstListenerCounts = {
+        beforeCache: listeners.document.has('turbo:before-cache') ? 1 : 0,
+        click: listeners.element.has('click') ? 1 : 0,
+        hashchange: listeners.window.has('hashchange') ? 1 : 0
+      }
+      listeners.document.get('turbo:before-cache')()
+      controller.disconnect()
+      const disconnectedListenerCount = listeners.document.size + listeners.element.size + listeners.window.size
+      controller.connect()
+      const secondListenerCounts = {
+        beforeCache: listeners.document.has('turbo:before-cache') ? 1 : 0,
+        click: listeners.element.has('click') ? 1 : 0,
+        hashchange: listeners.window.has('hashchange') ? 1 : 0
+      }
+      target.scrollCount = 0
+      listeners.window.get('hashchange')()
+
+      process.stdout.write(JSON.stringify({
+        firstListenerCounts,
+        disconnectedListenerCount,
+        secondListenerCounts,
+        targetOpen: target.panel.classList.contains('is-open'),
+        targetFocus: target.toggles.reduce((sum, toggle) => sum + toggle.focusCount, 0),
+        hashchangeScrolls: target.scrollCount,
+        fetchCount
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "firstListenerCounts" => { "beforeCache" => 1, "click" => 1, "hashchange" => 1 },
+      "disconnectedListenerCount" => 0,
+      "secondListenerCounts" => { "beforeCache" => 1, "click" => 1, "hashchange" => 1 },
+      "targetOpen" => true,
+      "targetFocus" => 0,
+      "hashchangeScrolls" => 1,
+      "fetchCount" => 0
+    )
   end
 
   it "keeps persisted countable line total baselines immutable during recalculation" do

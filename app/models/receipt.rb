@@ -709,8 +709,17 @@ class Receipt < ApplicationRecord
     receipt_items.select(&:needs_review)
   end
 
+  def review_adjustments
+    receipt_adjustments.select do |adjustment|
+      adjustment.persisted? &&
+        !adjustment.marked_for_destruction? &&
+        adjustment.needs_review? &&
+        ReviewReasons.review_reasons_for_user(adjustment.review_reasons).any?
+    end
+  end
+
   def has_blocking_review_notes?
-    blocking_review_reason_labels.any? || review_items.any?
+    blocking_review_reason_labels.any? || review_items.any? || review_adjustments.any?
   end
 
   def has_warning_notes?

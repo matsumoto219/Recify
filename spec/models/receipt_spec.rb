@@ -348,6 +348,66 @@ RSpec.describe Receipt, type: :model do
     end
   end
 
+  describe '#review_adjustments' do
+    it 'persistedかつ削除予定でない要確認調整行のうちユーザー向け理由を持つものだけを返す' do
+      receipt = create(:receipt)
+      target = create(
+        :receipt_adjustment,
+        receipt: receipt,
+        needs_review: true,
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+      not_review_needed = create(
+        :receipt_adjustment,
+        receipt: receipt,
+        needs_review: false,
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+      system_only = create(
+        :receipt_adjustment,
+        receipt: receipt,
+        needs_review: true,
+        review_reasons: [ 'analysis_missing_keys', 'unknown_reason' ]
+      )
+      destroyed = create(
+        :receipt_adjustment,
+        receipt: receipt,
+        needs_review: true,
+        review_reasons: [ 'adjustment_tax_rate_missing' ]
+      )
+
+      receipt.reload
+      receipt.receipt_adjustments.find { |adjustment| adjustment.id == destroyed.id }.mark_for_destruction
+      unsaved = receipt.receipt_adjustments.build(
+        kind: 'coupon',
+        amount: 100,
+        sign: 'discount',
+        source: 'manual',
+        needs_review: true,
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+
+      aggregate_failures do
+        expect(receipt.review_adjustments).to eq([ target ])
+        expect(receipt.review_adjustments).not_to include(not_review_needed, system_only, destroyed, unsaved)
+      end
+    end
+
+    it '対象調整行だけでもblocking review notesを持つと判定する' do
+      receipt = create(:receipt, review_reasons: [])
+      create(
+        :receipt_adjustment,
+        receipt: receipt,
+        needs_review: true,
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+
+      receipt.reload
+
+      expect(receipt.has_blocking_review_notes?).to be(true)
+    end
+  end
+
   describe 'Receipts::SummaryQuery headline compatibility' do
     it 'user scopeを適用しstatus別件数を返す' do
       user = create(:user)

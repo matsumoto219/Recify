@@ -37,6 +37,7 @@ import {
 const DEFAULT_AMOUNT_MAX = 999999999
 const LINE_TOTAL_TOOLTIP_DELAY_MS = 500
 const CONTINUOUS_AMOUNT_UPDATE_THRESHOLD_MS = 150
+const REVIEW_TARGET_CLICK_SCROLL_DELAY_MS = 1000
 
 export default class extends Controller {
   static targets = [
@@ -129,7 +130,9 @@ export default class extends Controller {
     receiptAdjustmentAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
     receiptPaymentAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
     reviewItemTargetPrefix: String,
-    reviewItemsTarget: String
+    reviewItemsTarget: String,
+    reviewAdjustmentTargetPrefix: String,
+    reviewAdjustmentsTarget: String
   }
 
   connect () {
@@ -149,12 +152,14 @@ export default class extends Controller {
     this.captureInitialPurchaseInputFingerprint()
     this.syncPaymentSummaryLayout()
     this.expandItemDetailsFromHash()
+    this.expandAdjustmentDetailsFromHash()
   }
 
   disconnect () {
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     this.element.removeEventListener('click', this.handleReviewTargetClick)
     window.removeEventListener('hashchange', this.handleHashChange)
+    this.clearReviewTargetScrollTimer()
     this.itemRowTargets.forEach((row) => this.clearLineTotalTooltipTimer(row))
     this.amountAnimationTargets().forEach((target) => this.cancelAmountAnimation(target))
   }
@@ -378,22 +383,42 @@ export default class extends Controller {
     if (!url || !this.samePageReviewTargetUrl(url)) return
 
     const targetId = this.reviewTargetIdFromHash(url.hash)
-    if (!this.reviewItemTargetId(targetId)) return
+    if (this.reviewItemTargetId(targetId)) {
+      event.preventDefault()
 
-    event.preventDefault()
+      if (this.expandItemDetailsForReviewTarget(targetId, { scroll: true })) {
+        this.pushReviewTargetHash(targetId)
+        return
+      }
 
-    if (this.expandItemDetailsForReviewTarget(targetId, { scroll: true })) {
-      this.pushReviewTargetHash(targetId)
+      const fallbackTargetId = link.dataset.reviewReasonTarget || this.reviewItemsTargetValue
+      this.pushReviewTargetHash(fallbackTargetId)
+      this.scrollReviewTargetFallback(fallbackTargetId)
       return
     }
 
-    const fallbackTargetId = link.dataset.reviewReasonTarget || this.reviewItemsTargetValue
-    this.pushReviewTargetHash(fallbackTargetId)
-    this.scrollReviewTargetFallback(fallbackTargetId)
+    if (!this.reviewAdjustmentTargetId(targetId)) return
+
+    event.preventDefault()
+    const scrollDelay = event.detail === 1 ? REVIEW_TARGET_CLICK_SCROLL_DELAY_MS : 0
+
+    if (this.expandAdjustmentDetailsForReviewTarget(targetId, { scroll: false, focus: true })) {
+      this.navigateReviewTargetHash(targetId)
+      this.scheduleReviewTargetScroll(document.getElementById(targetId), { delay: scrollDelay })
+      return
+    }
+
+    this.navigateReviewTargetHash(this.reviewAdjustmentsTargetValue)
+    this.scheduleReviewTargetScroll(
+      document.getElementById(this.reviewAdjustmentsTargetValue),
+      { block: 'start', delay: scrollDelay }
+    )
   }
 
   handleHashChange () {
+    this.clearReviewTargetScrollTimer()
     this.expandItemDetailsFromHash({ scroll: true })
+    this.expandAdjustmentDetailsFromHash({ scroll: true })
   }
 
   reviewTargetUrl (href) {
@@ -416,6 +441,12 @@ export default class extends Controller {
     return this.reviewItemTargetPrefixValue !== '' &&
       typeof targetId === 'string' &&
       targetId.startsWith(this.reviewItemTargetPrefixValue)
+  }
+
+  reviewAdjustmentTargetId (targetId) {
+    return this.reviewAdjustmentTargetPrefixValue !== '' &&
+      typeof targetId === 'string' &&
+      targetId.startsWith(this.reviewAdjustmentTargetPrefixValue)
   }
 
   expandItemDetailsFromHash ({ scroll = true } = {}) {
@@ -463,6 +494,74 @@ export default class extends Controller {
     return destroyField?.value !== '1'
   }
 
+  expandAdjustmentDetailsFromHash ({ scroll = true } = {}) {
+    const targetId = this.currentReviewTargetId()
+    if (!this.reviewAdjustmentTargetId(targetId)) return false
+
+    const expanded = this.expandAdjustmentDetailsForReviewTarget(targetId, { scroll })
+    if (!expanded && scroll) this.scrollReviewAdjustmentTargetFallback()
+    return expanded
+  }
+
+  expandAdjustmentDetailsForReviewTarget (targetId, { scroll = true, focus = false } = {}) {
+    const row = this.reviewAdjustmentRowForTarget(targetId)
+    if (!this.reviewAdjustmentRowVisible(row)) return false
+
+    const panel = row.querySelector('[data-receipt-form-target="adjustmentDetailsPanel"]')
+    const toggles = row.querySelectorAll('[data-receipt-form-target="adjustmentDetailsToggle"]')
+    const icons = row.querySelectorAll('[data-receipt-form-target="adjustmentDetailsIcon"]')
+    if (!panel) return false
+
+    this.setAdjustmentDetailsOpen({ row, panel, toggles, icons, open: true })
+    if (scroll) this.scrollReviewTargetIntoView(row)
+    if (focus) this.focusVisibleAdjustmentDetailsToggle(row)
+
+    return true
+  }
+
+  reviewAdjustmentRowForTarget (targetId) {
+    const rows = this.adjustmentRowTargets.filter((row) => (
+      row.id === targetId &&
+      this.element.contains(row) &&
+      row.matches('[data-receipt-review-adjustment-row="true"]')
+    ))
+
+    return rows.length === 1 ? rows[0] : null
+  }
+
+  reviewAdjustmentRowVisible (row) {
+    if (!row?.isConnected) return false
+    if (row.style.display === 'none') return false
+
+    const rowContainer = this.adjustmentRowContainer(row)
+    if (rowContainer !== row && rowContainer.style.display === 'none') return false
+
+    const destroyField = row.querySelector('[data-receipt-form-target="adjustmentDestroyField"]')
+    return destroyField?.value !== '1'
+  }
+
+  focusVisibleAdjustmentDetailsToggle (row) {
+    window.requestAnimationFrame(() => {
+      if (!row?.isConnected || !this.element.contains(row)) return
+
+      const toggle = Array.from(
+        row.querySelectorAll('[data-receipt-form-target="adjustmentDetailsToggle"]')
+      ).find((candidate) => this.reviewTargetToggleVisible(candidate))
+      if (!toggle) return
+
+      toggle.focus({ preventScroll: true })
+    })
+  }
+
+  reviewTargetToggleVisible (toggle) {
+    if (!toggle || toggle.hidden) return false
+
+    const style = window.getComputedStyle(toggle)
+    if (style.display === 'none' || style.visibility === 'hidden') return false
+
+    return toggle.getClientRects().length > 0
+  }
+
   pushReviewTargetHash (targetId) {
     if (!targetId || typeof window.history?.pushState !== 'function') return
 
@@ -472,8 +571,44 @@ export default class extends Controller {
     window.history.pushState(null, '', hash)
   }
 
+  navigateReviewTargetHash (targetId) {
+    if (!targetId) return
+
+    const hash = reviewTargetHash(targetId)
+    if (window.location.hash === hash) return
+
+    if (typeof window.history?.pushState === 'function') {
+      window.history.pushState(window.history.state, '', hash)
+      return
+    }
+
+    window.location.hash = hash
+  }
+
+  scheduleReviewTargetScroll (target, { block = 'center', delay = REVIEW_TARGET_CLICK_SCROLL_DELAY_MS } = {}) {
+    this.clearReviewTargetScrollTimer()
+    if (!target || typeof target.scrollIntoView !== 'function') return
+
+    this.reviewTargetScrollTimer = window.setTimeout(() => {
+      this.reviewTargetScrollTimer = null
+      this.scrollReviewTargetIntoView(target, { block })
+    }, delay)
+  }
+
+  clearReviewTargetScrollTimer () {
+    if (this.reviewTargetScrollTimer == null) return
+
+    window.clearTimeout(this.reviewTargetScrollTimer)
+    this.reviewTargetScrollTimer = null
+  }
+
   scrollReviewTargetFallback (targetId = this.reviewItemsTargetValue) {
     const fallback = document.getElementById(targetId) || document.getElementById(this.reviewItemsTargetValue)
+    this.scrollReviewTargetIntoView(fallback, { block: 'start' })
+  }
+
+  scrollReviewAdjustmentTargetFallback () {
+    const fallback = document.getElementById(this.reviewAdjustmentsTargetValue)
     this.scrollReviewTargetIntoView(fallback, { block: 'start' })
   }
 

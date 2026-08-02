@@ -37,10 +37,106 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
   end
 
   def expect_mobile_viewport_without_horizontal_overflow
-    expect(page.evaluate_script("window.innerWidth")).to eq(390)
+    expect_viewport_without_horizontal_overflow(390)
+  end
+
+  def expect_viewport_without_horizontal_overflow(width)
+    expect(page.evaluate_script("window.innerWidth")).to eq(width)
     expect(
       page.evaluate_script("document.documentElement.scrollWidth <= window.innerWidth")
     ).to be(true)
+  end
+
+  def set_viewport(width:, height:, mobile:)
+    page.driver.browser.execute_cdp(
+      "Emulation.setDeviceMetricsOverride",
+      width: width,
+      height: height,
+      deviceScaleFactor: 1,
+      mobile: mobile
+    )
+  end
+
+  def receipt_adjustment_target_id(adjustment)
+    "receipt-adjustment-#{adjustment.id}"
+  end
+
+  def receipt_adjustment_row(adjustment)
+    find("##{receipt_adjustment_target_id(adjustment)}")
+  end
+
+  def expect_adjustment_row_expanded(row, target_id)
+    panel_id = "#{target_id}-details"
+
+    aggregate_failures do
+      expect(row).to have_css(
+        "[data-receipt-form-target='adjustmentDetailsPanel']##{panel_id}.is-open[aria-hidden='false']:not([inert])",
+        visible: :all
+      )
+      expect(row).to have_css(
+        "[data-receipt-form-target='adjustmentDetailsToggle'][aria-controls='#{panel_id}'][aria-expanded='true']",
+        count: 2,
+        visible: :all
+      )
+    end
+  end
+
+  def expect_adjustment_row_collapsed(row, target_id)
+    panel_id = "#{target_id}-details"
+
+    aggregate_failures do
+      expect(row).to have_css(
+        "[data-receipt-form-target='adjustmentDetailsPanel']##{panel_id}[aria-hidden='true'][inert]:not(.is-open)",
+        visible: :all
+      )
+      expect(row).to have_css(
+        "[data-receipt-form-target='adjustmentDetailsToggle'][aria-controls='#{panel_id}'][aria-expanded='false']",
+        count: 2,
+        visible: :all
+      )
+    end
+  end
+
+  def visible_adjustment_toggle(row)
+    row.find("[data-receipt-form-target='adjustmentDetailsToggle']", visible: true)
+  end
+
+  def element_has_focus?(element)
+    page.evaluate_script("document.activeElement === arguments[0]", element)
+  end
+
+  def expect_visible_adjustment_toggle_focused(row)
+    expect(row).to have_css(
+      "[data-receipt-form-target='adjustmentDetailsToggle']:focus",
+      visible: true
+    )
+  end
+
+  def wait_for_visual_motion_to_finish(element)
+    settled = page.evaluate_async_script(<<~JAVASCRIPT, element, Capybara.default_max_wait_time * 1000)
+      const target = arguments[0]
+      const timeoutMilliseconds = arguments[1]
+      const done = arguments[arguments.length - 1]
+      let completed = false
+
+      const finish = (result) => {
+        if (completed) return
+
+        completed = true
+        done(result)
+      }
+
+      window.setTimeout(() => finish(false), timeoutMilliseconds)
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const animations = target.getAnimations({ subtree: true })
+          Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)))
+            .then(() => finish(true))
+        })
+      })
+    JAVASCRIPT
+
+    expect(settled).to be(true), "CSS motion did not finish"
   end
 
   def click_mobile_save_button
@@ -216,11 +312,280 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
       visible: :all
     )
     expect(page.evaluate_script("window.location.hash")).to eq("##{target_id}")
+    expect(element_has_focus?(item_row.find(toggle_selector, visible: true))).to be(false)
 
     tax_rate_input = item_row.find("[data-receipt-form-target='taxRateInput']")
     tax_rate_input.set("8")
     expect(tax_rate_input.value).to eq("8")
 
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
+  it "review reasonリンクから対象調整行だけを展開し、既存の展開状態とARIAを維持する" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "調整レビュー対象店",
+      purchased_at: Time.zone.local(2026, 7, 12, 12, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 100,
+      tax_amount: 10,
+      total_amount: 110
+    )
+    receipt.receipt_items.create!(
+      raw_text: "展開維持商品",
+      confirmed_name: "展開維持商品",
+      price: 110,
+      quantity: 1,
+      quantity_unit_code: "each",
+      tax_rate: BigDecimal("0.1"),
+      line_total: 110,
+      needs_review: false,
+      review_reasons: []
+    )
+    first_review_adjustment = create(
+      :receipt_adjustment,
+      receipt: receipt,
+      label: "要確認調整A",
+      needs_review: true,
+      review_reasons: [ "adjustment_uncertain" ],
+      position_index: 1
+    )
+    second_review_adjustment = create(
+      :receipt_adjustment,
+      receipt: receipt,
+      label: "要確認調整B",
+      needs_review: true,
+      review_reasons: [ "adjustment_uncertain" ],
+      position_index: 2
+    )
+    already_open_adjustment = create(
+      :receipt_adjustment,
+      receipt: receipt,
+      label: "手動展開済み調整",
+      position_index: 3
+    )
+    untouched_adjustment = create(
+      :receipt_adjustment,
+      receipt: receipt,
+      label: "未展開調整",
+      position_index: 4
+    )
+    receipt.update!(status: "review_needed", review_reasons: [])
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    expanded_item_row = expanded_receipt_item_row
+    already_open_row = receipt_adjustment_row(already_open_adjustment)
+    visible_adjustment_toggle(already_open_row).click
+    already_open_target_id = receipt_adjustment_target_id(already_open_adjustment)
+    expect_adjustment_row_expanded(already_open_row, already_open_target_id)
+
+    review_card = find("[data-receipt-review-notes-card]")
+    review_card.find("[data-receipt-notes-summary]").click
+
+    first_target_id = receipt_adjustment_target_id(first_review_adjustment)
+    first_target_link = review_card.find(
+      "a[data-review-reason-target-adjustment='#{first_target_id}']"
+    )
+    first_target_link.click
+
+    first_row = receipt_adjustment_row(first_review_adjustment)
+    second_row = receipt_adjustment_row(second_review_adjustment)
+    untouched_row = receipt_adjustment_row(untouched_adjustment)
+    expect_adjustment_row_expanded(first_row, first_target_id)
+    expect_adjustment_row_expanded(already_open_row, already_open_target_id)
+    expect(expanded_item_row).to have_css(
+      "[data-receipt-form-target='itemDetailsPanel'].is-open[aria-hidden='false']:not([inert])",
+      visible: :all
+    )
+    expect_adjustment_row_collapsed(
+      second_row,
+      receipt_adjustment_target_id(second_review_adjustment)
+    )
+    expect_adjustment_row_collapsed(
+      untouched_row,
+      receipt_adjustment_target_id(untouched_adjustment)
+    )
+    expect(page.evaluate_script("window.location.hash")).to eq("##{first_target_id}")
+    expect_visible_adjustment_toggle_focused(first_row)
+
+    second_target_id = receipt_adjustment_target_id(second_review_adjustment)
+    review_card.find(
+      "a[data-review-reason-target-adjustment='#{second_target_id}']"
+    ).send_keys(:enter)
+
+    expect_adjustment_row_expanded(second_row, second_target_id)
+    expect_adjustment_row_expanded(first_row, first_target_id)
+    expect_adjustment_row_expanded(already_open_row, already_open_target_id)
+    expect_adjustment_row_collapsed(
+      untouched_row,
+      receipt_adjustment_target_id(untouched_adjustment)
+    )
+    expect(page.evaluate_script("window.location.hash")).to eq("##{second_target_id}")
+    expect_visible_adjustment_toggle_focused(second_row)
+
+    page.execute_script("document.activeElement?.blur()")
+    page.go_back
+    expect(page.evaluate_script("window.location.hash")).to eq("##{first_target_id}")
+    expect_adjustment_row_expanded(first_row, first_target_id)
+    expect_adjustment_row_expanded(second_row, second_target_id)
+    expect(element_has_focus?(visible_adjustment_toggle(first_row))).to be(false)
+
+    page.go_forward
+    expect(page.evaluate_script("window.location.hash")).to eq("##{second_target_id}")
+    expect_adjustment_row_expanded(first_row, first_target_id)
+    expect_adjustment_row_expanded(second_row, second_target_id)
+    expect(element_has_focus?(visible_adjustment_toggle(second_row))).to be(false)
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
+  it "direct hashでは調整行を展開してもfocusを移動しない" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "直接リンク確認店",
+      purchased_at: Time.zone.local(2026, 7, 12, 12, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 100,
+      tax_amount: 10,
+      total_amount: 110
+    )
+    adjustment = create(
+      :receipt_adjustment,
+      receipt: receipt,
+      label: "直接リンク対象調整",
+      needs_review: true,
+      review_reasons: [ "adjustment_uncertain" ]
+    )
+    receipt.update!(status: "review_needed", review_reasons: [])
+
+    sign_in_through_browser(user)
+    set_viewport(width: 1440, height: 1000, mobile: false)
+    target_id = receipt_adjustment_target_id(adjustment)
+    visit "#{edit_receipt_path(receipt)}##{target_id}"
+    wait_for_stimulus_controller("receipt-form")
+
+    row = receipt_adjustment_row(adjustment)
+    toggle = visible_adjustment_toggle(row)
+    expect_adjustment_row_expanded(row, target_id)
+    expect(page.evaluate_script("window.location.hash")).to eq("##{target_id}")
+    expect(element_has_focus?(toggle)).to be(false)
+    expect_viewport_without_horizontal_overflow(1440)
+
+    review_card = find("[data-receipt-review-notes-card]")
+    review_card.find("[data-receipt-notes-summary]").click
+    review_card.find("a[data-review-reason-target-adjustment='#{target_id}']").click
+
+    expect_adjustment_row_expanded(row, target_id)
+    expect_visible_adjustment_toggle_focused(row)
+    expect_viewport_without_horizontal_overflow(1440)
+    expect_browser_console_clean
+  end
+
+  it "調整行のreview reasonリンクをダブルクリックしてもフォームを送信しない" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "ダブルクリック確認店",
+      purchased_at: Time.zone.local(2026, 7, 12, 12, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 100,
+      tax_amount: 10,
+      total_amount: 110
+    )
+    adjustment = create(
+      :receipt_adjustment,
+      receipt: receipt,
+      label: "ダブルクリック対象調整",
+      needs_review: true,
+      review_reasons: [ "adjustment_uncertain" ]
+    )
+    receipt.update!(status: "review_needed", review_reasons: [])
+    lock_version = receipt.lock_version
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    target_id = receipt_adjustment_target_id(adjustment)
+    review_card = find("[data-receipt-review-notes-card]")
+    review_card.find("[data-receipt-notes-summary]").click
+    wait_for_visual_motion_to_finish(review_card)
+    target_link = review_card.find("a[data-review-reason-target-adjustment='#{target_id}']")
+    page.driver.browser.action.move_to(target_link.native).click.pause(duration: 0.2).click.perform
+
+    expect(page).to have_current_path(edit_receipt_path(receipt), ignore_query: true)
+    expect(page.evaluate_script("window.location.hash")).to eq("##{target_id}")
+    expect(receipt.reload.lock_version).to eq(lock_version)
+    expect_adjustment_row_expanded(receipt_adjustment_row(adjustment), target_id)
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
+  it "調整行のhashから別画面へ移動して戻っても編集画面を復元する" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "履歴復元確認店",
+      purchased_at: Time.zone.local(2026, 7, 13, 12, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 100,
+      tax_amount: 10,
+      total_amount: 110
+    )
+    adjustment = create(
+      :receipt_adjustment,
+      receipt: receipt,
+      label: "履歴復元対象調整",
+      needs_review: true,
+      review_reasons: [ "adjustment_uncertain" ]
+    )
+    second_adjustment = create(
+      :receipt_adjustment,
+      receipt: receipt,
+      label: "履歴復元対象調整2",
+      needs_review: true,
+      review_reasons: [ "adjustment_uncertain" ]
+    )
+    receipt.update!(status: "review_needed", review_reasons: [])
+
+    sign_in_through_browser(user)
+    target_id = receipt_adjustment_target_id(adjustment)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    review_card = find("[data-receipt-review-notes-card]")
+    review_card.find("[data-receipt-notes-summary]").click
+    review_card.find("a[data-review-reason-target-adjustment='#{target_id}']").click
+    second_target_id = receipt_adjustment_target_id(second_adjustment)
+    review_card.find("a[data-review-reason-target-adjustment='#{second_target_id}']").click
+    review_card.find("a[data-review-reason-target-adjustment='#{target_id}']").click
+    expect(page.evaluate_script("window.location.hash")).to eq("##{target_id}")
+    expect(page.evaluate_script("Boolean(window.history.state?.turbo)")).to be(true)
+
+    find("a[href='#{settings_path}']", visible: true).click
+    expect(page).to have_current_path(settings_path)
+
+    page.go_back
+    expect(page).to have_current_path(edit_receipt_path(receipt), ignore_query: true)
+    wait_for_stimulus_controller("receipt-form")
+
+    row = receipt_adjustment_row(adjustment)
+    expect_adjustment_row_expanded(row, target_id)
+    expect(element_has_focus?(visible_adjustment_toggle(row))).to be(false)
     expect_mobile_viewport_without_horizontal_overflow
     expect_browser_console_clean
   end
