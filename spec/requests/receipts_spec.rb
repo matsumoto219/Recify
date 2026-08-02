@@ -5809,6 +5809,61 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '同じreview reasonを持つ複数の調整行はshow画面からそれぞれの行へ遷移できる' do
+      review_adjustments = [
+        create(
+          :receipt_adjustment,
+          receipt: receipt,
+          label: '要確認配送料',
+          needs_review: true,
+          review_reasons: [ 'adjustment_uncertain' ]
+        ),
+        create(
+          :receipt_adjustment,
+          receipt: receipt,
+          kind: 'service_charge',
+          label: '要確認サービス料',
+          needs_review: true,
+          review_reasons: [ 'adjustment_uncertain' ]
+        )
+      ]
+      create(
+        :receipt_adjustment,
+        receipt: receipt,
+        kind: 'handling_fee',
+        label: '内部理由のみ',
+        needs_review: true,
+        review_reasons: [ 'analysis_missing_keys', 'unknown_reason' ]
+      )
+      receipt.update!(status: 'review_needed', review_reasons: [])
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      review_card = document.at_css('[data-receipt-review-notes-card]')
+      links = review_card&.css(
+        'a[data-review-reason-target-link][data-review-reason-code="adjustment_uncertain"]' \
+        '[data-review-reason-target-adjustment]'
+      ) || []
+      target_ids = review_adjustments.map do |adjustment|
+        "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENT_ID_PREFIX}#{adjustment.id}"
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(review_card).to be_present
+        expect(review_card.at_css('[data-receipt-notes-summary]').text).to include('2件')
+        expect(links.size).to eq(2)
+        expect(links.map { |link| link['data-review-reason-target-adjustment'] }).to match_array(target_ids)
+        expect(links.map { |link| link['href'] }).to match_array(
+          target_ids.map { |target_id| "#{edit_receipt_path(receipt, from: 'show')}##{target_id}" }
+        )
+        expect(links).to all(satisfy { |link| link['data-turbo'] == 'false' })
+        expect(review_card.text).to include('要確認配送料', '要確認サービス料')
+        expect(review_card.text).not_to include('analysis_missing_keys', 'unknown_reason', '内部理由のみ')
+      end
+    end
+
     it 'review_neededかつamount blockingのレシートはreview cardを表示する' do
       receipt.update!(
         status: 'review_needed',
@@ -6482,6 +6537,31 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it 'receipt-levelのadjustment reasonは調整行を推測せずsectionへ遷移する' do
+      create(
+        :receipt_adjustment,
+        receipt: receipt,
+        needs_review: false,
+        review_reasons: []
+      )
+      receipt.update!(status: 'review_needed', review_reasons: [ 'adjustment_uncertain' ])
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      target_link = document.at_css(
+        'a[data-review-reason-target-link][data-review-reason-code="adjustment_uncertain"]'
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(target_link).to be_present
+        expect(target_link['href']).to eq("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS}")
+        expect(target_link['data-review-reason-anchor-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS)
+        expect(target_link['data-review-reason-target-adjustment']).to be_nil
+      end
+    end
+
     it '明細ごとのreview reasonは編集画面で該当明細行anchorを持つ' do
       review_item = receipt.receipt_items.create!(
         confirmed_name: '要確認商品',
@@ -6517,6 +6597,49 @@ RSpec.describe 'Receipts', type: :request do
         expect(target_link['data-review-reason-anchor-target']).to eq(target_id)
         expect(template_html).not_to include('data-receipt-review-item-row="true"')
         expect(template_html).not_to include('id="receipt-item-')
+      end
+    end
+
+    it '調整行ごとのreview reasonは編集画面でstableなrowとpanel anchorを持つ' do
+      review_adjustment = create(
+        :receipt_adjustment,
+        receipt: receipt,
+        label: '要確認配送料',
+        needs_review: true,
+        review_reasons: [ 'adjustment_tax_rate_missing' ]
+      )
+      receipt.update!(status: 'review_needed', review_reasons: [])
+
+      get edit_receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      target_id = "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENT_ID_PREFIX}#{review_adjustment.id}"
+      panel_id = "#{target_id}-details"
+      adjustment_row = document.at_css("##{target_id}")
+      target_link = document.at_css("a[data-review-reason-target-adjustment='#{target_id}']")
+      details_panel = adjustment_row&.at_css('[data-receipt-form-target="adjustmentDetailsPanel"]')
+      details_toggles = adjustment_row&.css('[data-receipt-form-target="adjustmentDetailsToggle"]') || []
+      template_html = document.at_css('template[data-receipt-form-target="adjustmentTemplate"]')&.inner_html.to_s
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(adjustment_row).to be_present
+        expect(adjustment_row['data-receipt-review-adjustment-row']).to eq('true')
+        expect(details_panel['id']).to eq(panel_id)
+        expect(details_panel['aria-hidden']).to eq('true')
+        expect(details_panel.attribute('inert')).to be_present
+        expect(details_panel['class']).not_to include('is-open')
+        expect(details_toggles.size).to eq(2)
+        expect(details_toggles).to all(satisfy do |toggle|
+          toggle['aria-controls'] == panel_id && toggle['aria-expanded'] == 'false'
+        end)
+        expect(target_link).to be_present
+        expect(target_link['data-turbo']).to eq('false')
+        expect(target_link['href']).to eq("##{target_id}")
+        expect(target_link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS)
+        expect(target_link['data-review-reason-anchor-target']).to eq(target_id)
+        expect(template_html).not_to include('data-receipt-review-adjustment-row="true"')
+        expect(template_html).not_to include('id="receipt-adjustment-')
       end
     end
 

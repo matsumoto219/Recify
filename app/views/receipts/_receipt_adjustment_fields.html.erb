@@ -16,6 +16,8 @@
   selected_sign = row_state.selected_sign
   other_kind = row_state.other_kind?
   tax_rate_value = row_state.tax_rate_value
+  adjustment_target_id = receipt_review_adjustment_target_id(adjustment)
+  adjustment_panel_id = receipt_review_adjustment_panel_id(adjustment) || adjustment_form.field_id(:details)
 %>
 
 <div class="swipe-action rounded-lg"
@@ -36,6 +38,7 @@
        data-swipe-action-target="foreground"
        data-action="pointerdown->swipe-action#start pointermove->swipe-action#move pointerup->swipe-action#end pointercancel->swipe-action#cancel">
     <div class="grid grid-cols-2 md:grid-cols-12 gap-4 items-center rounded-lg border border-transparent receipt-form-adjustment-row p-3 transition-colors relative min-w-0"
+         <% if adjustment_target_id.present? %> id="<%= adjustment_target_id %>" data-receipt-review-adjustment-row="true"<% end %>
          data-receipt-form-target="adjustmentRow"
          data-receipt-form-adjustment-effect="<%= row_state.calculation_effect %>"
          data-receipt-form-adjustment-source-payment="<%= row_state.source_text_payment_adjustment? %>"
@@ -65,6 +68,7 @@
               class="ui-touch-control receipt-form-adjustment-mobile-name-toggle flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border token-border-soft token-bg-input token-text-muted transition-colors md:hidden"
               data-action="click->receipt-form#toggleAdjustmentDetails"
               data-receipt-form-target="adjustmentDetailsToggle"
+              aria-controls="<%= adjustment_panel_id %>"
               aria-expanded="false"
               aria-label="<%= t("receipts.adjustment_fields.details_aria") %>">
         <span class="material-symbols-outlined text-lg transition-transform duration-150" data-receipt-form-target="adjustmentDetailsIcon">expand_more</span>
@@ -133,6 +137,7 @@
             class="ui-touch-control flex h-10 w-full cursor-pointer items-center justify-center gap-1 rounded-lg border token-border-soft token-bg-input token-text-muted transition-colors md:w-10"
             data-action="click->receipt-form#toggleAdjustmentDetails"
             data-receipt-form-target="adjustmentDetailsToggle"
+            aria-controls="<%= adjustment_panel_id %>"
             aria-expanded="false"
             aria-label="<%= t("receipts.adjustment_fields.details_aria") %>">
       <span class="text-xs font-bold md:sr-only"><%= t("receipts.adjustment_fields.details") %></span>
@@ -149,7 +154,7 @@
     </button>
   </div>
 
-  <div class="col-span-2 md:col-span-12 collapsible-grid" data-receipt-form-target="adjustmentDetailsPanel" aria-hidden="true" inert>
+  <div id="<%= adjustment_panel_id %>" class="col-span-2 md:col-span-12 collapsible-grid" data-receipt-form-target="adjustmentDetailsPanel" aria-hidden="true" inert>
     <div class="collapsible-grid-inner min-w-0">
       <div class="grid grid-cols-2 md:grid-cols-12 gap-4 p-0 md:rounded-lg md:border token-border-default md:p-3">
         <div class="col-span-2 md:col-span-3">

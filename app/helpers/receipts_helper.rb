@@ -1,5 +1,5 @@
 module ReceiptsHelper
-  ReceiptNotesState = Struct.new(:groups, :items, :count, keyword_init: true)
+  ReceiptNotesState = Struct.new(:groups, :items, :adjustments, :count, keyword_init: true)
   AmountSummaryTaxDetailRow = Struct.new(
     :rate_label,
     :amount_display,
@@ -17,6 +17,8 @@ module ReceiptsHelper
   RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW = "receipt-section-image-preview".freeze
   RECEIPT_REVIEW_TARGET_ITEM_PREFIX = "receipt-item".freeze
   RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX = "#{RECEIPT_REVIEW_TARGET_ITEM_PREFIX}-".freeze
+  RECEIPT_REVIEW_TARGET_ADJUSTMENT_PREFIX = "receipt-adjustment".freeze
+  RECEIPT_REVIEW_TARGET_ADJUSTMENT_ID_PREFIX = "#{RECEIPT_REVIEW_TARGET_ADJUSTMENT_PREFIX}-".freeze
 
   REVIEW_REASON_TARGET_ANCHORS = {
     "store_name_missing" => RECEIPT_REVIEW_TARGET_BASIC_INFO,
@@ -229,30 +231,47 @@ module ReceiptsHelper
     "#{RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX}#{item.id}"
   end
 
-  def review_reason_target_anchor(reason, item: nil)
+  def receipt_review_adjustment_target_id(adjustment)
+    return nil unless adjustment.respond_to?(:id) && adjustment.id.present?
+    return nil unless adjustment.respond_to?(:persisted?) && adjustment.persisted?
+    return nil if adjustment.respond_to?(:marked_for_destruction?) && adjustment.marked_for_destruction?
+
+    "#{RECEIPT_REVIEW_TARGET_ADJUSTMENT_ID_PREFIX}#{adjustment.id}"
+  end
+
+  def receipt_review_adjustment_panel_id(adjustment)
+    target_id = receipt_review_adjustment_target_id(adjustment)
+    "#{target_id}-details" if target_id.present?
+  end
+
+  def review_reason_target_anchor(reason, item: nil, adjustment: nil)
     target = review_reason_target(reason)
     return nil if target.blank?
 
     item_target = receipt_review_item_target_id(item)
     return item_target if target == RECEIPT_REVIEW_TARGET_ITEMS && item_target.present?
 
+    adjustment_target = receipt_review_adjustment_target_id(adjustment)
+    return adjustment_target if target == RECEIPT_REVIEW_TARGET_ADJUSTMENTS && adjustment_target.present?
+
     target
   end
 
-  def review_reason_target_path(reason, base_path: nil, item: nil)
-    target = review_reason_target_anchor(reason, item: item)
+  def review_reason_target_path(reason, base_path: nil, item: nil, adjustment: nil)
+    target = review_reason_target_anchor(reason, item: item, adjustment: adjustment)
     return nil if target.blank?
 
     base_path.present? ? "#{base_path}##{target}" : "##{target}"
   end
 
-  def review_reason_target_link(reason, base_path: nil, variant: :primary, item: nil)
-    target_path = review_reason_target_path(reason, base_path: base_path, item: item)
+  def review_reason_target_link(reason, base_path: nil, variant: :primary, item: nil, adjustment: nil)
+    target_path = review_reason_target_path(reason, base_path: base_path, item: item, adjustment: adjustment)
     return nil if target_path.blank?
 
     target = review_reason_target(reason)
-    anchor_target = review_reason_target_anchor(reason, item: item)
+    anchor_target = review_reason_target_anchor(reason, item: item, adjustment: adjustment)
     item_target = receipt_review_item_target_id(item)
+    adjustment_target = receipt_review_adjustment_target_id(adjustment)
     data = {
       turbo: false,
       review_reason_target_link: true,
@@ -261,6 +280,9 @@ module ReceiptsHelper
       review_reason_anchor_target: anchor_target
     }
     data[:review_reason_target_item] = item_target if item_target.present? && anchor_target == item_target
+    if adjustment_target.present? && anchor_target == adjustment_target
+      data[:review_reason_target_adjustment] = adjustment_target
+    end
 
     render(
       "shared/ui/actions/button",
@@ -277,11 +299,13 @@ module ReceiptsHelper
   def receipt_review_notes_state(receipt)
     groups = grouped_receipt_review_reasons(receipt.blocking_review_reason_codes)
     items = receipt.review_items
+    adjustments = receipt.review_adjustments
 
     ReceiptNotesState.new(
       groups: groups,
       items: items,
-      count: groups.values.sum(&:size) + items.size
+      adjustments: adjustments,
+      count: groups.values.sum(&:size) + items.size + adjustments.size
     )
   end
 
@@ -291,6 +315,7 @@ module ReceiptsHelper
     ReceiptNotesState.new(
       groups: groups,
       items: [],
+      adjustments: [],
       count: groups.values.sum(&:size)
     )
   end

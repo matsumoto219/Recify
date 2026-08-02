@@ -126,12 +126,14 @@ RSpec.describe ReceiptsHelper, type: :helper do
   end
 
   describe '#receipt_review_notes_state' do
-    it 'groups blocking reasons and includes review items in the count' do
+    it 'groups blocking reasons and includes review items and adjustments in the count' do
       review_items = [ instance_double('ReceiptReviewItem'), instance_double('ReceiptReviewItem') ]
+      review_adjustments = [ instance_double('ReceiptReviewAdjustment'), instance_double('ReceiptReviewAdjustment') ]
       receipt = instance_double(
         Receipt,
         blocking_review_reason_codes: %w[item_name_uncertain tax_detail_mismatch],
-        review_items: review_items
+        review_items: review_items,
+        review_adjustments: review_adjustments
       )
 
       state = helper.receipt_review_notes_state(receipt)
@@ -140,7 +142,8 @@ RSpec.describe ReceiptsHelper, type: :helper do
         expect(state.groups[:ai]).to eq([ 'item_name_uncertain' ])
         expect(state.groups[:amount]).to eq([ 'tax_detail_mismatch' ])
         expect(state.items).to eq(review_items)
-        expect(state.count).to eq(4)
+        expect(state.adjustments).to eq(review_adjustments)
+        expect(state.count).to eq(6)
       end
     end
   end
@@ -158,7 +161,48 @@ RSpec.describe ReceiptsHelper, type: :helper do
         expect(state.groups[:ocr]).to eq([ 'ocr_low_confidence' ])
         expect(state.groups[:ai]).to eq([ 'item_tax_rate_uncertain' ])
         expect(state.items).to eq([])
+        expect(state.adjustments).to eq([])
         expect(state.count).to eq(2)
+      end
+    end
+  end
+
+  describe '#receipt_review_adjustment_target_id' do
+    it 'persisted adjustmentのstable row IDを返す' do
+      adjustment = instance_double(ReceiptAdjustment, id: 84, persisted?: true, marked_for_destruction?: false)
+
+      expect(helper.receipt_review_adjustment_target_id(adjustment)).to eq(
+        "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENT_ID_PREFIX}84"
+      )
+    end
+
+    it '未保存または削除予定のadjustmentにはrow IDを返さない' do
+      unsaved = instance_double(ReceiptAdjustment, id: 85, persisted?: false, marked_for_destruction?: false)
+      destroyed = instance_double(ReceiptAdjustment, id: 86, persisted?: true, marked_for_destruction?: true)
+
+      aggregate_failures do
+        expect(helper.receipt_review_adjustment_target_id(unsaved)).to be_nil
+        expect(helper.receipt_review_adjustment_target_id(destroyed)).to be_nil
+      end
+    end
+  end
+
+  describe '#receipt_review_adjustment_panel_id' do
+    it 'persisted adjustment rowに対応するstable panel IDを返す' do
+      adjustment = instance_double(ReceiptAdjustment, id: 84, persisted?: true, marked_for_destruction?: false)
+
+      expect(helper.receipt_review_adjustment_panel_id(adjustment)).to eq(
+        "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENT_ID_PREFIX}84-details"
+      )
+    end
+
+    it '未保存または削除予定のadjustmentにはpanel IDを返さない' do
+      unsaved = instance_double(ReceiptAdjustment, id: 85, persisted?: false, marked_for_destruction?: false)
+      destroyed = instance_double(ReceiptAdjustment, id: 86, persisted?: true, marked_for_destruction?: true)
+
+      aggregate_failures do
+        expect(helper.receipt_review_adjustment_panel_id(unsaved)).to be_nil
+        expect(helper.receipt_review_adjustment_panel_id(destroyed)).to be_nil
       end
     end
   end
@@ -208,6 +252,21 @@ RSpec.describe ReceiptsHelper, type: :helper do
       aggregate_failures do
         expect(helper.review_reason_target_path('item_name_uncertain', item: item)).to eq("##{item_target}")
         expect(helper.review_reason_target_path('tax_detail_mismatch', item: item)).to eq("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY}")
+      end
+    end
+
+    it 'returns an adjustment row anchor only when an adjustment reason has a persisted adjustment target' do
+      adjustment = instance_double(ReceiptAdjustment, id: 84, persisted?: true, marked_for_destruction?: false)
+      adjustment_target = "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENT_ID_PREFIX}84"
+
+      aggregate_failures do
+        expect(helper.review_reason_target_path('adjustment_uncertain', adjustment: adjustment)).to eq("##{adjustment_target}")
+        expect(helper.review_reason_target_path('tax_detail_mismatch', adjustment: adjustment)).to eq(
+          "##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY}"
+        )
+        expect(helper.review_reason_target_path('adjustment_uncertain')).to eq(
+          "##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS}"
+        )
       end
     end
 
@@ -261,6 +320,45 @@ RSpec.describe ReceiptsHelper, type: :helper do
         expect(link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
         expect(link['data-review-reason-anchor-target']).to eq(item_target)
         expect(link['data-review-reason-target-item']).to eq(item_target)
+      end
+    end
+
+    it 'renders adjustment review links with adjustment row target metadata' do
+      adjustment = instance_double(ReceiptAdjustment, id: 84, persisted?: true, marked_for_destruction?: false)
+      adjustment_target = "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENT_ID_PREFIX}84"
+      html = helper.review_reason_target_link(
+        'adjustment_tax_rate_missing',
+        base_path: '/receipts/rcpt_abc/edit',
+        adjustment: adjustment
+      )
+      link = Nokogiri::HTML.fragment(html).at_css('a[data-review-reason-target-link]')
+
+      aggregate_failures do
+        expect(link['href']).to eq("/receipts/rcpt_abc/edit##{adjustment_target}")
+        expect(link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS)
+        expect(link['data-review-reason-anchor-target']).to eq(adjustment_target)
+        expect(link['data-review-reason-target-adjustment']).to eq(adjustment_target)
+        expect(link['data-review-reason-target-item']).to be_nil
+      end
+    end
+
+    it 'keeps existing item review link metadata unchanged beside adjustment links' do
+      item = instance_double(ReceiptItem, id: 42)
+      adjustment = instance_double(ReceiptAdjustment, id: 84, persisted?: true, marked_for_destruction?: false)
+      item_link = Nokogiri::HTML.fragment(
+        helper.review_reason_target_link('item_category_uncertain', item: item)
+      ).at_css('a[data-review-reason-target-link]')
+      adjustment_link = Nokogiri::HTML.fragment(
+        helper.review_reason_target_link('adjustment_uncertain', adjustment: adjustment)
+      ).at_css('a[data-review-reason-target-link]')
+
+      aggregate_failures do
+        expect(item_link['data-review-reason-target-item']).to eq("#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX}42")
+        expect(item_link['data-review-reason-target-adjustment']).to be_nil
+        expect(adjustment_link['data-review-reason-target-item']).to be_nil
+        expect(adjustment_link['data-review-reason-target-adjustment']).to eq(
+          "#{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENT_ID_PREFIX}84"
+        )
       end
     end
 

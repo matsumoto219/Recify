@@ -13,6 +13,7 @@
   review_notes_state = receipt_review_notes_state(receipt)
   review_groups = review_notes_state.groups
   review_items = review_notes_state.items
+  review_adjustments = review_notes_state.adjustments
   review_count = review_notes_state.count
   target_base_path = local_assigns[:target_base_path]
 %>
@@ -85,6 +86,31 @@
                     <% else %>
                       <p class="mt-1 break-words [overflow-wrap:anywhere] text-xs token-text-muted"><%= t("receipts.review_notes_card.item_default_message") %></p>
                     <% end %>
+                  </li>
+                <% end %>
+              </ul>
+            </div>
+          <% end %>
+
+          <% if review_adjustments.any? %>
+            <div class="min-w-0 max-w-full rounded-lg border token-border-error-soft token-bg-error-soft px-3 py-2">
+              <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-error"><%= t("receipts.form.sections.adjustments") %></div>
+              <ul class="min-w-0 max-w-full space-y-2 text-sm token-text-base break-words [overflow-wrap:anywhere]">
+                <% review_adjustments.each do |review_adjustment| %>
+                  <% review_adjustment_name = review_adjustment.label.presence || review_adjustment.kind_label %>
+                  <li class="min-w-0 max-w-full">
+                    <div class="font-semibold truncate" title="<%= review_adjustment_name %>"><%= review_adjustment_name %></div>
+                    <ul class="mt-1 min-w-0 max-w-full space-y-1 pl-5 text-xs token-text-muted list-disc break-words [overflow-wrap:anywhere]">
+                      <% ReviewReasons.review_reasons_for_user(review_adjustment.review_reasons).each do |reason| %>
+                        <% reason_label = receipt.review_reason_labels_for([reason]).first %>
+                        <li class="break-words [overflow-wrap:anywhere]">
+                          <div class="flex min-w-0 max-w-full flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <span class="min-w-0"><%= reason_label %></span>
+                            <%= review_reason_target_link(reason, base_path: target_base_path, variant: :danger, adjustment: review_adjustment) %>
+                          </div>
+                        </li>
+                      <% end %>
+                    </ul>
                   </li>
                 <% end %>
               </ul>
