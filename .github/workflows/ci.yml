@@ -11,7 +11,85 @@ permissions:
   contents: read
 
 jobs:
+  classify_changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify changed files
+        id: classify
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          docs_only=false
+          diff_range=""
+          base_sha=""
+          head_sha=""
+          separator=""
+
+          if [[ "$EVENT_NAME" == "pull_request" ]] &&
+             [[ -n "$PR_BASE_SHA" ]] &&
+             [[ -n "$PR_HEAD_SHA" ]]; then
+            base_sha="$PR_BASE_SHA"
+            head_sha="$PR_HEAD_SHA"
+            separator="..."
+          elif [[ "$EVENT_NAME" == "push" ]] &&
+               [[ -n "$PUSH_BASE_SHA" ]] &&
+               [[ "$PUSH_BASE_SHA" != "0000000000000000000000000000000000000000" ]] &&
+               [[ -n "$PUSH_HEAD_SHA" ]]; then
+            base_sha="$PUSH_BASE_SHA"
+            head_sha="$PUSH_HEAD_SHA"
+            separator=".."
+          fi
+
+          if [[ -n "$base_sha" ]] &&
+             [[ -n "$head_sha" ]] &&
+             git cat-file -e "${base_sha}^{commit}" 2>/dev/null &&
+             git cat-file -e "${head_sha}^{commit}" 2>/dev/null; then
+            diff_range="${base_sha}${separator}${head_sha}"
+            changed_file_count=0
+            docs_only=true
+
+            while IFS= read -r -d '' path; do
+              changed_file_count=$((changed_file_count + 1))
+
+              case "$path" in
+                README.md|.github/readme/*)
+                  ;;
+                *)
+                  docs_only=false
+                  ;;
+              esac
+            done < <(git diff --name-only --no-renames -z "$diff_range")
+
+            if (( changed_file_count == 0 )); then
+              docs_only=false
+            fi
+          fi
+
+          if [[ "$docs_only" == "true" ]]; then
+            git diff --check "$diff_range"
+          fi
+
+          printf 'docs_only=%s\n' "$docs_only" >> "$GITHUB_OUTPUT"
+
   scan_ruby:
+    needs: classify_changes
+    if: needs.classify_changes.result == 'success' && needs.classify_changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -32,6 +110,8 @@ jobs:
         run: bin/bundler-audit
       
   scan_js:
+    needs: classify_changes
+    if: needs.classify_changes.result == 'success' && needs.classify_changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -49,30 +129,46 @@ jobs:
         run: bin/importmap audit
 
   lint:
+    needs: classify_changes
+    if: always()
     runs-on: ubuntu-latest
     env:
       RUBOCOP_CACHE_ROOT: tmp/rubocop
     steps:
+      - name: Verify change classification
+        env:
+          CLASSIFICATION_RESULT: ${{ needs.classify_changes.result }}
+        run: test "$CLASSIFICATION_RESULT" = "success"
+
+      - name: Record documentation-only validation
+        if: needs.classify_changes.outputs.docs_only == 'true'
+        run: echo "Documentation-only scope and whitespace checks passed."
+
       - name: Checkout code
+        if: needs.classify_changes.outputs.docs_only != 'true'
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
 
       - name: Set up Ruby
+        if: needs.classify_changes.outputs.docs_only != 'true'
         uses: ruby/setup-ruby@a30dfa457ad68707b8b910ac3a244714b61c0626 # v1
         with:
           bundler-cache: true
 
       - name: Set up Node.js
+        if: needs.classify_changes.outputs.docs_only != 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Install JavaScript dependencies
+        if: needs.classify_changes.outputs.docs_only != 'true'
         run: npm ci
 
       - name: Prepare RuboCop cache
+        if: needs.classify_changes.outputs.docs_only != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         env:
           DEPENDENCIES_HASH: ${{ hashFiles('.ruby-version', '**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock') }}
@@ -83,18 +179,24 @@ jobs:
             rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-
 
       - name: Lint code for consistent style
+        if: needs.classify_changes.outputs.docs_only != 'true'
         run: bin/rubocop -f github
 
       - name: Lint JavaScript
+        if: needs.classify_changes.outputs.docs_only != 'true'
         run: npm run lint:js
 
       - name: Check JavaScript syntax
+        if: needs.classify_changes.outputs.docs_only != 'true'
         run: node --check app/javascript/controllers/*.js
 
       - name: Lint CSS
+        if: needs.classify_changes.outputs.docs_only != 'true'
         run: npx stylelint "app/assets/tailwind/**/*.css"
 
   test:
+    needs: classify_changes
+    if: needs.classify_changes.result == 'success' && needs.classify_changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
 
     services:
