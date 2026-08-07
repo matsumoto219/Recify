@@ -27,6 +27,14 @@ Recifyは、本方針に基づき[Semantic Versioning 2.0.0](https://semver.org/
 
 「公開文書」は、Git管理されたREADME、`VERSIONING.md`、`CHANGELOG.md`、release notes、または公開互換性契約として明示した仕様を指します。
 
+公開済みsoftware artifactを変更せず、正確な利用案内、リンク、画像、または誤記だけを
+更新するdocumentation-only commitは、新しいreleaseを構成しません。repository固有の
+allowlistに差分全体が収まり、実装、設定、依存関係、version metadata、security契約、
+または公開互換性契約の意味を変えない場合は、`VERSION`、tag、`CHANGELOG.md`、
+release notesを更新しません。案内の追加に見えても、利用可能な機能、保証する結果、
+必須設定、対応環境、認証・認可、privacyまたはsecurity保証を変更する場合は、この例外を
+使用せず、通常のrelease判定を行います。
+
 同一major内では、`v1.2.0`または本方針採用後に公開された同一majorの対応版から、文書化された通常の手順でアップグレードできなければなりません。downgradeや旧版へのrollbackは、release notesで明示した場合を除き、互換性契約には含めません。
 
 ## 公開互換性契約に含めないもの
@@ -127,6 +135,9 @@ mobile APIまたはpublic APIを導入するときは、公開前にstableまた
 - 同じversion番号で異なる内容を再公開しません。
 - 公開後に問題が見つかった場合は、変更内容に応じた新しいversionを公開します。
 - `VERSION`、Git tag、`CHANGELOG.md`、release notesのversionを一致させます。
+- release後のdocumentation-only commitは、既存tagが指す公開済みsoftware artifactを
+  変更しません。productionで稼働するversionはannotated release tagのtargetとdeploy
+  記録で特定し、文書のみのcommitを既存releaseとしてtagし直しません。
 
 ## リリース判定
 
