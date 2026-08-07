@@ -30,10 +30,39 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
 
   def expanded_receipt_item_row
     item_row = receipt_item_row
+    expand_receipt_item_row(item_row)
+  end
+
+  def expand_receipt_item_row(item_row)
     toggle = item_row.find("[data-receipt-form-target='itemDetailsToggle']", match: :first)
+    panel = item_row.find("[data-receipt-form-target='itemDetailsPanel']", visible: :all)
     toggle.click unless toggle["aria-expanded"] == "true"
-    expect(item_row).to have_css("input[name$='[price]']")
+    expect(panel["aria-hidden"]).to eq("false")
+    expect(page.evaluate_script("arguments[0].inert", panel)).to be(false)
     item_row
+  end
+
+  def select_with_keyboard(select_element, value)
+    options = select_element.all("option", visible: :all)
+    option_index = options.index { |option| option.value == value }
+    raise "Select option not found: #{value}" unless option_index
+
+    select_element.send_keys(options[option_index].text(:all))
+    expect(select_element.value).to eq(value)
+  end
+
+  def expect_category_label_association(row)
+    select_element = row.find("select[name$='[category]']", visible: :all)
+    select_id = select_element[:id]
+    label = row.find("label[for='#{select_id}']", visible: :all)
+    labeled_field = row.find_field(I18n.t("receipts.item_fields.category"), visible: :all)
+
+    aggregate_failures do
+      expect(label.text(:all)).to eq(I18n.t("receipts.item_fields.category"))
+      expect(labeled_field[:id]).to eq(select_id)
+    end
+
+    labeled_field
   end
 
   def expect_mobile_viewport_without_horizontal_overflow
@@ -587,6 +616,137 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect_adjustment_row_expanded(row, target_id)
     expect(element_has_focus?(visible_adjustment_toggle(row))).to be(false)
     expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
+  it "390pxで新規明細のcategoryをkeyboard選択し、422後もlabelと選択値を保持する" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "カテゴリ入力確認店",
+      purchased_at: Time.zone.local(2026, 8, 7, 12, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 100,
+      tax_amount: 0,
+      total_amount: 100
+    )
+    receipt.receipt_items.create!(
+      confirmed_name: "既存分類商品",
+      category: "other",
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: "each",
+      line_total: 100,
+      needs_review: false
+    )
+    queue_adapter = ActiveJob::Base.queue_adapter
+    queued_job_count = queue_adapter.enqueued_jobs.size
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    existing_row = expand_receipt_item_row(
+      all("[data-receipt-form-target='itemRow']", visible: :all).first
+    )
+    existing_category = expect_category_label_association(existing_row)
+    option_contract = existing_category.all("option", visible: :all).to_h do |option|
+      [ option.value, option.text(:all) ]
+    end
+
+    aggregate_failures do
+      expect(existing_category.value).to eq("other")
+      expect(option_contract.fetch("")).to eq(I18n.t("receipts.item_fields.uncategorized"))
+      expect(option_contract.fetch("other")).to eq(I18n.t("enums.receipt_item.category.other"))
+    end
+
+    click_button I18n.t("receipts.form.buttons.add_item")
+    new_row = expand_receipt_item_row(
+      all("[data-receipt-form-target='itemRow']", visible: :all).last
+    )
+    new_row.find("input[name$='[confirmed_name]']").set("新規分類商品")
+    new_row.find("input[name$='[price]']").set("1e2")
+    new_category = expect_category_label_association(new_row)
+    select_with_keyboard(new_category, "medical")
+
+    click_mobile_save_button
+
+    expect(page).to have_content(I18n.t("receipts.form.errors.invalid_numeric_input"))
+    expect_only_validation_failure_in_browser_console(receipt)
+    retained_row = all("[data-receipt-form-target='itemRow']", visible: :all).find do |row|
+      row.find("input[name$='[confirmed_name]']", visible: :all).value == "新規分類商品"
+    end
+    retained_row = expand_receipt_item_row(retained_row)
+    retained_category = expect_category_label_association(retained_row)
+
+    aggregate_failures do
+      expect(retained_category.value).to eq("medical")
+      expect(receipt.reload.receipt_items.count).to eq(1)
+      expect(receipt.receipt_items.sole.category).to eq("other")
+      expect(queue_adapter.enqueued_jobs.size).to eq(queued_job_count)
+    end
+    expect_mobile_viewport_without_horizontal_overflow
+  end
+
+  it "desktopで保存済みcategoryをkeyboard変更し、reloadとbrowser backで復元する" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "カテゴリ履歴確認店",
+      purchased_at: Time.zone.local(2026, 8, 7, 13, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 200,
+      tax_amount: 0,
+      total_amount: 200
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: "履歴確認商品",
+      category: "food",
+      price: 200,
+      quantity: 1,
+      quantity_unit_code: "each",
+      line_total: 200,
+      needs_review: false
+    )
+
+    sign_in_through_browser(user)
+    set_viewport(width: 1440, height: 1000, mobile: false)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    item_row = expanded_receipt_item_row
+    category_select = expect_category_label_association(item_row)
+    expect(category_select.value).to eq("food")
+    select_with_keyboard(category_select, "other")
+    click_button I18n.t("receipts.form.buttons.save"), match: :first
+
+    expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    expect(item.reload.category).to eq("other")
+
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    expect(expect_category_label_association(expanded_receipt_item_row).value).to eq("other")
+    page.refresh
+    wait_for_stimulus_controller("receipt-form")
+    expect(expect_category_label_association(expanded_receipt_item_row).value).to eq("other")
+
+    page.execute_script("window.history.pushState({ categoryTest: true }, '', '#category-history')")
+    expect(page.evaluate_script("window.location.hash")).to eq("#category-history")
+    page.go_back
+    expect(page).to have_current_path(edit_receipt_path(receipt), ignore_query: true)
+    expect(page.evaluate_script("window.location.hash")).to eq("")
+    wait_for_stimulus_controller("receipt-form")
+    expect(expect_category_label_association(expanded_receipt_item_row).value).to eq("other")
+    page.go_forward
+    expect(page).to have_current_path(edit_receipt_path(receipt), ignore_query: true)
+    expect(page.evaluate_script("window.location.hash")).to eq("#category-history")
+    expect(expect_category_label_association(expanded_receipt_item_row).value).to eq("other")
+
+    expect_viewport_without_horizontal_overflow(1440)
     expect_browser_console_clean
   end
 end

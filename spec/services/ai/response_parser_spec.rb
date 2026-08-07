@@ -93,6 +93,42 @@ RSpec.describe Ai::ResponseParser do
         end
       end
 
+      it '未知categoryを結果やsnapshot候補へ残さず未分類の確認対象にする' do
+        payload['items'].first['category'] = 'unknown_category'
+        payload['items'].first['needs_review'] = false
+        payload['needs_review'] = false
+        payload['review_reasons'] = []
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+        item = result[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item).not_to have_key(:category)
+          expect(item[:needs_review]).to be(true)
+          expect(item[:review_reasons]).to eq([ 'item_category_uncertain' ])
+          expect(result[:needs_review]).to be(true)
+          expect(result[:review_reasons]).to include('item_category_uncertain')
+          expect(result.to_json).not_to include('unknown_category')
+        end
+      end
+
+      it '明示されたotherは有効なcategoryとして保持する' do
+        payload['items'].first['category'] = 'other'
+        payload['items'].first['needs_review'] = false
+        payload['needs_review'] = false
+        payload['review_reasons'] = []
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+        item = result[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:category]).to eq('other')
+          expect(item[:needs_review]).to be(false)
+          expect(item).not_to have_key(:review_reasons)
+          expect(result[:review_reasons]).to be_empty
+        end
+      end
+
       it 'receipt_adjustmentsを保存用attributesへ正規化する' do
         payload['receipt_adjustments'] = [
           {

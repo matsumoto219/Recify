@@ -1,6 +1,59 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
+  it 'invalid categoryを保存せず未分類の確認状態だけをsnapshotへ残す' do
+    snapshot = described_class.ai_normalized_result_snapshot(
+      success: true,
+      needs_review: false,
+      review_reasons: [],
+      receipt_items_attributes: [
+        { index: 0, category: 'unknown_category', needs_review: false }
+      ]
+    )
+    item = snapshot.fetch('receipt_items_attributes').first
+
+    aggregate_failures do
+      expect(item).not_to have_key('category')
+      expect(item['needs_review']).to be(true)
+      expect(item['review_reasons']).to include('item_category_uncertain')
+      expect(snapshot['needs_review']).to be(true)
+      expect(snapshot['review_reasons']).to include('item_category_uncertain')
+      expect(snapshot.to_json).not_to include('unknown_category')
+    end
+  end
+
+  it '明示されたotherはsnapshotでも独立した有効categoryとして保持する' do
+    snapshot = described_class.ai_normalized_result_snapshot(
+      success: true,
+      needs_review: false,
+      review_reasons: [],
+      receipt_items_attributes: [
+        { index: 0, category: 'other', needs_review: false }
+      ]
+    )
+
+    expect(snapshot.dig('receipt_items_attributes', 0, 'category')).to eq('other')
+  end
+
+  it '前後空白を含むcanonical categoryを正規化してsnapshotへ保持する' do
+    snapshot = described_class.ai_normalized_result_snapshot(
+      success: true,
+      needs_review: false,
+      review_reasons: [],
+      receipt_items_attributes: [
+        { index: 0, category: ' other ', needs_review: false }
+      ]
+    )
+    item = snapshot.fetch('receipt_items_attributes').first
+
+    aggregate_failures do
+      expect(item['category']).to eq('other')
+      expect(item['needs_review']).to be(false)
+      expect(item.fetch('review_reasons', [])).not_to include('item_category_uncertain')
+      expect(snapshot['needs_review']).to be(false)
+    end
+  end
+
   it 'build params snapshotにはraw source refsやdiagnosticsを含めず安全なownership contractだけを残す' do
     snapshot = described_class.build_params_snapshot(
       receipt_attributes: { total_amount: 100 },

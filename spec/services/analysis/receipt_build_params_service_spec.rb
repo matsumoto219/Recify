@@ -162,6 +162,19 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'OCRにcategory根拠がない明細はotherへ推測せず未分類の確認対象にする' do
+        ocr_result[:candidates][:items].first[:raw_text] = '匿名品A'
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:category]).to be_nil
+          expect(item[:needs_review]).to be(true)
+          expect(item[:review_reasons]).to include('item_category_uncertain')
+        end
+      end
+
       it 'OCR行に商品名と金額の根拠があるamount-only itemを後続name-only itemへ統合する' do
         ocr_result[:candidates][:items] = [
           {
@@ -208,8 +221,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(items.first[:price]).to eq(275)
           expect(items.first[:original_line_total]).to eq(275)
           expect(items.first[:line_total]).to eq(275)
-          expect(items.first[:needs_review]).to be(false)
-          expect(items.first[:review_reasons]).to be_empty
+          expect(items.first[:needs_review]).to be(true)
+          expect(items.first[:review_reasons]).to include('item_category_uncertain')
           expect(items.first[:confidence]).to eq(BigDecimal('0.59'))
         end
       end
@@ -3183,6 +3196,58 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         aggregate_failures do
           expect(item[:category]).to be_nil
           expect(item[:needs_review]).to eq(true)
+          expect(item[:review_reasons]).to include('item_category_uncertain')
+        end
+      end
+
+      it 'AIがcategoryを返さずOCRにも根拠がない場合は未分類の確認対象にする' do
+        ocr_result[:candidates][:items].first[:raw_text] = '匿名品A'
+        ai_result[:receipt_items_attributes].first.merge!(
+          category: nil,
+          needs_review: false
+        )
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:category]).to be_nil
+          expect(item[:needs_review]).to be(true)
+          expect(item[:review_reasons]).to include('item_category_uncertain')
+        end
+      end
+
+      it 'AIが明示したotherは有効なcategoryとして保持する' do
+        ocr_result[:candidates][:items].first[:raw_text] = '匿名品A'
+        ai_result[:receipt_items_attributes].first.merge!(
+          category: 'other',
+          needs_review: false
+        )
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:category]).to eq('other')
+          expect(item[:needs_review]).to be(false)
+          expect(item[:review_reasons]).not_to include('item_category_uncertain')
+        end
+      end
+
+      it 'AIが明示したotherに確認reasonがあってもcategory自体は保持する' do
+        ocr_result[:candidates][:items].first[:raw_text] = '匿名品A'
+        ai_result[:receipt_items_attributes].first.merge!(
+          category: 'other',
+          needs_review: true,
+          review_reasons: [ 'item_category_uncertain' ]
+        )
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        item = params[:receipt_items_attributes].first
+
+        aggregate_failures do
+          expect(item[:category]).to eq('other')
+          expect(item[:needs_review]).to be(true)
           expect(item[:review_reasons]).to include('item_category_uncertain')
         end
       end

@@ -323,17 +323,7 @@ module Ai
     end
 
     def allowed_categories
-      %w[
-        food
-        drink
-        daily_goods
-        household
-        medical
-        beauty
-        transportation
-        hobby
-        other
-      ]
+      ReceiptItem::CATEGORIES
     end
 
     def allowed_payment_methods

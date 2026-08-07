@@ -19,13 +19,20 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
       snapshot = normalized_hash(snapshot)
       return nil if snapshot.blank?
 
+      receipt_items_attributes = rehydrate_ai_items(snapshot[:receipt_items_attributes])
+      item_category_uncertain = receipt_items_attributes.any? do |item|
+        Array(item["review_reasons"] || item[:review_reasons]).include?("item_category_uncertain")
+      end
+      review_reasons = Array(snapshot[:review_reasons])
+      review_reasons |= [ "item_category_uncertain" ] if item_category_uncertain
+
       {
         success: snapshot[:success] == true,
         error_code: snapshot[:error_code].presence,
-        needs_review: snapshot[:needs_review] == true,
-        review_reasons: Array(snapshot[:review_reasons]),
+        needs_review: snapshot[:needs_review] == true || item_category_uncertain,
+        review_reasons: review_reasons,
         receipt_attributes: rehydrate_ai_receipt_attributes(snapshot[:receipt_attributes]),
-        receipt_items_attributes: rehydrate_ai_items(snapshot[:receipt_items_attributes]),
+        receipt_items_attributes: receipt_items_attributes,
         receipt_adjustments_attributes: rehydrate_ai_adjustments(snapshot[:receipt_adjustments_attributes]),
         attribute_counts: normalized_hash(snapshot[:attribute_counts]).to_h,
         meta: normalized_hash(snapshot[:meta]).to_h
@@ -40,7 +47,20 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
 
     def rehydrate_ai_items(value)
       Array(value).map do |item|
-        normalized_hash(item).to_h
+        normalized = normalized_hash(item)
+        raw_category = normalized[:category].to_s.strip.presence
+        category = raw_category if ReceiptItem::CATEGORIES.include?(raw_category)
+        category_invalid = raw_category.present? && category.nil?
+        review_reasons = Array(normalized[:review_reasons])
+        review_reasons |= [ "item_category_uncertain" ] if category_invalid
+
+        normalized[:category] = category
+        normalized.delete(:category) if category.nil?
+        if review_reasons.include?("item_category_uncertain")
+          normalized[:needs_review] = true
+          normalized[:review_reasons] = review_reasons
+        end
+        normalized.to_h
       end
     end
 

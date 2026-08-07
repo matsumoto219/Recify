@@ -233,7 +233,7 @@ module Admin
       }
       detailed_snapshots = {
         ocr_result_snapshot: safe_summary(run.ocr_result_snapshot),
-        ai_normalized_result_snapshot: safe_summary(run.ai_normalized_result_snapshot),
+        ai_normalized_result_snapshot: safe_ai_normalized_result_snapshot(run.ai_normalized_result_snapshot),
         build_params_snapshot: safe_summary(run.metadata.to_h["build_params_snapshot"] || {})
       }
       amount_calculation_profile = safe_summary(receipt.amount_calculation_profile || {})
@@ -514,6 +514,35 @@ module Admin
 
     def safe_summary(value)
       sanitize_summary(value)
+    end
+
+    def safe_ai_normalized_result_snapshot(value)
+      snapshot = safe_summary(value)
+      items = snapshot["receipt_items_attributes"]
+      return snapshot unless items.is_a?(Array)
+
+      invalid_category_found = false
+      snapshot["receipt_items_attributes"] = items.map do |item|
+        next item unless item.is_a?(Hash) && item.key?("category")
+
+        category = item["category"].to_s.strip.presence
+        if ReceiptItem::CATEGORIES.include?(category) || category.nil?
+          next item.merge("category" => category)
+        end
+
+        invalid_category_found = true
+        review_reasons = Array(item["review_reasons"]) | [ "item_category_uncertain" ]
+        item.merge(
+          "category" => nil,
+          "needs_review" => true,
+          "review_reasons" => review_reasons
+        )
+      end
+      if invalid_category_found
+        snapshot["needs_review"] = true
+        snapshot["review_reasons"] = Array(snapshot["review_reasons"]) | [ "item_category_uncertain" ]
+      end
+      snapshot
     end
 
     def sanitize_summary(value)

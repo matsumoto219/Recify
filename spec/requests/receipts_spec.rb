@@ -2968,6 +2968,20 @@ RSpec.describe 'Receipts', type: :request do
       expect(Receipt.order(:id).last.status).to eq('completed')
     end
 
+    it '手動作成でcanonical categoryを明細へ保存する' do
+      params = valid_params.deep_dup
+      params[:receipt][:receipt_items_attributes]['0'][:category] = 'medical'
+
+      expect do
+        post receipts_path, params: params
+      end.to change(ReceiptItem, :count).by(1)
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipts_path)
+        expect(ReceiptItem.order(:id).last.category).to eq('medical')
+      end
+    end
+
     it '手動作成成功時にmanual receipt counterを消費する' do
       create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 49)
 
@@ -3488,6 +3502,7 @@ RSpec.describe 'Receipts', type: :request do
             receipt_items_attributes: {
               '0' => {
                 confirmed_name: '保持する商品',
+                category: 'medical',
                 price: '120',
                 quantity: '2',
                 quantity_unit_code: 'each',
@@ -3502,12 +3517,16 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       item_row = rendered_receipt_item_rows(document).first
+      category_select = item_row.at_css('select[name*="[category]"]')
+      category_label = item_row.at_css("label[for='#{category_select['id']}']")
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
         expect(rendered_receipt_item_rows(document).size).to eq(1)
         expect(item_row.at_css('input[name*="[confirmed_name]"]')['value']).to eq('保持する商品')
         expect(item_row.at_css('input[name*="[price]"]')['value']).to eq('120')
+        expect(category_select.at_css('option[selected]')['value']).to eq('medical')
+        expect(category_label.text.strip).to eq(I18n.t('receipts.item_fields.category'))
       end
     end
 
@@ -7213,6 +7232,88 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.store_name).to eq('更新後')
         expect(receipt.receipt_items).to contain_exactly(item)
+      end
+    end
+
+    it '他ユーザーのnested item IDではcategoryを変更できない' do
+      other_receipt = create(:receipt, :completed, user: create(:user))
+      foreign_item = other_receipt.receipt_items.create!(
+        confirmed_name: '他ユーザー明細',
+        category: 'food',
+        price: 500,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 500,
+        needs_review: false
+      )
+
+      expect do
+        patch_receipt receipt, params: {
+          receipt: {
+            store_name: receipt.store_name,
+            total_amount: receipt.total_amount,
+            payment_method: receipt.payment_method,
+            receipt_items_attributes: {
+              '0' => {
+                id: foreign_item.id,
+                confirmed_name: foreign_item.confirmed_name,
+                category: 'medical',
+                price: foreign_item.price,
+                quantity: foreign_item.quantity,
+                quantity_unit_code: foreign_item.quantity_unit_code,
+                line_total: foreign_item.line_total,
+                _destroy: '0'
+              }
+            }
+          }
+        }
+      end.not_to change { foreign_item.reload.category }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:not_found)
+        expect(foreign_item.category).to eq('food')
+        expect(receipt.reload.receipt_items).to be_empty
+      end
+    end
+
+    it '手動編集で候補外categoryを送信すると既存明細を変更せず422にする' do
+      item = receipt.receipt_items.create!(
+        confirmed_name: '分類保持商品',
+        category: 'food',
+        price: 1400,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 1400,
+        needs_review: false
+      )
+
+      expect do
+        patch_receipt receipt, params: {
+          receipt: {
+            store_name: receipt.store_name,
+            total_amount: receipt.total_amount,
+            payment_method: receipt.payment_method,
+            receipt_items_attributes: {
+              '0' => {
+                id: item.id,
+                confirmed_name: item.confirmed_name,
+                category: 'arbitrary_invalid',
+                price: item.price,
+                quantity: item.quantity,
+                quantity_unit_code: item.quantity_unit_code,
+                line_total: item.line_total,
+                _destroy: '0'
+              }
+            }
+          }
+        }
+      end.not_to change(ReceiptItem, :count)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(item.reload.category).to eq('food')
+        expect(receipt.reload.receipt_items).to contain_exactly(item)
+        expect(response.body).not_to include('arbitrary_invalid')
       end
     end
 

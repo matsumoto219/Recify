@@ -231,7 +231,9 @@
 
         <div class="col-span-2 md:col-span-3">
           <div class="space-y-2">
-            <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.category") %></p>
+            <%= item_form.label :category,
+                                t("receipts.item_fields.category"),
+                                class: "text-xs font-bold token-text-muted uppercase tracking-wider" %>
             <div>
               <%= render "shared/ui/form/select_field",
                          f: item_form,

@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "candidate_decisions": [
+    {
+      "code": "electronics",
+      "decision": "no_go"
+    },
+    {
+      "code": "clothing",
+      "decision": "no_go"
+    },
+    {
+      "code": "services",
+      "decision": "no_go"
+    },
+    {
+      "code": "office_supplies",
+      "decision": "no_go"
+    },
+    {
+      "code": "education",
+      "decision": "no_go"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "cat_001_food",
+      "expected_code": "food",
+      "boundary_tag": "canonical_food",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_002_drink",
+      "expected_code": "drink",
+      "boundary_tag": "canonical_drink",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_003_daily_goods",
+      "expected_code": "daily_goods",
+      "boundary_tag": "canonical_daily_goods",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_004_household",
+      "expected_code": "household",
+      "boundary_tag": "canonical_household",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_005_medical",
+      "expected_code": "medical",
+      "boundary_tag": "canonical_medical",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_006_beauty",
+      "expected_code": "beauty",
+      "boundary_tag": "canonical_beauty",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_007_transportation",
+      "expected_code": "transportation",
+      "boundary_tag": "canonical_transportation",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_008_hobby",
+      "expected_code": "hobby",
+      "boundary_tag": "canonical_hobby",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_009_other",
+      "expected_code": "other",
+      "boundary_tag": "explicit_other",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_010_missing_evidence",
+      "expected_code": null,
+      "boundary_tag": "missing_evidence",
+      "needs_review": true
+    },
+    {
+      "case_id": "cat_011_invalid_external",
+      "expected_code": null,
+      "boundary_tag": "invalid_external_code",
+      "needs_review": true
+    },
+    {
+      "case_id": "cat_012_electronics_other",
+      "expected_code": "other",
+      "boundary_tag": "electronics_no_go",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_013_electronics_daily_goods",
+      "expected_code": "daily_goods",
+      "boundary_tag": "electronics_daily_goods_boundary",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_014_electronics_hobby",
+      "expected_code": "hobby",
+      "boundary_tag": "electronics_hobby_boundary",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_015_clothing_other",
+      "expected_code": "other",
+      "boundary_tag": "clothing_no_go",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_016_services_other",
+      "expected_code": "other",
+      "boundary_tag": "services_no_go",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_017_services_transportation",
+      "expected_code": "transportation",
+      "boundary_tag": "services_transportation_boundary",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_018_services_medical",
+      "expected_code": "medical",
+      "boundary_tag": "services_medical_boundary",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_019_office_supplies_hobby",
+      "expected_code": "hobby",
+      "boundary_tag": "office_supplies_hobby_boundary",
+      "needs_review": false
+    },
+    {
+      "case_id": "cat_020_education_hobby",
+      "expected_code": "hobby",
+      "boundary_tag": "education_hobby_boundary",
+      "needs_review": false
+    }
+  ]
+}

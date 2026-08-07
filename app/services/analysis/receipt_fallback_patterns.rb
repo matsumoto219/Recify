@@ -14,7 +14,7 @@ module Analysis
       normalized_text = normalize_text(text)
       return nil if normalized_text.blank?
 
-      detect_by_patterns(normalized_text, profile.fallback_item_category_patterns) || "other"
+      detect_by_patterns(normalized_text, profile.fallback_item_category_patterns)
     end
 
     def detect_by_patterns(text, patterns)

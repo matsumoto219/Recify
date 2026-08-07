@@ -352,11 +352,24 @@ module Analysis
           raw_category = normalized_item[:category].presence
           category = normalize_category(raw_category)
           category_invalid = raw_category.present? && category.nil?
+          category_marked_uncertain = normalize_review_reasons(normalized_item[:review_reasons]).include?(
+            "item_category_uncertain"
+          )
+          resolved_category = if category_invalid
+            nil
+          elsif category.present?
+            category
+          elsif category_marked_uncertain
+            nil
+          else
+            detect_category(raw_text)
+          end
+          category_uncertain = category_invalid || category_marked_uncertain || resolved_category.nil?
           tax_rate_confidence = normalize_tax_rate_confidence(normalized_item[:tax_rate_confidence])
           review_reasons = item_review_reasons(
             normalized_item,
             tax_rate_confidence:,
-            category_invalid:,
+            category_uncertain:,
             quantity_fraction_invalid:
           )
 
@@ -366,7 +379,7 @@ module Analysis
             suggested_name: normalized_item[:suggested_name].presence || extract_item_name(raw_text),
             # AI は confirmed_name を返さず、補完候補は suggested_name に保持する。
             confirmed_name: normalized_item[:confirmed_name],
-            category: category_invalid ? nil : (category || detect_category(raw_text)),
+            category: resolved_category,
             price: price,
             quantity: quantity,
             original_line_total: original_line_total,
@@ -385,7 +398,7 @@ module Analysis
               tax_rate: tax_rate,
               tax_rate_confidence: tax_rate_confidence,
               review_reasons: review_reasons,
-              category_invalid: category_invalid,
+              category_uncertain: category_uncertain,
               quantity_fraction_invalid: quantity_fraction_invalid
             ),
             review_reasons: review_reasons,
@@ -2298,8 +2311,8 @@ module Analysis
           (candidate_index.zero? && index_issues[:out_of_range])
       end
 
-      def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:, category_invalid:, quantity_fraction_invalid: false)
-        return true if category_invalid
+      def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:, category_uncertain:, quantity_fraction_invalid: false)
+        return true if category_uncertain
         return true if quantity_fraction_invalid
         return true if tax_rate.blank? && tax_rate_confidence_low?(tax_rate_confidence)
 
@@ -2315,9 +2328,9 @@ module Analysis
         end
       end
 
-      def item_review_reasons(normalized_item, tax_rate_confidence:, category_invalid: false, quantity_fraction_invalid: false)
+      def item_review_reasons(normalized_item, tax_rate_confidence:, category_uncertain: false, quantity_fraction_invalid: false)
         normalize_review_reasons(normalized_item[:review_reasons]).tap do |reasons|
-          reasons << "item_category_uncertain" if category_invalid
+          reasons << "item_category_uncertain" if category_uncertain
           reasons << "item_quantity_uncertain" if quantity_fraction_invalid
           reasons << "item_tax_rate_uncertain" if tax_rate_confidence_low?(tax_rate_confidence)
           reasons.uniq!

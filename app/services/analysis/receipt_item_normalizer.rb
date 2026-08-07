@@ -1,5 +1,7 @@
 module Analysis
   class ReceiptItemNormalizer
+    ITEM_CATEGORY_UNCERTAIN_REVIEW_REASON = "item_category_uncertain"
+
     AI_ALLOWED_KEYS = %i[
       index
       position_index
@@ -32,12 +34,19 @@ module Analysis
 
       raw_item = item.is_a?(Hash) ? item : item.to_h
       normalized = raw_item.with_indifferent_access.slice(*AI_ALLOWED_KEYS)
+      raw_category = normalize_string(normalized[:category])
+      category = normalize_category(raw_category)
+      category_invalid = raw_category.present? && category.nil?
+      category_review_reasons = normalize_category_review_reasons(raw_item)
+      category_review_reasons << ITEM_CATEGORY_UNCERTAIN_REVIEW_REASON if category_invalid
+      category_review_reasons.uniq!
 
       result = {
         index: normalize_index(normalized[:index] || normalized[:position_index]),
         suggested_name: normalize_string(normalized[:suggested_name]),
-        category: normalize_string(normalized[:category]),
-        needs_review: normalize_boolean(normalized[:needs_review]),
+        category: category,
+        needs_review: category_review_reasons.any? ? true : normalize_boolean(normalized[:needs_review]),
+        review_reasons: category_review_reasons.presence,
         tax_rate: normalize_tax_rate(normalized[:tax_rate]),
         tax_rate_confidence: normalize_confidence(normalized[:tax_rate_confidence]),
         tax_rate_reason: normalize_string(normalized[:tax_rate_reason])
@@ -62,6 +71,20 @@ module Analysis
     def normalize_string(value)
       text = value.to_s.strip
       text.presence
+    end
+
+    def normalize_category(value)
+      return value if ReceiptItem::CATEGORIES.include?(value)
+
+      nil
+    end
+
+    def normalize_category_review_reasons(item)
+      reasons = item.respond_to?(:[]) ? item[:review_reasons] || item["review_reasons"] : nil
+
+      Array(reasons).filter_map do |reason|
+        ITEM_CATEGORY_UNCERTAIN_REVIEW_REASON if reason.to_s.strip == ITEM_CATEGORY_UNCERTAIN_REVIEW_REASON
+      end
     end
 
     def normalize_boolean(value)
