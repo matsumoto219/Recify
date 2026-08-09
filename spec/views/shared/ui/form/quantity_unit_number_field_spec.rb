@@ -45,7 +45,7 @@ RSpec.describe 'shared/ui/form/_quantity_unit_number_field', type: :view do
 
     aggregate_failures do
       expect(wrapper['class']).to include('md:flex-wrap')
-      expect(input.parent['class']).to include('md:flex-[1_1_2.5rem]')
+      expect(input.parent['class']).to include('md:flex-[1_1_5rem]')
       expect(select['class']).to include('md:static')
       expect(select['class']).to include('md:w-auto')
       expect(select['class']).to include('md:max-w-full')
