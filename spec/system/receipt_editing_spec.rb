@@ -65,6 +65,32 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     select_element
   end
 
+  def expect_current_category_value(value)
+    expect(page).to have_css("form[data-controller~='receipt-form']")
+    wait_for_stimulus_controller("receipt-form")
+
+    row = receipt_item_row
+    expand_receipt_item_row(row)
+
+    open_panel_selector =
+      "[data-receipt-form-target='itemDetailsPanel'][aria-hidden='false']:not([inert])"
+    expect(row).to have_css(open_panel_selector, visible: :all)
+
+    current_row = receipt_item_row
+    panel = current_row.find(open_panel_selector, visible: :all)
+    select_element = panel.find("select[name$='[category]']", visible: :all)
+    select_id = select_element[:id]
+    expect(select_id).to be_present
+    label = panel.find("label[for='#{select_id}']", visible: :all)
+
+    aggregate_failures do
+      expect(label.text(:all)).to eq(I18n.t("receipts.item_fields.category"))
+      expect(select_element.value).to eq(value)
+    end
+
+    select_element
+  end
+
   def expect_mobile_viewport_without_horizontal_overflow
     expect_viewport_without_horizontal_overflow(390)
   end
@@ -941,7 +967,7 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect_mobile_viewport_without_horizontal_overflow
   end
 
-  it "desktopで保存済みcategoryをkeyboard変更し、reloadとbrowser backで復元する" do
+  it "desktopで保存済みcategoryをkeyboard変更し、reloadと実際のback/forwardで復元する" do
     user = create_system_test_user
     receipt = create(
       :receipt,
@@ -967,35 +993,36 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     sign_in_through_browser(user)
     set_viewport(width: 1440, height: 1000, mobile: false)
     visit edit_receipt_path(receipt)
-    wait_for_stimulus_controller("receipt-form")
-
-    item_row = expanded_receipt_item_row
-    category_select = expect_category_label_association(item_row)
-    expect(category_select.value).to eq("food")
+    category_select = expect_current_category_value("food")
     select_with_keyboard(category_select, "other")
     click_button I18n.t("receipts.form.buttons.save"), match: :first
 
     expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    expect(page).to have_css("#receipt-detail-main")
     expect(item.reload.category).to eq("other")
 
-    visit edit_receipt_path(receipt)
-    wait_for_stimulus_controller("receipt-form")
-    expect(expect_category_label_association(expanded_receipt_item_row).value).to eq("other")
-    page.refresh
-    wait_for_stimulus_controller("receipt-form")
-    expect(expect_category_label_association(expanded_receipt_item_row).value).to eq("other")
+    click_link I18n.t("common.edit")
+    expect(page).to have_current_path(edit_receipt_path(receipt), ignore_query: true)
+    expect_current_category_value("other")
 
-    page.execute_script("window.history.pushState({ categoryTest: true }, '', '#category-history')")
-    expect(page.evaluate_script("window.location.hash")).to eq("#category-history")
+    page.refresh
+    expect_current_category_value("other")
+
+    click_link I18n.t("receipts.form.buttons.cancel")
+    expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    expect(page).to have_css("#receipt-detail-main")
+
     page.go_back
     expect(page).to have_current_path(edit_receipt_path(receipt), ignore_query: true)
-    expect(page.evaluate_script("window.location.hash")).to eq("")
-    wait_for_stimulus_controller("receipt-form")
-    expect(expect_category_label_association(expanded_receipt_item_row).value).to eq("other")
+    expect_current_category_value("other")
+
     page.go_forward
+    expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    expect(page).to have_css("#receipt-detail-main")
+
+    page.go_back
     expect(page).to have_current_path(edit_receipt_path(receipt), ignore_query: true)
-    expect(page.evaluate_script("window.location.hash")).to eq("#category-history")
-    expect(expect_category_label_association(expanded_receipt_item_row).value).to eq("other")
+    expect_current_category_value("other")
 
     expect_viewport_without_horizontal_overflow(1440)
     expect_browser_console_clean
