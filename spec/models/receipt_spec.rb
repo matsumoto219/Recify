@@ -1572,6 +1572,49 @@ RSpec.describe Receipt, type: :model do
       receipt.update!(status: "completed")
     end
 
+    it 'uploaded / processing から各terminal statusへのprocessing flashを維持する' do
+      source_statuses = %w[uploaded processing]
+      terminal_statuses = %w[completed review_needed failed]
+
+      source_statuses.product(terminal_statuses).each do |source, target|
+        receipt =
+          if source == 'processing'
+            create(:receipt, :processing, :with_image, user: user)
+          else
+            create(:receipt, user: user, status: source)
+          end
+        attributes = {
+          status: target,
+          processing_error_code: (target == 'failed' ? 'ocr_api_error' : nil)
+        }
+
+        expect(receipt).to receive(:broadcast_processing_flash).and_call_original
+
+        receipt.update!(attributes)
+      end
+    end
+
+    it 'terminal status間の遷移ではprocessing flashをbroadcastしない' do
+      terminal_statuses = %w[completed review_needed failed]
+
+      terminal_statuses.permutation(2).each do |source, target|
+        receipt = create(
+          :receipt,
+          user: user,
+          status: source,
+          processing_error_code: (source == 'failed' ? 'ocr_api_error' : nil)
+        )
+        attributes = {
+          status: target,
+          processing_error_code: (target == 'failed' ? 'ocr_api_error' : nil)
+        }
+
+        expect(receipt).not_to receive(:broadcast_processing_flash)
+
+        receipt.update!(attributes)
+      end
+    end
+
     it 'processingからcompletedになった時に永続通知を作成する' do
       receipt = create(:receipt, :processing, :with_image, user: user, store_name: '完了ストア')
 

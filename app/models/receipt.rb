@@ -955,16 +955,20 @@ class Receipt < ApplicationRecord
   end
 
   def status_notification_needed?
+    analysis_terminal_transition?
+  end
+
+  def processing_flash_notification_needed?
+    analysis_terminal_transition? && user&.push_notification_enabled?
+  end
+
+  def analysis_terminal_transition?
     return false unless saved_change_to_status?
 
     previous_status, current_status = saved_change_to_status
 
     NOTIFICATION_SOURCE_STATUSES.include?(previous_status) &&
       STATUS_NOTIFICATION_KINDS.key?(current_status)
-  end
-
-  def processing_flash_notification_needed?
-    saved_change_to_status? && user&.push_notification_enabled?
   end
 
   def create_status_notification
