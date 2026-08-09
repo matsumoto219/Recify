@@ -154,6 +154,35 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
     end
   end
 
+  it 'warning-only itemは通常のitem再送信でneeds_reviewへ昇格させない' do
+    receipt = create_receipt(
+      status: 'completed',
+      review_reasons: [ 'item_tax_rate_uncertain' ]
+    )
+    item = receipt.receipt_items.sole
+    item.update!(
+      needs_review: false,
+      review_reasons: [ 'item_tax_rate_uncertain' ]
+    )
+
+    patch_receipt(
+      receipt,
+      receipt_items_attributes: {
+        '0' => item_attributes(item)
+      }
+    )
+    receipt.reload
+    item.reload
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(item.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+      expect(item.needs_review).to be(false)
+      expect(receipt.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+      expect(receipt.status).to eq('completed')
+    end
+  end
+
   it 'processing errorを持つfailed receiptのmemoだけを更新してもblocking reasonを保持する' do
     receipt = create_receipt(
       status: 'failed',
@@ -220,7 +249,7 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
       receipt,
       store_name: receipt.store_name,
       store_address: receipt.store_address,
-      store_phone_number: receipt.store_phone_number,
+      store_phone_number: receipt.display_store_phone_number,
       purchased_on: purchased_at.to_date.iso8601,
       purchased_time: purchased_at.strftime('%H:%M'),
       payment_method: receipt.payment_method,

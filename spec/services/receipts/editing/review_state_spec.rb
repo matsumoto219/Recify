@@ -1,11 +1,11 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Editing::ReviewState do
-  def resolve(receipt, permitted: {}, amount_reasons: [], child_review_remaining: false, nested_amount_inputs_submitted: false, item_inputs_submitted: false)
+  def resolve(receipt, permitted: {}, amount_reasons: [], amount_needs_review: false, child_review_remaining: false, nested_amount_inputs_submitted: false, item_inputs_submitted: false)
     described_class.call(
       receipt: receipt,
       permitted: permitted.stringify_keys,
-      amount_result: { review_reasons: amount_reasons },
+      amount_result: { review_reasons: amount_reasons, needs_review: amount_needs_review },
       consistency_review_reasons: [],
       child_review_remaining: child_review_remaining,
       nested_amount_inputs_submitted: nested_amount_inputs_submitted,
@@ -178,6 +178,22 @@ RSpec.describe Receipts::Editing::ReviewState do
     end
   end
 
+  it '表示形式の日本電話番号を再送信してもstore_phone_number_uncertainを解除しない' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      store_phone_number: '+81312345678',
+      review_reasons: [ 'store_phone_number_uncertain' ]
+    )
+
+    result = resolve(receipt, permitted: { store_phone_number: '03-1234-5678' })
+
+    aggregate_failures do
+      expect(result.review_reasons).to eq([ 'store_phone_number_uncertain' ])
+      expect(result.status).to eq('review_needed')
+    end
+  end
+
   it 'core fieldを実際に変更した場合だけuncertain/conflicted reasonを解除する' do
     receipt = build(
       :receipt,
@@ -228,6 +244,28 @@ RSpec.describe Receipts::Editing::ReviewState do
     aggregate_failures do
       expect(result.review_reasons).to eq([ 'ocr_low_confidence' ])
       expect(result.status).to eq('completed')
+    end
+  end
+
+  it 'Amount側で確認必須へ昇格したwarningはreview_neededを維持する' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'price_tax_inclusion_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+
+    result = resolve(
+      receipt,
+      amount_reasons: [ 'price_tax_inclusion_uncertain' ],
+      amount_needs_review: true,
+      nested_amount_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(result.review_reasons).to eq([ 'price_tax_inclusion_uncertain' ])
+      expect(result.status).to eq('review_needed')
     end
   end
 
@@ -325,6 +363,24 @@ RSpec.describe Receipts::Editing::ReviewState do
     aggregate_failures do
       expect(result.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
       expect(result.needs_review).to be(true)
+    end
+  end
+
+  it 'warning-only itemは同じ値の再送信でneeds_reviewをfalseからtrueへ変えない' do
+    item = ReceiptItem.new(
+      tax_rate: BigDecimal('0.10'),
+      needs_review: false,
+      review_reasons: [ 'item_tax_rate_uncertain' ]
+    )
+
+    result = described_class.item_review_state(
+      item: item,
+      submitted_attributes: { tax_rate: BigDecimal('0.10') }
+    )
+
+    aggregate_failures do
+      expect(result.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+      expect(result.needs_review).to be(false)
     end
   end
 end

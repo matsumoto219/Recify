@@ -53,7 +53,10 @@ class Receipts::Editing::ReviewState
         item_review_reason_resolved?(reason, item: item, submitted_attributes: submitted_attributes)
       end
       remaining_reasons = reasons - resolved_reasons
-      needs_review = remaining_reasons.present? || (item.needs_review? && resolved_reasons.empty?)
+      blocking_reason_remaining = ReviewReasons.blocking_reasons_for_user(remaining_reasons).present?
+      existing_review_remaining = item.needs_review? &&
+        (remaining_reasons.present? || resolved_reasons.empty?)
+      needs_review = blocking_reason_remaining || existing_review_remaining
 
       ItemResult.new(review_reasons: remaining_reasons, needs_review: needs_review)
     end
@@ -187,7 +190,15 @@ class Receipts::Editing::ReviewState
   end
 
   def normalized_field_value(field, value)
+    return normalized_store_phone_number(value) if field == :store_phone_number
+
     receipt.class.type_for_attribute(field.to_s).cast(value).presence
+  end
+
+  def normalized_store_phone_number(value)
+    comparable_receipt = receipt.dup
+    comparable_receipt.store_phone_number = value
+    comparable_receipt.display_store_phone_number.presence
   end
 
   def effective_item_present?
@@ -208,8 +219,15 @@ class Receipts::Editing::ReviewState
 
   def review_needed?(reasons)
     ReviewReasons.blocking_reasons_for_user(reasons).present? ||
+      amount_review_required? ||
       child_review_remaining ||
       unexplained_existing_review?
+  end
+
+  def amount_review_required?
+    amount_result.respond_to?(:key?) &&
+      amount_result.key?(:needs_review) &&
+      amount_result[:needs_review] == true
   end
 
   def unexplained_existing_review?
