@@ -89,17 +89,7 @@
     tax_rate_summary = receipt_tax_rate_summary(receipt, items: visible_receipt_items)
     error_flags = form_presenter.error_flags
   %>
-  <% content_for :mobile_bottom_actions do %>
-    <%= render "shared/ui/actions/button",
-          label: t("receipts.form.buttons.save"),
-          type: "submit",
-          form: form_dom_id,
-          full_width: true,
-          radius: :xl,
-          class: "py-3" %>
-  <% end %>
-
-  <section class="w-full min-w-0 max-w-7xl mx-auto px-0 md:px-4 py-2 md:pb-2">
+  <section class="receipt-form-content w-full min-w-0 max-w-7xl mx-auto px-0 md:px-4 py-2">
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
       <%= render "shared/ui/layout/section_header",
             title: page_title,
@@ -117,12 +107,14 @@
               size: :compact,
               radius: :xl %>
 
-        <%= render "shared/ui/actions/button",
-              label: t("receipts.form.buttons.save"),
-              type: "submit",
-              size: :compact,
-              radius: :xl,
-              class: "px-10" %>
+        <div class="hidden lg:block">
+          <%= render "shared/ui/actions/button",
+                label: t("receipts.form.buttons.save"),
+                type: "submit",
+                size: :compact,
+                radius: :xl,
+                class: "px-10" %>
+        </div>
       </div>
     </div>
 
@@ -438,7 +430,7 @@
           </div>
         <% end %>
 
-        <%= render "shared/ui/layout/surface_card", padding: :md do %>
+        <%= render "shared/ui/layout/surface_card", padding: :md, class: "receipt-form-memo-card" do %>
           <%= render "shared/ui/layout/section_header",
                 title: t("receipts.form.sections.memo"),
                 icon: "notes",
@@ -457,26 +449,27 @@
         <% end %>
       </div>
 
-      <div class="lg:col-span-4 space-y-6 lg:sticky lg:top-24 self-start">
-        <div id="<%= ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY %>" class="scroll-mt-24">
-          <%= render "receipts/amount_summary_card",
-                title: t("receipts.common.total_amount_title"),
-                amount: total_amount_value,
-                icon: "payments",
-                subtotal: subtotal_amount_value,
-                tax_amount: tax_amount_value,
-                tax_rate: receipt.tax_rate,
-                tax_rate_summary: tax_rate_summary,
-                payment_adjustment_total: payment_adjustment_summary&.payment_adjustment_total,
-                final_payment_total: payment_adjustment_summary&.final_payment_total,
-                subtotal_target: "subtotalAmount",
-                tax_amount_target: "taxAmount",
-                tax_rate_target: "taxRateSummary",
-                payment_adjustment_row_target: "paymentAdjustmentRow",
-                payment_adjustment_total_target: "paymentAdjustmentAmount",
-                final_payment_row_target: "finalPaymentRow",
-                final_payment_total_target: "finalPaymentAmount" %>
-        </div>
+      <div class="receipt-form-aside lg:col-span-4 flex flex-col gap-6 lg:sticky lg:top-24 self-start">
+        <%= render "receipts/amount_summary_card",
+              id: ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
+              class: "scroll-mt-24",
+              form_mode: true,
+              title: t("receipts.common.total_amount_title"),
+              amount: total_amount_value,
+              icon: "payments",
+              subtotal: subtotal_amount_value,
+              tax_amount: tax_amount_value,
+              tax_rate: receipt.tax_rate,
+              tax_rate_summary: tax_rate_summary,
+              payment_adjustment_total: payment_adjustment_summary&.payment_adjustment_total,
+              final_payment_total: payment_adjustment_summary&.final_payment_total,
+              subtotal_target: "subtotalAmount",
+              tax_amount_target: "taxAmount",
+              tax_rate_target: "taxRateSummary",
+              payment_adjustment_row_target: "paymentAdjustmentRow",
+              payment_adjustment_total_target: "paymentAdjustmentAmount",
+              final_payment_row_target: "finalPaymentRow",
+              final_payment_total_target: "finalPaymentAmount" %>
 
         <div id="<%= ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW %>" class="scroll-mt-24">
           <%= render "shared/ui/card/receipt_image_card",

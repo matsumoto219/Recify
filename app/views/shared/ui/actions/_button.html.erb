@@ -22,7 +22,6 @@
   - trailing_icon_animated: trailing_icon を hover 時に動かす場合は true。未指定時は false
   - class: 追加CSSクラス
   - disable_with: 送信中に表示するテキスト
-  - form: button 要素に付与する form 属性
   - html_options: button 要素に追加するHTML属性
   - unstyled: 既定のボタンスタイルを使わない場合は true。variant はリンク色として使う。未指定時は false
 %>
@@ -47,7 +46,6 @@
   trailing_icon_animated = local_assigns.fetch(:trailing_icon_animated, false)
   extra_classes = local_assigns[:class]
   disable_with = local_assigns[:disable_with]
-  form = local_assigns[:form]
   html_options = local_assigns.fetch(:html_options, {})
   unstyled = local_assigns.fetch(:unstyled, false)
 
@@ -149,9 +147,6 @@
   <button
     type="<%= type %>"
     class="<%= button_classes %>"
-    <% if form.present? %>
-      form="<%= form %>"
-    <% end %>
     <%= "disabled" if disabled || loading %>
     <% if disable_with.present? %> data-disable-with="<%= disable_with %>" data-turbo-submits-with="<%= disable_with %>"<% end %>
     <% data_attributes.each do |key, value| %> data-<%= key.to_s.dasherize %>="<%= value %>" <% end %>

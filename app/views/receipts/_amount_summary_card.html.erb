@@ -23,6 +23,8 @@
   - final_payment_row_target: 実支払額行へ付与する receipt-form target 名
   - final_payment_total_target: 実支払額表示へ付与する receipt-form target 名
   - tax_details: 税率別内訳の配列
+  - form_mode: レシートフォーム用の追従表示を有効にする場合は true
+  - id: カードに付与する id
   - class: カードに追加するCSSクラス
 %>
 
@@ -60,70 +62,139 @@
   tax_details = Array(local_assigns[:tax_details])
   tax_detail_rows = receipt_amount_summary_tax_detail_rows(tax_details, currency_prefix: currency_prefix)
   show_payment_adjustment = payment_adjustment_total.to_i.nonzero? && !final_payment_total.nil?
+  form_mode = local_assigns.fetch(:form_mode, false)
+  card_id = local_assigns[:id]
   wrapper_class = local_assigns[:class]
+  details_id = "#{card_id}-details" if form_mode && card_id.present?
+  title_id = "#{card_id}-title" if form_mode && card_id.present?
+  open_details_label = t("receipts.form.amount_summary.open_details")
+  close_details_label = t("receipts.form.amount_summary.close_details")
+  card_data = if form_mode
+    {
+      controller: "mobile-amount-summary",
+      mobile_amount_summary_open_label_value: open_details_label,
+      mobile_amount_summary_close_label_value: close_details_label,
+      mobile_amount_summary_review_target_value: card_id
+    }
+  end
+  card_class = [
+    "relative overflow-hidden amount-summary-surface",
+    ("receipt-form-mobile-amount-summary" if form_mode),
+    wrapper_class
+  ].compact.join(" ")
+  title_attributes = {
+    class: "receipt-amount-summary-title truncate text-xs font-bold uppercase tracking-widest opacity-80 mb-2",
+    title: title
+  }
+  title_attributes[:id] = title_id if title_id.present?
+  details_attributes = {
+    class: [
+      "receipt-amount-summary-details",
+      ("collapsible-grid is-open" if form_mode)
+    ].compact.join(" "),
+    aria: { hidden: false }
+  }
+  details_attributes[:id] = details_id if details_id.present?
+  details_attributes[:data] = { mobile_amount_summary_target: "details" } if form_mode
 %>
 
 <%= render "shared/ui/layout/surface_card",
       shadow_variant: :indigo,
       padding: :lg,
-      class: ["relative overflow-hidden amount-summary-surface", wrapper_class].compact.join(" ") do %>
-  <div class="absolute -right-4 -top-4 opacity-10 pointer-events-none">
-    <span class="material-symbols-outlined text-9xl" style="font-size: 120px;"><%= icon %></span>
+      id: card_id,
+      title_id: title_id,
+      data: card_data,
+      class: card_class do %>
+  <div class="receipt-amount-summary-decoration" aria-hidden="true">
+    <span class="receipt-amount-summary-decoration-icon material-symbols-outlined"><%= icon %></span>
   </div>
 
-  <p class="truncate text-xs font-bold uppercase tracking-widest opacity-80 mb-2" title="<%= title %>"><%= title %></p>
-  <h2 class="text-4xl font-black mb-6 truncate"
-      title="<%= amount_display %>"
-      data-receipt-form-target="totalAmount">
-    <%= amount_display %>
-  </h2>
-
-  <%= render "shared/ui/layout/section_divider", class: "mt-6 mb-4" %>
-  <div class="space-y-3">
-    <div class="flex min-w-0 justify-between text-sm gap-4">
-      <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.subtotal") %></span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= subtotal_display %>" <%= subtotal_target_attributes %>><%= subtotal_display %></span>
-    </div>
-    <div class="flex min-w-0 justify-between text-sm gap-4">
-      <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_amount") %></span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_amount_display %>" <%= tax_amount_target_attributes %>><%= tax_amount_display %></span>
-    </div>
-    <div class="flex min-w-0 justify-between text-sm gap-4">
-      <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_rate") %></span>
-      <span class="min-w-0 truncate font-medium text-right" title="<%= tax_rate_display %>" <%= tax_rate_target_attributes %>><%= tax_rate_display %></span>
+  <div class="receipt-amount-summary-toolbar">
+    <div class="receipt-amount-summary-heading min-w-0">
+      <p <%= tag.attributes(title_attributes) %>><%= title %></p>
+      <h2 class="receipt-amount-summary-value text-4xl font-black truncate"
+          title="<%= amount_display %>"
+          data-receipt-form-target="totalAmount">
+        <%= amount_display %>
+      </h2>
     </div>
 
-    <% if show_payment_adjustment %>
-      <%= render "shared/ui/layout/section_divider", class: "mt-4 mb-3" %>
-      <div class="flex min-w-0 justify-between text-sm gap-4"
-           <%= payment_adjustment_row_target_attributes %>>
-        <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.payment_adjustment") %></span>
-        <span class="min-w-0 truncate font-medium text-right" title="<%= payment_adjustment_display %>" <%= payment_adjustment_total_target_attributes %>><%= payment_adjustment_display %></span>
-      </div>
-      <div class="flex min-w-0 justify-between text-sm gap-4"
-           <%= final_payment_row_target_attributes %>>
-        <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.final_payment_total") %></span>
-        <span class="min-w-0 truncate font-bold text-right" title="<%= final_payment_total_display %>" <%= final_payment_total_target_attributes %>><%= final_payment_total_display %></span>
-      </div>
+    <% if form_mode %>
+      <button type="button"
+              class="receipt-amount-summary-toggle ui-touch-control"
+              aria-label="<%= open_details_label %>"
+              aria-controls="<%= details_id %>"
+              aria-expanded="true"
+              data-mobile-amount-summary-target="toggle"
+              data-action="click->mobile-amount-summary#toggle">
+        <span class="material-symbols-outlined transition-transform"
+              aria-hidden="true"
+              data-mobile-amount-summary-target="icon">expand_less</span>
+      </button>
+
+      <%= render "shared/ui/actions/button",
+            label: t("receipts.form.buttons.save"),
+            type: "submit",
+            size: :sm,
+            weight: :bold,
+            radius: :xl,
+            disable_with: t("receipts.form.buttons.saving"),
+            class: "receipt-amount-summary-save min-h-11" %>
     <% end %>
+  </div>
 
-    <% if tax_detail_rows.size > 1 %>
-      <%= render "shared/ui/layout/section_divider", class: "mt-4 mb-3" %>
-      <div class="space-y-2">
-        <p class="truncate text-xs font-bold uppercase tracking-widest opacity-70" title="<%= t("shared.amount_summary_card.tax_details") %>"><%= t("shared.amount_summary_card.tax_details") %></p>
-        <% tax_detail_rows.each do |tax_detail_row| %>
-          <div class="rounded-lg amount-summary-detail-surface px-3 py-2 text-xs space-y-1">
-            <div class="flex min-w-0 justify-between gap-4 font-medium">
-              <span class="min-w-0 truncate" title="<%= tax_detail_row.rate_label %><%= t("shared.amount_summary_card.target") %>"><%= tax_detail_row.rate_label %><%= t("shared.amount_summary_card.target") %></span>
-              <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_amount") %> <%= tax_detail_row.amount_display %>"><%= t("shared.amount_summary_card.tax_amount") %> <%= tax_detail_row.amount_display %></span>
-            </div>
-            <div class="flex min-w-0 justify-between gap-4 opacity-70">
-              <span class="min-w-0 truncate" title="<%= t("shared.amount_summary_card.subtotal") %> <%= tax_detail_row.net_amount_display %>"><%= t("shared.amount_summary_card.subtotal") %> <%= tax_detail_row.net_amount_display %></span>
-              <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_included") %> <%= tax_detail_row.total_display %>"><%= t("shared.amount_summary_card.tax_included") %> <%= tax_detail_row.total_display %></span>
-            </div>
+  <div <%= tag.attributes(details_attributes) %>>
+    <div class="<%= "receipt-amount-summary-details-inner collapsible-grid-inner" if form_mode %>">
+      <%= render "shared/ui/layout/section_divider", class: "receipt-amount-summary-divider" %>
+      <div class="receipt-amount-summary-detail-list space-y-3">
+        <div class="receipt-amount-summary-primary-details flex flex-col gap-3">
+          <div class="receipt-amount-summary-primary-detail flex min-w-0 justify-between text-sm gap-4">
+            <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.subtotal") %></span>
+            <span class="min-w-0 truncate font-medium text-right" title="<%= subtotal_display %>" <%= subtotal_target_attributes %>><%= subtotal_display %></span>
+          </div>
+          <div class="receipt-amount-summary-primary-detail flex min-w-0 justify-between text-sm gap-4">
+            <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_amount") %></span>
+            <span class="min-w-0 truncate font-medium text-right" title="<%= tax_amount_display %>" <%= tax_amount_target_attributes %>><%= tax_amount_display %></span>
+          </div>
+          <div class="receipt-amount-summary-primary-detail flex min-w-0 justify-between text-sm gap-4">
+            <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.tax_rate") %></span>
+            <span class="min-w-0 truncate font-medium text-right" title="<%= tax_rate_display %>" <%= tax_rate_target_attributes %>><%= tax_rate_display %></span>
+          </div>
+        </div>
+
+        <% if show_payment_adjustment %>
+          <%= render "shared/ui/layout/section_divider", class: "mt-4 mb-3" %>
+          <div class="flex min-w-0 justify-between text-sm gap-4"
+               <%= payment_adjustment_row_target_attributes %>>
+            <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.payment_adjustment") %></span>
+            <span class="min-w-0 truncate font-medium text-right" title="<%= payment_adjustment_display %>" <%= payment_adjustment_total_target_attributes %>><%= payment_adjustment_display %></span>
+          </div>
+          <div class="flex min-w-0 justify-between text-sm gap-4"
+               <%= final_payment_row_target_attributes %>>
+            <span class="shrink-0 opacity-70"><%= t("shared.amount_summary_card.final_payment_total") %></span>
+            <span class="min-w-0 truncate font-bold text-right" title="<%= final_payment_total_display %>" <%= final_payment_total_target_attributes %>><%= final_payment_total_display %></span>
+          </div>
+        <% end %>
+
+        <% if tax_detail_rows.size > 1 %>
+          <%= render "shared/ui/layout/section_divider", class: "mt-4 mb-3" %>
+          <div class="space-y-2">
+            <p class="truncate text-xs font-bold uppercase tracking-widest opacity-70" title="<%= t("shared.amount_summary_card.tax_details") %>"><%= t("shared.amount_summary_card.tax_details") %></p>
+            <% tax_detail_rows.each do |tax_detail_row| %>
+              <div class="rounded-lg amount-summary-detail-surface px-3 py-2 text-xs space-y-1">
+                <div class="flex min-w-0 justify-between gap-4 font-medium">
+                  <span class="min-w-0 truncate" title="<%= tax_detail_row.rate_label %><%= t("shared.amount_summary_card.target") %>"><%= tax_detail_row.rate_label %><%= t("shared.amount_summary_card.target") %></span>
+                  <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_amount") %> <%= tax_detail_row.amount_display %>"><%= t("shared.amount_summary_card.tax_amount") %> <%= tax_detail_row.amount_display %></span>
+                </div>
+                <div class="flex min-w-0 justify-between gap-4 opacity-70">
+                  <span class="min-w-0 truncate" title="<%= t("shared.amount_summary_card.subtotal") %> <%= tax_detail_row.net_amount_display %>"><%= t("shared.amount_summary_card.subtotal") %> <%= tax_detail_row.net_amount_display %></span>
+                  <span class="shrink-0 truncate text-right" title="<%= t("shared.amount_summary_card.tax_included") %> <%= tax_detail_row.total_display %>"><%= t("shared.amount_summary_card.tax_included") %> <%= tax_detail_row.total_display %></span>
+                </div>
+              </div>
+            <% end %>
           </div>
         <% end %>
       </div>
-    <% end %>
+    </div>
   </div>
 <% end %>
