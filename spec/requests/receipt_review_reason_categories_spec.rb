@@ -27,7 +27,7 @@ RSpec.describe "Receipt review reason categories", type: :request do
       aggregate_failures(path) do
         expect(response).to have_http_status(:success)
         expect(review_card).to be_present
-        expect(review_card.text).to include("項目の確認")
+        expect(review_card.text).to include("レシート内容")
         expect(review_card.text).to include(
           I18n.t("enums.receipt_item.review_reason.purchased_at_missing"),
           I18n.t("enums.receipt_item.review_reason.payment_method_missing")

@@ -5760,7 +5760,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '項目reasonのみのレシートは項目の確認セクションとして表示する' do
+    it '項目reasonのみのレシートはレシート内容セクションとして表示する' do
       receipt.update!(
         status: 'review_needed',
         review_reasons: [ 'item_name_uncertain' ]
@@ -5777,7 +5777,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('要確認内容')
-        expect(response.body).to include('項目の確認')
+        expect(response.body).to include('レシート内容')
         expect(response.body).to include('商品名の精度が低い可能性があります')
         expect(review_card).to be_present
         expect(review_card['open']).to be_nil
@@ -5785,7 +5785,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(summary['class']).to include('min-w-0')
         expect(details['class']).to include('min-w-0')
         expect(summary.text).to include('要確認内容', '1件', '確認が必要な項目があります。')
-        expect(details.text).to include('項目の確認', '商品名の精度が低い可能性があります')
+        expect(details.text).to include('レシート内容', '商品名の精度が低い可能性があります')
         expect(review_card.text).not_to include('AI補完')
         expect(target_link).to be_present
         expect(target_link['class']).to include('btn-link-danger')
