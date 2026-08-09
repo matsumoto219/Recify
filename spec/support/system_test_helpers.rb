@@ -91,6 +91,10 @@ RSpec.configure do |config|
 
     driven_by :selenium, using: browser, screen_size: screen_size do |options|
       options.add_argument("--disable-background-networking")
+      # Avoid Chrome's click-navigation race:
+      # https://github.com/teamcapybara/capybara/issues/2800#issuecomment-5152341389
+      # Remove only after repeated navigation specs pass on CI without it.
+      options.add_argument("--disable-features=DeferRendererTasksAfterInput")
       options.add_argument("--disable-dev-shm-usage") if ENV["CI"].present?
       options.add_argument(
         "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1"

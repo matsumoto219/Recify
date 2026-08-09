@@ -3,6 +3,12 @@ require_relative "../support/system_test_helpers"
 
 RSpec.describe "実Chrome system test harness", type: :system do
   it "Stimulusを実行し、実ログイン後に完了済みレシートを表示する" do
+    chrome_arguments = page.driver.browser.execute_cdp("Browser.getBrowserCommandLine").fetch("arguments")
+    disabled_features = chrome_arguments
+      .grep(/\A--disable-features=/)
+      .flat_map { |argument| argument.split("=", 2).last.split(",") }
+    expect(disabled_features).to include("DeferRendererTasksAfterInput")
+
     user = create_system_test_user
     create(
       :receipt,
