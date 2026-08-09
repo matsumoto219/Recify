@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module ReviewReasons
-  AI_REASONS = %w[
+  CONTENT_REASONS = %w[
     item_name_uncertain
     item_category_uncertain
     item_quantity_uncertain
@@ -72,7 +72,7 @@ module ReviewReasons
   ].freeze
 
   USER_FACING_REASONS = (
-    AI_REASONS +
+    CONTENT_REASONS +
     OCR_REASONS +
     AMOUNT_REASONS
   ).uniq.freeze
@@ -83,7 +83,7 @@ module ReviewReasons
   ).uniq.freeze
 
   AI_OUTPUT_REASONS = (
-    AI_REASONS +
+    CONTENT_REASONS +
     OCR_REASONS +
     %w[
       adjustment_uncertain
@@ -98,8 +98,8 @@ module ReviewReasons
     ]
   ).freeze
 
-  SOURCES = %i[
-    ai
+  DISPLAY_CATEGORIES = %i[
+    content
     ocr
     amount
     system
@@ -108,10 +108,10 @@ module ReviewReasons
 
   module_function
 
-  def source_for(reason)
+  def display_category_for(reason)
     normalized = normalize(reason)
 
-    return :ai if AI_REASONS.include?(normalized)
+    return :content if CONTENT_REASONS.include?(normalized)
     return :ocr if OCR_REASONS.include?(normalized)
     return :amount if AMOUNT_REASONS.include?(normalized)
     return :system if SYSTEM_REASONS.include?(normalized)
@@ -119,10 +119,10 @@ module ReviewReasons
     :unknown
   end
 
-  def group_by_source(reasons)
-    SOURCES.index_with { [] }.tap do |groups|
+  def group_by_display_category(reasons)
+    DISPLAY_CATEGORIES.index_with { [] }.tap do |groups|
       Array(reasons).each do |reason|
-        groups[source_for(reason)] << normalize(reason)
+        groups[display_category_for(reason)] << normalize(reason)
       end
     end
   end
@@ -162,7 +162,7 @@ module ReviewReasons
     Array(reasons).filter_map do |reason|
       normalized = normalize(reason)
       next if normalized.blank?
-      next unless source_for(normalized) == :system
+      next unless display_category_for(normalized) == :system
 
       normalized
     end.uniq

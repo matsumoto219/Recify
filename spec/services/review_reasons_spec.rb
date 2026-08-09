@@ -1,67 +1,68 @@
 require 'rails_helper'
 
 RSpec.describe ReviewReasons do
-  describe '.source_for' do
-    it 'classifies ai reasons' do
+  describe '.display_category_for' do
+    it 'classifies content reasons without treating the category as provenance' do
       aggregate_failures do
-        expect(described_class.source_for('item_name_uncertain')).to eq(:ai)
-        expect(described_class.source_for(:item_category_uncertain)).to eq(:ai)
-        expect(described_class.source_for('item_tax_rate_uncertain')).to eq(:ai)
-        expect(described_class.source_for('store_name_missing')).to eq(:ai)
-        expect(described_class.source_for('payment_method_uncertain')).to eq(:ai)
+        expect(described_class.display_category_for('item_name_uncertain')).to eq(:content)
+        expect(described_class.display_category_for(:item_category_uncertain)).to eq(:content)
+        expect(described_class.display_category_for('item_tax_rate_uncertain')).to eq(:content)
+        expect(described_class.display_category_for('store_name_missing')).to eq(:content)
+        expect(described_class.display_category_for('purchased_at_missing')).to eq(:content)
+        expect(described_class.display_category_for('payment_method_missing')).to eq(:content)
       end
     end
 
     it 'classifies ocr reasons' do
       aggregate_failures do
-        expect(described_class.source_for('ocr_unreadable')).to eq(:ocr)
-        expect(described_class.source_for(:ocr_low_confidence)).to eq(:ocr)
-        expect(described_class.source_for('multiple_receipts_suspected')).to eq(:ocr)
+        expect(described_class.display_category_for('ocr_unreadable')).to eq(:ocr)
+        expect(described_class.display_category_for(:ocr_low_confidence)).to eq(:ocr)
+        expect(described_class.display_category_for('multiple_receipts_suspected')).to eq(:ocr)
       end
     end
 
     it 'classifies amount reasons' do
       aggregate_failures do
-        expect(described_class.source_for('total_mismatch')).to eq(:amount)
-        expect(described_class.source_for(:tax_detail_mismatch)).to eq(:amount)
-        expect(described_class.source_for('tax_detail_incomplete')).to eq(:amount)
-        expect(described_class.source_for(:tax_detail_partial)).to eq(:amount)
-        expect(described_class.source_for('zero_amount_item_incomplete')).to eq(:amount)
-        expect(described_class.source_for('price_tax_inclusion_uncertain')).to eq(:amount)
-        expect(described_class.source_for('competing_exact_basis_candidate')).to eq(:amount)
-        expect(described_class.source_for('mixed_basis_search_truncated')).to eq(:amount)
-        expect(described_class.source_for('calculation_profile_uncertain')).to eq(:amount)
-        expect(described_class.source_for('item_tax_rate_group_uncertain')).to eq(:amount)
-        expect(described_class.source_for('purchase_adjustment_tax_allocation_uncertain')).to eq(:amount)
+        expect(described_class.display_category_for('total_mismatch')).to eq(:amount)
+        expect(described_class.display_category_for(:tax_detail_mismatch)).to eq(:amount)
+        expect(described_class.display_category_for('tax_detail_incomplete')).to eq(:amount)
+        expect(described_class.display_category_for(:tax_detail_partial)).to eq(:amount)
+        expect(described_class.display_category_for('zero_amount_item_incomplete')).to eq(:amount)
+        expect(described_class.display_category_for('price_tax_inclusion_uncertain')).to eq(:amount)
+        expect(described_class.display_category_for('competing_exact_basis_candidate')).to eq(:amount)
+        expect(described_class.display_category_for('mixed_basis_search_truncated')).to eq(:amount)
+        expect(described_class.display_category_for('calculation_profile_uncertain')).to eq(:amount)
+        expect(described_class.display_category_for('item_tax_rate_group_uncertain')).to eq(:amount)
+        expect(described_class.display_category_for('purchase_adjustment_tax_allocation_uncertain')).to eq(:amount)
       end
     end
 
     it 'classifies system reasons' do
       aggregate_failures do
-        expect(described_class.source_for('ai_api_error')).to eq(:system)
-        expect(described_class.source_for('ai_auth_error')).to eq(:system)
-        expect(described_class.source_for('ai_invalid_request')).to eq(:system)
-        expect(described_class.source_for(:ai_timeout)).to eq(:system)
-        expect(described_class.source_for('ai_unavailable')).to eq(:system)
-        expect(described_class.source_for('ai_quota_exceeded')).to eq(:system)
-        expect(described_class.source_for('ai_rate_limited')).to eq(:system)
-        expect(described_class.source_for('unexpected_error')).to eq(:system)
-        expect(described_class.source_for('analysis_missing_keys')).to eq(:system)
+        expect(described_class.display_category_for('ai_api_error')).to eq(:system)
+        expect(described_class.display_category_for('ai_auth_error')).to eq(:system)
+        expect(described_class.display_category_for('ai_invalid_request')).to eq(:system)
+        expect(described_class.display_category_for(:ai_timeout)).to eq(:system)
+        expect(described_class.display_category_for('ai_unavailable')).to eq(:system)
+        expect(described_class.display_category_for('ai_quota_exceeded')).to eq(:system)
+        expect(described_class.display_category_for('ai_rate_limited')).to eq(:system)
+        expect(described_class.display_category_for('unexpected_error')).to eq(:system)
+        expect(described_class.display_category_for('analysis_missing_keys')).to eq(:system)
       end
     end
 
     it 'falls back unknown reasons to unknown' do
       aggregate_failures do
-        expect(described_class.source_for('custom_reason')).to eq(:unknown)
-        expect(described_class.source_for(nil)).to eq(:unknown)
+        expect(described_class.display_category_for('custom_reason')).to eq(:unknown)
+        expect(described_class.display_category_for(nil)).to eq(:unknown)
       end
     end
   end
 
-  describe '.group_by_source' do
-    it 'groups normalized reasons by source' do
-      result = described_class.group_by_source([
-        :item_name_uncertain,
+  describe '.group_by_display_category' do
+    it 'groups normalized reasons by their display meaning' do
+      result = described_class.group_by_display_category([
+        :purchased_at_missing,
         'ocr_low_confidence',
         'tax_detail_mismatch',
         'unexpected_error',
@@ -69,7 +70,7 @@ RSpec.describe ReviewReasons do
       ])
 
       aggregate_failures do
-        expect(result[:ai]).to eq([ 'item_name_uncertain' ])
+        expect(result[:content]).to eq([ 'purchased_at_missing' ])
         expect(result[:ocr]).to eq([ 'ocr_low_confidence' ])
         expect(result[:amount]).to eq([ 'tax_detail_mismatch' ])
         expect(result[:system]).to eq([ 'unexpected_error' ])
@@ -77,11 +78,11 @@ RSpec.describe ReviewReasons do
       end
     end
 
-    it 'returns all source keys even when empty' do
-      result = described_class.group_by_source([])
+    it 'returns all display category keys even when empty' do
+      result = described_class.group_by_display_category([])
 
       expect(result).to eq(
-        ai: [],
+        content: [],
         ocr: [],
         amount: [],
         system: [],

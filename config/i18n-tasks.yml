@@ -66,7 +66,7 @@ ignore_unused:
   - category.*
   - receipts.processing_error_codes.*
   - receipts.processing_errors.*
-  - receipts.review_reason_sources.*
+  - receipts.review_reason_categories.*
   - shared.service_status.*
   - shared.setting_status.*
   - shared.storage_usage.messages.*

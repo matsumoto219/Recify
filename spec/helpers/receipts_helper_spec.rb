@@ -131,7 +131,7 @@ RSpec.describe ReceiptsHelper, type: :helper do
       review_adjustments = [ instance_double('ReceiptReviewAdjustment'), instance_double('ReceiptReviewAdjustment') ]
       receipt = instance_double(
         Receipt,
-        blocking_review_reason_codes: %w[item_name_uncertain tax_detail_mismatch],
+        blocking_review_reason_codes: %w[purchased_at_missing payment_method_missing tax_detail_mismatch],
         review_items: review_items,
         review_adjustments: review_adjustments
       )
@@ -139,11 +139,11 @@ RSpec.describe ReceiptsHelper, type: :helper do
       state = helper.receipt_review_notes_state(receipt)
 
       aggregate_failures do
-        expect(state.groups[:ai]).to eq([ 'item_name_uncertain' ])
+        expect(state.groups[:content]).to eq(%w[purchased_at_missing payment_method_missing])
         expect(state.groups[:amount]).to eq([ 'tax_detail_mismatch' ])
         expect(state.items).to eq(review_items)
         expect(state.adjustments).to eq(review_adjustments)
-        expect(state.count).to eq(6)
+        expect(state.count).to eq(7)
       end
     end
   end
@@ -159,7 +159,7 @@ RSpec.describe ReceiptsHelper, type: :helper do
 
       aggregate_failures do
         expect(state.groups[:ocr]).to eq([ 'ocr_low_confidence' ])
-        expect(state.groups[:ai]).to eq([ 'item_tax_rate_uncertain' ])
+        expect(state.groups[:content]).to eq([ 'item_tax_rate_uncertain' ])
         expect(state.items).to eq([])
         expect(state.adjustments).to eq([])
         expect(state.count).to eq(2)
