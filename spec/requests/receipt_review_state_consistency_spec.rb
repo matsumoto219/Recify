@@ -204,6 +204,35 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
     end
   end
 
+  it 'fallback errorだけが要確認の説明である場合はmemo更新後も案内を保持する' do
+    receipt = create_receipt(
+      status: 'review_needed',
+      review_reasons: [],
+      processing_error_code: 'ai_unavailable',
+      processing_error_message: 'safe fallback guidance'
+    )
+
+    patch_receipt(receipt, memo: '確認済みメモ')
+    receipt.reload
+
+    aggregate_failures 'persisted state' do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.memo).to eq('確認済みメモ')
+      expect(receipt.status).to eq('review_needed')
+      expect(receipt.review_reasons).to be_empty
+      expect(receipt.processing_error_code).to eq('ai_unavailable')
+      expect(receipt.processing_error_message).to eq('safe fallback guidance')
+    end
+
+    get receipt_path(receipt)
+
+    aggregate_failures 'visible explanation' do
+      expect(response).to have_http_status(:success)
+      expect(response.body).to include(I18n.t('receipts.processing_error_card.attention_title'))
+      expect(response.body).to include(I18n.t('receipts.processing_error_codes.ai_unavailable'))
+    end
+  end
+
   it 'review reasonのないfailed receiptはmemoだけの更新でprocessing errorを解除してcompletedにする' do
     receipt = create_receipt(
       status: 'failed',

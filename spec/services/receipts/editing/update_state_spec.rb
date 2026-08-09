@@ -80,6 +80,77 @@ RSpec.describe Receipts::Editing::UpdateState do
     )
   end
 
+  it 'keeps a fallback processing error when it is the only explanation for review_needed' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [],
+      processing_error_code: 'ai_unavailable',
+      processing_error_message: 'safe fallback guidance'
+    )
+    attributes = { 'memo' => 'updated memo' }
+    review_state_arguments = {
+      amount_result: { review_reasons: [] },
+      consistency_review_reasons: [],
+      child_review_remaining: false,
+      nested_amount_inputs_submitted: false,
+      item_inputs_submitted: false
+    }
+    state = Receipts::Editing::ReviewState::Result.new(
+      review_reasons: [],
+      status: 'review_needed'
+    )
+    allow(Receipts::Editing::ReviewState).to receive(:call).and_return(state)
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      review_state_arguments: review_state_arguments
+    )
+
+    expect(attributes).to eq(
+      'memo' => 'updated memo',
+      'review_reasons' => [],
+      'status' => 'review_needed'
+    )
+  end
+
+  it 'clears a processing error when child review still explains review_needed' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [],
+      processing_error_code: 'ai_unavailable',
+      processing_error_message: 'safe fallback guidance'
+    )
+    attributes = {}
+    review_state_arguments = {
+      amount_result: { review_reasons: [] },
+      consistency_review_reasons: [],
+      child_review_remaining: true,
+      nested_amount_inputs_submitted: false,
+      item_inputs_submitted: false
+    }
+    state = Receipts::Editing::ReviewState::Result.new(
+      review_reasons: [],
+      status: 'review_needed'
+    )
+    allow(Receipts::Editing::ReviewState).to receive(:call).and_return(state)
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      review_state_arguments: review_state_arguments
+    )
+
+    expect(attributes).to include(
+      'review_reasons' => [],
+      'status' => 'review_needed',
+      'processing_error_code' => nil,
+      'processing_error_message' => nil
+    )
+  end
+
   it 'leaves attributes unchanged when neither state transition applies' do
     receipt = build(:receipt, :completed, processing_error_code: nil, processing_error_message: nil)
     attributes = { 'memo' => 'unchanged' }
