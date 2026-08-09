@@ -5752,6 +5752,159 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
+    it '元needs_reviewの明細へ未解消のitem_quantity_uncertainを保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'item_quantity_uncertain' ],
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: 'コーヒー',
+            category: 'drink',
+            line_total: 180,
+            needs_review: true
+          }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      item = receipt.reload.receipt_items.first
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to include('item_quantity_uncertain')
+        expect(item.needs_review).to be(true)
+        expect(item.review_reasons).to eq([ 'item_quantity_uncertain' ])
+      end
+    end
+
+    it 'warningだけのitem_tax_rate_uncertainを元needs_reviewの明細へ保存してflagは解消状態を保つ' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'item_tax_rate_uncertain' ],
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: 'コーヒー',
+            category: 'drink',
+            tax_rate: 0.1,
+            line_total: 180,
+            needs_review: true
+          }
+        ]
+      )
+      allow(ReceiptAmountService).to receive(:call).and_return(
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      item = receipt.reload.receipt_items.first
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+        expect(item.needs_review).to be(false)
+        expect(item.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+      end
+    end
+
+    it 'Finalizeで解消したitem_name_uncertainを元needs_reviewの明細へ保存しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'item_name_uncertain' ],
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: 'コーヒー',
+            category: 'drink',
+            line_total: 180,
+            needs_review: true
+          }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: successful_ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      item = receipt.reload.receipt_items.first
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).not_to include('item_name_uncertain')
+        expect(item.needs_review).to be(false)
+        expect(item.review_reasons).to be_empty
+      end
+    end
+
+    it '複数明細では元needs_reviewの明細だけへreceipt-levelのitem理由を保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = successful_ocr_result.deep_merge(
+        candidates: {
+          items: [
+            { raw_text: 'コーヒー', price: 80, quantity: 1, line_total: 80, confidence: 0.95 },
+            { raw_text: 'パン', price: 100, quantity: 1, line_total: 100, confidence: 0.95 }
+          ]
+        }
+      )
+      ai_result = successful_ai_result.merge(
+        needs_review: true,
+        review_reasons: [ 'item_quantity_uncertain' ],
+        receipt_items_attributes: [
+          { index: 0, suggested_name: 'コーヒー', category: 'drink', needs_review: true },
+          { index: 1, suggested_name: 'パン', category: 'food', needs_review: false }
+        ]
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(
+          :ai_success,
+          ocr_result: ocr_result,
+          ai_result: ai_result
+        )
+      )
+
+      items = receipt.reload.receipt_items.order(:position_index)
+
+      aggregate_failures do
+        expect(receipt.review_reasons).to include('item_quantity_uncertain')
+        expect(items.first).to have_attributes(
+          needs_review: true,
+          review_reasons: [ 'item_quantity_uncertain' ]
+        )
+        expect(items.second).to have_attributes(needs_review: false, review_reasons: [])
+      end
+    end
+
     it '保存item名がfinal値で揃っていればAIのitem_name_uncertainとitems_missingをreceipt-levelから落とす' do
       receipt = create(:receipt, :processing, :with_image)
       ai_result = successful_ai_result.merge(
