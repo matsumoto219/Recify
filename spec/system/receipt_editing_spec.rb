@@ -257,23 +257,186 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
   end
 
   def click_mobile_save_button
-    actions_ready = page.evaluate_async_script(<<~JAVASCRIPT)
+    focus_released = page.evaluate_async_script(<<~JAVASCRIPT)
       const done = arguments[arguments.length - 1]
       document.activeElement?.blur()
 
-      window.setTimeout(() => {
-        window.scrollBy(0, 80)
-        window.setTimeout(() => done(true), 350)
-      }, 200)
+      window.setTimeout(() => done(true), 200)
     JAVASCRIPT
-    expect(actions_ready).to be(true)
+    expect(focus_released).to be(true)
     expect(page).to have_css(
-      "[data-mobile-ui-target='actions']:not(.pointer-events-none):not(.translate-y-full)"
+      "[data-controller~='mobile-amount-summary']" \
+      "[data-mobile-amount-summary-keyboard-visible='false'] " \
+      ".receipt-amount-summary-save",
+      visible: true
     )
 
-    within("[data-mobile-ui-target='actions']") do
+    within("[data-controller~='mobile-amount-summary']") do
       click_button I18n.t("receipts.form.buttons.save")
     end
+  end
+
+  def mobile_amount_summary_metrics(maximum_amount_text: nil)
+    page.evaluate_script(<<~JAVASCRIPT, maximum_amount_text, I18n.t("receipts.form.buttons.save"))
+      (() => {
+        const maximumAmountText = arguments[0]
+        const saveLabel = arguments[1]
+        const summary = document.querySelector("[data-controller~='mobile-amount-summary']")
+        const amount = summary.querySelector("[data-receipt-form-target='totalAmount']")
+        const details = summary.querySelector("[data-mobile-amount-summary-target='details']")
+        const toggle = summary.querySelector("[data-mobile-amount-summary-target='toggle']")
+        const toolbar = summary.querySelector(".receipt-amount-summary-toolbar")
+        const heading = summary.querySelector(".receipt-amount-summary-heading")
+        const title = summary.querySelector(".receipt-amount-summary-title")
+        const decoration = summary.querySelector(".receipt-amount-summary-decoration")
+        const decorationIcon = summary.querySelector(".receipt-amount-summary-decoration-icon")
+        const detailList = summary.querySelector(".receipt-amount-summary-detail-list")
+        const divider = summary.querySelector(".receipt-amount-summary-divider")
+        const primaryDetails = Array.from(summary.querySelectorAll(".receipt-amount-summary-primary-detail"))
+        const paymentAdjustmentRow = summary.querySelector("[data-receipt-form-target='paymentAdjustmentRow']")
+        const finalPaymentRow = summary.querySelector("[data-receipt-form-target='finalPaymentRow']")
+        const nav = document.querySelector("[data-mobile-ui-target='nav']")
+        const memo = document.querySelector(".receipt-form-memo-card")
+        const imagePreview = document.querySelector("#receipt-section-image-preview")
+        const formContent = document.querySelector(".receipt-form-content")
+        if (maximumAmountText) {
+          amount.textContent = maximumAmountText
+          amount.title = maximumAmountText
+        }
+
+        const visible = (element) => {
+          if (!element) return false
+          const style = window.getComputedStyle(element)
+          const rect = element.getBoundingClientRect()
+          return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0
+        }
+        const summaryRect = summary.getBoundingClientRect()
+        const navRect = nav.getBoundingClientRect()
+        const amountRect = amount.getBoundingClientRect()
+        const toggleRect = toggle.getBoundingClientRect()
+        const headingRect = heading.getBoundingClientRect()
+        const titleRect = title.getBoundingClientRect()
+        const decorationRect = decoration.getBoundingClientRect()
+        const decorationIconRect = decorationIcon.getBoundingClientRect()
+        const toolbarRect = toolbar.getBoundingClientRect()
+        const detailsRect = details.getBoundingClientRect()
+        const detailListRect = detailList.getBoundingClientRect()
+        const dividerRect = divider.getBoundingClientRect()
+        const primaryDetailRects = primaryDetails.map((detail) => detail.getBoundingClientRect())
+        const memoRect = memo.getBoundingClientRect()
+        const imagePreviewRect = imagePreview.getBoundingClientRect()
+        const visibleSaveButtons = Array.from(document.querySelectorAll("button[type='submit']"))
+          .filter((button) => button.textContent.trim() === saveLabel && visible(button))
+        const visibleSaveButtonRect = visibleSaveButtons[0]?.getBoundingClientRect()
+        const visibleToggle = visible(toggle)
+        const firstControlLeft = visibleToggle ? toggleRect.left : visibleSaveButtonRect?.left
+        const decorationIntersectionWidth = Math.max(
+          0,
+          Math.min(decorationRect.right, summaryRect.right) - Math.max(decorationRect.left, summaryRect.left)
+        )
+        const decorationIntersectionHeight = Math.max(
+          0,
+          Math.min(decorationRect.bottom, summaryRect.bottom) - Math.max(decorationRect.top, summaryRect.top)
+        )
+        const decorationIconIntersectionWidth = Math.max(
+          0,
+          Math.min(decorationIconRect.right, summaryRect.right) - Math.max(decorationIconRect.left, summaryRect.left)
+        )
+        const decorationIconIntersectionHeight = Math.max(
+          0,
+          Math.min(decorationIconRect.bottom, summaryRect.bottom) - Math.max(decorationIconRect.top, summaryRect.top)
+        )
+        const toggleStyle = window.getComputedStyle(toggle)
+        const amountStyle = window.getComputedStyle(amount)
+        const decorationIconStyle = window.getComputedStyle(decorationIcon)
+        const summaryStyle = window.getComputedStyle(summary)
+        const formContentStyle = window.getComputedStyle(formContent)
+        const compactHeight = toolbarRect.height +
+          Number.parseFloat(summaryStyle.paddingTop) + Number.parseFloat(summaryStyle.paddingBottom) +
+          Number.parseFloat(summaryStyle.borderTopWidth) + Number.parseFloat(summaryStyle.borderBottomWidth)
+
+        return {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          summaryPosition: window.getComputedStyle(summary).position,
+          summaryTop: summaryRect.top,
+          summaryBottom: summaryRect.bottom,
+          summaryHeight: summaryRect.height,
+          compactHeight,
+          toolbarHeight: toolbarRect.height,
+          amountText: amount.textContent.trim(),
+          amountTitle: amount.title,
+          amountTextOverflow: amountStyle.textOverflow,
+          amountClientWidth: amount.clientWidth,
+          amountScrollWidth: amount.scrollWidth,
+          amountClipped: amount.scrollWidth > amount.clientWidth + 1,
+          amountBeforeControls: amountRect.right <= firstControlLeft + 1,
+          amountLeftInset: amountRect.left - summaryRect.left,
+          headingRightInset: summaryRect.right - headingRect.right,
+          titleText: title.textContent.trim(),
+          titleVisible: visible(title),
+          titleAboveAmount: titleRect.bottom <= amountRect.top + 1,
+          decorationVisible: visible(decoration),
+          decorationParentIsSummary: decoration.parentElement === summary,
+          decorationTop: decorationRect.top,
+          decorationTopOffset: decorationRect.top - summaryRect.top,
+          decorationRightOffset: decorationRect.right - summaryRect.right,
+          decorationWidthBeforeSave: visibleSaveButtonRect
+            ? Math.max(0, Math.min(decorationRect.right, visibleSaveButtonRect.left) -
+              Math.max(decorationRect.left, summaryRect.left))
+            : decorationIntersectionWidth,
+          decorationIntersectionWidth,
+          decorationIntersectionHeight,
+          decorationIconWidth: decorationIconRect.width,
+          decorationIconHeight: decorationIconRect.height,
+          decorationIconFontSize: Number.parseFloat(decorationIconStyle.fontSize),
+          decorationIconIntersectionWidth,
+          decorationIconIntersectionHeight,
+          toggleVisible: visibleToggle,
+          toggleWidth: toggleRect.width,
+          toggleHeight: toggleRect.height,
+          toggleBackground: toggleStyle.backgroundColor,
+          toggleBorderWidth: toggleStyle.borderWidth,
+          toggleBoxShadow: toggleStyle.boxShadow,
+          visibleSaveButtonCount: visibleSaveButtons.length,
+          visibleSaveButtonWidth: visibleSaveButtonRect?.width || 0,
+          summaryInsideViewport: summaryRect.left >= -1 && summaryRect.right <= window.innerWidth + 1,
+          controlsInsideSummary: Boolean(visibleSaveButtonRect) &&
+            (!visibleToggle || toggleRect.left >= summaryRect.left - 1) &&
+            visibleSaveButtonRect.right <= summaryRect.right + 1,
+          controlsInsideViewport: Boolean(visibleSaveButtonRect) &&
+            (!visibleToggle || toggleRect.left >= -1) &&
+            visibleSaveButtonRect.right <= window.innerWidth + 1,
+          saveRightInset: Boolean(visibleSaveButtonRect) ? summaryRect.right - visibleSaveButtonRect.right : null,
+          navVisible: visible(nav),
+          summaryAboveNav: summaryRect.bottom <= navRect.top + 1,
+          summaryAtViewportBottom: Math.abs(summaryRect.bottom - (window.innerHeight - 16)) <= 2,
+          detailsHidden: details.getAttribute("aria-hidden"),
+          detailsInert: details.inert,
+          detailsHeight: detailsRect.height,
+          toggleExpanded: toggle.getAttribute("aria-expanded"),
+          primaryDetailsHorizontal: primaryDetailRects.length === 3 &&
+            primaryDetailRects.every((rect) => rect.width > 0) &&
+            primaryDetailRects.every((rect) => Math.abs(rect.top - primaryDetailRects[0].top) <= 2),
+          paymentAdjustmentVisible: visible(paymentAdjustmentRow),
+          finalPaymentVisible: visible(finalPaymentRow),
+          dividerBelowDetails: detailListRect.bottom <= dividerRect.top + 1,
+          dividerBeforeToolbar: dividerRect.bottom <= toolbarRect.top + 1,
+          phoneDividerTopGap: dividerRect.top - detailListRect.bottom,
+          phoneDividerBottomGap: toolbarRect.top - dividerRect.bottom,
+          tabletDividerTopGap: dividerRect.top - toolbarRect.bottom,
+          tabletDividerBottomGap: detailListRect.top - dividerRect.bottom,
+          memoImageGap: imagePreviewRect.top - memoRect.bottom,
+          imagePreviewBottom: imagePreviewRect.bottom,
+          imagePreviewClearance: summaryRect.top - imagePreviewRect.bottom,
+          formContentPaddingBottom: Number.parseFloat(formContentStyle.paddingBottom),
+          measuredSummaryHeight: Number.parseFloat(
+            formContent.style.getPropertyValue("--receipt-mobile-amount-summary-height")
+          ),
+          horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth
+        }
+      })()
+    JAVASCRIPT
   end
 
   def expect_only_validation_failure_in_browser_console(receipt)
@@ -980,6 +1143,365 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
       expect(unit_select.value).to eq("set")
       expect(quantity_input["step"]).to eq("1")
       expect(quantity_input["inputmode"]).to eq("numeric")
+    end
+
+    expect_browser_console_clean
+  end
+
+  it "追従金額サマリーを320pxからdesktopまで一つの保存操作で表示する" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "追従金額確認",
+      subtotal_amount: 100,
+      tax_amount: 0,
+      total_amount: 100,
+      payment_method: "cash"
+    )
+    receipt.receipt_items.create!(
+      confirmed_name: "表示確認明細",
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: "each",
+      tax_rate: 0,
+      line_total: 100,
+      needs_review: false
+    )
+    receipt.receipt_adjustments.create!(
+      kind: "point_usage",
+      label: "ポイント利用",
+      amount: 10,
+      sign: "discount",
+      source: "manual",
+      needs_review: false,
+      review_reasons: [],
+      position_index: 0
+    )
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    wait_for_stimulus_controller("mobile-amount-summary")
+
+    maximum_amount_text = "¥#{SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX.to_s.reverse.scan(/.{1,3}/).join(",").reverse}"
+    viewports = [
+      { width: 320, height: 568, mobile: true },
+      { width: 320, height: 844, mobile: true },
+      { width: 390, height: 844, mobile: true },
+      { width: 430, height: 932, mobile: true },
+      { width: 767, height: 900, mobile: true },
+      { width: 768, height: 900, mobile: false },
+      { width: 1023, height: 900, mobile: false },
+      { width: 1024, height: 900, mobile: false }
+    ]
+
+    viewports.each do |viewport|
+      set_viewport(**viewport.slice(:width, :height, :mobile))
+      summary = find("[data-controller~='mobile-amount-summary']", visible: :all)
+      wait_for_visual_motion_to_finish(summary)
+      displayed_amount = viewport.fetch(:width) < 1024 ? maximum_amount_text : "¥100"
+      metrics = mobile_amount_summary_metrics(maximum_amount_text: displayed_amount)
+
+      aggregate_failures "amount summary at #{viewport.fetch(:width)}x#{viewport.fetch(:height)}px" do
+        expect(metrics.fetch("viewportWidth")).to eq(viewport.fetch(:width))
+        expect(metrics.fetch("viewportHeight")).to eq(viewport.fetch(:height))
+        expect(metrics.fetch("visibleSaveButtonCount")).to eq(1)
+        expect(metrics.fetch("horizontalOverflow")).to be(false)
+        expect(metrics.fetch("titleText")).to eq(I18n.t("receipts.common.total_amount_title"))
+        expect(metrics.fetch("titleVisible")).to be(true)
+        expect(metrics.fetch("titleAboveAmount")).to be(true)
+        expect(metrics.fetch("decorationVisible")).to be(true)
+        expect(metrics.fetch("decorationParentIsSummary")).to be(true)
+        expected_decoration_top = viewport.fetch(:width) < 768 ? -48 : -16
+        expect(metrics.fetch("decorationTopOffset")).to be_within(1).of(expected_decoration_top)
+        expect(metrics.fetch("decorationIconWidth")).to be_within(1).of(120)
+        expect(metrics.fetch("decorationIconHeight")).to be_within(1).of(120)
+        expect(metrics.fetch("decorationIconFontSize")).to be_within(1).of(120)
+        expect(metrics.fetch("decorationIntersectionWidth")).to be >= 24
+        expect(metrics.fetch("decorationIntersectionHeight")).to be >= 24
+        expect(metrics.fetch("amountLeftInset")).to be >= 10
+        expect(metrics.fetch("headingRightInset")).to be >= 10
+
+        if viewport.fetch(:width) < 1024
+          expect(metrics.fetch("decorationRightOffset")).to be <= -55
+          expect(metrics.fetch("decorationWidthBeforeSave")).to be >= 64
+          expect(metrics.fetch("amountText")).to eq(maximum_amount_text)
+          expect(metrics.fetch("amountTitle")).to eq(maximum_amount_text)
+          expect(metrics.fetch("amountTextOverflow")).to eq("ellipsis")
+          expect(metrics.fetch("amountClipped")).to be(false), metrics.inspect if viewport.fetch(:width) > 320
+          expect(metrics.fetch("summaryPosition")).to eq("fixed")
+          expect(metrics.fetch("amountBeforeControls")).to be(true)
+          expect(metrics.fetch("summaryInsideViewport")).to be(true), metrics.inspect
+          expect(metrics.fetch("controlsInsideSummary")).to be(true), metrics.inspect
+          expect(metrics.fetch("controlsInsideViewport")).to be(true), metrics.inspect
+          expect(metrics.fetch("saveRightInset")).to be >= 7
+          expect(metrics.fetch("memoImageGap")).to be_between(20, 28)
+        else
+          expect(metrics.fetch("decorationRightOffset")).to be_within(1).of(16)
+          expect(metrics.fetch("summaryPosition")).not_to eq("fixed")
+          expect(metrics.fetch("detailsHidden")).to eq("false")
+          expect(metrics.fetch("detailsInert")).to be(false)
+        end
+
+        if viewport.fetch(:width) < 768
+          expect(metrics.fetch("detailsHidden")).to eq("true")
+          expect(metrics.fetch("detailsInert")).to be(true)
+          expect(metrics.fetch("detailsHeight")).to be <= 1
+          expect(metrics.fetch("toggleExpanded")).to eq("false")
+          expect(metrics.fetch("toggleVisible")).to be(true)
+          expect(metrics.fetch("toggleWidth")).to be_within(1).of(44)
+          expect(metrics.fetch("toggleHeight")).to be_within(1).of(44)
+          expect(metrics.fetch("toggleBackground")).to eq("rgba(0, 0, 0, 0)")
+          expect(metrics.fetch("toggleBorderWidth")).to eq("0px")
+          expect(metrics.fetch("toggleBoxShadow")).to eq("none")
+          expect(metrics.fetch("navVisible")).to be(true)
+          expect(metrics.fetch("summaryAboveNav")).to be(true), metrics.inspect
+        elsif viewport.fetch(:width) < 1024
+          expect(metrics.fetch("detailsHidden")).to eq("false")
+          expect(metrics.fetch("detailsInert")).to be(false)
+          expect(metrics.fetch("detailsHeight")).to be > 1
+          expect(metrics.fetch("toggleExpanded")).to eq("true")
+          expect(metrics.fetch("toggleVisible")).to be(false)
+          expect(metrics.fetch("primaryDetailsHorizontal")).to be(true)
+          expect(metrics.fetch("paymentAdjustmentVisible")).to be(true)
+          expect(metrics.fetch("finalPaymentVisible")).to be(true)
+          expect(metrics.fetch("summaryHeight")).to be > metrics.fetch("compactHeight") + 100
+          expect(metrics.fetch("visibleSaveButtonWidth")).to be >= 119
+          expect(metrics.fetch("tabletDividerTopGap")).to be >= 15
+          expect(metrics.fetch("tabletDividerBottomGap")).to be >= 15
+          expect(metrics.fetch("navVisible")).to be(false)
+          expect(metrics.fetch("summaryAtViewportBottom")).to be(true), metrics.inspect
+
+          page.execute_script("window.scrollTo(0, document.documentElement.scrollHeight)")
+          wait_for_visual_motion_to_finish(summary)
+          bottom_metrics = mobile_amount_summary_metrics(maximum_amount_text: maximum_amount_text)
+          expect(bottom_metrics.fetch("imagePreviewClearance")).to be_between(23, 32), bottom_metrics.inspect
+          expect(bottom_metrics.fetch("measuredSummaryHeight")).to be_within(1).of(bottom_metrics.fetch("summaryHeight"))
+          expect(bottom_metrics.fetch("formContentPaddingBottom")).to be_within(1).of(bottom_metrics.fetch("summaryHeight"))
+          page.execute_script("window.scrollTo(0, 0)")
+        else
+          expect(metrics.fetch("navVisible")).to be(false)
+        end
+      end
+    end
+  end
+
+  it "内訳を上向きに展開し入力中は金額だけを追従表示する" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "金額内訳確認",
+      subtotal_amount: 100,
+      tax_amount: 0,
+      total_amount: 100,
+      payment_method: "cash"
+    )
+    receipt.receipt_items.create!(
+      confirmed_name: "内訳確認明細",
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: "each",
+      tax_rate: 0,
+      line_total: 100,
+      needs_review: false
+    )
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    wait_for_stimulus_controller("mobile-amount-summary")
+
+    summary = find("[data-controller~='mobile-amount-summary']")
+    toggle = summary.find("[data-mobile-amount-summary-target='toggle']")
+    details = summary.find("[data-mobile-amount-summary-target='details']", visible: :all)
+    save_button = summary.find(".receipt-amount-summary-save")
+    nav = find("[data-mobile-ui-target='nav']")
+    nav_root = find("#mobile-bottom-nav")
+
+    wait_for_visual_motion_to_finish(summary)
+    closed_metrics = mobile_amount_summary_metrics
+    toggle.click
+    wait_for_visual_motion_to_finish(summary)
+    open_metrics = mobile_amount_summary_metrics
+    aggregate_failures do
+      expect(toggle["aria-expanded"]).to eq("true")
+      expect(details["aria-hidden"]).to eq("false")
+      expect(page.evaluate_script("arguments[0].inert", details)).to be(false)
+      expect(details).to have_text(I18n.t("shared.amount_summary_card.subtotal"))
+      expect(details).to have_text(I18n.t("shared.amount_summary_card.tax_amount"))
+      expect(page.evaluate_script("document.activeElement === arguments[0]", toggle)).to be(true)
+      expect(open_metrics.fetch("dividerBelowDetails")).to be(true)
+      expect(open_metrics.fetch("dividerBeforeToolbar")).to be(true)
+      expect(open_metrics.fetch("phoneDividerTopGap")).to be >= 15
+      expect(open_metrics.fetch("phoneDividerBottomGap")).to be >= 15
+      expect(open_metrics.fetch("decorationParentIsSummary")).to be(true)
+      expect(open_metrics.fetch("decorationTopOffset")).to be_within(1).of(-16)
+      expect(open_metrics.fetch("decorationRightOffset")).to be <= -55
+      expect(open_metrics.fetch("decorationWidthBeforeSave")).to be >= 64
+      expect(open_metrics.fetch("decorationTop")).to(
+        be < closed_metrics.fetch("decorationTop") - 40,
+        "closed=#{closed_metrics.inspect}\nopen=#{open_metrics.inspect}"
+      )
+      expect(open_metrics.fetch("decorationIntersectionWidth")).to be >= 24
+      expect(open_metrics.fetch("decorationIntersectionHeight")).to be >= 24
+      expect(open_metrics.fetch("decorationIconWidth")).to be_within(1).of(120)
+      expect(open_metrics.fetch("decorationIconHeight")).to be_within(1).of(120)
+      expect(open_metrics.fetch("decorationIconFontSize")).to be_within(1).of(120)
+      expect(open_metrics.fetch("decorationIconIntersectionWidth")).to be >= 64
+      expect(open_metrics.fetch("decorationIconIntersectionHeight")).to be >= 64
+    end
+
+    store_name = find_field(I18n.t("receipts.form.fields.store_name"))
+    store_name.click
+    focus_only_metrics = mobile_amount_summary_metrics
+    aggregate_failures "software keyboard未確認のfocusでは表示を変えない" do
+      expect(summary["data-mobile-amount-summary-keyboard-visible"]).to eq("false")
+      expect(toggle).to be_visible
+      expect(save_button).to be_visible
+      expect(details["aria-hidden"]).to eq("false")
+      expect(page.evaluate_script("arguments[0].inert", details)).to be(false)
+      expect(nav["aria-hidden"]).to be_nil
+      expect(focus_only_metrics.fetch("summaryTop")).to be_within(1).of(open_metrics.fetch("summaryTop"))
+    end
+    set_viewport(width: 390, height: 544, mobile: true)
+    expect(page).to have_css(
+      "[data-controller~='mobile-amount-summary']" \
+      "[data-mobile-amount-summary-keyboard-visible='true']"
+    )
+    amount_above_keyboard = page.evaluate_async_script(<<~JAVASCRIPT, summary, Capybara.default_max_wait_time * 1000)
+      const summary = arguments[0]
+      const timeoutMilliseconds = arguments[1]
+      const done = arguments[arguments.length - 1]
+      const deadline = window.performance.now() + timeoutMilliseconds
+      const check = () => {
+        const viewport = window.visualViewport
+        const viewportBottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight
+        if (Math.abs(summary.getBoundingClientRect().bottom - (viewportBottom - 8)) <= 2) {
+          done(true)
+          return
+        }
+        if (window.performance.now() >= deadline) {
+          done(false)
+          return
+        }
+        window.setTimeout(check, 25)
+      }
+      check()
+    JAVASCRIPT
+    wait_for_visual_motion_to_finish(summary)
+    keyboard_metrics = mobile_amount_summary_metrics
+    aggregate_failures do
+      expect(amount_above_keyboard).to be(true)
+      expect(toggle).not_to be_visible
+      expect(save_button).not_to be_visible
+      expect(details["aria-hidden"]).to eq("true")
+      expect(page.evaluate_script("arguments[0].inert", details)).to be(true)
+      expect(nav["class"]).to include("translate-y-full", "pointer-events-none")
+      expect(nav_root["class"]).to include("pointer-events-none")
+      expect(nav["aria-hidden"]).to eq("true")
+      expect(page.evaluate_script("arguments[0].inert", nav)).to be(true)
+      expect(summary.find("[data-receipt-form-target='totalAmount']")).to be_visible
+      expect(keyboard_metrics.fetch("titleVisible")).to be(true)
+      expect(keyboard_metrics.fetch("titleAboveAmount")).to be(true)
+      expect(keyboard_metrics.fetch("decorationVisible")).to be(true)
+      expect(keyboard_metrics.fetch("decorationIconFontSize")).to be_within(1).of(120)
+      expect(keyboard_metrics.fetch("summaryHeight")).to be_within(1).of(keyboard_metrics.fetch("compactHeight"))
+      expect(keyboard_metrics.fetch("summaryHeight")).to be_within(1).of(closed_metrics.fetch("summaryHeight"))
+      expect(keyboard_metrics.fetch("toolbarHeight")).to be_within(1).of(closed_metrics.fetch("toolbarHeight"))
+    end
+
+    set_viewport(width: 390, height: 844, mobile: true)
+    expect(page).to have_css(
+      "[data-controller~='mobile-amount-summary']" \
+      "[data-mobile-amount-summary-keyboard-visible='false']"
+    )
+    page.execute_script("document.activeElement.blur()")
+    wait_for_visual_motion_to_finish(summary)
+    restored_metrics = mobile_amount_summary_metrics
+    aggregate_failures do
+      expect(save_button).to be_visible
+      expect(toggle).to be_visible
+      expect(toggle["aria-expanded"]).to eq("false")
+      expect(nav["class"]).not_to include("translate-y-full", "pointer-events-none")
+      expect(nav_root["class"]).not_to include("pointer-events-none")
+      expect(nav["aria-hidden"]).to be_nil
+      expect(page.evaluate_script("arguments[0].inert", nav)).to be(false)
+      expect(restored_metrics.fetch("summaryAboveNav")).to be(true)
+    end
+
+    toggle.send_keys(:enter)
+    expect(toggle["aria-expanded"]).to eq("true")
+    page.execute_script("window.scrollTo(0, document.documentElement.scrollHeight)")
+    expect(summary).to be_visible
+    page.execute_script("window.scrollTo(0, 0)")
+    expect(summary).to be_visible
+
+    item_row = expanded_receipt_item_row
+    item_row.find("[data-receipt-form-target='priceInput']").set("250")
+    expect(summary.find("[data-receipt-form-target='totalAmount']")).to have_text("¥250")
+    expect_mobile_viewport_without_horizontal_overflow
+
+    set_viewport(width: 768, height: 900, mobile: false)
+    wait_for_visual_motion_to_finish(summary)
+    aggregate_failures do
+      expect(toggle).not_to be_visible
+      expect(details["aria-hidden"]).to eq("false")
+      expect(page.evaluate_script("arguments[0].inert", details)).to be(false)
+    end
+
+    store_name.click
+    tablet_focus_only_metrics = mobile_amount_summary_metrics
+    aggregate_failures "tabletでもsoftware keyboard未確認のfocusでは表示を変えない" do
+      expect(summary["data-mobile-amount-summary-keyboard-visible"]).to eq("false")
+      expect(save_button).to be_visible
+      expect(details["aria-hidden"]).to eq("false")
+      expect(page.evaluate_script("arguments[0].inert", details)).to be(false)
+      expect(tablet_focus_only_metrics.fetch("summaryPosition")).to eq("fixed")
+    end
+    set_viewport(width: 768, height: 600, mobile: false)
+    expect(page).to have_css(
+      "[data-controller~='mobile-amount-summary']" \
+      "[data-mobile-amount-summary-keyboard-visible='true']"
+    )
+    wait_for_visual_motion_to_finish(summary)
+    tablet_keyboard_metrics = mobile_amount_summary_metrics
+    aggregate_failures do
+      expect(details["aria-hidden"]).to eq("true")
+      expect(page.evaluate_script("arguments[0].inert", details)).to be(true)
+      expect(save_button).not_to be_visible
+      expect(toggle).not_to be_visible
+      expect(nav["aria-hidden"]).to eq("true")
+      expect(page.evaluate_script("arguments[0].inert", nav)).to be(true)
+      expect(nav_root["class"]).to include("pointer-events-none")
+      expect(summary.find("[data-receipt-form-target='totalAmount']")).to be_visible
+      expect(tablet_keyboard_metrics.fetch("titleVisible")).to be(true)
+      expect(tablet_keyboard_metrics.fetch("decorationVisible")).to be(true)
+      expect(tablet_keyboard_metrics.fetch("decorationIconFontSize")).to be_within(1).of(120)
+      expect(tablet_keyboard_metrics.fetch("summaryHeight")).to be_within(1).of(tablet_keyboard_metrics.fetch("compactHeight"))
+      expect(tablet_keyboard_metrics.fetch("toolbarHeight")).to be >= 44
+      expect(tablet_keyboard_metrics.fetch("detailsHeight")).to be <= 1
+      expect(tablet_keyboard_metrics.fetch("visibleSaveButtonCount")).to eq(0)
+      expect(tablet_keyboard_metrics.fetch("horizontalOverflow")).to be(false)
+      expect(tablet_keyboard_metrics.fetch("measuredSummaryHeight")).to be_within(1).of(tablet_keyboard_metrics.fetch("summaryHeight"))
+      expect(tablet_keyboard_metrics.fetch("formContentPaddingBottom")).to be_within(1).of(tablet_keyboard_metrics.fetch("summaryHeight"))
+    end
+    set_viewport(width: 768, height: 900, mobile: false)
+    expect(page).to have_css(
+      "[data-controller~='mobile-amount-summary']" \
+      "[data-mobile-amount-summary-keyboard-visible='false']"
+    )
+    page.execute_script("document.activeElement.blur()")
+    wait_for_visual_motion_to_finish(summary)
+    tablet_restored_metrics = mobile_amount_summary_metrics
+    aggregate_failures do
+      expect(details["aria-hidden"]).to eq("false")
+      expect(page.evaluate_script("arguments[0].inert", details)).to be(false)
+      expect(tablet_restored_metrics.fetch("measuredSummaryHeight")).to be_within(1).of(tablet_restored_metrics.fetch("summaryHeight"))
+      expect(tablet_restored_metrics.fetch("formContentPaddingBottom")).to be_within(1).of(tablet_restored_metrics.fetch("summaryHeight"))
     end
 
     expect_browser_console_clean

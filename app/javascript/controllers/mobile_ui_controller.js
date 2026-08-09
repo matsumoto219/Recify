@@ -2,134 +2,170 @@
 import { Controller } from '@hotwired/stimulus'
 
 export default class extends Controller {
-  static targets = ['nav', 'actions']
+  static targets = ['nav']
 
   connect () {
-    this.lastScrollY = window.scrollY
-    this.threshold = 30
-    this.scrollDelta = 0
-    this.lastDirection = 0 // 1: down, -1: up
     this.keyboardThreshold = 100
     this.isFormFocused = false
     this.isKeyboardVisible = false
+    this.keyboardProbePending = false
     this.initialViewportHeight = this.currentViewportHeight()
+    this.initialViewportWidth = window.innerWidth
 
-    this.handleScroll = this.handleScroll.bind(this)
+    this.handleBeforeCache = this.handleBeforeCache.bind(this)
     this.handleViewportResize = this.handleViewportResize.bind(this)
     this.handleFocusIn = this.handleFocusIn.bind(this)
     this.handleFocusOut = this.handleFocusOut.bind(this)
 
-    window.addEventListener('scroll', this.handleScroll)
+    document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     window.addEventListener('focusin', this.handleFocusIn)
     window.addEventListener('focusout', this.handleFocusOut)
     window.visualViewport?.addEventListener('resize', this.handleViewportResize)
+    window.visualViewport?.addEventListener('scroll', this.handleViewportResize)
   }
 
   disconnect () {
-    window.clearTimeout(this.actionsHideTimeout)
+    window.clearTimeout(this.focusVerificationTimeout)
+    window.clearTimeout(this.focusOutTimeout)
 
-    window.removeEventListener('scroll', this.handleScroll)
+    document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     window.removeEventListener('focusin', this.handleFocusIn)
     window.removeEventListener('focusout', this.handleFocusOut)
     window.visualViewport?.removeEventListener('resize', this.handleViewportResize)
+    window.visualViewport?.removeEventListener('scroll', this.handleViewportResize)
   }
 
-  handleScroll () {
-    if (this.isFormFocused || this.isKeyboardVisible) {
-      this.hideNav()
-      this.hideActions()
-      this.lastScrollY = window.scrollY
-      this.scrollDelta = 0
-      return
-    }
-
-    const currentScrollY = window.scrollY
-    const delta = currentScrollY - this.lastScrollY
-
-    // 無視できる微小変化
-    if (Math.abs(delta) < 1) return
-
-    const direction = delta > 0 ? 1 : -1
-
-    // 方向が変わったら蓄積リセット
-    if (direction !== this.lastDirection) {
-      this.scrollDelta = 0
-    }
-
-    this.scrollDelta += Math.abs(delta)
-
-    // 上部では追加ボタンを常に表示
-    if (currentScrollY < 50) {
-      this.showActions()
-      this.lastScrollY = currentScrollY
-      this.lastDirection = direction
-      this.scrollDelta = 0
-      return
-    }
-
-    // 閾値未満なら何もしない（ゆとり）
-    if (this.scrollDelta < this.threshold) {
-      this.lastScrollY = currentScrollY
-      this.lastDirection = direction
-      return
-    }
-
-    if (direction === 1) {
-      // 下スクロール → 追加ボタン表示
-      this.showActions()
-    } else {
-      // 上スクロール → 追加ボタン非表示
-      this.hideActions()
-    }
-
-    // トリガー後はリセットして連続トグルを防ぐ
-    this.scrollDelta = 0
-    this.lastScrollY = currentScrollY
-    this.lastDirection = direction
+  handleBeforeCache () {
+    window.clearTimeout(this.focusVerificationTimeout)
+    window.clearTimeout(this.focusOutTimeout)
+    this.isFormFocused = false
+    this.isKeyboardVisible = false
+    this.keyboardProbePending = false
+    this.initialViewportHeight = this.currentViewportHeight()
+    this.initialViewportWidth = window.innerWidth
+    this.showNav()
+    this.notifyKeyboardVisibility(false)
   }
 
   handleViewportResize () {
     const currentHeight = this.currentViewportHeight()
+    const currentWidth = window.innerWidth
+
+    if (Math.abs(this.initialViewportWidth - currentWidth) > 1) {
+      const inset = this.keyboardInset()
+      const keyboardWasConfirmedVisible = this.isKeyboardVisible && !this.keyboardProbePending
+      const keyboardNeedsVerification = this.isFormFocused &&
+        inset <= this.keyboardThreshold &&
+        keyboardWasConfirmedVisible
+
+      this.initialViewportHeight = currentHeight + inset
+      this.initialViewportWidth = currentWidth
+      this.isKeyboardVisible = this.isFormFocused &&
+        (inset > this.keyboardThreshold || keyboardWasConfirmedVisible)
+      this.keyboardProbePending = keyboardNeedsVerification
+      window.clearTimeout(this.focusVerificationTimeout)
+
+      if (this.isKeyboardVisible) {
+        this.hideNav()
+        this.notifyKeyboardVisibility(true)
+        if (keyboardNeedsVerification) this.scheduleFocusVerification()
+      } else {
+        this.showNav()
+        this.notifyKeyboardVisibility(false)
+      }
+      return
+    }
+
     const heightDiff = this.initialViewportHeight - currentHeight
 
     this.isKeyboardVisible = this.isFormFocused && heightDiff > this.keyboardThreshold
 
     if (this.isKeyboardVisible) {
+      this.keyboardProbePending = false
+      window.clearTimeout(this.focusVerificationTimeout)
       this.hideNav()
-      this.hideActions()
+      this.notifyKeyboardVisibility(true)
       return
     }
 
-    this.initialViewportHeight = currentHeight
+    if (this.isFormFocused && this.keyboardProbePending) {
+      this.scheduleFocusVerification()
+      return
+    }
 
     if (!this.isFormFocused) {
-      this.showNav()
+      this.initialViewportHeight = currentHeight
+      this.initialViewportWidth = currentWidth
     }
+
+    this.showNav()
+    this.notifyKeyboardVisibility(false)
   }
 
   handleFocusIn (event) {
     if (!this.isFormControl(event.target)) return
 
-    // visualViewport resize が遅れる端末向けの保険
+    window.clearTimeout(this.focusVerificationTimeout)
+    window.clearTimeout(this.focusOutTimeout)
     this.isFormFocused = true
-    this.isKeyboardVisible = true
-    this.hideNav()
-    this.hideActions()
+
+    const keyboardConfirmedByGeometry = this.keyboardInset() > this.keyboardThreshold ||
+      this.initialViewportHeight - this.currentViewportHeight() > this.keyboardThreshold
+
+    if (this.isKeyboardVisible && keyboardConfirmedByGeometry) {
+      this.keyboardProbePending = false
+      return
+    }
+
+    this.keyboardProbePending = true
+    this.scheduleFocusVerification()
   }
 
   handleFocusOut (event) {
     if (!this.isFormControl(event.target)) return
 
+    window.clearTimeout(this.focusVerificationTimeout)
     this.isFormFocused = false
+    this.keyboardProbePending = false
 
     // キーボード収納アニメーション後に visualViewport の値を確認する
-    window.setTimeout(() => {
+    window.clearTimeout(this.focusOutTimeout)
+    this.focusOutTimeout = window.setTimeout(() => {
+      this.focusOutTimeout = null
       this.handleViewportResize()
     }, 150)
   }
 
   currentViewportHeight () {
     return window.visualViewport?.height || window.innerHeight
+  }
+
+  scheduleFocusVerification () {
+    window.clearTimeout(this.focusVerificationTimeout)
+    this.focusVerificationTimeout = window.setTimeout(() => {
+      this.focusVerificationTimeout = null
+      this.keyboardProbePending = false
+      this.handleViewportResize()
+    }, 150)
+  }
+
+  keyboardInset () {
+    const viewport = window.visualViewport
+    if (!viewport) return 0
+
+    const viewportHeight = Number(viewport.height) || window.innerHeight
+    const viewportOffsetTop = Number(viewport.offsetTop) || 0
+    return Math.max(0, window.innerHeight - viewportHeight - viewportOffsetTop)
+  }
+
+  notifyKeyboardVisibility (visible) {
+    this.dispatch('keyboard-visibility-change', {
+      target: window,
+      detail: {
+        visible,
+        inset: visible ? this.keyboardInset() : 0
+      }
+    })
   }
 
   isFormControl (element) {
@@ -141,40 +177,18 @@ export default class extends Controller {
   showNav () {
     if (!this.hasNavTarget) return
 
+    this.element.classList.remove('pointer-events-none')
     this.navTarget.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none')
+    this.navTarget.toggleAttribute('inert', false)
+    this.navTarget.removeAttribute('aria-hidden')
   }
 
   hideNav () {
     if (!this.hasNavTarget) return
 
+    this.element.classList.add('pointer-events-none')
     this.navTarget.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none')
-  }
-
-  showActions () {
-    if (!this.hasActionsTarget) return
-
-    window.clearTimeout(this.actionsHideTimeout)
-
-    // 先に表示状態へ戻す
-    this.actionsTarget.classList.remove('opacity-0', 'pointer-events-none')
-
-    // 次フレームで下からスライドイン
-    window.requestAnimationFrame(() => {
-      this.actionsTarget.classList.remove('translate-y-full')
-    })
-  }
-
-  hideActions () {
-    if (!this.hasActionsTarget) return
-
-    window.clearTimeout(this.actionsHideTimeout)
-
-    // 先に下へスライドアウト
-    this.actionsTarget.classList.add('translate-y-full', 'pointer-events-none')
-
-    // 完全に下がってから透明化（Safari/iOSのちらつき対策）
-    this.actionsHideTimeout = window.setTimeout(() => {
-      this.actionsTarget.classList.add('opacity-0')
-    }, 300)
+    this.navTarget.toggleAttribute('inert', true)
+    this.navTarget.setAttribute('aria-hidden', 'true')
   }
 }

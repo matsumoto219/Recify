@@ -255,7 +255,7 @@
     <div id="receipt-detail-sidebar" class="order-2 md:order-1 lg:order-none lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:row-span-2 flex flex-col gap-6 lg:sticky lg:top-24 self-start">
       <div class="order-first lg:order-none">
         <% payment_adjustment_summary = receipt_payment_adjustment_summary(@receipt) %>
-        <%= render "shared/ui/card/amount_summary_card",
+        <%= render "receipts/amount_summary_card",
               title: t("receipts.common.total_amount_title"),
               amount: @receipt.total_amount,
               icon: "payments",

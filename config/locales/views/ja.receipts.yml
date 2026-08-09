@@ -86,10 +86,14 @@ ja:
         show: レシート詳細
       buttons:
         save: 保存
+        saving: 保存中…
         cancel: キャンセル
         add_item: 明細追加
         add_adjustment: 値引き・手数料を追加
         add_payment: 支払い行を追加
+      amount_summary:
+        open_details: 金額の内訳を表示
+        close_details: 金額の内訳を閉じる
       review:
         blocking_description: 保存前に以下の内容を確認してください。
         warning_description: 内容を確認してください。

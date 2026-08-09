@@ -1,4 +1,12 @@
 /* ===== Disclosure / Collapse Motion ===== */
+:root {
+  --mobile-bottom-nav-height: calc(5rem + env(safe-area-inset-bottom));
+}
+
+.mobile-bottom-nav {
+  height: var(--mobile-bottom-nav-height);
+}
+
 .collapsible-grid {
   display: grid;
   grid-template-rows: 0fr;
@@ -45,8 +53,8 @@
 }
 
 @media (height <= 700px) and (width <= 380px) {
-  .mobile-bottom-nav {
-    height: calc(4rem + env(safe-area-inset-bottom));
+  :root {
+    --mobile-bottom-nav-height: calc(4rem + env(safe-area-inset-bottom));
   }
 
   .mobile-bottom-nav-link {
