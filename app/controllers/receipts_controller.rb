@@ -1189,13 +1189,20 @@ class ReceiptsController < ApplicationController
   def manual_review_state_rebuild_target?(permitted)
     submitted = params[:receipt]
     return false unless submitted.respond_to?(:key?)
+    return true if @receipt.failed? || @receipt.has_processing_error?
     return false unless manual_review_state_rebuild_keys.any? { |key| submitted.key?(key) }
 
-    @receipt.completed? || @receipt.review_needed? || @receipt.failed? || @receipt.has_processing_error?
+    @receipt.completed? || @receipt.review_needed?
   end
 
   def manual_review_state_rebuild_keys
     %w[
+      store_name
+      purchased_on
+      purchased_time
+      payment_method
+      store_address
+      store_phone_number
       total_amount
       subtotal_amount
       tax_amount

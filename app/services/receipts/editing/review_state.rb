@@ -14,15 +14,23 @@ class Receipts::Editing::ReviewState
   FIELD_REVIEW_RULES = {
     store_name: {
       missing: "store_name_missing",
-      resolved: %w[store_name_missing store_name_uncertain]
+      resolved_on_change: %w[store_name_uncertain]
+    },
+    store_address: {
+      missing: "store_address_missing",
+      resolved_on_change: %w[store_address_uncertain]
+    },
+    store_phone_number: {
+      missing: "store_phone_number_missing",
+      resolved_on_change: %w[store_phone_number_uncertain]
     },
     purchased_at: {
       missing: "purchased_at_missing",
-      resolved: %w[purchased_at_missing purchased_at_uncertain purchased_at_conflicted]
+      resolved_on_change: %w[purchased_at_uncertain purchased_at_conflicted]
     },
     payment_method: {
       missing: "payment_method_missing",
-      resolved: %w[payment_method_missing payment_method_uncertain]
+      resolved_on_change: %w[payment_method_uncertain]
     }
   }.freeze
 
@@ -158,11 +166,10 @@ class Receipts::Editing::ReviewState
   def synchronize_core_field_reasons(reasons)
     FIELD_REVIEW_RULES.each_with_object(reasons.dup) do |(field, rule), result|
       value = effective_value(field)
-      if value.blank?
-        result << rule.fetch(:missing)
-      elsif permitted.key?(field.to_s) || result.include?(rule.fetch(:missing))
-        result.delete_if { |reason| rule.fetch(:resolved).include?(reason) }
-      end
+      result.delete(rule.fetch(:missing)) if value.present?
+      next unless field_changed?(field)
+
+      result.delete_if { |reason| rule.fetch(:resolved_on_change).include?(reason) }
     end.uniq
   end
 
@@ -170,6 +177,17 @@ class Receipts::Editing::ReviewState
     return permitted[field.to_s] if permitted.key?(field.to_s)
 
     receipt.public_send(field)
+  end
+
+  def field_changed?(field)
+    return false unless permitted.key?(field.to_s)
+
+    normalized_field_value(field, permitted[field.to_s]) !=
+      normalized_field_value(field, receipt.public_send(field))
+  end
+
+  def normalized_field_value(field, value)
+    receipt.class.type_for_attribute(field.to_s).cast(value).presence
   end
 
   def effective_item_present?
@@ -189,7 +207,9 @@ class Receipts::Editing::ReviewState
   end
 
   def review_needed?(reasons)
-    reasons.present? || child_review_remaining || unexplained_existing_review?
+    ReviewReasons.blocking_reasons_for_user(reasons).present? ||
+      child_review_remaining ||
+      unexplained_existing_review?
   end
 
   def unexplained_existing_review?
