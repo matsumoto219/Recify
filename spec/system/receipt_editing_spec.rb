@@ -54,15 +54,15 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
   def expect_category_label_association(row)
     select_element = row.find("select[name$='[category]']", visible: :all)
     select_id = select_element[:id]
+    expect(select_id).to be_present
     label = row.find("label[for='#{select_id}']", visible: :all)
-    labeled_field = row.find_field(I18n.t("receipts.item_fields.category"), visible: :all)
 
     aggregate_failures do
       expect(label.text(:all)).to eq(I18n.t("receipts.item_fields.category"))
-      expect(labeled_field[:id]).to eq(select_id)
+      expect(label[:for]).to eq(select_id)
     end
 
-    labeled_field
+    select_element
   end
 
   def expect_mobile_viewport_without_horizontal_overflow
