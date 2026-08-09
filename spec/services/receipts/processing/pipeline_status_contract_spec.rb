@@ -90,6 +90,25 @@ RSpec.describe 'Receipts::Processing::Pipeline status contract' do
     }
   end
 
+  def ocr_result_without_resolved_payment(payment_method_text:)
+    lines = [
+      '契約テストストア',
+      '2025/07/10 12:34',
+      'コーヒー 180',
+      '合計 180',
+      payment_method_text
+    ].compact
+
+    successful_ocr_result(
+      raw_text: lines.join("\n"),
+      lines: lines,
+      candidates: {
+        payment_method_text: payment_method_text,
+        payments: []
+      }
+    )
+  end
+
   def no_amount_mismatch_result
     {
       resolved: {
@@ -164,6 +183,29 @@ RSpec.describe 'Receipts::Processing::Pipeline status contract' do
     end.not_to change(AuditLog, :count)
 
     [ receipt.reload, run.reload, ocr_stage, finalize_stage ]
+  end
+
+  def finalize_without_payment(strategy:, ocr_result:)
+    if strategy == 'ai_success'
+      ai_result = successful_ai_result
+      ai_result[:receipt_attributes][:payment_method] = nil
+      receipt, = run_ai_and_finalize(ai_result, ocr_result: ocr_result)
+      return receipt
+    end
+
+    receipt, = build_processing_run
+    stub_amount_service
+    decision = Receipts::Processing::Contracts::FinalizeDecision.new(
+      finalize_strategy: strategy,
+      error_code: strategy == 'ai_fallback' ? 'ai_timeout' : nil,
+      receipt_attributes: {},
+      ocr_result: ocr_result,
+      ai_result: nil,
+      metadata: {}
+    )
+
+    Receipts::Processing::Pipeline.finalize(receipt: receipt, decision: decision)
+    receipt.reload
   end
 
   def expect_ai_fallback_contract(error_code, ai_result: failed_ai_result(error_code), processing_error_message: nil)
@@ -298,6 +340,35 @@ RSpec.describe 'Receipts::Processing::Pipeline status contract' do
           expect(receipt.purchased_at).to be_nil
           expect(receipt.status).to eq('review_needed')
           expect(receipt.review_reasons).to include('purchased_at_missing')
+        end
+      end
+    end
+
+    it '支払文字列も最終支払方法も空なら全保存経路で欠損理由とOCR低品質理由を残す' do
+      ocr_result = ocr_result_without_resolved_payment(payment_method_text: nil)
+
+      %w[ai_success ocr_only ai_fallback].each do |strategy|
+        receipt = finalize_without_payment(strategy: strategy, ocr_result: ocr_result)
+
+        aggregate_failures(strategy) do
+          expect(receipt.payment_method).to be_nil
+          expect(receipt.status).to eq('review_needed')
+          expect(receipt.review_reasons).to include('payment_method_missing', 'ocr_low_confidence')
+        end
+      end
+    end
+
+    it '非空でも未認識の支払文字列は全保存経路で最終支払方法の欠損理由を残す' do
+      ocr_result = ocr_result_without_resolved_payment(payment_method_text: '未対応決済')
+
+      %w[ai_success ocr_only ai_fallback].each do |strategy|
+        receipt = finalize_without_payment(strategy: strategy, ocr_result: ocr_result)
+
+        aggregate_failures(strategy) do
+          expect(receipt.payment_method).to be_nil
+          expect(receipt.status).to eq('review_needed')
+          expect(receipt.review_reasons).to include('payment_method_missing')
+          expect(receipt.review_reasons).not_to include('ocr_low_confidence')
         end
       end
     end

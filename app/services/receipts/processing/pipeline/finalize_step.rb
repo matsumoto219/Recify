@@ -446,6 +446,7 @@ class Receipts::Processing::Pipeline
       [].tap do |reasons|
         reasons << "store_name_missing" if attributes[:store_name].blank?
         reasons << "purchased_at_missing" if attributes[:purchased_at].blank?
+        reasons << "payment_method_missing" if attributes[:payment_method].blank?
       end
     end
 
