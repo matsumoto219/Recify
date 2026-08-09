@@ -330,7 +330,7 @@ module ReceiptsHelper
   end
 
   def grouped_receipt_review_reasons(reason_codes)
-    ReviewReasons.group_by_source(reason_codes).select { |_source, reasons| reasons.any? }
+    ReviewReasons.group_by_display_category(reason_codes).select { |_category, reasons| reasons.any? }
   end
 
   def normalized_receipt_tax_detail_rates(tax_details)

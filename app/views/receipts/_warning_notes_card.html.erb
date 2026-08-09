@@ -43,9 +43,9 @@
     <div class="collapsible-grid min-w-0 max-w-full" data-collapsible-details-target="content" data-receipt-notes-details>
       <div class="collapsible-grid-inner">
         <div class="mt-4 min-w-0 max-w-full space-y-4 pl-12">
-          <% warning_groups.each do |source, reasons| %>
+          <% warning_groups.each do |category, reasons| %>
             <div class="min-w-0 max-w-full rounded-lg border token-border-soft token-bg-warning-soft px-3 py-2">
-              <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-warning"><%= t("receipts.review_reason_sources.#{source}", default: t("receipts.review_reason_sources.unknown")) %></div>
+              <div class="mb-1 break-words [overflow-wrap:anywhere] text-xs font-bold token-text-warning"><%= t("receipts.review_reason_categories.#{category}", default: t("receipts.review_reason_categories.unknown")) %></div>
               <ul class="min-w-0 max-w-full space-y-1 pl-5 text-sm token-text-base list-disc break-words [overflow-wrap:anywhere]">
                 <% reasons.each do |reason| %>
                   <% reason_label = receipt.review_reason_labels_for([reason]).first %>
