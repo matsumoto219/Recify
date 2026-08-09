@@ -10,6 +10,7 @@ class Receipts::Editing::ReviewState
     "item_tax_rate_uncertain" => %w[tax_rate]
   }.freeze
   ITEM_DECIMAL_FIELDS = %w[quantity tax_rate].freeze
+  ADJUSTMENT_REVIEW_REASON = "adjustment_uncertain"
 
   FIELD_REVIEW_RULES = {
     store_name: {
@@ -47,40 +48,109 @@ class Receipts::Editing::ReviewState
       ).call
     end
 
-    def item_review_state(item:, submitted_attributes:)
-      reasons = Array(item.review_reasons).map(&:to_s)
-      resolved_reasons = reasons.select do |reason|
+    def item_review_state(item:, submitted_attributes:, inherited_review_reasons: [])
+      stored_reasons = item_review_reasons(item)
+      inherited_reasons = inherited_item_review_reasons(item, inherited_review_reasons)
+      evaluation_reasons = stored_reasons | inherited_reasons
+      resolved_reasons = evaluation_reasons.select do |reason|
         item_review_reason_resolved?(reason, item: item, submitted_attributes: submitted_attributes)
       end
-      remaining_reasons = reasons - resolved_reasons
-      blocking_reason_remaining = ReviewReasons.blocking_reasons_for_user(remaining_reasons).present?
+      remaining_evaluation_reasons = evaluation_reasons - resolved_reasons
+      remaining_stored_reasons = stored_reasons - resolved_reasons
+      blocking_reason_remaining = ReviewReasons.blocking_reasons_for_user(remaining_evaluation_reasons).present?
+      blocking_reason_resolved = ReviewReasons.blocking_reasons_for_user(resolved_reasons).present?
       existing_review_remaining = item.needs_review? &&
-        (remaining_reasons.present? || resolved_reasons.empty?)
+        (remaining_evaluation_reasons.present? || resolved_reasons.empty?) &&
+        !(blocking_reason_resolved && !blocking_reason_remaining)
       needs_review = blocking_reason_remaining || existing_review_remaining
+      materialized_warnings = if blocking_reason_resolved && !blocking_reason_remaining
+        ReviewReasons.warning_reasons_for_user(inherited_reasons - resolved_reasons)
+      else
+        []
+      end
 
-      ItemResult.new(review_reasons: remaining_reasons, needs_review: needs_review)
+      ItemResult.new(
+        review_reasons: remaining_stored_reasons | materialized_warnings,
+        needs_review: needs_review
+      )
     end
 
     def resolved_item_review_reasons(receipt:, permitted:)
       attributes = submitted_item_attributes(permitted)
+      attributes_by_id = attributes.index_by { |item_attributes| item_attributes["id"].to_s }
       existing_items = receipt.receipt_items.index_by { |item| item.id.to_s }
 
       ITEM_REVIEW_FIELD_RULES.keys.select do |reason|
-        attributes.any? do |item_attributes|
-          item = existing_items[item_attributes["id"].to_s]
-          item_review_reason_resolved?(reason, item: item, submitted_attributes: item_attributes)
+        reviewed_items = item_review_candidates(receipt, reason)
+        if reviewed_items.empty?
+          next attributes.any? do |submitted_attributes|
+            item = existing_items[submitted_attributes["id"].to_s]
+            !destroyed_attributes?(submitted_attributes) &&
+              item_review_reason_resolved?(
+                reason,
+                item: item,
+                submitted_attributes: submitted_attributes
+              )
+          end
+        end
+
+        reviewed_items.none? do |item|
+          item_review_reason_remaining?(
+            reason,
+            item: item,
+            submitted_attributes: attributes_by_id[item.id.to_s]
+          )
         end
       end
     end
 
     private
 
+    def item_review_candidates(receipt, reason)
+      receipt.receipt_items.select do |item|
+        item.needs_review? || item_review_reasons(item).include?(reason)
+      end
+    end
+
+    def inherited_item_review_reasons(item, reasons)
+      return [] unless item.needs_review?
+
+      ReviewReasons.review_reasons_for_user(reasons).select do |reason|
+        ITEM_REVIEW_FIELD_RULES.key?(reason)
+      end
+    end
+
+    def item_review_reasons(item)
+      Array(item.review_reasons).map(&:to_s).reject(&:blank?)
+    end
+
     def item_review_reason_resolved?(reason, item:, submitted_attributes:)
       fields = ITEM_REVIEW_FIELD_RULES[reason]
       return false if fields.blank?
 
       attributes = submitted_attributes.to_h.stringify_keys
-      fields.any? { |field| item_review_field_changed?(item, attributes, field) }
+      return false unless fields.any? { |field| item_review_field_changed?(item, attributes, field) }
+
+      item_review_fields_valid?(item, attributes, fields)
+    end
+
+    def item_review_reason_remaining?(reason, item:, submitted_attributes:)
+      return true if submitted_attributes.blank?
+      return false if destroyed_attributes?(submitted_attributes)
+
+      !item_review_reason_resolved?(reason, item: item, submitted_attributes: submitted_attributes)
+    end
+
+    def item_review_fields_valid?(item, attributes, fields)
+      candidate = item ? item.dup : ReceiptItem.new
+      candidate.assign_attributes(attributes.slice(*fields))
+      candidate.valid?(:update)
+
+      fields.all? do |field|
+        candidate.public_send(field).present? && candidate.errors[field].empty?
+      end
+    rescue ActiveModel::UnknownAttributeError, ArgumentError, TypeError
+      false
     end
 
     def item_review_field_changed?(item, attributes, field)
@@ -107,10 +177,13 @@ class Receipts::Editing::ReviewState
       collection = value.respond_to?(:values) ? value.values : Array(value)
       collection.filter_map do |attributes|
         next unless attributes.respond_to?(:to_h)
-        next if ActiveModel::Type::Boolean.new.cast(attributes.to_h["_destroy"] || attributes.to_h[:_destroy])
 
         attributes.to_h.stringify_keys
       end
+    end
+
+    def destroyed_attributes?(attributes)
+      ActiveModel::Type::Boolean.new.cast(attributes["_destroy"])
     end
   end
 
@@ -127,8 +200,9 @@ class Receipts::Editing::ReviewState
   def call
     reasons = ReviewReasons.review_reasons_for_user(receipt.review_reasons)
     if nested_amount_inputs_submitted
-      reasons -= ReviewReasons::AMOUNT_REASONS
+      reasons -= ReviewReasons::AMOUNT_REASONS - [ ADJUSTMENT_REVIEW_REASON ]
     end
+    reasons.delete(ADJUSTMENT_REVIEW_REASON) if adjustment_review_reason_resolved?
     if item_inputs_submitted
       reasons -= self.class.resolved_item_review_reasons(receipt: receipt, permitted: permitted)
       reasons.delete("items_missing") if effective_item_present?
@@ -164,6 +238,82 @@ class Receipts::Editing::ReviewState
       end
 
     ReviewReasons.review_reasons_for_user(reasons)
+  end
+
+  def adjustment_review_reason_resolved?
+    attributes = submitted_adjustment_attributes
+    return false if attributes.empty?
+
+    attributes_by_id = attributes.index_by { |item| item["id"].to_s }
+    reviewed_adjustments = adjustment_review_candidates
+
+    if reviewed_adjustments.present?
+      return reviewed_adjustments.none? do |adjustment|
+        adjustment_review_reason_remaining?(
+          adjustment,
+          submitted_attributes: attributes_by_id[adjustment.id.to_s]
+        )
+      end
+    end
+
+    legacy_adjustment_review_resolved?(attributes, attributes_by_id)
+  end
+
+  def adjustment_review_candidates
+    receipt.receipt_adjustments.select do |adjustment|
+      reasons = adjustment_review_reasons(adjustment)
+      reasons.include?(ADJUSTMENT_REVIEW_REASON) || (adjustment.needs_review? && reasons.empty?)
+    end
+  end
+
+  def adjustment_review_reason_remaining?(adjustment, submitted_attributes:)
+    return true if submitted_attributes.blank?
+    return false if destroyed_adjustment_attributes?(submitted_attributes)
+
+    !adjustment_review_confirmed_by_server?(submitted_attributes)
+  end
+
+  def legacy_adjustment_review_resolved?(submitted_attributes, attributes_by_id)
+    existing_adjustment_resolved = receipt.receipt_adjustments.any? do |adjustment|
+      item_attributes = attributes_by_id[adjustment.id.to_s]
+      item_attributes.present? &&
+        (destroyed_adjustment_attributes?(item_attributes) || adjustment_review_confirmed_by_server?(item_attributes))
+    end
+    existing_adjustment_resolved || new_adjustment_confirmed_by_server?(submitted_attributes)
+  end
+
+  def adjustment_review_confirmed_by_server?(attributes)
+    attributes["source"] == "manual" &&
+      attributes.key?("needs_review") &&
+      ActiveModel::Type::Boolean.new.cast(attributes["needs_review"]) == false &&
+      attributes.key?("review_reasons") &&
+      Array(attributes["review_reasons"]).reject(&:blank?).empty?
+  end
+
+  def new_adjustment_confirmed_by_server?(attributes)
+    attributes.any? do |attributes|
+      attributes["id"].blank? &&
+        !destroyed_adjustment_attributes?(attributes) &&
+        adjustment_review_confirmed_by_server?(attributes)
+    end
+  end
+
+  def adjustment_review_reasons(adjustment)
+    Array(adjustment.review_reasons).map(&:to_s).reject(&:blank?)
+  end
+
+  def submitted_adjustment_attributes
+    value = permitted["receipt_adjustments_attributes"] || permitted[:receipt_adjustments_attributes]
+    return [] if value.blank?
+
+    collection = value.respond_to?(:values) ? value.values : Array(value)
+    collection.filter_map do |attributes|
+      attributes.to_h.stringify_keys if attributes.respond_to?(:to_h)
+    end
+  end
+
+  def destroyed_adjustment_attributes?(attributes)
+    ActiveModel::Type::Boolean.new.cast(attributes["_destroy"])
   end
 
   def synchronize_core_field_reasons(reasons)

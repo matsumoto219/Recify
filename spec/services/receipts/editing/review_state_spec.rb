@@ -47,6 +47,307 @@ RSpec.describe Receipts::Editing::ReviewState do
     end
   end
 
+  it '未変更のitem・adjustment入力ではreceipt-level adjustment_uncertainを解除しない' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'adjustment_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '商品',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      line_total: 100
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'coupon',
+      label: nil,
+      amount: 10,
+      sign: 'discount',
+      source: 'manual',
+      needs_review: false,
+      review_reasons: []
+    )
+
+    result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: item.id, price: item.price, quantity: item.quantity }
+        },
+        receipt_adjustments_attributes: {
+          '0' => {
+            id: adjustment.id,
+            kind: adjustment.kind,
+            label: '   ',
+            amount: adjustment.amount,
+            sign: adjustment.sign,
+            tax_rate: adjustment.tax_rate
+          }
+        }
+      },
+      nested_amount_inputs_submitted: true,
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(result.review_reasons).to eq([ 'adjustment_uncertain' ])
+      expect(result.status).to eq('review_needed')
+    end
+  end
+
+  it 'adjustmentの確認対象fieldを変更した場合はreceipt-level adjustment_uncertainを解除する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'adjustment_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'coupon',
+      label: '確認前クーポン',
+      amount: 10,
+      sign: 'discount',
+      source: 'manual',
+      needs_review: false,
+      review_reasons: []
+    )
+    permitted = Receipts::EditForm.call(
+      receipt: receipt,
+      attributes: {
+        'receipt_adjustments_attributes' => {
+          '0' => { 'id' => adjustment.id, 'label' => '確認済みクーポン' }
+        }
+      }
+    )
+
+    result = resolve(
+      receipt,
+      permitted: permitted,
+      nested_amount_inputs_submitted: true
+    )
+    aggregate_failures do
+      expect(result.review_reasons).to be_empty
+      expect(result.status).to eq('completed')
+    end
+  end
+
+  it '新規manual adjustmentを確認済み状態で追加した場合はreceipt-level adjustment_uncertainを解除する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'adjustment_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    permitted = Receipts::EditForm.call(
+      receipt: receipt,
+      attributes: {
+        'receipt_adjustments_attributes' => {
+          '0' => {
+            'kind' => 'coupon',
+            'label' => '確認済みクーポン',
+            'amount' => '10',
+            'sign' => 'discount',
+            'tax_rate' => ''
+          }
+        }
+      }
+    )
+
+    result = resolve(
+      receipt,
+      permitted: permitted,
+      nested_amount_inputs_submitted: true
+    )
+    non_empty_marker_result = resolve(
+      receipt,
+      permitted: {
+        receipt_adjustments_attributes: {
+          '0' => {
+            source: 'manual',
+            needs_review: false,
+            review_reasons: [ 'unknown_reason' ]
+          }
+        }
+      },
+      nested_amount_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(permitted.dig('receipt_adjustments_attributes', '0')).to include(
+        'source' => 'manual',
+        'needs_review' => false,
+        'review_reasons' => []
+      )
+      expect(result.review_reasons).to be_empty
+      expect(result.status).to eq('completed')
+      expect(non_empty_marker_result.review_reasons).to eq([ 'adjustment_uncertain' ])
+    end
+  end
+
+  it 'candidate 0のreceipt-level adjustment_uncertainは既存行の削除で解除する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'adjustment_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'coupon',
+      label: '削除対象クーポン',
+      amount: 10,
+      sign: 'discount',
+      source: 'manual',
+      needs_review: false,
+      review_reasons: []
+    )
+
+    result = resolve(
+      receipt,
+      permitted: {
+        receipt_adjustments_attributes: {
+          '0' => { id: adjustment.id, _destroy: '1' }
+        }
+      },
+      nested_amount_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(result.review_reasons).to be_empty
+      expect(result.status).to eq('completed')
+    end
+  end
+
+  it '複数のreasonless needs_review adjustmentは順次確認して全件解消するまで理由を維持する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'adjustment_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    first = receipt.receipt_adjustments.create!(
+      kind: 'coupon', label: '確認前クーポンA', amount: 10, sign: 'discount',
+      source: 'ai', needs_review: true, review_reasons: []
+    )
+    second = receipt.receipt_adjustments.create!(
+      kind: 'coupon', label: '確認前クーポンB', amount: 5, sign: 'discount',
+      source: 'ai', needs_review: true, review_reasons: []
+    )
+    attributes_for = lambda do |adjustment, label|
+      {
+        'id' => adjustment.id,
+        'kind' => adjustment.kind,
+        'label' => label,
+        'amount' => adjustment.amount,
+        'sign' => adjustment.sign,
+        'tax_rate' => adjustment.tax_rate
+      }
+    end
+
+    first_permitted = Receipts::EditForm.call(
+      receipt: receipt,
+      attributes: {
+        'receipt_adjustments_attributes' => {
+          '0' => attributes_for.call(first, '確認済みクーポンA')
+        }
+      }
+    )
+    partial_result = resolve(
+      receipt,
+      permitted: first_permitted,
+      nested_amount_inputs_submitted: true
+    )
+
+    first.update!(
+      label: '確認済みクーポンA',
+      source: 'manual',
+      needs_review: false,
+      review_reasons: []
+    )
+    receipt.update!(status: partial_result.status, review_reasons: partial_result.review_reasons)
+
+    second_permitted = Receipts::EditForm.call(
+      receipt: receipt,
+      attributes: {
+        'receipt_adjustments_attributes' => {
+          '0' => attributes_for.call(second, '確認済みクーポンB')
+        }
+      }
+    )
+    complete_result = resolve(
+      receipt,
+      permitted: second_permitted,
+      nested_amount_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(partial_result.review_reasons).to eq([ 'adjustment_uncertain' ])
+      expect(partial_result.status).to eq('review_needed')
+      expect(complete_result.review_reasons).to be_empty
+      expect(complete_result.status).to eq('completed')
+    end
+  end
+
+  it '明示reasonとreasonless needs_review adjustmentが混在する場合は両方を候補にする' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'adjustment_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    exact = receipt.receipt_adjustments.create!(
+      kind: 'coupon', label: '明示対象', amount: 10, sign: 'discount',
+      source: 'ai', needs_review: true, review_reasons: [ 'adjustment_uncertain' ]
+    )
+    generic = receipt.receipt_adjustments.create!(
+      kind: 'coupon', label: '汎用対象', amount: 5, sign: 'discount',
+      source: 'ai', needs_review: true, review_reasons: []
+    )
+    attributes_for = lambda do |adjustment, label|
+      {
+        'id' => adjustment.id,
+        'kind' => adjustment.kind,
+        'label' => label,
+        'amount' => adjustment.amount,
+        'sign' => adjustment.sign,
+        'tax_rate' => adjustment.tax_rate
+      }
+    end
+    partial_permitted = Receipts::EditForm.call(
+      receipt: receipt,
+      attributes: {
+        'receipt_adjustments_attributes' => {
+          '0' => attributes_for.call(exact, '明示確認済み')
+        }
+      }
+    )
+    complete_permitted = Receipts::EditForm.call(
+      receipt: receipt,
+      attributes: {
+        'receipt_adjustments_attributes' => {
+          '0' => attributes_for.call(exact, '明示確認済み'),
+          '1' => attributes_for.call(generic, '汎用確認済み')
+        }
+      }
+    )
+
+    partial_result = resolve(receipt, permitted: partial_permitted, nested_amount_inputs_submitted: true)
+    complete_result = resolve(receipt, permitted: complete_permitted, nested_amount_inputs_submitted: true)
+
+    aggregate_failures do
+      expect(partial_result.review_reasons).to eq([ 'adjustment_uncertain' ])
+      expect(complete_result.review_reasons).to be_empty
+    end
+  end
+
   it 'blankのcore fieldから新しいmissing reasonを合成しない' do
     receipt = build(
       :receipt,
@@ -362,7 +663,478 @@ RSpec.describe Receipts::Editing::ReviewState do
 
     aggregate_failures do
       expect(result.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
-      expect(result.needs_review).to be(true)
+      expect(result.needs_review).to be(false)
+    end
+  end
+
+  it 'item-level reasonの対応fieldをblankまたは不正値へ変更しても解除しない' do
+    item = ReceiptItem.new(
+      category: 'food',
+      needs_review: true,
+      review_reasons: [ 'item_category_uncertain' ]
+    )
+
+    blank_result = described_class.item_review_state(
+      item: item,
+      submitted_attributes: { category: '' }
+    )
+    invalid_result = described_class.item_review_state(
+      item: item,
+      submitted_attributes: { category: 'unsupported' }
+    )
+
+    aggregate_failures do
+      expect(blank_result.review_reasons).to eq([ 'item_category_uncertain' ])
+      expect(blank_result.needs_review).to be(true)
+      expect(invalid_result.review_reasons).to eq([ 'item_category_uncertain' ])
+      expect(invalid_result.needs_review).to be(true)
+    end
+  end
+
+  it 'blocking item reasonの解除後にwarningだけが残る場合はneeds_reviewを解除する' do
+    item = ReceiptItem.new(
+      confirmed_name: '確認前商品',
+      tax_rate: BigDecimal('0.10'),
+      needs_review: true,
+      review_reasons: %w[item_name_uncertain item_tax_rate_uncertain]
+    )
+
+    result = described_class.item_review_state(
+      item: item,
+      submitted_attributes: {
+        confirmed_name: '確認済み商品',
+        tax_rate: BigDecimal('0.10')
+      }
+    )
+
+    aggregate_failures do
+      expect(result.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+      expect(result.needs_review).to be(false)
+    end
+  end
+
+  it 'receipt-level item reasonは全てのactive childで解消するまで維持する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_name_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    first = receipt.receipt_items.create!(
+      confirmed_name: '確認前商品A',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+    second = receipt.receipt_items.create!(
+      confirmed_name: '確認前商品B',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+
+    partial_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: first.id, confirmed_name: '確認済み商品A' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+    complete_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: first.id, confirmed_name: '確認済み商品A' },
+          '1' => { id: second.id, confirmed_name: '確認済み商品B' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(partial_result.review_reasons).to eq([ 'item_name_uncertain' ])
+      expect(partial_result.status).to eq('review_needed')
+      expect(complete_result.review_reasons).to be_empty
+      expect(complete_result.status).to eq('completed')
+    end
+  end
+
+  it 'review対象itemの削除はactive child集合に基づいてreceipt-level reasonを同期する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_name_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    first = receipt.receipt_items.create!(
+      confirmed_name: '削除対象商品A',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+    second = receipt.receipt_items.create!(
+      confirmed_name: '削除対象商品B',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+    receipt.receipt_items.create!(
+      confirmed_name: '確認済み商品',
+      quantity_unit_code: 'each',
+      needs_review: false,
+      review_reasons: []
+    )
+
+    partial_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: first.id, _destroy: '1' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+    complete_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: first.id, _destroy: '1' },
+          '1' => { id: second.id, _destroy: '1' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(partial_result.review_reasons).to eq([ 'item_name_uncertain' ])
+      expect(complete_result.review_reasons).to be_empty
+    end
+  end
+
+  it 'candidate 0のlegacy item reasonは対応fieldの有効な実変更だけで解除する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_name_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '確認前商品',
+      quantity_unit_code: 'each',
+      needs_review: false,
+      review_reasons: []
+    )
+
+    blank_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: item.id, confirmed_name: '' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+    unrelated_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: item.id, category: 'food' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+    resolved_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: item.id, confirmed_name: '確認済み商品' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(blank_result.review_reasons).to eq([ 'item_name_uncertain' ])
+      expect(unrelated_result.review_reasons).to eq([ 'item_name_uncertain' ])
+      expect(resolved_result.review_reasons).to be_empty
+      expect(resolved_result.status).to eq('completed')
+    end
+  end
+
+  it 'candidate 0のlegacy item reasonは対応fieldを持つ新規item追加でも解除する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_name_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+
+    result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => {
+            confirmed_name: '確認済み商品',
+            quantity_unit_code: 'each'
+          }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(result.review_reasons).to be_empty
+      expect(result.status).to eq('completed')
+    end
+  end
+
+  it 'reasonless needs_review itemは継承したreceipt-level reasonを有効な変更で解除する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_name_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '確認前商品',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: []
+    )
+
+    blank_state = described_class.item_review_state(
+      item: item,
+      submitted_attributes: { confirmed_name: '' },
+      inherited_review_reasons: receipt.review_reasons
+    )
+    resolved_state = described_class.item_review_state(
+      item: item,
+      submitted_attributes: { confirmed_name: '確認済み商品' },
+      inherited_review_reasons: receipt.review_reasons
+    )
+    receipt_state = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: item.id, confirmed_name: '確認済み商品' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(blank_state.needs_review).to be(true)
+      expect(blank_state.review_reasons).to be_empty
+      expect(resolved_state.needs_review).to be(false)
+      expect(resolved_state.review_reasons).to be_empty
+      expect(receipt_state.review_reasons).to be_empty
+      expect(receipt_state.status).to eq('completed')
+    end
+  end
+
+  it 'generic itemでblocking解消後に残る継承warningを保存し、次回編集で解除する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: %w[item_name_uncertain item_tax_rate_uncertain],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '確認前商品',
+      tax_rate: BigDecimal('0.10'),
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: []
+    )
+
+    first_item_state = described_class.item_review_state(
+      item: item,
+      submitted_attributes: { confirmed_name: '確認済み商品', tax_rate: BigDecimal('0.10') },
+      inherited_review_reasons: receipt.review_reasons
+    )
+    first_receipt_state = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: item.id, confirmed_name: '確認済み商品', tax_rate: BigDecimal('0.10') }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    item.update!(
+      confirmed_name: '確認済み商品',
+      needs_review: first_item_state.needs_review,
+      review_reasons: first_item_state.review_reasons
+    )
+    receipt.update!(
+      status: first_receipt_state.status,
+      review_reasons: first_receipt_state.review_reasons
+    )
+
+    second_item_state = described_class.item_review_state(
+      item: item,
+      submitted_attributes: { tax_rate: BigDecimal('0.08') },
+      inherited_review_reasons: receipt.review_reasons
+    )
+    second_receipt_state = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: item.id, tax_rate: BigDecimal('0.08') }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(first_item_state.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+      expect(first_item_state.needs_review).to be(false)
+      expect(first_receipt_state.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+      expect(first_receipt_state.status).to eq('completed')
+      expect(second_item_state.review_reasons).to be_empty
+      expect(second_item_state.needs_review).to be(false)
+      expect(second_receipt_state.review_reasons).to be_empty
+      expect(second_receipt_state.status).to eq('completed')
+    end
+  end
+
+  it 'receipt-level item reasonは全てのreasonless needs_review itemで解消するまで維持する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_name_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    first = receipt.receipt_items.create!(
+      confirmed_name: '確認前商品A',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: []
+    )
+    second = receipt.receipt_items.create!(
+      confirmed_name: '確認前商品B',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: []
+    )
+
+    partial_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: first.id, confirmed_name: '確認済み商品A' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+    complete_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: first.id, confirmed_name: '確認済み商品A' },
+          '1' => { id: second.id, confirmed_name: '確認済み商品B' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(partial_result.review_reasons).to eq([ 'item_name_uncertain' ])
+      expect(partial_result.status).to eq('review_needed')
+      expect(complete_result.review_reasons).to be_empty
+      expect(complete_result.status).to eq('completed')
+    end
+  end
+
+  it 'exact childとreasonless needs_review childが混在する場合は両方を候補にする' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_name_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    exact = receipt.receipt_items.create!(
+      confirmed_name: '明示対象商品',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+    generic = receipt.receipt_items.create!(
+      confirmed_name: '汎用対象商品',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: []
+    )
+
+    partial_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: generic.id, confirmed_name: '汎用確認済み商品' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+    complete_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: exact.id, confirmed_name: '明示確認済み商品' },
+          '1' => { id: generic.id, confirmed_name: '汎用確認済み商品' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(partial_result.review_reasons).to eq([ 'item_name_uncertain' ])
+      expect(partial_result.status).to eq('review_needed')
+      expect(complete_result.review_reasons).to be_empty
+      expect(complete_result.status).to eq('completed')
+    end
+  end
+
+  it 'needs_review itemはchild reasonとreceipt-level item reasonを重複保存せずに評価する' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+    item = receipt.receipt_items.build(
+      confirmed_name: '確認前商品',
+      category: nil,
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: [ 'item_category_uncertain' ]
+    )
+
+    partial_state = described_class.item_review_state(
+      item: item,
+      submitted_attributes: { confirmed_name: '確認済み商品' },
+      inherited_review_reasons: receipt.review_reasons
+    )
+    complete_state = described_class.item_review_state(
+      item: item,
+      submitted_attributes: { confirmed_name: '確認済み商品', category: 'food' },
+      inherited_review_reasons: receipt.review_reasons
+    )
+
+    aggregate_failures do
+      expect(partial_state.review_reasons).to eq([ 'item_category_uncertain' ])
+      expect(partial_state.needs_review).to be(true)
+      expect(complete_state.review_reasons).to be_empty
+      expect(complete_state.needs_review).to be(false)
     end
   end
 

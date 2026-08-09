@@ -190,6 +190,42 @@ RSpec.describe "Receipts input forms" do
       end
     end
 
+    it "既存adjustmentのnil labelを空白だけで再送信してもreview stateを上書きしない" do
+      receipt = create(:receipt, :completed)
+      adjustment = create(
+        :receipt_adjustment,
+        receipt: receipt,
+        kind: "delivery_fee",
+        label: nil,
+        amount: 100,
+        sign: "surcharge",
+        source: "ai",
+        needs_review: true,
+        review_reasons: [ "adjustment_uncertain" ]
+      )
+      attributes = {
+        "receipt_adjustments_attributes" => {
+          "0" => {
+            "id" => adjustment.id.to_s,
+            "kind" => "delivery_fee",
+            "label" => "   ",
+            "amount" => "100",
+            "sign" => "surcharge",
+            "tax_rate" => ""
+          }
+        }
+      }
+
+      normalized = described_class.call(receipt: receipt, attributes: attributes)
+      adjustment_attributes = normalized.dig("receipt_adjustments_attributes", "0")
+
+      aggregate_failures do
+        expect(adjustment_attributes).not_to have_key("source")
+        expect(adjustment_attributes).not_to have_key("needs_review")
+        expect(adjustment_attributes).not_to have_key("review_reasons")
+      end
+    end
+
     it "編集された既存adjustmentだけをmanual confirmed stateへ正規化する" do
       receipt = create(:receipt, :completed)
       adjustment = create(

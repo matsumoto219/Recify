@@ -117,8 +117,16 @@ class Receipts::Editing::InputNormalizer
     changed_adjustment.assign_attributes(submitted.slice(*ADJUSTMENT_REVIEW_TARGET_FIELDS.map(&:to_s)))
 
     ADJUSTMENT_REVIEW_TARGET_FIELDS.any? do |field|
-      submitted.key?(field.to_s) && changed_adjustment.public_send(field) != adjustment.public_send(field)
+      submitted.key?(field.to_s) &&
+        comparable_adjustment_review_value(field, changed_adjustment.public_send(field)) !=
+          comparable_adjustment_review_value(field, adjustment.public_send(field))
     end
+  end
+
+  def comparable_adjustment_review_value(field, value)
+    return value.to_s.strip.presence if field == :label
+
+    value
   end
 
   def normalized_adjustment_sign(kind:, requested_sign:)
