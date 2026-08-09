@@ -284,10 +284,10 @@ class ReceiptFormPresenter
     end
 
     def row_class
-      return "grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg receipt-form-item-row transition-colors relative min-w-0" if new_record?
+      return "grid grid-cols-2 receipt-form-item-layout gap-4 md:gap-1.5 items-center p-3 rounded-lg receipt-form-item-row transition-colors relative min-w-0" if new_record?
 
       [
-        "grid grid-cols-2 md:grid-cols-12 gap-4 items-center p-3 rounded-lg transition-colors relative min-w-0",
+        "grid grid-cols-2 receipt-form-item-layout gap-4 md:gap-1.5 items-center p-3 rounded-lg transition-colors relative min-w-0",
         item.needs_review ? "border receipt-form-item-review-row" : "receipt-form-item-row"
       ].join(" ")
     end

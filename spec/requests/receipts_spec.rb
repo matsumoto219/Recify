@@ -6779,9 +6779,10 @@ RSpec.describe 'Receipts', type: :request do
         price_wrapper = item_row.at_css('[data-receipt-form-target="priceInput"]').ancestors.find { |node| node['class'].to_s.include?('receipt-form-item-mobile-detail-field') }
 
         expect(quantity_wrapper).to be_present
-        expect(quantity_wrapper['class']).to include('md:col-span-2')
+        expect(quantity_wrapper['class']).to include('md:col-span-1')
         expect(price_wrapper).to be_present
-        expect(price_wrapper['class']).to include('md:col-span-2')
+        expect(price_wrapper['class']).to include('md:col-span-1')
+        expect(item_row['class']).to include('receipt-form-item-layout')
 
         %w[
           quantityInput
@@ -6798,6 +6799,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(quantity_input['data-action']).to eq('input->receipt-form#recalculate')
         expect(quantity_unit_select['data-action']).to include('change->receipt-form#quantityUnitChanged')
         expect(quantity_unit_select['aria-label']).to eq(I18n.t('receipts.item_fields.unit'))
+        expect(quantity_input['aria-label']).to eq(I18n.t('receipts.item_fields.quantity'))
+        expect(item_row.at_css('[data-receipt-form-target="priceInput"]')['aria-label']).to eq(I18n.t('receipts.item_fields.unit_price'))
         expect(quantity_input['step']).to eq('1')
         expect(quantity_input['inputmode']).to eq('numeric')
         expect(item_row.at_css(%(button[aria-label="#{I18n.t('shared.number_field.decrement_aria', label: I18n.t('receipts.item_fields.unit_price'))}"]))).to be_present

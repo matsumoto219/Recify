@@ -86,6 +86,90 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     )
   end
 
+  def quantity_unit_layout_metrics(row)
+    quantity_input = row.find("[data-receipt-form-target='quantityInput']", visible: :all)
+    unit_select = row.find("[data-receipt-form-target='quantityUnitInput']", visible: :all)
+    price_input = row.find("[data-receipt-form-target='priceInput']", visible: :all)
+
+    maximum_price_text = SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX.to_s
+
+    page.evaluate_script(<<~JAVASCRIPT, quantity_input, unit_select, price_input, maximum_price_text)
+      (() => {
+        const quantityInput = arguments[0]
+        const unitSelect = arguments[1]
+        const priceInput = arguments[2]
+        const maximumPriceText = arguments[3]
+        const quantityWrapper = quantityInput.closest(".field-control-wrapper")
+        const priceWrapper = priceInput.closest(".field-control-wrapper")
+        const quantityField = quantityInput.closest(".receipt-form-item-mobile-detail-field")
+        const priceField = priceInput.closest(".receipt-form-item-mobile-detail-field")
+        const quantityWrapperRect = quantityWrapper.getBoundingClientRect()
+        const quantityInputRect = quantityInput.getBoundingClientRect()
+        const unitSelectRect = unitSelect.getBoundingClientRect()
+        const priceInputRect = priceInput.getBoundingClientRect()
+        const quantityFieldRect = quantityField.getBoundingClientRect()
+        const priceFieldRect = priceField.getBoundingClientRect()
+        const priceButtons = Array.from(priceWrapper.querySelectorAll("button"))
+        const priceButtonRects = priceButtons
+          .map((button) => button.getBoundingClientRect())
+          .filter((rect) => rect.width > 0 && rect.height > 0)
+        const quantityStyle = window.getComputedStyle(quantityInput)
+        const priceStyle = window.getComputedStyle(priceInput)
+        const visibleWidthWithin = (element, wrapper) => {
+          const elementRect = element.getBoundingClientRect()
+          const wrapperRect = wrapper.getBoundingClientRect()
+          return Math.max(
+            0,
+            Math.min(elementRect.right, wrapperRect.right) - Math.max(elementRect.left, wrapperRect.left)
+          )
+        }
+        const selectStyle = window.getComputedStyle(unitSelect)
+        const canvas = document.createElement("canvas")
+        const context = canvas.getContext("2d")
+        context.font = selectStyle.font
+        const longestOptionWidth = Math.max(
+          ...Array.from(unitSelect.options, (option) => context.measureText(option.text).width)
+        )
+        const horizontalPadding =
+          Number.parseFloat(selectStyle.paddingLeft) + Number.parseFloat(selectStyle.paddingRight)
+        context.font = quantityStyle.font
+        const requiredQuantityContentWidth = context.measureText(quantityInput.max).width
+        context.font = priceStyle.font
+        const requiredPriceContentWidth = context.measureText(maximumPriceText).width
+        const contentWidthWithin = (element, wrapper, style) =>
+          visibleWidthWithin(element, wrapper) -
+          Number.parseFloat(style.paddingLeft) -
+          Number.parseFloat(style.paddingRight)
+
+        return {
+          viewportWidth: window.innerWidth,
+          visibleQuantityContentWidth: contentWidthWithin(quantityInput, quantityWrapper, quantityStyle),
+          requiredQuantityContentWidth,
+          quantityWrapperWidth: quantityWrapperRect.width,
+          unitSelectWidth: unitSelectRect.width,
+          requiredUnitSelectWidth: longestOptionWidth + horizontalPadding,
+          unitSelectWithinWrapper:
+            unitSelectRect.left >= quantityWrapperRect.left - 1 &&
+            unitSelectRect.right <= quantityWrapperRect.right + 1,
+          unitTextAlign: selectStyle.textAlign,
+          unitTextAlignLast: selectStyle.textAlignLast,
+          unitOnSameLine: Math.abs(unitSelectRect.top - quantityInputRect.top) < 1,
+          unitBelowQuantity: unitSelectRect.top >= quantityInputRect.bottom - 1,
+          visiblePriceContentWidth: contentWidthWithin(priceInput, priceWrapper, priceStyle),
+          requiredPriceContentWidth,
+          visiblePriceButtonCount: priceButtonRects.length,
+          visiblePriceButtonWidths: priceButtonRects.map((rect) => rect.width),
+          quantityBeforePriceWithoutOverlap: quantityFieldRect.bottom <= priceFieldRect.top + 1,
+          priceControlsDoNotOverlap:
+            priceButtonRects.length !== 2 ||
+            (priceButtonRects[0].right <= priceInputRect.left + 1 &&
+              priceInputRect.right <= priceButtonRects[1].left + 1),
+          horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth
+        }
+      })()
+    JAVASCRIPT
+  end
+
   def receipt_adjustment_target_id(adjustment)
     "receipt-adjustment-#{adjustment.id}"
   end
@@ -159,7 +243,11 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           const animations = target.getAnimations({ subtree: true })
-          Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)))
+          const fontsReady = document.fonts?.ready || Promise.resolve()
+          Promise.all([
+            fontsReady,
+            ...animations.map((animation) => animation.finished.catch(() => undefined))
+          ])
             .then(() => finish(true))
         })
       })
@@ -747,6 +835,153 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect(expect_category_label_association(expanded_receipt_item_row).value).to eq("other")
 
     expect_viewport_without_horizontal_overflow(1440)
+    expect_browser_console_clean
+  end
+
+  it "数量・単位・単価のmobile表示を維持しdesktopで欠けずに操作できる" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "数量単位表示確認店",
+      purchased_at: Time.zone.local(2026, 8, 9, 10, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 14_808,
+      tax_amount: 0,
+      total_amount: 14_808
+    )
+    receipt.receipt_items.create!(
+      confirmed_name: "数量単位表示確認商品",
+      price: 1_234,
+      quantity: 12,
+      quantity_unit_code: "set",
+      line_total: 14_808,
+      needs_review: false
+    )
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    row = expanded_receipt_item_row
+    quantity_input = row.find_field(I18n.t("receipts.item_fields.quantity"), visible: :all)
+    unit_select = row.find_field(I18n.t("receipts.item_fields.unit"), visible: :all)
+    price_input = row.find_field(I18n.t("receipts.item_fields.unit_price"), visible: :all)
+
+    page.execute_script(<<~JAVASCRIPT, quantity_input, price_input, SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX.to_s)
+      arguments[0].value = arguments[0].max
+      arguments[1].value = arguments[2]
+    JAVASCRIPT
+
+    aggregate_failures do
+      expect(row.find_field(I18n.t("receipts.item_fields.quantity"), visible: :all)).to be_present
+      expect(row.find_field(I18n.t("receipts.item_fields.unit"), visible: :all)).to be_present
+      expect(row.find_field(I18n.t("receipts.item_fields.unit_price"), visible: :all)).to be_present
+    end
+
+    viewports = [
+      { width: 320, height: 568, mobile: true, stacked_unit: true },
+      { width: 359, height: 780, mobile: true, stacked_unit: true },
+      { width: 360, height: 800, mobile: true },
+      { width: 390, height: 844, mobile: true },
+      { width: 430, height: 932, mobile: true },
+      { width: 667, height: 375, mobile: true },
+      { width: 767, height: 430, mobile: true },
+      { width: 768, height: 900, mobile: false },
+      { width: 844, height: 390, mobile: true },
+      { width: 1024, height: 900, mobile: false },
+      { width: 1440, height: 1000, mobile: false }
+    ]
+
+    viewports.each do |viewport|
+      set_viewport(**viewport.slice(:width, :height, :mobile))
+      wait_for_visual_motion_to_finish(row)
+      metrics = quantity_unit_layout_metrics(row)
+
+      aggregate_failures "viewport #{viewport.fetch(:width)}px" do
+        expect(metrics.fetch("viewportWidth")).to eq(viewport.fetch(:width))
+        expect(metrics.fetch("unitSelectWidth") + 1).to be >= metrics.fetch("requiredUnitSelectWidth")
+        expect(metrics.fetch("unitSelectWithinWrapper")).to be(true)
+        if viewport[:stacked_unit]
+          expect(metrics.fetch("unitOnSameLine")).to be(false)
+          expect(metrics.fetch("unitBelowQuantity")).to be(true)
+        else
+          expect(metrics.fetch("unitOnSameLine")).to be(true)
+        end
+        expect(metrics.fetch("unitTextAlign")).to eq("center")
+        expect(metrics.fetch("unitTextAlignLast")).to eq("center")
+        expect(metrics.fetch("visibleQuantityContentWidth") + 1).to be >= metrics.fetch("requiredQuantityContentWidth")
+        expect(metrics.fetch("visiblePriceContentWidth") + 1).to be >= metrics.fetch("requiredPriceContentWidth")
+        expect(metrics.fetch("priceControlsDoNotOverlap")).to be(true)
+        if viewport.fetch(:width) <= 767
+          expect(metrics.fetch("visiblePriceButtonCount")).to eq(2)
+          expect(metrics.fetch("visiblePriceButtonWidths")).to all(be_within(1).of(40))
+          expect(metrics.fetch("quantityBeforePriceWithoutOverlap")).to be(true)
+        else
+          expect(metrics.fetch("visiblePriceButtonCount")).to eq(0)
+        end
+        expect(metrics.fetch("horizontalOverflow")).to be(false)
+      end
+    end
+
+    unit_select = row.find_field(I18n.t("receipts.item_fields.unit"), visible: :all)
+    page.execute_script(<<~JAVASCRIPT, unit_select)
+      (() => {
+        const select = arguments[0]
+        const option = new Option("パッケージあたり", "future_long_unit", true, true)
+        select.add(option)
+        select.value = option.value
+      })()
+    JAVASCRIPT
+
+    viewports.select { |viewport| viewport.fetch(:mobile) }.each do |viewport|
+      set_viewport(**viewport.slice(:width, :height, :mobile))
+      wait_for_visual_motion_to_finish(row)
+      metrics = quantity_unit_layout_metrics(row)
+
+      aggregate_failures "long unit label at #{viewport.fetch(:width)}px" do
+        expect(metrics.fetch("viewportWidth")).to eq(viewport.fetch(:width))
+        expect(metrics.fetch("unitSelectWidth") + 1).to be >= metrics.fetch("requiredUnitSelectWidth")
+        expect(metrics.fetch("unitSelectWithinWrapper")).to be(true)
+        expect(metrics.fetch("unitTextAlign")).to eq("center")
+        expect(metrics.fetch("unitTextAlignLast")).to eq("center")
+        if viewport[:stacked_unit]
+          expect(metrics.fetch("unitOnSameLine")).to be(false)
+          expect(metrics.fetch("unitBelowQuantity")).to be(true)
+        else
+          expect(metrics.fetch("unitOnSameLine") || metrics.fetch("unitBelowQuantity")).to be(true)
+        end
+        expect(metrics.fetch("visibleQuantityContentWidth") + 1).to be >= metrics.fetch("requiredQuantityContentWidth")
+        expect(metrics.fetch("visiblePriceContentWidth") + 1).to be >= metrics.fetch("requiredPriceContentWidth")
+        expect(metrics.fetch("priceControlsDoNotOverlap")).to be(true)
+        if viewport.fetch(:width) <= 767
+          expect(metrics.fetch("visiblePriceButtonCount")).to eq(2)
+          expect(metrics.fetch("visiblePriceButtonWidths")).to all(be_within(1).of(40))
+          expect(metrics.fetch("quantityBeforePriceWithoutOverlap")).to be(true)
+        else
+          expect(metrics.fetch("visiblePriceButtonCount")).to eq(0)
+        end
+        expect(metrics.fetch("horizontalOverflow")).to be(false)
+      end
+    end
+
+    page.execute_script(<<~JAVASCRIPT, quantity_input, price_input)
+      arguments[0].value = "12"
+      arguments[1].value = "1234"
+    JAVASCRIPT
+
+    select_with_keyboard(unit_select, "liter")
+    aggregate_failures do
+      expect(quantity_input["step"]).to eq("0.001")
+      expect(quantity_input["inputmode"]).to eq("decimal")
+    end
+    unit_select.select(I18n.t("enums.receipt_item.quantity_unit_code.set"))
+    aggregate_failures do
+      expect(unit_select.value).to eq("set")
+      expect(quantity_input["step"]).to eq("1")
+      expect(quantity_input["inputmode"]).to eq("numeric")
+    end
+
     expect_browser_console_clean
   end
 end

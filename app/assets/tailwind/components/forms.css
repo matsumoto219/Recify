@@ -135,6 +135,11 @@
   );
 }
 
+.quantity-unit-number-field-centered-select {
+  text-align: center;
+  text-align-last: center;
+}
+
 .field-stepper-button {
   color: var(--text-base);
 }
