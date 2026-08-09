@@ -106,8 +106,9 @@ class ReceiptItem < ApplicationRecord
 
   def category_label
     return "" if category.blank?
+    return I18n.t("receipts.item_fields.uncategorized") unless CATEGORIES.include?(category)
 
-    I18n.t("enums.receipt_item.category.#{category}", default: category)
+    I18n.t("enums.receipt_item.category.#{category}")
   end
 
   def review_reason_labels

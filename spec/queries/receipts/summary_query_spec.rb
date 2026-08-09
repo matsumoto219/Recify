@@ -127,6 +127,28 @@ RSpec.describe Receipts::SummaryQuery do
     )
   end
 
+  it 'legacy invalid codeを未分類へ集約し、otherは独立分類として維持する' do
+    user = create(:user)
+    receipt = create(:receipt, :completed, user: user)
+    create_item(receipt, category: nil, line_total: 100)
+    create_item(receipt, category: '', line_total: 200)
+    create_item(receipt, category: 'other', line_total: 300)
+    legacy_invalid = create_item(receipt, category: 'food', line_total: 400)
+    legacy_invalid.update_column(:category, 'legacy_unknown')
+
+    result = described_class.categories(user: user)
+
+    expect(result).to contain_exactly(
+      hash_including(
+        category: 'uncategorized',
+        label: I18n.t('receipts.item_fields.uncategorized'),
+        total_amount: 700,
+        item_count: 3
+      ),
+      hash_including(category: 'other', label: 'その他', total_amount: 300, item_count: 1)
+    )
+  end
+
   it 'reapplies the user boundary to category aggregation even with a broader scope' do
     user = create(:user)
     own = create(:receipt, :completed, user: user)

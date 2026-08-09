@@ -1,6 +1,78 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptItem, type: :model do
+  describe 'category contract' do
+    let(:expected_categories) do
+      %w[
+        food
+        drink
+        daily_goods
+        household
+        medical
+        beauty
+        transportation
+        hobby
+        other
+      ]
+    end
+
+    def build_category_item(category)
+      build(:receipt).receipt_items.build(
+        confirmed_name: '分類確認商品',
+        category: category,
+        price: 100,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 100,
+        needs_review: false
+      )
+    end
+
+    it 'canonical 9 codeと日本語optionを同じ順序で返す' do
+      expected_options = expected_categories.map do |category|
+        [ I18n.t("enums.receipt_item.category.#{category}"), category ]
+      end
+
+      aggregate_failures do
+        expect(described_class::CATEGORIES).to eq(expected_categories)
+        expect(described_class.category_options).to eq(expected_options)
+      end
+    end
+
+    it 'nil、blank、otherを許可し、候補外codeを拒否する' do
+      invalid = build_category_item('arbitrary_invalid')
+
+      aggregate_failures do
+        expect(build_category_item(nil)).to be_valid
+        expect(build_category_item('')).to be_valid
+        expect(build_category_item('other')).to be_valid
+        expect(invalid).not_to be_valid
+        expect(invalid.errors.of_kind?(:category, :inclusion)).to be(true)
+      end
+    end
+  end
+
+  describe '#category_label' do
+    it '有効なotherはその他として表示する' do
+      item = build(:receipt).receipt_items.build(category: 'other')
+
+      expect(item.category_label).to eq(I18n.t('enums.receipt_item.category.other'))
+    end
+
+    it 'nilとblankは既存の空表示契約を維持する' do
+      aggregate_failures do
+        expect(build(:receipt).receipt_items.build(category: nil).category_label).to eq('')
+        expect(build(:receipt).receipt_items.build(category: '').category_label).to eq('')
+      end
+    end
+
+    it 'legacy invalid codeを未分類として表示する' do
+      item = build(:receipt).receipt_items.build(category: 'legacy_unknown')
+
+      expect(item.category_label).to eq(I18n.t('receipts.item_fields.uncategorized'))
+    end
+  end
+
   describe 'quantity unit code validation' do
     it 'default codeを設定する' do
       item = build(:receipt).receipt_items.build(confirmed_name: '標準単位商品', price: 100, quantity: 1, line_total: 100)

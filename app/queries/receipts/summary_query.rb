@@ -51,7 +51,7 @@ module Receipts
 
     def categories
       scoped_receipts = receipts.where(user_id: user.id).reorder(nil)
-      category_expression = Arel.sql("COALESCE(NULLIF(receipt_items.category, ''), 'uncategorized')")
+      category_expression = normalized_category_expression
 
       rows = scoped_receipts
         .where(status: AMOUNT_STATUSES)
@@ -160,6 +160,15 @@ module Receipts
           icon_class: "token-text-muted"
         }
       end
+    end
+
+    def normalized_category_expression
+      category = ReceiptItem.arel_table[:category]
+
+      Arel::Nodes::Case.new
+        .when(category.in(ReceiptItem::CATEGORIES))
+        .then(category)
+        .else("uncategorized")
     end
 
     def category_label(category)

@@ -331,14 +331,19 @@ module Receipts::Processing::Runs
       result = normalized_hash(ai_result)
       receipt_items_snapshot = limited_ai_normalized_items(result[:receipt_items_attributes])
       receipt_adjustments_snapshot = limited_ai_normalized_adjustments(result[:receipt_adjustments_attributes])
+      review_reasons = Array(result[:review_reasons])
+      item_category_uncertain = receipt_items_snapshot.any? do |item|
+        Array(item[:review_reasons] || item["review_reasons"]).include?("item_category_uncertain")
+      end
+      review_reasons |= [ "item_category_uncertain" ] if item_category_uncertain
 
       sanitize_hash(
         {
           schema_version: AI_NORMALIZED_RESULT_SCHEMA_VERSION,
           success: result[:success] == true,
           error_code: safe_string(result[:error_code]),
-          needs_review: result[:needs_review] == true,
-          review_reasons: limited_strings(result[:review_reasons], snapshot_review_reasons_limit),
+          needs_review: result[:needs_review] == true || item_category_uncertain,
+          review_reasons: limited_strings(review_reasons, snapshot_review_reasons_limit),
           receipt_attributes: normalized_receipt_attributes_snapshot(result[:receipt_attributes]),
           receipt_items_attributes: receipt_items_snapshot,
           receipt_adjustments_attributes: receipt_adjustments_snapshot,
@@ -631,13 +636,20 @@ module Receipts::Processing::Runs
         item = normalized_hash(item)
         next if item.blank?
 
+        raw_category = safe_string(item[:category]).to_s.strip.presence
+        category = raw_category if ReceiptItem::CATEGORIES.include?(raw_category)
+        category_invalid = raw_category.present? && category.nil?
+        review_reasons = Array(item[:review_reasons])
+        review_reasons |= [ "item_category_uncertain" ] if category_invalid
+        category_uncertain = review_reasons.include?("item_category_uncertain")
+
         {
           index: safe_value(item[:index]),
           position_index: safe_value(item[:position_index]),
           raw_text: safe_string(item[:raw_text]),
           suggested_name: safe_string(item[:suggested_name]),
           confirmed_name: safe_string(item[:confirmed_name]),
-          category: safe_string(item[:category]),
+          category: category,
           price: safe_value(item[:price]),
           quantity: safe_value(item[:quantity]),
           quantity_unit_code: safe_string(item[:quantity_unit_code]),
@@ -649,8 +661,8 @@ module Receipts::Processing::Runs
           line_total: safe_value(item[:line_total]),
           discount_amount: safe_value(item[:discount_amount]),
           discount_rate: safe_value(item[:discount_rate]),
-          needs_review: item.key?(:needs_review) ? item[:needs_review] == true : nil,
-          review_reasons: limited_strings(item[:review_reasons], snapshot_review_reasons_limit),
+          needs_review: category_uncertain ? true : (item.key?(:needs_review) ? item[:needs_review] == true : nil),
+          review_reasons: limited_strings(review_reasons, snapshot_review_reasons_limit),
           confidence: safe_value(item[:confidence])
         }.compact
       end

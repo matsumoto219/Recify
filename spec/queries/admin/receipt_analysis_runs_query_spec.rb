@@ -384,6 +384,38 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
       end
     end
 
+    it 'legacy AI snapshotのinvalid category文字列を管理画面用recordへ出さない' do
+      run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        ai_normalized_result_snapshot: {
+          receipt_items_attributes: [
+            { index: 0, category: 'unknown_category', needs_review: false },
+            { index: 1, category: 'other', needs_review: false }
+          ]
+        }
+      )
+
+      record = described_class.call(receipt: run.receipt).records.first
+      items = record.dig(:detailed_snapshots, :ai_normalized_result_snapshot, 'receipt_items_attributes')
+
+      aggregate_failures do
+        expect(items.first).to include(
+          'index' => 0,
+          'category' => nil,
+          'needs_review' => true,
+          'review_reasons' => [ 'item_category_uncertain' ]
+        )
+        expect(items.second).to include('index' => 1, 'category' => 'other', 'needs_review' => false)
+        expect(record.dig(:detailed_snapshots, :ai_normalized_result_snapshot, 'needs_review')).to be(true)
+        expect(record.dig(:detailed_snapshots, :ai_normalized_result_snapshot, 'review_reasons')).to include(
+          'item_category_uncertain'
+        )
+        expect(record[:detailed_snapshots].to_json).not_to include('unknown_category')
+        expect(run.reload.ai_normalized_result_snapshot.to_json).to include('unknown_category')
+      end
+    end
+
     it 'OCR polling metricsをrecordに含める' do
       run = create(
         :receipt_analysis_run,

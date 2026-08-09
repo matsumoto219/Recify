@@ -103,6 +103,15 @@ RSpec.describe ReceiptFormPresenter do
   end
 
   describe '#item_row' do
+    it '新規明細のcategoryを422再表示用の選択値として保持する' do
+      receipt = build(:receipt)
+      item = receipt.receipt_items.build(category: 'medical')
+
+      row = described_class.new(receipt: receipt).item_row(item, new_record: true)
+
+      expect(row.selected_category).to eq('medical')
+    end
+
     it 'builds item row state from review reasons and quantity unit' do
       receipt = build(:receipt)
       item = ReceiptItem.new(

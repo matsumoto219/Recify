@@ -52,10 +52,14 @@ module Ai
 
       return not_receipt_result(normalized_payload) unless normalized_payload["is_receipt"]
 
+      receipt_items_attributes = Analysis.normalize_receipt_items(normalized_payload["items"])
       review_reasons = normalize_review_reasons(normalized_payload["review_reasons"])
+      if receipt_items_attributes.any? { |item| Array(item[:review_reasons]).include?("item_category_uncertain") }
+        review_reasons |= [ "item_category_uncertain" ]
+      end
       Ai::ResultTemplate.success(
         receipt_attributes: normalize_receipt_attributes(normalized_payload),
-        receipt_items_attributes: Analysis.normalize_receipt_items(normalized_payload["items"]),
+        receipt_items_attributes: receipt_items_attributes,
         receipt_adjustments_attributes: normalize_receipt_adjustments(normalized_payload["receipt_adjustments"]),
         needs_review: normalized_payload["needs_review"] == true || review_reasons.any?,
         review_reasons: review_reasons,

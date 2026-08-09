@@ -30,6 +30,15 @@ RSpec.describe Ai::PromptTemplate do
     let(:system_prompt) { built_prompt[:system] }
     let(:user_prompt) { built_prompt[:user] }
 
+    it 'category一覧はReceiptItemのcanonical順序をそのまま使用する' do
+      allowed_categories = described_class.new(input).send(:allowed_categories)
+
+      aggregate_failures do
+        expect(allowed_categories).to equal(ReceiptItem::CATEGORIES)
+        expect(system_prompt).to include("categories:\n#{ReceiptItem::CATEGORIES.join(', ')}")
+      end
+    end
+
     it 'country_region を item tax_rate 判断材料として使うよう指示する' do
       expect(user_prompt).to include(
         'Use country_region in meta as a reference for local tax rules when determining item tax_rate.'

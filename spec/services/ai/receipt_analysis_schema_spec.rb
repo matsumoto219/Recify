@@ -50,7 +50,7 @@ RSpec.describe Ai::ReceiptAnalysisSchema do
         expect(schema.dig('properties', 'payment', 'properties', 'payment_method', 'enum')).to match_array(
           Receipt::PAYMENT_METHODS + [ nil ]
         )
-        expect(item_schema.dig('properties', 'category', 'enum')).to match_array(ReceiptItem::CATEGORIES + [ nil ])
+        expect(item_schema.dig('properties', 'category', 'enum')).to eq(ReceiptItem::CATEGORIES + [ nil ])
         expect(schema.dig('properties', 'review_reasons', 'items', 'enum')).to match_array(
           Ai::ResponseParser::ALLOWED_REVIEW_REASONS
         )

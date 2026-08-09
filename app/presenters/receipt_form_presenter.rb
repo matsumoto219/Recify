@@ -363,7 +363,7 @@ class ReceiptFormPresenter
     end
 
     def selected_category
-      submitted_value(:category) { new_record? ? nil : item.category }
+      submitted_value(:category) { item.category }
     end
 
     def name_highlight_variant

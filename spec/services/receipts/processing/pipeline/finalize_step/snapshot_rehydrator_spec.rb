@@ -87,6 +87,27 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator 
       )
     end
 
+    it 'legacy snapshotのinvalid categoryを復元せず未分類の確認状態へ安全化する' do
+      result = described_class.ai(
+        'success' => true,
+        'needs_review' => false,
+        'review_reasons' => [],
+        'receipt_items_attributes' => [
+          { 'index' => 0, 'category' => 'unknown_category', 'needs_review' => false }
+        ]
+      )
+      item = result.fetch(:receipt_items_attributes).first
+
+      aggregate_failures do
+        expect(item).not_to have_key('category')
+        expect(item['needs_review']).to be(true)
+        expect(item['review_reasons']).to include('item_category_uncertain')
+        expect(result[:needs_review]).to be(true)
+        expect(result[:review_reasons]).to include('item_category_uncertain')
+        expect(result.to_json).not_to include('unknown_category')
+      end
+    end
+
     it 'returns nil for blank or non-hash snapshots' do
       aggregate_failures do
         expect(described_class.ai(nil)).to be_nil

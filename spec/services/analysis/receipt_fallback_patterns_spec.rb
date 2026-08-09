@@ -140,14 +140,14 @@ RSpec.describe Analysis::ReceiptFallbackPatterns do
       expect(described_class.detect_category('高速道路料金')).to eq('transportation')
     end
 
-    it '危険な短い語だけではカテゴリを決めない' do
+    it '根拠のない文字列をotherへ推測分類しない' do
       aggregate_failures do
-        expect(described_class.detect_category('水道')).to eq('other')
-        expect(described_class.detect_category('きゅうり 1本')).to eq('other')
+        expect(described_class.detect_category('水道')).to be_nil
+        expect(described_class.detect_category('きゅうり 1本')).to be_nil
         expect(described_class.detect_category('本日のパスタ')).to eq('food')
-        expect(described_class.detect_category('USB3.0 高速転送')).to eq('other')
-        expect(described_class.detect_category('おすすめ商品')).to eq('other')
-        expect(described_class.detect_category('セール価格')).to eq('other')
+        expect(described_class.detect_category('USB3.0 高速転送')).to be_nil
+        expect(described_class.detect_category('おすすめ商品')).to be_nil
+        expect(described_class.detect_category('セール価格')).to be_nil
       end
     end
 
@@ -161,7 +161,7 @@ RSpec.describe Analysis::ReceiptFallbackPatterns do
         'おすすめ商品'
       ].map { |text| described_class.detect_category(text) }
 
-      expect(detected_categories).to all(satisfy { |category| ReceiptItem::CATEGORIES.include?(category) })
+      expect(detected_categories).to all(satisfy { |category| category.nil? || ReceiptItem::CATEGORIES.include?(category) })
     end
   end
 end
