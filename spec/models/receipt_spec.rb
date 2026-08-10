@@ -1092,6 +1092,30 @@ RSpec.describe Receipt, type: :model do
       expect(receipt).to be_valid
     end
 
+    it '画像付き要確認データは通常validationでは部分保存を許可し、手動必須項目validationでは拒否する' do
+      receipt = build(
+        :receipt,
+        :review_needed,
+        :with_image,
+        store_name: nil,
+        total_amount: nil
+      )
+
+      expect(receipt).to be_valid
+
+      receipt.manual_core_fields_required = true
+
+      aggregate_failures 'manual core fields required' do
+        expect(receipt).not_to be_valid
+        expect(receipt.errors).to be_of_kind(:store_name, :blank)
+        expect(receipt.errors).to be_of_kind(:total_amount, :blank)
+      end
+
+      receipt.manual_core_fields_required = nil
+
+      expect(receipt).to be_valid
+    end
+
     it '画像purge済みでもprocessingは画像必須のままにする' do
       receipt = build(
         :receipt,

@@ -33,6 +33,92 @@ RSpec.describe Receipts::Editing::ManualUpdater do
     end
   end
 
+  it '画像付き要確認データの入力済み店舗名を空へ戻す更新を保存しない' do
+    review_receipt = create(
+      :receipt,
+      :review_needed,
+      :with_image,
+      user: user,
+      store_name: '変更前店舗',
+      total_amount: 100,
+      review_reasons: [ 'payment_amount_mismatch' ]
+    )
+
+    result = described_class.call(
+      receipt: review_receipt,
+      attributes: {
+        'store_name' => '',
+        'status' => 'review_needed',
+        'review_reasons' => [ 'payment_amount_mismatch' ]
+      },
+      items_missing: false
+    )
+
+    aggregate_failures do
+      expect(result).not_to be_saved
+      expect(result.receipt.errors).to be_of_kind(:store_name, :blank)
+      expect(result.receipt.manual_core_fields_required).to be_nil
+      expect(review_receipt.reload.store_name).to eq('変更前店舗')
+    end
+  end
+
+  it '画像付き要確認データの入力済み合計金額を空へ戻す更新を保存しない' do
+    review_receipt = create(
+      :receipt,
+      :review_needed,
+      :with_image,
+      user: user,
+      store_name: '合計金額確認店舗',
+      total_amount: 100,
+      review_reasons: [ 'payment_amount_mismatch' ]
+    )
+
+    result = described_class.call(
+      receipt: review_receipt,
+      attributes: {
+        'total_amount' => nil,
+        'status' => 'review_needed',
+        'review_reasons' => [ 'payment_amount_mismatch' ]
+      },
+      items_missing: false
+    )
+
+    aggregate_failures do
+      expect(result).not_to be_saved
+      expect(result.receipt.errors).to be_of_kind(:total_amount, :blank)
+      expect(result.receipt.manual_core_fields_required).to be_nil
+      expect(review_receipt.reload.total_amount).to eq(100)
+    end
+  end
+
+  it '画像付き要確認データの既存必須項目が空のままならメモだけ更新できる' do
+    partial_receipt = create(
+      :receipt,
+      :review_needed,
+      :with_image,
+      user: user,
+      store_name: nil,
+      total_amount: nil,
+      review_reasons: [ 'store_name_missing' ]
+    )
+
+    result = described_class.call(
+      receipt: partial_receipt,
+      attributes: { 'memo' => '部分データのメモ更新' },
+      items_missing: false
+    )
+
+    aggregate_failures do
+      expect(result).to be_saved
+      expect(result.receipt.manual_core_fields_required).to be_nil
+      expect(partial_receipt.reload).to have_attributes(
+        store_name: nil,
+        total_amount: nil,
+        memo: '部分データのメモ更新'
+      )
+    end
+  end
+
   it 'validation失敗時は保存用derived attrsから元のsource attrsへ戻してerrorを維持する' do
     item = receipt.receipt_items.create!(
       confirmed_name: '商品', price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100
@@ -92,6 +178,30 @@ RSpec.describe Receipts::Editing::ManualUpdater do
         items_missing: false
       )
     end.to raise_error(ActiveRecord::StaleObjectError)
+  end
+
+  it '入力済み必須項目を空へ戻す更新が例外になっても検証フラグを元へ戻す' do
+    review_receipt = create(
+      :receipt,
+      :review_needed,
+      :with_image,
+      user: user,
+      store_name: '変更前店舗',
+      total_amount: 100
+    )
+    review_receipt.manual_core_fields_required = false
+    allow(review_receipt).to receive(:update)
+      .and_raise(ActiveRecord::StaleObjectError.new(review_receipt, 'update'))
+
+    expect do
+      described_class.call(
+        receipt: review_receipt,
+        attributes: { 'store_name' => '' },
+        items_missing: false
+      )
+    end.to raise_error(ActiveRecord::StaleObjectError)
+
+    expect(review_receipt.manual_core_fields_required).to be(false)
   end
 
   it 'does not consume manual creation usage' do
