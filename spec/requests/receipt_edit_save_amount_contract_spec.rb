@@ -592,6 +592,43 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
 
+    it '既存itemのpartial PATCHで未送信の数量単位と数量理由を維持する' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: %w[item_name_uncertain item_quantity_uncertain]
+      )
+      item = create_item(
+        receipt,
+        confirmed_name: '確認前商品',
+        price: 50,
+        quantity: 2,
+        quantity_unit_code: 'kilogram',
+        needs_review: true,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            confirmed_name: '確認済み商品'
+          }
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.confirmed_name).to eq('確認済み商品')
+        expect(item.quantity_unit_code).to eq('kilogram')
+        expect(item.needs_review).to be(true)
+        expect(receipt.review_reasons).to eq([ 'item_quantity_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
     it '未変更adjustmentのreview stateをフォーム送信だけで解除しない' do
       receipt = create_completed_receipt(status: 'review_needed', review_reasons: [ 'adjustment_uncertain' ])
       create_item(receipt)
@@ -618,6 +655,51 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(adjustment.needs_review).to be(true)
         expect(adjustment.review_reasons).to include('adjustment_uncertain')
         expect(receipt.reload.status).to eq('review_needed')
+      end
+    end
+
+    it '既存adjustmentのidだけを含むpartial PATCHを422にせず確認状態を維持する' do
+      receipt = create_completed_receipt(
+        subtotal_amount: 90,
+        tax_amount: 0,
+        total_amount: 90,
+        tax_rate: BigDecimal('0'),
+        status: 'review_needed',
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+      create_item(receipt, tax_rate: BigDecimal('0'))
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'coupon',
+        label: '確認前クーポン',
+        amount: 10,
+        sign: 'discount',
+        source: 'ai',
+        needs_review: true,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        memo: 'partial PATCH確認',
+        receipt_adjustments_attributes: {
+          '0' => { id: adjustment.id }
+        }
+      )
+      receipt.reload
+      adjustment.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.memo).to eq('partial PATCH確認')
+        expect(adjustment).to have_attributes(
+          kind: 'coupon',
+          sign: 'discount',
+          source: 'ai',
+          needs_review: true,
+          review_reasons: []
+        )
+        expect(receipt.review_reasons).to eq([ 'adjustment_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
       end
     end
 
