@@ -43,6 +43,52 @@ RSpec.describe ReceiptFormPresenter do
     end
   end
 
+  describe '調整なし確認' do
+    it 'receipt-level reasonがあり保存済み調整行がない編集画面だけで表示する' do
+      receipt = create(:receipt, status: 'review_needed', review_reasons: [ 'adjustment_uncertain' ])
+
+      presenter = described_class.new(receipt: receipt, adjustment_absence_confirmed: true)
+
+      aggregate_failures do
+        expect(presenter.adjustment_absence_confirmation_available?).to be(true)
+        expect(presenter.adjustment_absence_confirmation_visible?).to be(true)
+        expect(presenter.adjustment_absence_confirmed?).to be(true)
+      end
+    end
+
+    it '新規調整行の422再表示中はpanelを残して非表示・未確認にする' do
+      receipt = create(:receipt, status: 'review_needed', review_reasons: [ 'adjustment_uncertain' ])
+      presenter = described_class.new(
+        receipt: receipt,
+        adjustment_absence_confirmed: true,
+        submitted_params: {
+          receipt_adjustments_attributes: {
+            '0' => { kind: 'coupon', label: '入力中クーポン', amount: '10', sign: 'discount' }
+          }
+        }
+      )
+
+      aggregate_failures do
+        expect(presenter.adjustment_absence_confirmation_available?).to be(true)
+        expect(presenter.adjustment_absence_confirmation_visible?).to be(false)
+        expect(presenter.adjustment_absence_confirmed?).to be(false)
+      end
+    end
+
+    it 'reasonがない場合・新規作成・保存済み調整行がある場合は表示しない' do
+      no_reason = create(:receipt, status: 'completed', review_reasons: [])
+      new_receipt = build(:receipt, status: 'review_needed', review_reasons: [ 'adjustment_uncertain' ])
+      with_adjustment = create(:receipt, status: 'review_needed', review_reasons: [ 'adjustment_uncertain' ])
+      create(:receipt_adjustment, receipt: with_adjustment)
+
+      aggregate_failures do
+        expect(described_class.new(receipt: no_reason).adjustment_absence_confirmation_available?).to be(false)
+        expect(described_class.new(receipt: new_receipt).adjustment_absence_confirmation_available?).to be(false)
+        expect(described_class.new(receipt: with_adjustment).adjustment_absence_confirmation_available?).to be(false)
+      end
+    end
+  end
+
   describe 'submitted form values' do
     it '保存失敗後のtop-level値と新規child行を表示専用に再構築する' do
       receipt = build(:receipt, memo: '保存済みメモ')

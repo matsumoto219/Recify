@@ -242,6 +242,7 @@ class ReceiptsController < ApplicationController
 
   def update
     carry_receipt_form_initial_purchase_input_fingerprint
+    @receipt_form_adjustment_absence_confirmed = receipt_form_adjustment_absence_confirmed?
     rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
 
     if storage_quota_exceeded_for?(uploaded_receipt_image, excluding_blob: existing_receipt_image_blob)
@@ -397,7 +398,8 @@ class ReceiptsController < ApplicationController
       receipt: @receipt,
       submitted_params: submitted_params,
       purchase_inputs_changed: @receipt_form_purchase_inputs_changed,
-      adjustment_tax_detail_evidence_stale: receipt_form_adjustment_tax_detail_evidence_stale?
+      adjustment_tax_detail_evidence_stale: receipt_form_adjustment_tax_detail_evidence_stale?,
+      adjustment_absence_confirmed: @receipt_form_adjustment_absence_confirmed
     )
   end
 
@@ -688,6 +690,7 @@ class ReceiptsController < ApplicationController
 
   def render_stale_edit_conflict
     @receipt.reload
+    @receipt_form_adjustment_absence_confirmed = false
     @receipt.errors.add(:base, t("receipts.form.errors.stale_edit"))
     prepare_receipt_form_presenter
     flash.now[:alert] = @receipt.errors.full_messages
@@ -1182,7 +1185,8 @@ class ReceiptsController < ApplicationController
       consistency_review_reasons: consistency_guard&.review_reasons,
       child_review_remaining: manual_update_child_review_remaining?(permitted),
       nested_amount_inputs_submitted: manual_amount_inputs_submitted?(source_permitted),
-      item_inputs_submitted: item_inputs_submitted?
+      item_inputs_submitted: item_inputs_submitted?,
+      adjustment_absence_confirmed: @receipt_form_adjustment_absence_confirmed == true
     }
   end
 
@@ -1190,9 +1194,17 @@ class ReceiptsController < ApplicationController
     submitted = params[:receipt]
     return false unless submitted.respond_to?(:key?)
     return true if @receipt.failed? || @receipt.has_processing_error?
-    return false unless manual_review_state_rebuild_keys.any? { |key| submitted.key?(key) }
+
+    rebuild_requested =
+      @receipt_form_adjustment_absence_confirmed == true ||
+      manual_review_state_rebuild_keys.any? { |key| submitted.key?(key) }
+    return false unless rebuild_requested
 
     @receipt.completed? || @receipt.review_needed?
+  end
+
+  def receipt_form_adjustment_absence_confirmed?
+    params[:receipt_form_adjustment_absence_confirmed] == "1"
   end
 
   def manual_review_state_rebuild_keys

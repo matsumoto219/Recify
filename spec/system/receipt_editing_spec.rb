@@ -752,6 +752,134 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect_browser_console_clean
   end
 
+  it "調整がないことを明示確認し、調整行の追加と削除に応じて確認操作を同期する" do
+    user = create_system_test_user(delete_confirmation_enabled: false, theme_preference: "dark")
+    receipt = create(
+      :receipt,
+      user: user,
+      status: "review_needed",
+      review_reasons: [ "adjustment_uncertain" ],
+      store_name: "調整なし確認店",
+      purchased_at: Time.zone.local(2026, 8, 10, 12, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 100,
+      tax_amount: 0,
+      total_amount: 100,
+      tax_rate: 0
+    )
+    receipt.receipt_items.create!(
+      raw_text: "調整なし確認商品",
+      confirmed_name: "調整なし確認商品",
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: "each",
+      tax_rate: 0,
+      line_total: 100,
+      needs_review: false,
+      review_reasons: []
+    )
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    expect(page).to have_css("html[data-theme='dark']")
+
+    review_card = find("[data-receipt-review-notes-card]")
+    review_card.find("[data-receipt-notes-summary]").click
+    review_card.find("a[data-review-reason-code='adjustment_uncertain']").click
+    expect(page.evaluate_script("window.location.hash")).to eq("#receipt-section-adjustments")
+    amount_summary = find("[data-controller~='mobile-amount-summary']", visible: :all)
+    aggregate_failures "same-page link後も追従表示を維持する" do
+      expect(amount_summary["data-mobile-amount-summary-enhanced"]).to eq("true")
+      expect(page.evaluate_script("getComputedStyle(arguments[0]).position", amount_summary)).to eq("fixed")
+    end
+
+    panel_selector = "[data-receipt-adjustment-absence-confirmation]"
+    checkbox_selector = "input[name='receipt_form_adjustment_absence_confirmed']"
+    panel = find(panel_selector)
+    checkbox = panel.find(checkbox_selector, visible: :all)
+
+    aggregate_failures do
+      expect(panel["role"]).to eq("group")
+      expect(panel["aria-hidden"]).to eq("false")
+      expect(page.evaluate_script("arguments[0].inert", panel)).to be(false)
+      expect(panel).to have_text("値引き・手数料の有無を確認してください")
+      expect(panel).to have_text("レシート全体の値引き・手数料などはありません")
+      expect(checkbox).not_to be_checked
+    end
+
+    [
+      { width: 390, height: 844, mobile: true },
+      { width: 768, height: 900, mobile: false },
+      { width: 1440, height: 1000, mobile: false }
+    ].each do |viewport|
+      set_viewport(**viewport)
+      panel = find(panel_selector)
+      metrics = page.evaluate_script(<<~JAVASCRIPT, panel)
+        (() => {
+          const panel = arguments[0]
+          const checkbox = panel.querySelector("input[name='receipt_form_adjustment_absence_confirmed']")
+          const label = checkbox.closest("label")
+          const headings = panel.nextElementSibling
+          const addButton = panel.parentElement.querySelector("button[data-action~='click->receipt-form#addAdjustment']")
+          const panelRect = panel.getBoundingClientRect()
+          const labelRect = label.getBoundingClientRect()
+
+          return {
+            panelWidth: panelRect.width,
+            labelHeight: labelRect.height,
+            beforeHeadings: Boolean(panel.compareDocumentPosition(headings) & Node.DOCUMENT_POSITION_FOLLOWING),
+            beforeAddButton: Boolean(panel.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING),
+            horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth
+          }
+        })()
+      JAVASCRIPT
+
+      aggregate_failures "viewport #{viewport.fetch(:width)}px" do
+        expect(metrics.fetch("panelWidth")).to be > 0
+        expect(metrics.fetch("labelHeight")).to be >= 44
+        expect(metrics.fetch("beforeHeadings")).to be(true)
+        expect(metrics.fetch("beforeAddButton")).to be(true)
+        expect(metrics.fetch("horizontalOverflow")).to be(false)
+      end
+    end
+
+    set_viewport(width: 390, height: 844, mobile: true)
+    panel = find(panel_selector)
+    checkbox = panel.find(checkbox_selector, visible: :all)
+    checkbox.send_keys(:space)
+    expect(checkbox).to be_checked
+
+    click_button I18n.t("receipts.form.buttons.add_adjustment")
+    expect(page).to have_css(panel_selector + "[hidden][inert][aria-hidden='true']", visible: :all)
+    hidden_panel = find(panel_selector, visible: :all)
+    expect(hidden_panel.find(checkbox_selector, visible: :all)).not_to be_checked
+    new_adjustment_row = find("[data-receipt-form-target='adjustmentRow']", match: :first)
+    new_adjustment_row.find(
+      "button[aria-label='#{I18n.t("receipts.adjustment_fields.remove_aria")}']",
+      visible: true,
+      match: :first
+    ).click
+
+    expect(page).to have_css(panel_selector + "[aria-hidden='false']:not([hidden]):not([inert])")
+    panel = find(panel_selector)
+    checkbox = panel.find(checkbox_selector, visible: :all)
+    expect(checkbox).not_to be_checked
+    checkbox.send_keys(:space)
+    expect(checkbox).to be_checked
+
+    click_mobile_save_button
+
+    aggregate_failures do
+      expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+      expect(receipt.reload.status).to eq("completed")
+      expect(receipt.review_reasons).to be_empty
+      expect(receipt.receipt_adjustments).to be_empty
+    end
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
   it "direct hashでは調整行を展開してもfocusを移動しない" do
     user = create_system_test_user
     receipt = create(

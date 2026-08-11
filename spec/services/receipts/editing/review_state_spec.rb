@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Editing::ReviewState do
-  def resolve(receipt, permitted: {}, amount_reasons: [], amount_needs_review: false, child_review_remaining: false, nested_amount_inputs_submitted: false, item_inputs_submitted: false)
+  def resolve(receipt, permitted: {}, amount_reasons: [], amount_needs_review: false, child_review_remaining: false, nested_amount_inputs_submitted: false, item_inputs_submitted: false, adjustment_absence_confirmed: false)
     described_class.call(
       receipt: receipt,
       permitted: permitted.stringify_keys,
@@ -9,7 +9,8 @@ RSpec.describe Receipts::Editing::ReviewState do
       consistency_review_reasons: [],
       child_review_remaining: child_review_remaining,
       nested_amount_inputs_submitted: nested_amount_inputs_submitted,
-      item_inputs_submitted: item_inputs_submitted
+      item_inputs_submitted: item_inputs_submitted,
+      adjustment_absence_confirmed: adjustment_absence_confirmed
     )
   end
 
@@ -221,6 +222,93 @@ RSpec.describe Receipts::Editing::ReviewState do
     aggregate_failures do
       expect(result.review_reasons).to be_empty
       expect(result.status).to eq('completed')
+    end
+  end
+
+  it '調整行がないreceipt-level adjustment_uncertainは明示的な「調整なし」確認でだけ解除する' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'adjustment_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+
+    unconfirmed_result = resolve(receipt)
+    confirmed_result = resolve(receipt, adjustment_absence_confirmed: true)
+
+    aggregate_failures do
+      expect(unconfirmed_result.review_reasons).to eq([ 'adjustment_uncertain' ])
+      expect(unconfirmed_result.status).to eq('review_needed')
+      expect(confirmed_result.review_reasons).to be_empty
+      expect(confirmed_result.status).to eq('completed')
+    end
+  end
+
+  it '「調整なし」確認は他の理由を維持し、調整行が存在する場合は解除に使わない' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: %w[adjustment_uncertain ocr_unreadable],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    adjustment = receipt.receipt_adjustments.create!(
+      kind: 'coupon',
+      label: '既存クーポン',
+      amount: 10,
+      sign: 'discount',
+      source: 'manual',
+      needs_review: false,
+      review_reasons: []
+    )
+
+    existing_adjustment_result = resolve(receipt, adjustment_absence_confirmed: true)
+    adjustment.destroy!
+    receipt.reload
+    absent_result = resolve(receipt, adjustment_absence_confirmed: true)
+
+    aggregate_failures do
+      expect(existing_adjustment_result.review_reasons).to contain_exactly('adjustment_uncertain', 'ocr_unreadable')
+      expect(existing_adjustment_result.status).to eq('review_needed')
+      expect(absent_result.review_reasons).to eq([ 'ocr_unreadable' ])
+      expect(absent_result.status).to eq('review_needed')
+    end
+  end
+
+  it '未保存または保存済みと照合できない調整行がある場合は「調整なし」確認でreasonを解除しない' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'adjustment_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+
+    result = resolve(
+      receipt,
+      permitted: {
+        receipt_adjustments_attributes: {
+          '0' => { kind: 'coupon', label: '入力中クーポン', amount: 10, sign: 'discount' }
+        }
+      },
+      adjustment_absence_confirmed: true
+    )
+    unknown_id_result = resolve(
+      receipt,
+      permitted: {
+        receipt_adjustments_attributes: {
+          '0' => { id: '999999', kind: 'coupon', label: '不明IDクーポン', amount: 10, sign: 'discount' }
+        }
+      },
+      adjustment_absence_confirmed: true
+    )
+
+    aggregate_failures do
+      expect(result.review_reasons).to eq([ 'adjustment_uncertain' ])
+      expect(result.status).to eq('review_needed')
+      expect(unknown_id_result.review_reasons).to eq([ 'adjustment_uncertain' ])
+      expect(unknown_id_result.status).to eq('review_needed')
     end
   end
 
