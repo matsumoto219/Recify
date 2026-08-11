@@ -388,6 +388,16 @@ export default class extends Controller {
     if (!url || !this.samePageReviewTargetUrl(url)) return
 
     const targetId = this.reviewTargetIdFromHash(url.hash)
+    if (targetId === this.reviewItemsTargetValue || targetId === this.reviewAdjustmentsTargetValue) {
+      event.preventDefault()
+      this.navigateReviewTargetHash(targetId)
+      this.scheduleReviewTargetScroll(document.getElementById(targetId), {
+        block: 'start',
+        delay: event.detail === 1 ? REVIEW_TARGET_CLICK_SCROLL_DELAY_MS : 0
+      })
+      return
+    }
+
     if (this.reviewItemTargetId(targetId)) {
       event.preventDefault()
 

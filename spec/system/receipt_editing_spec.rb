@@ -788,6 +788,11 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     review_card.find("[data-receipt-notes-summary]").click
     review_card.find("a[data-review-reason-code='adjustment_uncertain']").click
     expect(page.evaluate_script("window.location.hash")).to eq("#receipt-section-adjustments")
+    amount_summary = find("[data-controller~='mobile-amount-summary']", visible: :all)
+    aggregate_failures "same-page link後も追従表示を維持する" do
+      expect(amount_summary["data-mobile-amount-summary-enhanced"]).to eq("true")
+      expect(page.evaluate_script("getComputedStyle(arguments[0]).position", amount_summary)).to eq("fixed")
+    end
 
     panel_selector = "[data-receipt-adjustment-absence-confirmation]"
     checkbox_selector = "input[name='receipt_form_adjustment_absence_confirmed']"

@@ -615,6 +615,35 @@ RSpec.describe "Receipt form Stimulus controller" do
     end
   end
 
+  it "keeps receipt-level review section links in the current Turbo document" do
+    result = run_review_target_script(<<~JAVASCRIPT)
+      const controller = makeController()
+      const itemEvent = makeClickEvent(makeLink(itemSection.id))
+      const adjustmentEvent = makeClickEvent(makeLink(adjustmentSection.id))
+
+      controller.handleReviewTargetClick(itemEvent)
+      controller.handleReviewTargetClick(adjustmentEvent)
+
+      process.stdout.write(JSON.stringify({
+        itemPrevented: itemEvent.prevented,
+        adjustmentPrevented: adjustmentEvent.prevented,
+        hash: window.location.hash,
+        itemScrolls: itemSection.scrollCount,
+        adjustmentScrolls: adjustmentSection.scrollCount,
+        fetchCount
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "itemPrevented" => true,
+      "adjustmentPrevented" => true,
+      "hash" => "#receipt-section-adjustments",
+      "itemScrolls" => 1,
+      "adjustmentScrolls" => 1,
+      "fetchCount" => 0
+    )
+  end
+
   it "restores adjustment targets idempotently across Turbo cache and Stimulus reconnects" do
     result = run_review_target_script(<<~JAVASCRIPT)
       const target = makeRow({ id: 'receipt-adjustment-42', type: 'adjustment' })
