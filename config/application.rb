@@ -23,6 +23,7 @@ module Recify
     # in config/environments, which are processed later.
     #
     config.time_zone = "Tokyo"
+    config.solid_queue.time_zone = config.time_zone
     config.i18n.default_locale = :ja
     config.i18n.load_path += Dir[Rails.root.join("config/locales/**/*.yml")]
     config.exceptions_app = routes
