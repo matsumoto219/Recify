@@ -162,6 +162,58 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it 'OCR TotalPrice由来の明示line_totalはmeasurementのpriceとquantityから再計算しない' do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: 'レギュラーガソリン',
+            price: 140,
+            quantity: BigDecimal('8.12'),
+            quantity_unit_code: 'liter',
+            original_line_total: 1_136,
+            line_total: 1_136,
+            source_field_path: 'documents[0].fields.Items[0].TotalPrice',
+            confidence: 0.98
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        item = params[:receipt_items_attributes].first
+
+        expect(item).to include(
+          price: 140,
+          quantity: BigDecimal('8.12'),
+          quantity_unit_code: 'liter',
+          original_line_total: 1_136,
+          line_total: 1_136
+        )
+      end
+
+      it 'OCR TotalPriceがないmeasurementは現行fallbackとしてpriceとquantityからline_totalを生成する' do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: 'レギュラーガソリン',
+            price: 140,
+            quantity: BigDecimal('8.12'),
+            quantity_unit_code: 'liter',
+            original_line_total: nil,
+            line_total: nil,
+            source_field_path: 'documents[0].fields.Items[0].Price',
+            confidence: 0.98
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        item = params[:receipt_items_attributes].first
+
+        expect(item).to include(
+          price: 140,
+          quantity: BigDecimal('8.12'),
+          quantity_unit_code: 'liter',
+          original_line_total: 1_137,
+          line_total: 1_137
+        )
+      end
+
       it 'OCRにcategory根拠がない明細はotherへ推測せず未分類の確認対象にする' do
         ocr_result[:candidates][:items].first[:raw_text] = '匿名品A'
 

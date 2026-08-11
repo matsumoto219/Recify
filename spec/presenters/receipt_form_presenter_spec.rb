@@ -217,6 +217,43 @@ RSpec.describe ReceiptFormPresenter do
       end
     end
 
+    it 'measurementの422では入力中の単価・数量・単位・明示小計をそのまま再表示する' do
+      receipt = create(:receipt)
+      item = receipt.receipt_items.create!(
+        confirmed_name: '計量商品',
+        price: 140,
+        quantity: BigDecimal('8.12'),
+        quantity_unit_code: 'liter',
+        original_line_total: 1_137,
+        line_total: 1_137,
+        tax_rate: 0
+      )
+      row = described_class.new(
+        receipt: receipt,
+        submitted_params: {
+          receipt_items_attributes: {
+            '0' => {
+              id: item.id,
+              price: '141',
+              quantity: '0',
+              quantity_unit_code: 'milliliter',
+              original_line_total: '1200',
+              line_total: '1200'
+            }
+          }
+        }
+      ).item_row(item, new_record: false)
+
+      aggregate_failures do
+        expect(row.price_value).to eq('141')
+        expect(row.quantity_value).to eq('0')
+        expect(row.selected_unit).to eq('milliliter')
+        expect(row.original_line_total_value).to eq('1200')
+        expect(row.line_total_value).to eq('1200')
+        expect(row.line_total_data[:original_line_total]).to eq('1200')
+      end
+    end
+
     it 'original 0だけのplaceholderを明示line total 0へ昇格させない' do
       receipt = build(:receipt)
       item = ReceiptItem.new(

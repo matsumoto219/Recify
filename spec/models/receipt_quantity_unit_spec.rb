@@ -39,6 +39,35 @@ RSpec.describe ReceiptQuantityUnit, type: :model do
         )
       end
     end
+
+    it '全14単位の入力契約をcodeごとに固定する' do
+      expected_contracts = {
+        'each' => [ :countable, '個', '1', 'numeric' ],
+        'item' => [ :countable, '点', '1', 'numeric' ],
+        'piece' => [ :countable, '本', '1', 'numeric' ],
+        'bag' => [ :countable, '袋', '1', 'numeric' ],
+        'sheet' => [ :countable, '枚', '1', 'numeric' ],
+        'unit' => [ :countable, '台', '1', 'numeric' ],
+        'box' => [ :countable, '箱', '1', 'numeric' ],
+        'set' => [ :countable, 'セット', '1', 'numeric' ],
+        'gram' => [ :decimal, 'g', '0.001', 'decimal' ],
+        'kilogram' => [ :decimal, 'kg', '0.001', 'decimal' ],
+        'milligram' => [ :decimal, 'mg', '0.001', 'decimal' ],
+        'liter' => [ :decimal, 'L', '0.001', 'decimal' ],
+        'milliliter' => [ :decimal, 'ml', '0.001', 'decimal' ],
+        'cubic_centimeter' => [ :decimal, 'cc', '0.001', 'decimal' ]
+      }
+
+      aggregate_failures do
+        expected_contracts.each do |code, (kind, label, step, inputmode)|
+          expect(described_class.label(code, locale: :ja)).to eq(label), code
+          expect(described_class.countable?(code)).to eq(kind == :countable), code
+          expect(described_class.decimal?(code)).to eq(kind == :decimal), code
+          expect(described_class.step_for(code)).to eq(step), code
+          expect(described_class.inputmode_for(code)).to eq(inputmode), code
+        end
+      end
+    end
   end
 
   describe '.normalize' do

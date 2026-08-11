@@ -478,6 +478,71 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect(unexpected_entries).to be_empty
   end
 
+  it "手動measurementの空小計をJSで0へ同期して0円で保存する" do
+    user = create_system_test_user
+
+    sign_in_through_browser(user)
+    visit new_receipt_path
+    wait_for_stimulus_controller("receipt-form")
+
+    item_row = expanded_receipt_item_row
+    original_line_total = item_row.find(
+      "[data-receipt-form-target='originalLineTotalInput']",
+      visible: :all
+    )
+    line_total = item_row.find(
+      "[data-receipt-form-target='lineTotalInput']",
+      visible: :all
+    )
+
+    aggregate_failures do
+      expect(original_line_total.value).to eq("")
+      expect(line_total.value).to eq("")
+    end
+
+    find("input[name='receipt[store_name]']").set("手動計量0円店")
+    find("select[name='receipt[payment_method]'] option[value='cash']").select_option
+    item_row.find("input[name$='[confirmed_name]']").set("手動計量商品")
+    item_row.find("select[name$='[quantity_unit_code]'] option[value='liter']").select_option
+    item_row.find("input[name$='[quantity]']").set("8.12")
+    item_row.find("input[name$='[price]']").set("140")
+
+    visible_line_total = item_row.find(
+      "[data-receipt-form-target='lineTotalDisplay']",
+      visible: true,
+      match: :first
+    )
+
+    aggregate_failures do
+      expect(original_line_total.value).to eq("0")
+      expect(line_total.value).to eq("0")
+      expect(visible_line_total).to have_text("¥0")
+    end
+
+    click_mobile_save_button
+
+    expect(page).to have_current_path(receipts_path, ignore_query: true)
+    receipt = user.receipts.find_by!(store_name: "手動計量0円店")
+    item = receipt.receipt_items.first
+
+    aggregate_failures do
+      expect(receipt).to have_attributes(
+        subtotal_amount: 0,
+        tax_amount: 0,
+        total_amount: 0,
+        status: "completed"
+      )
+      expect(item).to have_attributes(
+        price: 140,
+        quantity: BigDecimal("8.12"),
+        quantity_unit_code: "liter",
+        original_line_total: 0,
+        line_total: 0
+      )
+    end
+    expect_browser_console_clean
+  end
+
   it "不正な単価を保持し、修正後に明細を保存できる" do
     user = create_system_test_user
     receipt = create(

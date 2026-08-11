@@ -5,6 +5,54 @@ RSpec.describe Amounts::ItemTotalAggregator do
     described_class.new(items: items, **options).call
   end
 
+  describe 'current quantity unit amount contract' do
+    countable_unit_codes = %w[each item piece bag sheet unit box set].freeze
+    measurement_unit_codes = %w[gram kilogram milligram liter milliliter cubic_centimeter].freeze
+
+    it '全countable単位ではmanual/edit_saveともpriceとquantityを正本にする' do
+      aggregate_failures do
+        %i[manual edit_save].product(countable_unit_codes).each do |context, code|
+          explicit_result = aggregate(
+            [ { price: 125, quantity: 2, quantity_unit_code: code, line_total: 777 } ],
+            context: context
+          )
+          missing_result = aggregate(
+            [ { price: 125, quantity: 2, quantity_unit_code: code, line_total: nil } ],
+            context: context
+          )
+
+          [ explicit_result, missing_result ].each do |result|
+            expect(result[:total]).to eq(250), "#{context}: #{code}"
+            expect(result[:items].first[:original_line_total]).to eq(250), "#{context}: #{code}"
+            expect(result[:items].first[:line_total]).to eq(250), "#{context}: #{code}"
+          end
+        end
+      end
+    end
+
+    it '全measurement単位ではmanual/edit_saveとも明示line_totalを正本にし欠損時は0にする' do
+      aggregate_failures do
+        %i[manual edit_save].product(measurement_unit_codes).each do |context, code|
+          explicit_result = aggregate(
+            [ { price: 125, quantity: BigDecimal('2.500'), quantity_unit_code: code, line_total: 777 } ],
+            context: context
+          )
+          missing_result = aggregate(
+            [ { price: 125, quantity: BigDecimal('2.500'), quantity_unit_code: code, line_total: nil } ],
+            context: context
+          )
+
+          expect(explicit_result[:total]).to eq(777), "#{context}: #{code}"
+          expect(explicit_result[:items].first[:original_line_total]).to eq(777), "#{context}: #{code}"
+          expect(explicit_result[:items].first[:line_total]).to eq(777), "#{context}: #{code}"
+          expect(missing_result[:total]).to eq(0), "#{context}: #{code}"
+          expect(missing_result[:items].first[:original_line_total]).to eq(0), "#{context}: #{code}"
+          expect(missing_result[:items].first[:line_total]).to eq(0), "#{context}: #{code}"
+        end
+      end
+    end
+  end
+
   it 'treats line_total as the authoritative row total when present' do
     result = aggregate([
       { price: 300, quantity: 2, line_total: 500 }

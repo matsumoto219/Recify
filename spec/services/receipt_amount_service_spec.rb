@@ -258,6 +258,64 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'native engineのmanualで全14単位の現行金額正本契約を維持する' do
+      countable_codes = %w[each item piece bag sheet unit box set]
+      measurement_codes = %w[gram kilogram milligram liter milliliter cubic_centimeter]
+      contracts = [
+        {
+          name: :countable_formula,
+          codes: countable_codes,
+          quantity: BigDecimal('2'),
+          submitted_line_total: nil,
+          expected_line_total: 250,
+          expected_amounts: { subtotal: 2_000, tax: 0, total: 2_000 }
+        },
+        {
+          name: :measurement_explicit,
+          codes: measurement_codes,
+          quantity: BigDecimal('2.500'),
+          submitted_line_total: 777,
+          expected_line_total: 777,
+          expected_amounts: { subtotal: 4_662, tax: 0, total: 4_662 }
+        },
+        {
+          name: :measurement_missing,
+          codes: measurement_codes,
+          quantity: BigDecimal('2.500'),
+          submitted_line_total: nil,
+          expected_line_total: 0,
+          expected_amounts: { subtotal: nil, tax: nil, total: nil }
+        }
+      ]
+
+      aggregate_failures do
+        contracts.each do |contract|
+          items = contract[:codes].map do |code|
+            {
+              price: 125,
+              quantity: contract[:quantity],
+              quantity_unit_code: code,
+              line_total: contract[:submitted_line_total],
+              tax_rate: BigDecimal('0')
+            }
+          end
+          result = call_service(receipt: {}, receipt_items: items, context: :manual)
+
+          result.dig(:computed, :items).zip(contract[:codes]).each do |item, code|
+            expect(item).to include(
+              quantity_unit_code: code,
+              original_line_total: contract[:expected_line_total],
+              line_total: contract[:expected_line_total]
+            ), "#{contract[:name]}: #{code}"
+          end
+          %i[computed resolved].each do |amount_set|
+            expect(result[amount_set]).to include(contract[:expected_amounts]),
+              "#{contract[:name]}: #{amount_set}"
+          end
+        end
+      end
+    end
+
     it 'native engineでもmanualのdiscount_rateからdiscount_amountとline_totalを正規化する' do
       result = call_service(
         receipt: {},

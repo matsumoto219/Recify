@@ -1575,6 +1575,165 @@ RSpec.describe "Receipt form Stimulus controller" do
     )
   end
 
+  it "characterizes the current amount and quantity limit contract for all 14 units" do
+    countable_unit_codes = %w[each item piece bag sheet unit box set]
+    measurement_unit_codes = %w[gram kilogram milligram liter milliliter cubic_centimeter]
+    boundary_quantities = %w[9999 9999.001 9999.999 10000]
+
+    result = run_controller_script(<<~JAVASCRIPT)
+      const countableUnitCodes = #{countable_unit_codes.to_json}
+      const measurementUnitCodes = #{measurement_unit_codes.to_json}
+      const boundaryQuantities = #{boundary_quantities.to_json}
+      const allUnitCodes = [...countableUnitCodes, ...measurementUnitCodes]
+
+      const buildInputs = ({ unitCode, quantity = '2', lineTotal = null }) => ({
+        quantityInput: { value: String(quantity) },
+        quantityUnitInput: { value: unitCode },
+        priceInput: { value: '125' },
+        discountRateInput: { value: '', dataset: { originalDiscountRate: '' } },
+        taxRateInput: { value: '' },
+        lineTotalInput: {
+          value: lineTotal === null ? '' : String(lineTotal),
+          dataset: {
+            originalLineTotal: lineTotal === null ? '' : String(lineTotal),
+            originalSavedLineTotal: lineTotal === null ? '' : String(lineTotal)
+          }
+        },
+        originalLineTotalInput: { value: lineTotal === null ? '' : String(lineTotal) }
+      })
+
+      const buildRow = (inputs) => ({
+        style: { display: '' },
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? inputs[match[1]] ?? null : null
+        },
+        querySelectorAll () { return [] }
+      })
+
+      const buildController = (row = null) => {
+        const controller = Object.create(ReceiptFormController.prototype)
+        Object.defineProperties(controller, {
+          itemRowTargets: { value: row ? [row] : [] },
+          adjustmentRowTargets: { value: [] },
+          paymentRowTargets: { value: [] },
+          countableQuantityUnitsValue: { value: countableUnitCodes.join(',') },
+          decimalQuantityUnitsValue: { value: measurementUnitCodes.join(',') },
+          receiptTaxBasisValue: { value: 'internal' },
+          receiptItemPriceMaxValue: { value: 999999999 },
+          receiptItemLineTotalMaxValue: { value: 999999999 },
+          receiptAdjustmentAmountMaxValue: { value: 999999999 },
+          receiptPaymentAmountMaxValue: { value: 999999999 },
+          receiptTotalAmountMaxValue: { value: 999999999 },
+          receiptTaxAmountMaxValue: { value: 999999999 },
+          hasTotalAmountTarget: { value: false },
+          hasSubtotalAmountTarget: { value: false },
+          hasTaxAmountTarget: { value: false },
+          hasTaxRateSummaryTarget: { value: false }
+        })
+        return controller
+      }
+
+      const calculatedAmount = (unitCode, lineTotal) => {
+        const controller = buildController()
+        const inputs = buildInputs({ unitCode, lineTotal })
+        const originalLineTotal = controller.originalLineTotalFor({
+          quantity: 2,
+          price: 125,
+          priceInputPresent: true,
+          quantityUnit: unitCode,
+          lineTotalInput: inputs.lineTotalInput
+        })
+        const calculatedLineTotal = controller.lineTotalFor({
+          originalLineTotal,
+          discountRatePercent: null,
+          discountRateInput: inputs.discountRateInput,
+          lineTotalInput: inputs.lineTotalInput
+        })
+        return controller.clampNumber(calculatedLineTotal, 0, controller.receiptItemLineTotalMaxValue)
+      }
+
+      const acceptedByPreviewValidation = (unitCode, quantity) => {
+        const inputs = buildInputs({ unitCode, quantity })
+        const controller = buildController(buildRow(inputs))
+        return controller.previewNumericInputsValid()
+      }
+
+      const recalculationState = (unitCode, quantity) => {
+        const inputs = buildInputs({ unitCode, quantity })
+        const controller = buildController(buildRow(inputs))
+        let internalQuantity = null
+        let previewUnavailable = false
+
+        controller.renderUnavailablePreview = () => { previewUnavailable = true }
+        controller.animateLineTotal = () => {}
+        controller.itemAmountSourcePresentFor = () => true
+        controller.originalLineTotalFor = ({ quantity: value }) => {
+          internalQuantity = value
+          return 0
+        }
+        controller.lineTotalFor = () => 0
+        controller.syncLineTotalState = () => {}
+        controller.inheritedAdjustmentTaxRate = () => null
+        controller.purchaseInputsChangedForPreview = () => false
+        controller.internalTaxTotal = () => 0
+        controller.preserveInitialReceiptAmountsForPreview = () => false
+        controller.syncPaymentAdjustmentSummary = () => {}
+        controller.syncPaymentReconciliationSummary = () => {}
+        controller.paymentAmountSum = () => 0
+
+        controller.recalculate()
+        return { internalQuantity, previewUnavailable }
+      }
+
+      const result = Object.fromEntries(allUnitCodes.map((unitCode) => [
+        unitCode,
+        {
+          amounts: {
+            explicit: calculatedAmount(unitCode, 777),
+            missing: calculatedAmount(unitCode, null)
+          },
+          boundaries: Object.fromEntries(boundaryQuantities.map((quantity) => [
+            quantity,
+            {
+              accepted: acceptedByPreviewValidation(unitCode, quantity),
+              recalculation: recalculationState(unitCode, quantity)
+            }
+          ]))
+        }
+      ]))
+
+      process.stdout.write(JSON.stringify(result))
+    JAVASCRIPT
+
+    expected = (countable_unit_codes + measurement_unit_codes).to_h do |code|
+      measurement = measurement_unit_codes.include?(code)
+      boundaries = boundary_quantities.to_h do |quantity|
+        accepted = quantity != '10000' && (measurement || quantity == '9999')
+        recalculation =
+          if accepted
+            { "internalQuantity" => 9999, "previewUnavailable" => false }
+          else
+            { "internalQuantity" => nil, "previewUnavailable" => true }
+          end
+        [ quantity, { "accepted" => accepted, "recalculation" => recalculation } ]
+      end
+
+      [
+        code,
+        {
+          "amounts" => {
+            "explicit" => measurement ? 777 : 250,
+            "missing" => measurement ? 0 : 250
+          },
+          "boundaries" => boundaries
+        }
+      ]
+    end
+
+    expect(result).to eq(expected)
+  end
+
   it "marks a new child row hidden before recalculating its removal" do
     result = run_controller_script(<<~JAVASCRIPT)
       const results = []
