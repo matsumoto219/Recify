@@ -2164,6 +2164,294 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'edit_saveで購入金額の根拠がない場合は未確定金額をnilのまま保持する' do
+      result = call_service(
+        receipt: {
+          receipt_tax_basis: 'total_includes_tax',
+          item_amount_basis: 'line_total_as_recorded'
+        },
+        receipt_items: [
+          {
+            confirmed_name: '金額未入力',
+            price: nil,
+            quantity: 1,
+            quantity_unit_code: 'each',
+            line_total: nil,
+            tax_rate: nil
+          }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+        expect(result[:resolved]).to include(
+          subtotal: nil,
+          tax: nil,
+          total: nil,
+          tax_rate: nil
+        )
+        expect(result[:review_reasons]).to include('insufficient_data')
+        expect(result[:needs_review]).to be(true)
+      end
+    end
+
+    it 'edit_saveで明細自体がなく購入金額の根拠もない場合は未確定金額をnilのまま保持する' do
+      result = call_service(receipt: {}, receipt_items: [], context: :edit_save)
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+        expect(result[:resolved]).to include(
+          subtotal: nil,
+          tax: nil,
+          total: nil,
+          tax_rate: nil
+        )
+        expect(result[:review_reasons]).to include('insufficient_data')
+      end
+    end
+
+    it 'edit_saveで税率だけがある場合も購入金額を0円とみなさない' do
+      result = call_service(
+        receipt: { tax_rate: BigDecimal('0.1') },
+        receipt_tax_details: [ { rate: BigDecimal('0.1'), net_amount: nil, amount: nil } ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+        expect(result[:resolved]).to include(
+          subtotal: nil,
+          tax: nil,
+          total: nil,
+          tax_rate: BigDecimal('0.1')
+        )
+        expect(result[:review_reasons]).to include('insufficient_data')
+      end
+    end
+
+    it 'edit_saveで小計だけ・税額だけの入力を未確定のまま保持する' do
+      cases = [
+        {
+          receipt: { subtotal_amount: 100 },
+          expected: { subtotal: 100, tax: nil, total: nil, tax_rate: nil }
+        },
+        {
+          receipt: { tax_amount: 10 },
+          expected: { subtotal: nil, tax: 10, total: nil, tax_rate: nil }
+        }
+      ]
+
+      cases.each do |test_case|
+        result = call_service(receipt: test_case[:receipt], context: :edit_save)
+
+        aggregate_failures do
+          expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+          expect(result[:resolved]).to include(test_case[:expected])
+          expect(result[:review_reasons]).to eq([ 'insufficient_data' ])
+          expect(result[:needs_review]).to be(true)
+        end
+      end
+    end
+
+    it 'edit_saveで片側だけの税内訳を購入金額の根拠にしない' do
+      [
+        { rate: BigDecimal('0.1'), net_amount: 100, amount: nil, description: '外税10%' },
+        { rate: BigDecimal('0.1'), net_amount: nil, amount: 10, description: '消費税10%' },
+        { rate: BigDecimal('0.1'), net_amount: 3, amount: nil, description: '小 計 (税抜10%)' }
+      ].each do |tax_detail|
+        result = call_service(
+          receipt: {},
+          receipt_tax_details: [ tax_detail ],
+          context: :edit_save
+        )
+
+        aggregate_failures do
+          expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+          expect(result[:resolved]).to include(
+            subtotal: nil,
+            tax: nil,
+            total: nil,
+            tax_rate: nil
+          )
+          expect(result[:review_reasons]).to include('insufficient_data')
+          expect(result[:warning_inconsistencies]).to include(:tax_detail_incomplete)
+          expect(result[:needs_review]).to be(true)
+        end
+      end
+    end
+
+    it 'edit_saveで完全な税内訳と不完全な税内訳の混在を自動完了しない' do
+      result = call_service(
+        receipt: {},
+        receipt_tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 100, amount: 8, description: '外税8%' },
+          { rate: BigDecimal('0.1'), net_amount: nil, amount: 10, description: '消費税10%' }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+        expect(result[:resolved]).to include(
+          subtotal: nil,
+          tax: nil,
+          total: nil,
+          tax_rate: nil
+        )
+        expect(result[:review_reasons]).to include('insufficient_data')
+        expect(result[:warning_inconsistencies]).to include(:tax_detail_incomplete)
+        expect(result[:needs_review]).to be(true)
+      end
+    end
+
+    it 'edit_saveで完全な税内訳を購入金額の根拠として維持する' do
+      result = call_service(
+        receipt: {},
+        receipt_tax_details: [
+          { rate: BigDecimal('0.1'), net_amount: 100, amount: 10, description: '外税10%' }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).not_to eq('edit_saved_input')
+        expect(result[:resolved]).to include(subtotal: 100, tax: 10, total: 110)
+        expect(result[:review_reasons]).not_to include('insufficient_data')
+      end
+    end
+
+    it 'edit_saveで支払行だけがある場合も購入金額を0円とみなさない' do
+      result = call_service(
+        receipt: {},
+        receipt_payments: [ { method: 'cash', amount: 50 } ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+        expect(result[:resolved]).to include(
+          subtotal: nil,
+          tax: nil,
+          total: nil,
+          tax_rate: nil
+        )
+        expect(result[:review_reasons]).to include('insufficient_data', 'payment_amount_mismatch')
+      end
+    end
+
+    it 'edit_saveで購入調整だけがある場合はその金額を購入合計へ反映する' do
+      result = call_service(
+        receipt: {},
+        receipt_adjustments: [
+          { kind: 'bag_fee', label: '袋代', amount: 3, sign: 'surcharge', tax_rate: 0 }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).not_to eq('edit_saved_input')
+        expect(result[:resolved]).to include(
+          subtotal: 3,
+          tax: 0,
+          total: 3,
+          tax_rate: nil
+        )
+        expect(result[:review_reasons]).not_to include('insufficient_data')
+      end
+    end
+
+    it 'edit_saveで正味が正でない購入調整だけを購入金額の根拠にしない' do
+      adjustment_sets = [
+        [ { kind: 'coupon', label: 'クーポン', amount: 50, sign: 'discount', tax_rate: 0 } ],
+        [ { kind: 'bag_fee', label: '袋代', amount: 0, sign: 'surcharge', tax_rate: 0 } ],
+        [
+          { kind: 'bag_fee', label: '袋代', amount: 50, sign: 'surcharge', tax_rate: 0 },
+          { kind: 'coupon', label: 'クーポン', amount: 50, sign: 'discount', tax_rate: 0 }
+        ]
+      ]
+
+      adjustment_sets.each do |adjustments|
+        result = call_service(
+          receipt: {},
+          receipt_adjustments: adjustments,
+          context: :edit_save
+        )
+
+        aggregate_failures do
+          expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+          expect(result[:resolved]).to include(
+            subtotal: nil,
+            tax: nil,
+            total: nil,
+            tax_rate: nil
+          )
+          expect(result[:review_reasons]).to include('insufficient_data')
+        end
+      end
+    end
+
+    it 'edit_saveで支払調整だけがある場合も購入金額を0円とみなさない' do
+      result = call_service(
+        receipt: {},
+        receipt_adjustments: [
+          { kind: 'point_usage', label: 'ポイント利用', amount: 50, sign: 'discount', tax_rate: nil }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+        expect(result[:resolved]).to include(
+          subtotal: nil,
+          tax: nil,
+          total: nil,
+          tax_rate: nil
+        )
+        expect(result[:review_reasons]).to include('insufficient_data')
+      end
+    end
+
+    it 'edit_saveで未送信の保存済み明示0円itemを金額根拠として維持する' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            confirmed_name: '0円商品',
+            price: 0,
+            quantity: 1,
+            quantity_unit_code: 'each',
+            line_total: 0,
+            tax_rate: BigDecimal('0.1'),
+            amount_price_present: false,
+            amount_line_total_present: false,
+            amount_persisted_item: true,
+            amount_persisted_line_total: 0
+          }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).not_to eq('edit_saved_input')
+        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0)
+        expect(result[:review_reasons]).not_to include('insufficient_data')
+      end
+    end
+
+    it 'edit_saveで保存済みの明示0円receipt入力を金額根拠として維持する' do
+      result = call_service(
+        receipt: { subtotal_amount: 0, tax_amount: 0, total_amount: 0 },
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result.dig(:amount_engine, :selected_candidate_id)).to eq('edit_saved_input')
+        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0)
+        expect(result[:review_reasons]).not_to include('insufficient_data')
+      end
+    end
+
     [ :manual, :edit_save ].each do |context|
       it "#{context} context keeps tax-normalized saved items as tax-included amounts" do
         result = call_service(

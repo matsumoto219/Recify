@@ -64,4 +64,32 @@ RSpec.describe Amounts::TaxDetailEvidence do
       expect(evidence.targets_by_rate[BigDecimal('0.10')]).to include(gross: 3, net: 3, tax: 0)
     end
   end
+
+  it '購入金額を確定できる完全な税内訳だけを金額根拠として扱う' do
+    complete = described_class.new([
+      { rate: BigDecimal('0.10'), net_amount: 100, amount: 10, description: '外税10%' },
+      { rate: BigDecimal('0.10'), net_amount: 3, amount: 0, description: '小 計 (税抜10%)' }
+    ])
+    amount_missing = described_class.new([
+      { rate: BigDecimal('0.10'), net_amount: 100, amount: nil, description: '外税10%' }
+    ])
+    net_missing = described_class.new([
+      { rate: BigDecimal('0.10'), net_amount: nil, amount: 10, description: '消費税10%' }
+    ])
+    missing_zero_tax = described_class.new([
+      { rate: BigDecimal('0.10'), net_amount: 3, amount: nil, description: '小 計 (税抜10%)' }
+    ])
+    mixed_complete_and_incomplete = described_class.new([
+      { rate: BigDecimal('0.08'), net_amount: 100, amount: 8, description: '外税8%' },
+      { rate: BigDecimal('0.10'), net_amount: nil, amount: 10, description: '消費税10%' }
+    ])
+
+    aggregate_failures do
+      expect(complete.purchase_amount_evidence_present?).to be(true)
+      expect(amount_missing.purchase_amount_evidence_present?).to be(false)
+      expect(net_missing.purchase_amount_evidence_present?).to be(false)
+      expect(missing_zero_tax.purchase_amount_evidence_present?).to be(false)
+      expect(mixed_complete_and_incomplete.purchase_amount_evidence_present?).to be(false)
+    end
+  end
 end

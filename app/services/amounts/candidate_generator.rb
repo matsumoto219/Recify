@@ -264,9 +264,18 @@ module Amounts
 
     def value_was_present?(item, key)
       flag = item[:"amount_#{key}_present"]
-      return flag if [ true, false ].include?(flag)
+      return true if flag == true
+      return persisted_item_amount_present?(item, key) if flag == false
 
       present?(item[key])
+    end
+
+    def persisted_item_amount_present?(item, key)
+      return false unless item[:amount_persisted_item] == true
+      return false if key == :line_total && item[:amount_line_total_changed] == true
+
+      value = key == :line_total ? item[:amount_persisted_line_total] : item[key]
+      present?(value)
     end
 
     def item_tax_rate(item)

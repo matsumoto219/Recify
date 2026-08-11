@@ -68,6 +68,7 @@ module Amounts
     end
 
     def tax_amount_mismatch?(candidate)
+      return false if preserved_incomplete_edit_input?(candidate)
       return false if stale_receipt_tax_amount_ignored?(candidate)
       return false if exact_mixed_candidate_resolved_by_tax_details?(candidate)
       return false unless receipt_tax_amount.positive?
@@ -76,9 +77,19 @@ module Amounts
       receipt_tax_amount != candidate.tax.to_i
     end
 
+    def preserved_incomplete_edit_input?(candidate)
+      context == :edit_save &&
+        candidate.basis == "receipt_input_preserved" &&
+        !receipt_purchase_amount_data_present?
+    end
+
     def tax_detail_incomplete?
-      comparable_source_tax_details.any? do |tax_detail|
-        tax_detail_has_any_value?(tax_detail) && !tax_detail_complete?(tax_detail)
+      detected_tax_details.any? do |detail|
+        tax_detail = tax_details[detail[:index]]
+        next false unless tax_detail_has_any_value?(tax_detail)
+        next false if detail[:basis] == :summary && tax_detail_evidence.final_detected_tax_details.present?
+
+        !tax_detail_complete?(tax_detail)
       end
     end
 
@@ -228,11 +239,37 @@ module Amounts
     end
 
     def insufficient_data?(candidate)
-      context == :analysis &&
+      return analysis_insufficient_data?(candidate) if context == :analysis
+      return false unless context == :edit_save
+
+      !receipt_purchase_amount_data_present? &&
         !item_data_present? &&
+        !tax_detail_amount_data_present? &&
+        !positive_purchase_adjustment_total?(candidate)
+    end
+
+    def analysis_insufficient_data?(candidate)
+      !item_data_present? &&
         source_tax_detail_total.zero? &&
         to_i(fetch_value(receipt, :total_amount)).zero? &&
         candidate.purchase_total.to_i.zero?
+    end
+
+    def receipt_purchase_amount_data_present?
+      present?(fetch_value(receipt, :total_amount)) ||
+        present?(fetch_value(receipt, :subtotal_amount)) && present?(fetch_value(receipt, :tax_amount))
+    end
+
+    def tax_detail_amount_data_present?
+      tax_detail_evidence.purchase_amount_evidence_present?
+    end
+
+    def tax_detail_evidence
+      @tax_detail_evidence ||= Amounts::TaxDetailEvidence.new(tax_details)
+    end
+
+    def positive_purchase_adjustment_total?(candidate)
+      candidate.purchase_adjustment_total.to_i.positive?
     end
 
     def analysis_zero_item_positive_receipt_total?(candidate)
@@ -595,9 +632,22 @@ module Amounts
 
     def value_was_present?(item, key)
       flag = fetch_value(item, :"amount_#{key}_present")
-      return flag if [ true, false ].include?(flag)
+      return true if flag == true
+      return persisted_item_amount_present?(item, key) if flag == false
 
       present?(fetch_value(item, key))
+    end
+
+    def persisted_item_amount_present?(item, key)
+      return false unless fetch_value(item, :amount_persisted_item) == true
+      return false if key == :line_total && fetch_value(item, :amount_line_total_changed) == true
+
+      value = if key == :line_total
+        fetch_value(item, :amount_persisted_line_total)
+      else
+        fetch_value(item, key)
+      end
+      present?(value)
     end
 
     def normalize_rate(value)
