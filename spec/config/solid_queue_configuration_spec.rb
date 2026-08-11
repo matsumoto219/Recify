@@ -46,6 +46,23 @@ RSpec.describe "Solid Queue production configuration" do
     )
   end
 
+  it "timezone未指定のdaily scheduleをTokyoの次回時刻として解釈する" do
+    original_system_time_zone = ENV["TZ"]
+    ENV["TZ"] = "UTC"
+    tokyo = ActiveSupport::TimeZone[Rails.application.config.time_zone]
+    schedule = recurring_config.dig("production", "notification_cleanup", "schedule")
+    task = SolidQueue::RecurringTask.allocate
+    task.define_singleton_method(:schedule) { schedule }
+
+    aggregate_failures do
+      expect(Rails.application.config.solid_queue.time_zone).to eq(Rails.application.config.time_zone)
+      expect(SolidQueue.time_zone).to eq(tokyo.tzinfo.name)
+      expect(task.next_time_after(tokyo.local(2026, 8, 11, 2))).to eq(tokyo.local(2026, 8, 11, 3).utc)
+    end
+  ensure
+    ENV["TZ"] = original_system_time_zone
+  end
+
   it "production worker selectorでcommand形式のrecurring jobを一度だけ実行できる" do
     command = <<~RUBY.squish
       Rails.application.config.x.recurring_queue_contract_runs =
