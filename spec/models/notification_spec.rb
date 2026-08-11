@@ -193,6 +193,14 @@ RSpec.describe Notification, type: :model do
       notification.update!(read_at: Time.current)
     end
 
+    it '表示内容や表示順の更新時にも永続通知UIをreplaceする' do
+      notification = create(:notification, read_at: nil)
+
+      expect(described_class).to receive(:broadcast_realtime_surfaces_for).with(notification.user).once
+
+      notification.update!(body: '更新後の本文', created_at: Time.current)
+    end
+
     it '削除時に永続通知UIをreplaceする' do
       notification = create(:notification)
 

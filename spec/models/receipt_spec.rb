@@ -1724,22 +1724,49 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
-    it '同じreceipt + same kind の永続通知は重複作成しない' do
+    it '同じreceipt + same kind の再解析通知は同じ行を最新内容へ更新して未読に戻す' do
       receipt = create(:receipt, :processing, :with_image, user: user)
+      old_created_at = 2.days.ago
       existing_notification = create(
         :notification,
         user: user,
         kind: 'receipt_failed',
         notifiable: receipt,
-        action_path: "/receipts/#{receipt.public_id}",
-        metadata: { receipt_id: receipt.id, status: 'failed' }
+        title: '以前の解析エラー',
+        body: '以前のエラー内容',
+        action_path: '/receipts/old',
+        metadata: { receipt_id: receipt.id, status: 'processing' },
+        read_at: 1.hour.ago,
+        created_at: old_created_at
       )
+      newer_notification = create(:notification, user: user, created_at: 1.minute.ago)
+      notification_uid = existing_notification.uid
+      refreshed_at = 1.hour.from_now.change(usec: 0)
 
-      expect {
-        receipt.update!(status: 'failed', processing_error_code: 'ocr_api_error')
-      }.not_to change(user.notifications, :count)
+      travel_to(refreshed_at) do
+        expect {
+          receipt.update!(status: 'failed', processing_error_code: 'ocr_timeout')
+        }.not_to change(user.notifications, :count)
+      end
 
-      expect(user.notifications.where(kind: 'receipt_failed', notifiable: receipt)).to contain_exactly(existing_notification)
+      existing_notification.reload
+
+      aggregate_failures do
+        expect(existing_notification.uid).to eq(notification_uid)
+        expect(existing_notification).to be_unread
+        expect(existing_notification.title).to eq(I18n.t('notifications.receipts.failed.title'))
+        expect(existing_notification.body).to eq(receipt.processing_error_user_message)
+        expect(existing_notification.action_path).to eq("/receipts/#{receipt.public_id}")
+        expect(existing_notification.metadata).to eq(
+          'receipt_id' => receipt.id,
+          'status' => 'failed'
+        )
+        expect(existing_notification.created_at).to be_within(1.second).of(refreshed_at)
+        expect(existing_notification.created_at).to be > old_created_at
+        expect(user.notifications.recent.first).to eq(existing_notification)
+        expect(user.notifications.recent.second).to eq(newer_notification)
+        expect(user.notifications.where(kind: 'receipt_failed', notifiable: receipt)).to contain_exactly(existing_notification)
+      end
     end
 
     it 'processing -> failed を複数回試しても receipt_failed 通知は1件に抑える' do
@@ -1753,6 +1780,22 @@ RSpec.describe Receipt, type: :model do
       }.not_to change { user.notifications.where(kind: 'receipt_failed', notifiable: receipt).count }
 
       expect(user.notifications.where(kind: 'receipt_failed', notifiable: receipt).count).to eq(1)
+    end
+
+    it '同じkindの未読通知を再解析結果で更新した時も通知surfaceを再描画する' do
+      receipt = create(:receipt, :processing, :with_image, user: user)
+      create(
+        :notification,
+        user: user,
+        kind: 'receipt_failed',
+        notifiable: receipt,
+        body: '以前のエラー内容',
+        read_at: nil
+      )
+
+      expect(Notification).to receive(:broadcast_realtime_surfaces_for).with(user).once
+
+      receipt.update!(status: 'failed', processing_error_code: 'ocr_timeout')
     end
 
     it 'review_needed と failed は別kindとして共存できる' do
