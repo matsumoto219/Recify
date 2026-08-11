@@ -37,7 +37,7 @@ class Notification < ApplicationRecord
 
   after_create_commit :broadcast_realtime_surfaces_after_create
   after_create_commit :prune_user_notifications_after_create
-  after_update_commit :broadcast_realtime_surfaces_after_read_change, if: :saved_change_to_read_at?
+  after_update_commit :broadcast_realtime_surfaces_after_update, if: :realtime_surface_changed?
   after_destroy_commit :broadcast_realtime_surfaces_after_destroy
 
   def save(*args, **kwargs, &block)
@@ -239,8 +239,12 @@ class Notification < ApplicationRecord
     broadcast_realtime_surfaces
   end
 
-  def broadcast_realtime_surfaces_after_read_change
+  def broadcast_realtime_surfaces_after_update
     broadcast_realtime_surfaces
+  end
+
+  def realtime_surface_changed?
+    saved_changes.keys.intersect?(%w[title body action_path metadata read_at created_at])
   end
 
   def broadcast_realtime_surfaces_after_destroy
