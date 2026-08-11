@@ -31,7 +31,11 @@ class Receipts::Editing::UpdateState
 
   def clear_processing_error
     return unless receipt.has_processing_error?
-    return if processing_error_is_only_review_explanation?
+
+    if processing_error_is_only_review_explanation?
+      attributes["status"] = "review_needed"
+      return
+    end
 
     attributes["processing_error_code"] = nil
     attributes["processing_error_message"] = nil
@@ -40,12 +44,11 @@ class Receipts::Editing::UpdateState
 
   def processing_error_is_only_review_explanation?
     return false if review_state_arguments.blank?
-
-    resulting_status = attributes.fetch("status", receipt.status)
-    return false unless resulting_status == "review_needed"
+    return false unless receipt.review_needed?
+    return false if receipt.has_blocking_review_notes?
+    return false if review_state_arguments.fetch(:child_review_remaining, false)
 
     resulting_reasons = attributes.fetch("review_reasons", receipt.review_reasons)
-    ReviewReasons.review_reasons_for_user(resulting_reasons).empty? &&
-      review_state_arguments&.fetch(:child_review_remaining, false) != true
+    ReviewReasons.blocking_reasons_for_user(resulting_reasons).empty?
   end
 end

@@ -204,7 +204,7 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
     end
   end
 
-  it 'fallback errorだけが要確認の説明である場合はmemo更新後も案内を保持する' do
+  it 'fallback errorだけが要確認の説明である場合はfull form保存後も案内を保持する' do
     receipt = create_receipt(
       status: 'review_needed',
       review_reasons: [],
@@ -212,7 +212,19 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
       processing_error_message: 'safe fallback guidance'
     )
 
-    patch_receipt(receipt, memo: '確認済みメモ')
+    item = receipt.receipt_items.sole
+    patch_receipt(
+      receipt,
+      memo: '確認済みメモ',
+      store_name: receipt.store_name,
+      subtotal_amount: receipt.subtotal_amount,
+      tax_amount: receipt.tax_amount,
+      total_amount: receipt.total_amount,
+      payment_method: receipt.payment_method,
+      receipt_items_attributes: {
+        '0' => item_attributes(item)
+      }
+    )
     receipt.reload
 
     aggregate_failures 'persisted state' do
