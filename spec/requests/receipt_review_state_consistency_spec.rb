@@ -266,6 +266,57 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
     end
   end
 
+  it '異なる明示reasonを持つ明細は修正した明細だけを確認済みにする' do
+    receipt = create_receipt(
+      subtotal_amount: 182,
+      tax_amount: 18,
+      total_amount: 200,
+      status: 'review_needed',
+      review_reasons: %w[item_name_uncertain item_category_uncertain]
+    )
+    name_item = receipt.receipt_items.sole
+    name_item.update!(
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+    category_item = receipt.receipt_items.create!(
+      confirmed_name: 'カテゴリ確認商品',
+      category: 'other',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      tax_rate: BigDecimal('0.1'),
+      line_total: 100,
+      position_index: 1,
+      needs_review: true,
+      review_reasons: [ 'item_category_uncertain' ]
+    )
+
+    patch_receipt(
+      receipt,
+      receipt_items_attributes: {
+        '0' => item_attributes(name_item, confirmed_name: '確認済み商品'),
+        '1' => item_attributes(category_item)
+      }
+    )
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(name_item.reload).to have_attributes(
+        confirmed_name: '確認済み商品',
+        needs_review: false,
+        review_reasons: []
+      )
+      expect(category_item.reload).to have_attributes(
+        needs_review: true,
+        review_reasons: [ 'item_category_uncertain' ]
+      )
+      expect(receipt.review_reasons).to eq([ 'item_category_uncertain' ])
+      expect(receipt.status).to eq('review_needed')
+    end
+  end
+
   it 'full form相当で同じcore fieldを再送信してもuncertain/conflicted reasonを保持する' do
     purchased_at = Time.zone.local(2026, 7, 1, 12, 0)
     receipt = create_receipt(

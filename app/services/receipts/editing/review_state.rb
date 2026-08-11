@@ -108,12 +108,13 @@ class Receipts::Editing::ReviewState
 
     def item_review_candidates(receipt, reason)
       receipt.receipt_items.select do |item|
-        item.needs_review? || item_review_reasons(item).include?(reason)
+        reasons = item_review_reasons(item)
+        reasons.include?(reason) || (item.needs_review? && reasons.empty?)
       end
     end
 
     def inherited_item_review_reasons(item, reasons)
-      return [] unless item.needs_review?
+      return [] unless item.needs_review? && item_review_reasons(item).empty?
 
       ReviewReasons.review_reasons_for_user(reasons).select do |reason|
         ITEM_REVIEW_FIELD_RULES.key?(reason)

@@ -1105,6 +1105,53 @@ RSpec.describe Receipts::Editing::ReviewState do
     end
   end
 
+  it '明示reasonが異なるneeds_review itemを別reasonの候補に含めない' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: %w[item_name_uncertain item_category_uncertain],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    name_item = receipt.receipt_items.create!(
+      confirmed_name: '確認前商品',
+      category: 'food',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+    category_item = receipt.receipt_items.create!(
+      confirmed_name: 'カテゴリ確認商品',
+      category: 'other',
+      quantity_unit_code: 'each',
+      needs_review: true,
+      review_reasons: [ 'item_category_uncertain' ]
+    )
+
+    name_item_state = described_class.item_review_state(
+      item: name_item,
+      submitted_attributes: { confirmed_name: '確認済み商品', category: 'food' },
+      inherited_review_reasons: receipt.review_reasons
+    )
+    receipt_state = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => { id: name_item.id, confirmed_name: '確認済み商品', category: 'food' },
+          '1' => { id: category_item.id, confirmed_name: category_item.confirmed_name, category: 'other' }
+        }
+      },
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(name_item_state.review_reasons).to be_empty
+      expect(name_item_state.needs_review).to be(false)
+      expect(receipt_state.review_reasons).to eq([ 'item_category_uncertain' ])
+      expect(receipt_state.status).to eq('review_needed')
+    end
+  end
+
   it 'needs_review itemはchild reasonとreceipt-level item reasonを重複保存せずに評価する' do
     receipt = build(
       :receipt,

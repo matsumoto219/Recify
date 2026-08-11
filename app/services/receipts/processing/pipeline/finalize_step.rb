@@ -713,7 +713,10 @@ class Receipts::Processing::Pipeline
         next item unless originally_reviewed_item_indexes.include?(index)
 
         normalized = normalized_hash(item)
-        item_review_reasons = merge_review_reasons(normalized[:review_reasons], inherited_reasons)
+        stored_review_reasons = normalize_review_reasons(normalized[:review_reasons])
+        next item if stored_review_reasons.any?
+
+        item_review_reasons = merge_review_reasons(stored_review_reasons, inherited_reasons)
         needs_review = normalized[:needs_review] == true ||
           ReviewReasons.blocking_reasons_for_user(item_review_reasons).any?
 

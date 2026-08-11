@@ -5905,6 +5905,34 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
+    it '明示的なitem reasonへ別のreceipt-level item reasonを混在させない' do
+      step = Receipts::Processing::Pipeline::FinalizeStep.new(
+        receipt: build(:receipt),
+        decision: nil
+      )
+      items = [
+        { needs_review: true, review_reasons: [ 'item_name_uncertain' ] },
+        { needs_review: true, review_reasons: [ 'item_category_uncertain' ] },
+        { needs_review: true, review_reasons: [] }
+      ]
+
+      result = step.send(
+        :materialize_item_review_reasons,
+        items,
+        originally_reviewed_item_indexes: [ 0, 1, 2 ],
+        receipt_review_reasons: %w[item_name_uncertain item_category_uncertain]
+      )
+
+      aggregate_failures do
+        expect(result[0][:review_reasons]).to eq([ 'item_name_uncertain' ])
+        expect(result[1][:review_reasons]).to eq([ 'item_category_uncertain' ])
+        expect(result[2][:review_reasons]).to contain_exactly(
+          'item_name_uncertain',
+          'item_category_uncertain'
+        )
+      end
+    end
+
     it '保存item名がfinal値で揃っていればAIのitem_name_uncertainとitems_missingをreceipt-levelから落とす' do
       receipt = create(:receipt, :processing, :with_image)
       ai_result = successful_ai_result.merge(
