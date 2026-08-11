@@ -209,6 +209,239 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
 
+    it '金額根拠がない解析途中データを部分保存・全項目保存しても未確定金額を0円へ変えない' do
+      receipt = create(
+        :receipt,
+        :review_needed,
+        :with_image,
+        user: user,
+        store_name: '金額未確定店舗',
+        purchased_at: nil,
+        payment_method: nil,
+        subtotal_amount: nil,
+        tax_amount: nil,
+        total_amount: nil,
+        tax_rate: nil,
+        review_reasons: [ 'insufficient_data' ]
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '金額未入力商品',
+        price: nil,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: nil,
+        tax_rate: nil,
+        needs_review: false,
+        review_reasons: []
+      )
+
+      patch_receipt(receipt, memo: '金額を変えないメモ更新')
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          memo: '金額を変えないメモ更新',
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil,
+          tax_rate: nil,
+          status: 'review_needed'
+        )
+        expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
+        expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
+        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+      end
+
+      patch_receipt(
+        receipt,
+        memo: '空金額を含む全項目保存',
+        subtotal_amount: '',
+        tax_amount: '',
+        total_amount: '',
+        tax_rate: '',
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            confirmed_name: item.confirmed_name,
+            price: '',
+            quantity: '1',
+            quantity_unit_code: 'each',
+            tax_rate: '',
+            line_total: '',
+            _destroy: '0'
+          }
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          memo: '空金額を含む全項目保存',
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil,
+          tax_rate: nil,
+          status: 'review_needed'
+        )
+        expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
+        expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
+        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+      end
+    end
+
+    it '不完全な既存税内訳があっても未確定金額と確認理由を維持する' do
+      receipt = create(
+        :receipt,
+        :review_needed,
+        :with_image,
+        user: user,
+        store_name: '税内訳未確定店舗',
+        purchased_at: nil,
+        payment_method: nil,
+        subtotal_amount: nil,
+        tax_amount: nil,
+        total_amount: nil,
+        tax_rate: nil,
+        review_reasons: [ 'insufficient_data' ]
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '金額未入力商品',
+        price: nil,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: nil,
+        tax_rate: nil,
+        needs_review: false,
+        review_reasons: []
+      )
+      tax_detail = receipt.receipt_tax_details.build(
+        description: '消費税10%',
+        rate: BigDecimal('0.1'),
+        net_amount: nil,
+        amount: 10
+      )
+      tax_detail.save!(validate: false)
+
+      patch_receipt(receipt, memo: '税内訳を変えないメモ更新')
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          memo: '税内訳を変えないメモ更新',
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil,
+          tax_rate: nil,
+          status: 'review_needed'
+        )
+        expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
+        expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
+        expect(receipt.receipt_tax_details).to contain_exactly(tax_detail)
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
+        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+        expect(receipt.amount_calculation_profile['warning_mismatch_codes']).to include('TAX_DETAIL_INCOMPLETE')
+      end
+
+      patch_receipt(
+        receipt,
+        memo: '不完全税内訳を含む全項目保存',
+        subtotal_amount: '',
+        tax_amount: '',
+        total_amount: '',
+        tax_rate: '',
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            confirmed_name: item.confirmed_name,
+            price: '',
+            quantity: '1',
+            quantity_unit_code: 'each',
+            tax_rate: '',
+            line_total: '',
+            _destroy: '0'
+          }
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          memo: '不完全税内訳を含む全項目保存',
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil,
+          tax_rate: nil,
+          status: 'review_needed'
+        )
+        expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
+        expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
+        expect(receipt.receipt_tax_details).to contain_exactly(tax_detail)
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
+        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+        expect(receipt.amount_calculation_profile['warning_mismatch_codes']).to include('TAX_DETAIL_INCOMPLETE')
+      end
+    end
+
+    it '保存済みの明示0円itemは全項目保存でも購入金額の根拠として維持する' do
+      receipt = create(
+        :receipt,
+        :review_needed,
+        :with_image,
+        user: user,
+        store_name: '0円確認店舗',
+        subtotal_amount: nil,
+        tax_amount: nil,
+        total_amount: nil,
+        tax_rate: nil,
+        review_reasons: [ 'insufficient_data' ]
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '0円商品',
+        price: 0,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 0,
+        tax_rate: BigDecimal('0'),
+        needs_review: false,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, price: '0', line_total: '0', tax_rate: '0')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          subtotal_amount: 0,
+          tax_amount: 0,
+          total_amount: 0,
+          status: 'completed',
+          review_reasons: []
+        )
+        expect(item).to have_attributes(price: 0, line_total: 0)
+      end
+    end
+
     it '一部adjustmentだけPATCHしても未送信の既存adjustmentを含めて再計算する' do
       receipt = create_completed_receipt(subtotal_amount: 125, tax_amount: 0, total_amount: 125)
       create_item(receipt, price: 100, tax_rate: nil, line_total: 100)
