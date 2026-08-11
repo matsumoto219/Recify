@@ -100,6 +100,12 @@ RSpec.describe ReceiptFormPresenter do
         expect(flags[:store_address]).to be(false)
       end
     end
+
+    it '支払方法欠損理由を支払方法フィールドへ割り当てる' do
+      receipt = build(:receipt, payment_method: nil, review_reasons: [ 'payment_method_missing' ])
+
+      expect(described_class.new(receipt: receipt).error_flags[:payment_method]).to be(true)
+    end
   end
 
   describe '#item_row' do

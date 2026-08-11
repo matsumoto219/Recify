@@ -37,6 +37,9 @@ class Receipts::Editing::ManualUpdater
   attr_reader :receipt, :attributes, :source_attributes, :items_missing
 
   def persist_update
+    previous_manual_core_fields_required = receipt.manual_core_fields_required
+    receipt.manual_core_fields_required = true if manual_core_field_erased?
+
     return receipt.update(attributes) unless uploaded_image
 
     Storage.with_quota_reservation(
@@ -47,6 +50,21 @@ class Receipts::Editing::ManualUpdater
   rescue Storage::QuotaExceeded
     receipt.errors.add(:image, :storage_quota_exceeded)
     false
+  ensure
+    receipt.manual_core_fields_required = previous_manual_core_fields_required
+  end
+
+  def manual_core_field_erased?
+    %w[store_name total_amount].any? do |field|
+      receipt.public_send(field).present? && effective_attribute(field).blank?
+    end
+  end
+
+  def effective_attribute(field)
+    return attributes[field] if attributes.key?(field)
+    return attributes[field.to_sym] if attributes.key?(field.to_sym)
+
+    receipt.public_send(field)
   end
 
   def uploaded_image

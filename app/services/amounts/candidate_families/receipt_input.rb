@@ -7,22 +7,23 @@ module Amounts
         return nil unless receipt_input_candidate_needed?
 
         resolved = receipt_input_resolved_values
-        purchase_total = to_i(resolved[:total])
+        candidate_values = receipt_input_candidate_values(resolved)
+        purchase_total = to_i(candidate_values[:total])
         payment = payment_reconciliation(purchase_total, payment_adjustment_total)
         item_delta = item_total_delta(purchase_total)
 
         Amounts::Candidate.new(
           candidate_id: receipt_input_candidate_id,
           basis: "receipt_input_preserved",
-          subtotal: to_i(resolved[:subtotal]),
-          tax: to_i(resolved[:tax]),
+          subtotal: to_i(candidate_values[:subtotal]),
+          tax: to_i(candidate_values[:tax]),
           purchase_total: purchase_total,
           final_payment_total: payment[:final_payment_total],
           purchase_adjustment_total: purchase_adjustment_total,
           payment_adjustment_total: payment_adjustment_total,
           payment_amount_sum: payment[:payment_amount_sum],
           tax_details: receipt_input_tax_details,
-          tax_rate_groups: receipt_input_tax_rate_groups(resolved),
+          tax_rate_groups: receipt_input_tax_rate_groups(candidate_values),
           rounding_mode: :floor,
           rounding_scope: :per_receipt,
           warnings: (receipt_input_warnings(item_delta) + payment_warnings(payment)).uniq,
@@ -49,7 +50,12 @@ module Amounts
         when :manual
           receipt_input_present? || (!item_data_present? && !tax_detail_data_present?)
         when :edit_save
-          receipt_input_present?
+          receipt_purchase_amount_input_present? ||
+            (
+              !item_data_present? &&
+                !tax_detail_amount_data_present? &&
+                !purchase_adjustment_data_present?
+            )
         when :analysis
           receipt_input_present? &&
             (
@@ -76,13 +82,29 @@ module Amounts
         %i[total_amount subtotal_amount tax_amount tax_rate].any? { |key| value_present?(receipt[key]) }
       end
 
+      def receipt_purchase_amount_input_present?
+        value_present?(receipt[:total_amount]) ||
+          value_present?(receipt[:subtotal_amount]) && value_present?(receipt[:tax_amount])
+      end
+
       def tax_detail_data_present?
         tax_details.any? do |tax_detail|
           %i[rate net_amount amount].any? { |key| value_present?(fetch_value(tax_detail, key)) }
         end
       end
 
+      def tax_detail_amount_data_present?
+        tax_detail_evidence.purchase_amount_evidence_present?
+      end
+
+      def purchase_adjustment_data_present?
+        purchase_adjustment_total.positive?
+      end
+
       def receipt_input_resolved_values
+        if incomplete_edit_receipt_input?
+          return partial_edit_receipt_input_values
+        end
         return empty_receipt_input_values unless receipt_input_present?
 
         total = amount_or_nil(receipt[:total_amount])
@@ -110,6 +132,27 @@ module Amounts
           total: nil,
           tax_rate: nil
         }
+      end
+
+      def partial_edit_receipt_input_values
+        {
+          subtotal: amount_or_nil(receipt[:subtotal_amount]),
+          tax: amount_or_nil(receipt[:tax_amount]),
+          total: amount_or_nil(receipt[:total_amount]),
+          tax_rate: value_present?(receipt[:tax_rate]) ? normalize_rate(receipt[:tax_rate]) : nil
+        }
+      end
+
+      def receipt_input_candidate_values(resolved)
+        # ResultAdapter restores the persisted partial values from the profile; keep
+        # candidate arithmetic balanced so missing fields are not invented as zero.
+        return empty_receipt_input_values if incomplete_edit_receipt_input?
+
+        resolved
+      end
+
+      def incomplete_edit_receipt_input?
+        context.to_s.to_sym == :edit_save && !receipt_purchase_amount_input_present?
       end
 
       def fallback_subtotal(total, tax)

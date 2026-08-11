@@ -79,6 +79,8 @@ class Receipts::Editing::InputNormalizer
     return if item_attributes.blank?
 
     item_attributes.each_value do |item|
+      next if item["id"].present? && !item.key?("quantity_unit_code")
+
       raw_code = item["quantity_unit_code"]
       code = if raw_code.blank?
         ReceiptQuantityUnit.default_code
@@ -97,13 +99,8 @@ class Receipts::Editing::InputNormalizer
     existing_adjustments = receipt&.receipt_adjustments&.index_by { |adjustment| adjustment.id.to_s } || {}
 
     adjustment_attributes.each_value do |adjustment|
-      adjustment["kind"] = ReceiptAdjustment.normalize_kind(adjustment["kind"])
-      adjustment["sign"] = normalized_adjustment_sign(
-        kind: adjustment["kind"],
-        requested_sign: adjustment["sign"]
-      )
-
       existing = existing_adjustments[adjustment["id"].to_s]
+      normalize_adjustment_kind_and_sign!(adjustment, existing: existing)
       next if existing && !adjustment_review_target_changed?(existing, adjustment)
 
       adjustment["source"] = "manual"
@@ -112,13 +109,41 @@ class Receipts::Editing::InputNormalizer
     end
   end
 
+  def normalize_adjustment_kind_and_sign!(adjustment, existing:)
+    if existing
+      kind_submitted = adjustment.key?("kind")
+      sign_submitted = adjustment.key?("sign")
+      return unless kind_submitted || sign_submitted
+
+      adjustment["kind"] = ReceiptAdjustment.normalize_kind(adjustment["kind"]) if kind_submitted
+      effective_kind = kind_submitted ? adjustment["kind"] : existing.kind
+      requested_sign = sign_submitted ? adjustment["sign"] : existing.sign
+      adjustment["sign"] = normalized_adjustment_sign(kind: effective_kind, requested_sign: requested_sign)
+      return
+    end
+
+    adjustment["kind"] = ReceiptAdjustment.normalize_kind(adjustment["kind"])
+    adjustment["sign"] = normalized_adjustment_sign(
+      kind: adjustment["kind"],
+      requested_sign: adjustment["sign"]
+    )
+  end
+
   def adjustment_review_target_changed?(adjustment, submitted)
     changed_adjustment = adjustment.dup
     changed_adjustment.assign_attributes(submitted.slice(*ADJUSTMENT_REVIEW_TARGET_FIELDS.map(&:to_s)))
 
     ADJUSTMENT_REVIEW_TARGET_FIELDS.any? do |field|
-      submitted.key?(field.to_s) && changed_adjustment.public_send(field) != adjustment.public_send(field)
+      submitted.key?(field.to_s) &&
+        comparable_adjustment_review_value(field, changed_adjustment.public_send(field)) !=
+          comparable_adjustment_review_value(field, adjustment.public_send(field))
     end
+  end
+
+  def comparable_adjustment_review_value(field, value)
+    return value.to_s.strip.presence if field == :label
+
+    value
   end
 
   def normalized_adjustment_sign(kind:, requested_sign:)

@@ -1283,22 +1283,23 @@ class ReceiptsController < ApplicationController
   end
 
   def manual_update_item_needs_review?(item_attributes, existing_state)
-    return false if item_review_cleared_by_server?(item_attributes)
+    if item_review_recalculated_by_server?(item_attributes)
+      return ActiveModel::Type::Boolean.new.cast(item_attributes["needs_review"])
+    end
 
     existing_state[:needs_review]
   end
 
   def manual_update_item_review_reasons(item_attributes, existing_state)
-    return [] if item_review_cleared_by_server?(item_attributes)
+    if item_review_recalculated_by_server?(item_attributes)
+      return ReviewReasons.review_reasons_for_user(item_attributes["review_reasons"])
+    end
 
     existing_state[:review_reasons]
   end
 
-  def item_review_cleared_by_server?(item_attributes)
-    item_attributes.key?("needs_review") &&
-      ActiveModel::Type::Boolean.new.cast(item_attributes["needs_review"]) == false &&
-      item_attributes.key?("review_reasons") &&
-      Array(item_attributes["review_reasons"]).reject(&:blank?).empty?
+  def item_review_recalculated_by_server?(item_attributes)
+    item_attributes.key?("needs_review") && item_attributes.key?("review_reasons")
   end
 
   def amount_receipt_items(permitted, context)
@@ -1460,7 +1461,8 @@ class ReceiptsController < ApplicationController
 
       state = Receipts::Editing.item_review_state(
         item: item,
-        submitted_attributes: item_attributes
+        submitted_attributes: item_attributes,
+        inherited_review_reasons: @receipt.review_reasons
       )
       item_attributes["needs_review"] = state.needs_review
       item_attributes["review_reasons"] = state.review_reasons

@@ -158,6 +158,9 @@ class Receipt < ApplicationRecord
   accepts_nested_attributes_for :receipt_tax_details, allow_destroy: true
   accepts_nested_attributes_for :receipt_adjustments, allow_destroy: true
 
+  # OCRの部分保存契約は維持しつつ、手動作成・必須値消去時だけ再検証するための一時フラグ。
+  attr_accessor :manual_core_fields_required
+
   validates :payment_method, inclusion: { in: PAYMENT_METHODS }, allow_blank: true
   validates :status, presence: true, inclusion: { in: statuses.keys }
   validates :moderation_status, presence: true, inclusion: { in: moderation_statuses.keys }
@@ -654,6 +657,7 @@ class Receipt < ApplicationRecord
   end
 
   def allow_partial_ocr_data?
+    return false if manual_core_fields_required == true
     return true if image.attached? && (uploaded? || processing? || review_needed? || failed?)
 
     image_purged? && (review_needed? || failed?)

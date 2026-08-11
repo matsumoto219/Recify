@@ -209,6 +209,239 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
 
+    it '金額根拠がない解析途中データを部分保存・全項目保存しても未確定金額を0円へ変えない' do
+      receipt = create(
+        :receipt,
+        :review_needed,
+        :with_image,
+        user: user,
+        store_name: '金額未確定店舗',
+        purchased_at: nil,
+        payment_method: nil,
+        subtotal_amount: nil,
+        tax_amount: nil,
+        total_amount: nil,
+        tax_rate: nil,
+        review_reasons: [ 'insufficient_data' ]
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '金額未入力商品',
+        price: nil,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: nil,
+        tax_rate: nil,
+        needs_review: false,
+        review_reasons: []
+      )
+
+      patch_receipt(receipt, memo: '金額を変えないメモ更新')
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          memo: '金額を変えないメモ更新',
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil,
+          tax_rate: nil,
+          status: 'review_needed'
+        )
+        expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
+        expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
+        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+      end
+
+      patch_receipt(
+        receipt,
+        memo: '空金額を含む全項目保存',
+        subtotal_amount: '',
+        tax_amount: '',
+        total_amount: '',
+        tax_rate: '',
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            confirmed_name: item.confirmed_name,
+            price: '',
+            quantity: '1',
+            quantity_unit_code: 'each',
+            tax_rate: '',
+            line_total: '',
+            _destroy: '0'
+          }
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          memo: '空金額を含む全項目保存',
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil,
+          tax_rate: nil,
+          status: 'review_needed'
+        )
+        expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
+        expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
+        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+      end
+    end
+
+    it '不完全な既存税内訳があっても未確定金額と確認理由を維持する' do
+      receipt = create(
+        :receipt,
+        :review_needed,
+        :with_image,
+        user: user,
+        store_name: '税内訳未確定店舗',
+        purchased_at: nil,
+        payment_method: nil,
+        subtotal_amount: nil,
+        tax_amount: nil,
+        total_amount: nil,
+        tax_rate: nil,
+        review_reasons: [ 'insufficient_data' ]
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '金額未入力商品',
+        price: nil,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: nil,
+        tax_rate: nil,
+        needs_review: false,
+        review_reasons: []
+      )
+      tax_detail = receipt.receipt_tax_details.build(
+        description: '消費税10%',
+        rate: BigDecimal('0.1'),
+        net_amount: nil,
+        amount: 10
+      )
+      tax_detail.save!(validate: false)
+
+      patch_receipt(receipt, memo: '税内訳を変えないメモ更新')
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          memo: '税内訳を変えないメモ更新',
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil,
+          tax_rate: nil,
+          status: 'review_needed'
+        )
+        expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
+        expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
+        expect(receipt.receipt_tax_details).to contain_exactly(tax_detail)
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
+        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+        expect(receipt.amount_calculation_profile['warning_mismatch_codes']).to include('TAX_DETAIL_INCOMPLETE')
+      end
+
+      patch_receipt(
+        receipt,
+        memo: '不完全税内訳を含む全項目保存',
+        subtotal_amount: '',
+        tax_amount: '',
+        total_amount: '',
+        tax_rate: '',
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            confirmed_name: item.confirmed_name,
+            price: '',
+            quantity: '1',
+            quantity_unit_code: 'each',
+            tax_rate: '',
+            line_total: '',
+            _destroy: '0'
+          }
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          memo: '不完全税内訳を含む全項目保存',
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil,
+          tax_rate: nil,
+          status: 'review_needed'
+        )
+        expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
+        expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
+        expect(receipt.receipt_tax_details).to contain_exactly(tax_detail)
+        expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
+        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+        expect(receipt.amount_calculation_profile['warning_mismatch_codes']).to include('TAX_DETAIL_INCOMPLETE')
+      end
+    end
+
+    it '保存済みの明示0円itemは全項目保存でも購入金額の根拠として維持する' do
+      receipt = create(
+        :receipt,
+        :review_needed,
+        :with_image,
+        user: user,
+        store_name: '0円確認店舗',
+        subtotal_amount: nil,
+        tax_amount: nil,
+        total_amount: nil,
+        tax_rate: nil,
+        review_reasons: [ 'insufficient_data' ]
+      )
+      item = receipt.receipt_items.create!(
+        confirmed_name: '0円商品',
+        price: 0,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 0,
+        tax_rate: BigDecimal('0'),
+        needs_review: false,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, price: '0', line_total: '0', tax_rate: '0')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt).to have_attributes(
+          subtotal_amount: 0,
+          tax_amount: 0,
+          total_amount: 0,
+          status: 'completed',
+          review_reasons: []
+        )
+        expect(item).to have_attributes(price: 0, line_total: 0)
+      end
+    end
+
     it '一部adjustmentだけPATCHしても未送信の既存adjustmentを含めて再計算する' do
       receipt = create_completed_receipt(subtotal_amount: 125, tax_amount: 0, total_amount: 125)
       create_item(receipt, price: 100, tax_rate: nil, line_total: 100)
@@ -592,6 +825,43 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
 
+    it '既存itemのpartial PATCHで未送信の数量単位と数量理由を維持する' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: %w[item_name_uncertain item_quantity_uncertain]
+      )
+      item = create_item(
+        receipt,
+        confirmed_name: '確認前商品',
+        price: 50,
+        quantity: 2,
+        quantity_unit_code: 'kilogram',
+        needs_review: true,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            confirmed_name: '確認済み商品'
+          }
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.confirmed_name).to eq('確認済み商品')
+        expect(item.quantity_unit_code).to eq('kilogram')
+        expect(item.needs_review).to be(true)
+        expect(receipt.review_reasons).to eq([ 'item_quantity_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
     it '未変更adjustmentのreview stateをフォーム送信だけで解除しない' do
       receipt = create_completed_receipt(status: 'review_needed', review_reasons: [ 'adjustment_uncertain' ])
       create_item(receipt)
@@ -618,6 +888,254 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(adjustment.needs_review).to be(true)
         expect(adjustment.review_reasons).to include('adjustment_uncertain')
         expect(receipt.reload.status).to eq('review_needed')
+      end
+    end
+
+    it '既存adjustmentのidだけを含むpartial PATCHを422にせず確認状態を維持する' do
+      receipt = create_completed_receipt(
+        subtotal_amount: 90,
+        tax_amount: 0,
+        total_amount: 90,
+        tax_rate: BigDecimal('0'),
+        status: 'review_needed',
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+      create_item(receipt, tax_rate: BigDecimal('0'))
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'coupon',
+        label: '確認前クーポン',
+        amount: 10,
+        sign: 'discount',
+        source: 'ai',
+        needs_review: true,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        memo: 'partial PATCH確認',
+        receipt_adjustments_attributes: {
+          '0' => { id: adjustment.id }
+        }
+      )
+      receipt.reload
+      adjustment.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.memo).to eq('partial PATCH確認')
+        expect(adjustment).to have_attributes(
+          kind: 'coupon',
+          sign: 'discount',
+          source: 'ai',
+          needs_review: true,
+          review_reasons: []
+        )
+        expect(receipt.review_reasons).to eq([ 'adjustment_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
+    it 'childに根拠がないadjustment_uncertainを未変更のfull form送信だけで解除しない' do
+      receipt = create_completed_receipt(
+        subtotal_amount: 90,
+        tax_amount: 0,
+        total_amount: 90,
+        tax_rate: BigDecimal('0'),
+        status: 'review_needed',
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+      item = create_item(receipt, tax_rate: BigDecimal('0'))
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'coupon',
+        label: nil,
+        amount: 10,
+        sign: 'discount',
+        source: 'manual',
+        needs_review: false,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item)
+        },
+        receipt_adjustments_attributes: {
+          '0' => adjustment_attributes(adjustment, label: '   ')
+        }
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.review_reasons).to eq([ 'adjustment_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
+    it '既存adjustmentの実変更でreceipt-level-only adjustment_uncertainを解除する' do
+      receipt = create_completed_receipt(
+        subtotal_amount: 90,
+        tax_amount: 0,
+        total_amount: 90,
+        tax_rate: BigDecimal('0'),
+        status: 'review_needed',
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+      create_item(receipt, tax_rate: BigDecimal('0'))
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'coupon',
+        label: '確認前クーポン',
+        amount: 10,
+        sign: 'discount',
+        source: 'ai',
+        needs_review: false,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_adjustments_attributes: {
+          '0' => adjustment_attributes(adjustment, label: '確認済みクーポン')
+        }
+      )
+      receipt.reload
+      adjustment.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(adjustment.source).to eq('manual')
+        expect(adjustment.needs_review).to be(false)
+        expect(receipt.review_reasons).to be_empty
+        expect(receipt.status).to eq('completed')
+      end
+    end
+
+    it '新規manual adjustmentの追加でreceipt-level-only adjustment_uncertainを解除する' do
+      receipt = create_completed_receipt(
+        subtotal_amount: 90,
+        tax_amount: 0,
+        total_amount: 90,
+        tax_rate: BigDecimal('0'),
+        status: 'review_needed',
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+      create_item(receipt, tax_rate: BigDecimal('0'))
+
+      patch_receipt(
+        receipt,
+        receipt_adjustments_attributes: {
+          '0' => {
+            kind: 'coupon',
+            label: '確認済みクーポン',
+            amount: '10',
+            sign: 'discount',
+            tax_rate: '',
+            _destroy: '0'
+          }
+        }
+      )
+      receipt.reload
+      adjustment = receipt.receipt_adjustments.sole
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(adjustment.source).to eq('manual')
+        expect(adjustment.needs_review).to be(false)
+        expect(adjustment.review_reasons).to be_empty
+        expect(receipt.review_reasons).to be_empty
+        expect(receipt.status).to eq('completed')
+      end
+    end
+
+    it '既存adjustmentの削除でreceipt-level-only adjustment_uncertainを解除する' do
+      receipt = create_completed_receipt(
+        subtotal_amount: 90,
+        tax_amount: 0,
+        total_amount: 90,
+        tax_rate: BigDecimal('0'),
+        status: 'review_needed',
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+      create_item(receipt, tax_rate: BigDecimal('0'))
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'coupon',
+        label: '削除対象クーポン',
+        amount: 10,
+        sign: 'discount',
+        source: 'manual',
+        needs_review: false,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_adjustments_attributes: {
+          '0' => adjustment_attributes(adjustment, _destroy: '1')
+        }
+      )
+      receipt.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.receipt_adjustments).to be_empty
+        expect(receipt.review_reasons).to be_empty
+        expect(receipt.status).to eq('completed')
+      end
+    end
+
+    it '複数のreasonless needs_review adjustmentは順次確認して全件解消するまで理由を維持する' do
+      receipt = create_completed_receipt(
+        subtotal_amount: 85,
+        tax_amount: 0,
+        total_amount: 85,
+        tax_rate: BigDecimal('0'),
+        status: 'review_needed',
+        review_reasons: [ 'adjustment_uncertain' ]
+      )
+      create_item(receipt, tax_rate: BigDecimal('0'))
+      first = receipt.receipt_adjustments.create!(
+        kind: 'coupon', label: '確認前クーポンA', amount: 10, sign: 'discount',
+        source: 'ai', needs_review: true, review_reasons: []
+      )
+      second = receipt.receipt_adjustments.create!(
+        kind: 'coupon', label: '確認前クーポンB', amount: 5, sign: 'discount',
+        source: 'ai', needs_review: true, review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_adjustments_attributes: {
+          '0' => adjustment_attributes(first, label: '確認済みクーポンA')
+        }
+      )
+      receipt.reload
+      first.reload
+      second.reload
+
+      aggregate_failures 'partial resolution' do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(first.needs_review).to be(false)
+        expect(second.needs_review).to be(true)
+        expect(receipt.review_reasons).to eq([ 'adjustment_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+
+      patch_receipt(
+        receipt,
+        receipt_adjustments_attributes: {
+          '0' => adjustment_attributes(second, label: '確認済みクーポンB')
+        }
+      )
+      receipt.reload
+      second.reload
+
+      aggregate_failures 'complete resolution' do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(second.needs_review).to be(false)
+        expect(receipt.review_reasons).to be_empty
+        expect(receipt.status).to eq('completed')
       end
     end
 
@@ -677,6 +1195,260 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(item.needs_review).to be(false)
         expect(item.review_reasons).to be_empty
         expect(receipt.review_reasons).not_to include('item_tax_rate_uncertain')
+        expect(receipt.status).to eq('completed')
+      end
+    end
+
+    it 'review対象のcategoryをblankへ変更してもitem reasonを解除しない' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: [ 'item_category_uncertain' ]
+      )
+      item = create_item(
+        receipt,
+        category: 'food',
+        needs_review: true,
+        review_reasons: [ 'item_category_uncertain' ]
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, category: '')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.review_reasons).to eq([ 'item_category_uncertain' ])
+        expect(item.needs_review).to be(true)
+        expect(receipt.review_reasons).to eq([ 'item_category_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
+    it 'receipt-level reasonを継承するreasonless needs_review itemを有効な変更で解除する' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: [ 'item_name_uncertain' ]
+      )
+      item = create_item(
+        receipt,
+        confirmed_name: '確認前商品',
+        needs_review: true,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, confirmed_name: '確認済み商品')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.needs_review).to be(false)
+        expect(item.review_reasons).to be_empty
+        expect(receipt.review_reasons).to be_empty
+        expect(receipt.status).to eq('completed')
+      end
+    end
+
+    it 'candidate 0のlegacy item reasonを対応fieldの有効な実変更で解除する' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: [ 'item_name_uncertain' ]
+      )
+      item = create_item(
+        receipt,
+        confirmed_name: '確認前商品',
+        needs_review: false,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, confirmed_name: '確認済み商品')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.needs_review).to be(false)
+        expect(item.review_reasons).to be_empty
+        expect(receipt.review_reasons).to be_empty
+        expect(receipt.status).to eq('completed')
+      end
+    end
+
+    it '複数のreasonless needs_review itemは一部修正で理由を維持し、全件修正で解除する' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: [ 'item_name_uncertain' ]
+      )
+      create_item(receipt, confirmed_name: '通常商品')
+      first = create_item(
+        receipt,
+        confirmed_name: '確認前商品A',
+        price: nil,
+        tax_rate: nil,
+        line_total: nil,
+        needs_review: true,
+        review_reasons: []
+      )
+      second = create_item(
+        receipt,
+        confirmed_name: '確認前商品B',
+        price: nil,
+        tax_rate: nil,
+        line_total: nil,
+        needs_review: true,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => { id: first.id, confirmed_name: '確認済み商品A' }
+        }
+      )
+      receipt.reload
+      first.reload
+      second.reload
+
+      aggregate_failures 'partial resolution' do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(first.needs_review).to be(false)
+        expect(first.review_reasons).to be_empty
+        expect(second.needs_review).to be(true)
+        expect(receipt.review_reasons).to eq([ 'item_name_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => { id: second.id, confirmed_name: '確認済み商品B' }
+        }
+      )
+      receipt.reload
+      second.reload
+
+      aggregate_failures 'complete resolution' do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(second.needs_review).to be(false)
+        expect(second.review_reasons).to be_empty
+        expect(receipt.review_reasons).to be_empty
+        expect(receipt.status).to eq('completed')
+      end
+    end
+
+    it 'generic itemのblocking解消後にwarningを保存し、次回編集で解除する' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: %w[item_name_uncertain item_tax_rate_uncertain]
+      )
+      item = create_item(
+        receipt,
+        confirmed_name: '確認前商品',
+        needs_review: true,
+        review_reasons: []
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, confirmed_name: '確認済み商品')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+        expect(item.needs_review).to be(false)
+        expect(receipt.review_reasons).to eq([ 'item_tax_rate_uncertain' ])
+        expect(receipt.status).to eq('completed')
+      end
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, tax_rate: '8')
+        }
+      )
+      receipt.reload
+      item.reload
+
+      aggregate_failures 'warning resolution' do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.tax_rate).to eq(BigDecimal('0.08'))
+        expect(item.review_reasons).to be_empty
+        expect(item.needs_review).to be(false)
+        expect(receipt.review_reasons).to be_empty
+        expect(receipt.status).to eq('completed')
+      end
+    end
+
+    it 'review対象itemの一部削除ではreceipt reasonを維持し、最後の削除で解除する' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        review_reasons: [ 'item_name_uncertain' ]
+      )
+      create_item(receipt, confirmed_name: '通常商品')
+      first = create_item(
+        receipt,
+        confirmed_name: '削除対象商品A',
+        price: nil,
+        tax_rate: nil,
+        line_total: nil,
+        needs_review: true,
+        review_reasons: [ 'item_name_uncertain' ]
+      )
+      second = create_item(
+        receipt,
+        confirmed_name: '削除対象商品B',
+        price: nil,
+        tax_rate: nil,
+        line_total: nil,
+        needs_review: true,
+        review_reasons: [ 'item_name_uncertain' ]
+      )
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => { id: first.id, _destroy: '1' }
+        }
+      )
+      receipt.reload
+
+      aggregate_failures 'first reviewed item deletion' do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.review_reasons).to eq([ 'item_name_uncertain' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => { id: second.id, _destroy: '1' }
+        }
+      )
+      receipt.reload
+
+      aggregate_failures 'last reviewed item deletion' do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(receipt.review_reasons).to be_empty
         expect(receipt.status).to eq('completed')
       end
     end

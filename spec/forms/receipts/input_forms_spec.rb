@@ -148,6 +148,61 @@ RSpec.describe "Receipts input forms" do
   include_examples "receipt input normalization", Receipts::EditForm
 
   describe Receipts::EditForm do
+    it "既存itemのpartial入力で未送信の数量単位を補完しない" do
+      receipt = create(:receipt, :completed)
+      item = receipt.receipt_items.create!(
+        confirmed_name: "旧商品名",
+        quantity: BigDecimal("0.5"),
+        quantity_unit_code: "kilogram",
+        line_total: 100
+      )
+      attributes = {
+        "receipt_items_attributes" => {
+          "0" => {
+            "id" => item.id.to_s,
+            "confirmed_name" => "確認済み商品名"
+          }
+        }
+      }
+
+      normalized = described_class.call(receipt: receipt, attributes: attributes)
+      item_attributes = normalized.dig("receipt_items_attributes", "0")
+
+      aggregate_failures do
+        expect(item_attributes).to include(
+          "id" => item.id.to_s,
+          "confirmed_name" => "確認済み商品名"
+        )
+        expect(item_attributes).not_to have_key("quantity_unit_code")
+      end
+    end
+
+    it "既存adjustmentのpartial入力で未送信fieldと確認済みmarkerを補完しない" do
+      receipt = create(:receipt, :completed)
+      adjustment = create(
+        :receipt_adjustment,
+        receipt: receipt,
+        kind: "coupon",
+        label: "確認前クーポン",
+        amount: 100,
+        sign: "discount",
+        source: "ai",
+        needs_review: true,
+        review_reasons: [ "adjustment_uncertain" ]
+      )
+      attributes = {
+        "receipt_adjustments_attributes" => {
+          "0" => { "id" => adjustment.id.to_s }
+        }
+      }
+
+      normalized = described_class.call(receipt: receipt, attributes: attributes)
+
+      expect(normalized.dig("receipt_adjustments_attributes", "0")).to eq(
+        "id" => adjustment.id.to_s
+      )
+    end
+
     it "未変更の既存adjustmentはsource/review stateを上書きしない" do
       receipt = create(:receipt, :completed)
       adjustment = create(
@@ -187,6 +242,42 @@ RSpec.describe "Receipts input forms" do
           needs_review: true,
           review_reasons: [ "adjustment_uncertain" ]
         )
+      end
+    end
+
+    it "既存adjustmentのnil labelを空白だけで再送信してもreview stateを上書きしない" do
+      receipt = create(:receipt, :completed)
+      adjustment = create(
+        :receipt_adjustment,
+        receipt: receipt,
+        kind: "delivery_fee",
+        label: nil,
+        amount: 100,
+        sign: "surcharge",
+        source: "ai",
+        needs_review: true,
+        review_reasons: [ "adjustment_uncertain" ]
+      )
+      attributes = {
+        "receipt_adjustments_attributes" => {
+          "0" => {
+            "id" => adjustment.id.to_s,
+            "kind" => "delivery_fee",
+            "label" => "   ",
+            "amount" => "100",
+            "sign" => "surcharge",
+            "tax_rate" => ""
+          }
+        }
+      }
+
+      normalized = described_class.call(receipt: receipt, attributes: attributes)
+      adjustment_attributes = normalized.dig("receipt_adjustments_attributes", "0")
+
+      aggregate_failures do
+        expect(adjustment_attributes).not_to have_key("source")
+        expect(adjustment_attributes).not_to have_key("needs_review")
+        expect(adjustment_attributes).not_to have_key("review_reasons")
       end
     end
 

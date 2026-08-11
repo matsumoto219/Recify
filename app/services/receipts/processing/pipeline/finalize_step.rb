@@ -19,6 +19,12 @@ class Receipts::Processing::Pipeline
     ITEM_NAME_UNCERTAIN_REVIEW_REASON = "item_name_uncertain"
     ITEMS_MISSING_REVIEW_REASON = "items_missing"
     ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON = "item_tax_rate_uncertain"
+    ITEM_REVIEW_REASONS = %w[
+      item_name_uncertain
+      item_category_uncertain
+      item_quantity_uncertain
+      item_tax_rate_uncertain
+    ].freeze
     ITEM_TAX_RATE_RESOLUTION_BLOCKING_REASONS = %w[
       item_total_mismatch
       tax_amount_mismatch
@@ -105,6 +111,7 @@ class Receipts::Processing::Pipeline
 
       # 金額を補正（通常はresolvedを採用。預り差額から復元したtotalだけは支払一致時に保護する）
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
+      reviewed_item_indexes = originally_reviewed_item_indexes(params[:receipt_items_attributes])
       params[:receipt_items_attributes] = clear_resolved_item_review_flags(params[:receipt_items_attributes])
 
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
@@ -126,6 +133,11 @@ class Receipts::Processing::Pipeline
         item_drift_review_reasons,
         amount_review_reasons(amount_result),
         ocr_review_reasons
+      )
+      params[:receipt_items_attributes] = materialize_item_review_reasons(
+        params[:receipt_items_attributes],
+        originally_reviewed_item_indexes: reviewed_item_indexes,
+        receipt_review_reasons: review_reasons
       )
 
       final_status = determine_final_status(
@@ -446,6 +458,7 @@ class Receipts::Processing::Pipeline
       [].tap do |reasons|
         reasons << "store_name_missing" if attributes[:store_name].blank?
         reasons << "purchased_at_missing" if attributes[:purchased_at].blank?
+        reasons << "payment_method_missing" if attributes[:payment_method].blank?
       end
     end
 
@@ -683,6 +696,34 @@ class Receipts::Processing::Pipeline
         next item if item_requires_review_from_final_values?(normalized)
 
         normalized.to_h.symbolize_keys.merge(needs_review: false)
+      end
+    end
+
+    def originally_reviewed_item_indexes(items_attributes)
+      Array(items_attributes).filter_map.with_index do |item, index|
+        index if normalized_hash(item)[:needs_review] == true
+      end
+    end
+
+    def materialize_item_review_reasons(items_attributes, originally_reviewed_item_indexes:, receipt_review_reasons:)
+      inherited_reasons = normalize_review_reasons(receipt_review_reasons) & ITEM_REVIEW_REASONS
+      return items_attributes if inherited_reasons.empty? || originally_reviewed_item_indexes.empty?
+
+      Array(items_attributes).map.with_index do |item, index|
+        next item unless originally_reviewed_item_indexes.include?(index)
+
+        normalized = normalized_hash(item)
+        stored_review_reasons = normalize_review_reasons(normalized[:review_reasons])
+        next item if stored_review_reasons.any?
+
+        item_review_reasons = merge_review_reasons(stored_review_reasons, inherited_reasons)
+        needs_review = normalized[:needs_review] == true ||
+          ReviewReasons.blocking_reasons_for_user(item_review_reasons).any?
+
+        normalized.to_h.symbolize_keys.merge(
+          needs_review: needs_review,
+          review_reasons: item_review_reasons
+        )
       end
     end
 

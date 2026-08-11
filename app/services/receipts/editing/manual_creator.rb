@@ -46,6 +46,8 @@ class Receipts::Editing::ManualCreator
 
   def persist_with_usage
     saved = false
+    previous_manual_core_fields_required = receipt.manual_core_fields_required
+    receipt.manual_core_fields_required = true
 
     ActiveRecord::Base.transaction(requires_new: true) do
       if receipt.valid?
@@ -57,6 +59,8 @@ class Receipts::Editing::ManualCreator
     end
 
     saved
+  ensure
+    receipt.manual_core_fields_required = previous_manual_core_fields_required
   end
 
   def uploaded_image

@@ -204,6 +204,47 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
     end
   end
 
+  it 'fallback errorだけが要確認の説明である場合はfull form保存後も案内を保持する' do
+    receipt = create_receipt(
+      status: 'review_needed',
+      review_reasons: [],
+      processing_error_code: 'ai_unavailable',
+      processing_error_message: 'safe fallback guidance'
+    )
+
+    item = receipt.receipt_items.sole
+    patch_receipt(
+      receipt,
+      memo: '確認済みメモ',
+      store_name: receipt.store_name,
+      subtotal_amount: receipt.subtotal_amount,
+      tax_amount: receipt.tax_amount,
+      total_amount: receipt.total_amount,
+      payment_method: receipt.payment_method,
+      receipt_items_attributes: {
+        '0' => item_attributes(item)
+      }
+    )
+    receipt.reload
+
+    aggregate_failures 'persisted state' do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.memo).to eq('確認済みメモ')
+      expect(receipt.status).to eq('review_needed')
+      expect(receipt.review_reasons).to be_empty
+      expect(receipt.processing_error_code).to eq('ai_unavailable')
+      expect(receipt.processing_error_message).to eq('safe fallback guidance')
+    end
+
+    get receipt_path(receipt)
+
+    aggregate_failures 'visible explanation' do
+      expect(response).to have_http_status(:success)
+      expect(response.body).to include(I18n.t('receipts.processing_error_card.attention_title'))
+      expect(response.body).to include(I18n.t('receipts.processing_error_codes.ai_unavailable'))
+    end
+  end
+
   it 'review reasonのないfailed receiptはmemoだけの更新でprocessing errorを解除してcompletedにする' do
     receipt = create_receipt(
       status: 'failed',
@@ -222,6 +263,57 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
       expect(receipt.processing_error_message).to be_nil
       expect(receipt.review_reasons).to be_empty
       expect(receipt.status).to eq('completed')
+    end
+  end
+
+  it '異なる明示reasonを持つ明細は修正した明細だけを確認済みにする' do
+    receipt = create_receipt(
+      subtotal_amount: 182,
+      tax_amount: 18,
+      total_amount: 200,
+      status: 'review_needed',
+      review_reasons: %w[item_name_uncertain item_category_uncertain]
+    )
+    name_item = receipt.receipt_items.sole
+    name_item.update!(
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+    category_item = receipt.receipt_items.create!(
+      confirmed_name: 'カテゴリ確認商品',
+      category: 'other',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      tax_rate: BigDecimal('0.1'),
+      line_total: 100,
+      position_index: 1,
+      needs_review: true,
+      review_reasons: [ 'item_category_uncertain' ]
+    )
+
+    patch_receipt(
+      receipt,
+      receipt_items_attributes: {
+        '0' => item_attributes(name_item, confirmed_name: '確認済み商品'),
+        '1' => item_attributes(category_item)
+      }
+    )
+    receipt.reload
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(name_item.reload).to have_attributes(
+        confirmed_name: '確認済み商品',
+        needs_review: false,
+        review_reasons: []
+      )
+      expect(category_item.reload).to have_attributes(
+        needs_review: true,
+        review_reasons: [ 'item_category_uncertain' ]
+      )
+      expect(receipt.review_reasons).to eq([ 'item_category_uncertain' ])
+      expect(receipt.status).to eq('review_needed')
     end
   end
 
