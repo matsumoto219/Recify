@@ -36,7 +36,7 @@ class Receipts::Editing::ReviewState
   }.freeze
 
   class << self
-    def call(receipt:, permitted:, amount_result:, consistency_review_reasons:, child_review_remaining:, nested_amount_inputs_submitted:, item_inputs_submitted:)
+    def call(receipt:, permitted:, amount_result:, consistency_review_reasons:, child_review_remaining:, nested_amount_inputs_submitted:, item_inputs_submitted:, adjustment_absence_confirmed: false)
       new(
         receipt: receipt,
         permitted: permitted,
@@ -44,7 +44,8 @@ class Receipts::Editing::ReviewState
         consistency_review_reasons: consistency_review_reasons,
         child_review_remaining: child_review_remaining,
         nested_amount_inputs_submitted: nested_amount_inputs_submitted,
-        item_inputs_submitted: item_inputs_submitted
+        item_inputs_submitted: item_inputs_submitted,
+        adjustment_absence_confirmed: adjustment_absence_confirmed
       ).call
     end
 
@@ -188,7 +189,7 @@ class Receipts::Editing::ReviewState
     end
   end
 
-  def initialize(receipt:, permitted:, amount_result:, consistency_review_reasons:, child_review_remaining:, nested_amount_inputs_submitted:, item_inputs_submitted:)
+  def initialize(receipt:, permitted:, amount_result:, consistency_review_reasons:, child_review_remaining:, nested_amount_inputs_submitted:, item_inputs_submitted:, adjustment_absence_confirmed: false)
     @receipt = receipt
     @permitted = permitted
     @amount_result = amount_result
@@ -196,6 +197,7 @@ class Receipts::Editing::ReviewState
     @child_review_remaining = child_review_remaining
     @nested_amount_inputs_submitted = nested_amount_inputs_submitted
     @item_inputs_submitted = item_inputs_submitted
+    @adjustment_absence_confirmed = adjustment_absence_confirmed == true
   end
 
   def call
@@ -226,7 +228,8 @@ class Receipts::Editing::ReviewState
               :consistency_review_reasons,
               :child_review_remaining,
               :nested_amount_inputs_submitted,
-              :item_inputs_submitted
+              :item_inputs_submitted,
+              :adjustment_absence_confirmed
 
   def current_amount_review_reasons
     reasons =
@@ -242,6 +245,8 @@ class Receipts::Editing::ReviewState
   end
 
   def adjustment_review_reason_resolved?
+    return true if adjustment_absence_confirmation_resolves_reason?
+
     attributes = submitted_adjustment_attributes
     return false if attributes.empty?
 
@@ -258,6 +263,29 @@ class Receipts::Editing::ReviewState
     end
 
     legacy_adjustment_review_resolved?(attributes, attributes_by_id)
+  end
+
+  def adjustment_absence_confirmation_resolves_reason?
+    adjustment_absence_confirmed &&
+      ReviewReasons.review_reasons_for_user(receipt.review_reasons).include?(ADJUSTMENT_REVIEW_REASON) &&
+      receipt.receipt_adjustments.none?(&:persisted?) &&
+      !effective_adjustment_present?
+  end
+
+  def effective_adjustment_present?
+    attributes = submitted_adjustment_attributes
+    return receipt.receipt_adjustments.present? if attributes.empty?
+
+    attributes_by_id = attributes.index_by { |adjustment_attributes| adjustment_attributes["id"].to_s }
+    submitted_adjustment = attributes.any? do |adjustment_attributes|
+      !destroyed_adjustment_attributes?(adjustment_attributes)
+    end
+    persisted_adjustment = receipt.receipt_adjustments.any? do |adjustment|
+      submitted_attributes = attributes_by_id[adjustment.id.to_s]
+      submitted_attributes.blank? || !destroyed_adjustment_attributes?(submitted_attributes)
+    end
+
+    submitted_adjustment || persisted_adjustment
   end
 
   def adjustment_review_candidates

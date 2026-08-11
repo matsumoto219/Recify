@@ -63,6 +63,8 @@ export default class extends Controller {
     'adjustmentDetailsPanel',
     'adjustmentDetailsToggle',
     'adjustmentDetailsIcon',
+    'adjustmentAbsenceConfirmation',
+    'adjustmentAbsenceConfirmationField',
     'quantityInput',
     'quantityUnitInput',
     'priceInput',
@@ -148,6 +150,7 @@ export default class extends Controller {
     this.syncAdjustmentDetailsPanels()
     this.syncQuantityInputSteps()
     this.syncAdjustmentSigns()
+    this.syncAdjustmentAbsenceConfirmation()
     this.captureInitialReceiptAmounts()
     this.captureInitialPurchaseInputFingerprint()
     this.syncPaymentSummaryLayout()
@@ -192,6 +195,7 @@ export default class extends Controller {
     this.nextAdjustmentIndexValue = index + 1
     this.syncAdjustmentDetailsPanels()
     this.syncAdjustmentSigns()
+    this.syncAdjustmentAbsenceConfirmation()
     this.recalculate()
   }
 
@@ -232,6 +236,7 @@ export default class extends Controller {
       rowContainer.remove()
     }
 
+    this.syncAdjustmentAbsenceConfirmation()
     this.recalculate()
   }
 
@@ -706,6 +711,23 @@ export default class extends Controller {
     this.syncItemDetailsPanels()
     this.syncAdjustmentDetailsPanels()
     this.syncAdjustmentSigns()
+    this.syncAdjustmentAbsenceConfirmation()
+  }
+
+  syncAdjustmentAbsenceConfirmation () {
+    if (!this.hasAdjustmentAbsenceConfirmationTarget || !this.hasAdjustmentAbsenceConfirmationFieldTarget) return
+
+    const visible = this.adjustmentRowTargets.every((row) => (
+      this.previewRowExcluded(row, 'adjustmentDestroyField')
+    ))
+    const panel = this.adjustmentAbsenceConfirmationTarget
+    const field = this.adjustmentAbsenceConfirmationFieldTarget
+
+    if (!visible) field.checked = false
+
+    panel.hidden = !visible
+    panel.toggleAttribute('inert', !visible)
+    panel.setAttribute('aria-hidden', String(!visible))
   }
 
   scheduleLineTotalTooltip (event) {

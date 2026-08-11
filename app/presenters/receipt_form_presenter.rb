@@ -5,13 +5,15 @@ class ReceiptFormPresenter
     receipt:,
     submitted_params: nil,
     purchase_inputs_changed: false,
-    adjustment_tax_detail_evidence_stale: false
+    adjustment_tax_detail_evidence_stale: false,
+    adjustment_absence_confirmed: false
   )
     @receipt = receipt
     @submitted_params = submitted_params.to_h.with_indifferent_access
     @submitted_values_by_object_id = {}
     @purchase_inputs_changed = purchase_inputs_changed == true
     @adjustment_tax_detail_evidence_stale = adjustment_tax_detail_evidence_stale == true
+    @adjustment_absence_confirmed = adjustment_absence_confirmed == true
   end
 
   def purchase_inputs_changed?
@@ -20,6 +22,20 @@ class ReceiptFormPresenter
 
   def adjustment_tax_detail_evidence_stale?
     @adjustment_tax_detail_evidence_stale
+  end
+
+  def adjustment_absence_confirmation_available?
+    receipt.persisted? &&
+      receipt_review_reason_includes?("adjustment_uncertain") &&
+      receipt.receipt_adjustments.none?(&:persisted?)
+  end
+
+  def adjustment_absence_confirmation_visible?
+    adjustment_absence_confirmation_available? && visible_receipt_adjustments.empty?
+  end
+
+  def adjustment_absence_confirmed?
+    @adjustment_absence_confirmed && adjustment_absence_confirmation_visible?
   end
 
   def form_dom_id

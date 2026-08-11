@@ -285,6 +285,42 @@
           </div>
 
           <div class="p-6 space-y-4" data-receipt-form-target="adjustmentsContainer">
+            <% if form_presenter.adjustment_absence_confirmation_available? %>
+              <% adjustment_absence_confirmation_visible = form_presenter.adjustment_absence_confirmation_visible? %>
+              <div id="receipt-adjustment-absence-confirmation"
+                   class="rounded-xl border token-border-soft token-bg-warning-soft px-4 py-4"
+                   data-receipt-adjustment-absence-confirmation
+                   data-receipt-form-target="adjustmentAbsenceConfirmation"
+                   role="group"
+                   aria-labelledby="receipt-adjustment-absence-confirmation-title"
+                   aria-describedby="receipt-adjustment-absence-confirmation-description"
+                   aria-hidden="<%= !adjustment_absence_confirmation_visible %>"
+                   <%= "hidden inert" unless adjustment_absence_confirmation_visible %>>
+                <div class="flex min-w-0 items-start gap-3">
+                  <span class="material-symbols-outlined mt-0.5 shrink-0 token-text-warning" aria-hidden="true">help</span>
+                  <div class="min-w-0 flex-1">
+                    <p id="receipt-adjustment-absence-confirmation-title" class="text-sm font-bold token-text-warning"><%= t("receipts.form.adjustments.absence_confirmation.title") %></p>
+                    <p id="receipt-adjustment-absence-confirmation-description" class="mt-1 text-xs leading-relaxed token-text-muted"><%= t("receipts.form.adjustments.absence_confirmation.description") %></p>
+
+                    <div class="mt-3">
+                      <%= render "shared/ui/form/checkbox_field",
+                            name: "receipt_form_adjustment_absence_confirmed",
+                            value: "1",
+                            checked: form_presenter.adjustment_absence_confirmed?,
+                            label: t("receipts.form.adjustments.absence_confirmation.label"),
+                            hint: t("receipts.form.adjustments.absence_confirmation.hint"),
+                            wrapper_class: "rounded-lg border token-border-soft token-bg-card px-3 py-3 text-left cursor-pointer select-none",
+                            content_class: "space-y-1",
+                            label_class: "font-medium token-text-base",
+                            html_options: {
+                              data: { receipt_form_target: "adjustmentAbsenceConfirmationField" }
+                            } %>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            <% end %>
+
             <div class="hidden md:grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase tracking-wider token-text-muted">
               <div class="col-span-4"><%= t("receipts.adjustment_fields.label") %></div>
               <div class="col-span-3"><%= t("receipts.adjustment_fields.kind") %></div>

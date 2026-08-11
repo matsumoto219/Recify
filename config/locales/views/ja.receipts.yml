@@ -105,6 +105,11 @@ ja:
         memo: メモ
       adjustments:
         description: レシート全体の値引き、送料、サービス料などを入力します。
+        absence_confirmation:
+          title: 値引き・手数料の有無を確認してください
+          description: 解析結果から、レシート全体の値引き・送料・サービス料などの有無を確定できませんでした。
+          label: レシート全体の値引き・手数料などはありません
+          hint: チェックして保存すると、この確認項目を解消します。該当する行がある場合は、下のボタンから追加してください。
       payments:
         description: 支払い方法ごとの支払額を入力します。
       fields:

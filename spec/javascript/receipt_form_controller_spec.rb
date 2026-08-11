@@ -668,6 +668,70 @@ RSpec.describe "Receipt form Stimulus controller" do
     )
   end
 
+  it "synchronizes adjustment absence confirmation with active adjustment rows" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const rows = []
+      const attributes = new Map()
+      const panel = {
+        hidden: true,
+        inert: true,
+        toggleAttribute (name, force) {
+          if (name === 'inert') this.inert = force
+        },
+        setAttribute (name, value) {
+          attributes.set(name, String(value))
+        }
+      }
+      const field = { checked: false }
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        hasAdjustmentAbsenceConfirmationTarget: { value: true },
+        adjustmentAbsenceConfirmationTarget: { value: panel },
+        hasAdjustmentAbsenceConfirmationFieldTarget: { value: true },
+        adjustmentAbsenceConfirmationFieldTarget: { value: field },
+        adjustmentRowTargets: { get: () => rows }
+      })
+      controller.previewRowExcluded = (row) => row.excluded
+      controller.syncItemDetailsPanels = () => {}
+      controller.syncAdjustmentDetailsPanels = () => {}
+      controller.syncAdjustmentSigns = () => {}
+
+      const snapshot = () => ({
+        hidden: panel.hidden,
+        inert: panel.inert,
+        ariaHidden: attributes.get('aria-hidden'),
+        checked: field.checked
+      })
+
+      controller.syncAdjustmentAbsenceConfirmation()
+      const initial = snapshot()
+
+      field.checked = true
+      const row = { excluded: false }
+      rows.push(row)
+      controller.syncAdjustmentAbsenceConfirmation()
+      const added = snapshot()
+
+      row.excluded = true
+      controller.handleBeforeCache()
+      const removedBeforeCache = snapshot()
+
+      field.checked = true
+      row.excluded = false
+      controller.syncAdjustmentAbsenceConfirmation()
+      const reconnectWithActiveRow = snapshot()
+
+      process.stdout.write(JSON.stringify({ initial, added, removedBeforeCache, reconnectWithActiveRow }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "initial" => { "hidden" => false, "inert" => false, "ariaHidden" => "false", "checked" => false },
+      "added" => { "hidden" => true, "inert" => true, "ariaHidden" => "true", "checked" => false },
+      "removedBeforeCache" => { "hidden" => false, "inert" => false, "ariaHidden" => "false", "checked" => false },
+      "reconnectWithActiveRow" => { "hidden" => true, "inert" => true, "ariaHidden" => "true", "checked" => false }
+    )
+  end
+
   it "keeps persisted countable line total baselines immutable during recalculation" do
     aggregate_failures do
       expect(source).not_to include("lineTotalInput.dataset.originalLineTotal = String(originalLineTotal)")
