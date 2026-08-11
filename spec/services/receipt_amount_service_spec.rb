@@ -2439,6 +2439,33 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'edit_saveで保存済み0円itemの未入力数量を補完済みとみなさない' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            confirmed_name: '0円確認商品',
+            price: nil,
+            quantity: nil,
+            quantity_unit_code: 'each',
+            line_total: 0,
+            amount_price_present: false,
+            amount_quantity_present: false,
+            amount_line_total_present: false,
+            amount_persisted_item: true,
+            amount_persisted_line_total: 0
+          }
+        ],
+        context: :edit_save
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0)
+        expect(result[:warning_inconsistencies]).to include(:zero_amount_item_incomplete)
+        expect(result[:review_reasons]).not_to include('insufficient_data')
+      end
+    end
+
     it 'edit_saveで保存済みの明示0円receipt入力を金額根拠として維持する' do
       result = call_service(
         receipt: { subtotal_amount: 0, tax_amount: 0, total_amount: 0 },

@@ -640,6 +640,7 @@ module Amounts
 
     def persisted_item_amount_present?(item, key)
       return false unless fetch_value(item, :amount_persisted_item) == true
+      return false unless %i[price line_total].include?(key)
       return false if key == :line_total && fetch_value(item, :amount_line_total_changed) == true
 
       value = if key == :line_total
