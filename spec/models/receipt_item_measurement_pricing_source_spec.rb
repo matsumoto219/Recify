@@ -17,7 +17,8 @@ RSpec.describe ReceiptItem, type: :model do
       reference_price_amount: BigDecimal('120'),
       reference_quantity: BigDecimal('500'),
       reference_quantity_unit_code: 'milliliter',
-      reference_quantity_unit_raw: nil
+      reference_quantity_unit_raw: nil,
+      reference_price_tax_inclusion: 'gross'
     }.merge(overrides)
   end
 
@@ -26,7 +27,8 @@ RSpec.describe ReceiptItem, type: :model do
       reference_price_amount: BigDecimal('120'),
       reference_quantity: BigDecimal('500'),
       reference_quantity_unit_code: nil,
-      reference_quantity_unit_raw: 'fluid_ounce'
+      reference_quantity_unit_raw: 'fluid_ounce',
+      reference_price_tax_inclusion: 'gross'
     }.merge(overrides)
   end
 
@@ -38,7 +40,8 @@ RSpec.describe ReceiptItem, type: :model do
         reference_quantity: nil,
         reference_quantity_unit_code: nil,
         quantity_unit_raw: nil,
-        reference_quantity_unit_raw: nil
+        reference_quantity_unit_raw: nil,
+        reference_price_tax_inclusion: nil
       )
 
       expect(item).to be_valid
@@ -56,7 +59,8 @@ RSpec.describe ReceiptItem, type: :model do
         'reference_quantity',
         'reference_quantity_unit_code',
         'quantity_unit_raw',
-        'reference_quantity_unit_raw'
+        'reference_quantity_unit_raw',
+        'reference_price_tax_inclusion'
       )).to all(be_nil)
     end
   end
@@ -178,6 +182,105 @@ RSpec.describe ReceiptItem, type: :model do
     end
   end
 
+  describe 'reference price tax inclusion integrity' do
+    it 'reference formulaは明示されたgrossまたはnetを必要とする' do
+      aggregate_failures do
+        %w[gross net].each do |tax_inclusion|
+          tax_inclusion = +tax_inclusion
+          item = build_item(
+            pricing_source_kind: 'reference_quantity_price',
+            **canonical_reference_attributes(reference_price_tax_inclusion: tax_inclusion)
+          )
+
+          item.save!
+
+          expect(item.reload.reference_price_tax_inclusion).to eq(tax_inclusion)
+          expect(tax_inclusion).not_to be_frozen
+        end
+
+        missing = build_item(
+          pricing_source_kind: 'reference_quantity_price',
+          tax_rate: BigDecimal('0.1'),
+          **canonical_reference_attributes(reference_price_tax_inclusion: nil)
+        )
+        unsupported = build_item(
+          pricing_source_kind: 'reference_quantity_price',
+          **canonical_reference_attributes(reference_price_tax_inclusion: 'unknown')
+        )
+
+        expect(missing).not_to be_valid
+        expect(missing.errors.of_kind?(:pricing_source_kind, :invalid)).to be(true)
+        expect(missing.reference_price_tax_inclusion).to be_nil
+        expect(unsupported).not_to be_valid
+        expect(unsupported.errors.of_kind?(:reference_price_tax_inclusion, :inclusion)).to be(true)
+      end
+    end
+
+    it 'count formulaではreference priceのtax inclusionを許可しない' do
+      item = build_item(
+        pricing_source_kind: 'count_unit_price',
+        quantity_unit_code: 'each',
+        reference_price_tax_inclusion: 'gross'
+      )
+
+      aggregate_failures do
+        expect(item).not_to be_valid
+        expect(item.errors.of_kind?(:pricing_source_kind, :invalid)).to be(true)
+      end
+    end
+
+    it 'authorityなしとexplicit totalではcomplete reference evidenceに限り診断値を保持する' do
+      valid_items = [
+        build_item(pricing_source_kind: nil, **canonical_reference_attributes),
+        build_item(pricing_source_kind: nil, **raw_reference_attributes),
+        build_item(
+          pricing_source_kind: nil,
+          **canonical_reference_attributes(reference_price_tax_inclusion: nil)
+        ),
+        build_item(pricing_source_kind: 'explicit_line_total', **canonical_reference_attributes),
+        build_item(pricing_source_kind: 'explicit_line_total', **raw_reference_attributes),
+        build_item(
+          pricing_source_kind: 'explicit_line_total',
+          **canonical_reference_attributes(reference_price_tax_inclusion: nil)
+        )
+      ]
+      invalid_items = [
+        build_item(pricing_source_kind: nil, reference_price_tax_inclusion: 'gross'),
+        build_item(pricing_source_kind: 'explicit_line_total', reference_price_tax_inclusion: 'net')
+      ]
+
+      aggregate_failures do
+        valid_items.each { |item| expect(item).to be_valid }
+        invalid_items.each do |item|
+          expect(item).not_to be_valid
+          expect(item.errors.of_kind?(:pricing_source_kind, :invalid)).to be(true)
+        end
+      end
+    end
+
+    it 'unknown reference unit evidenceではtax inclusionを推測せずNULLのままreview対象として保持する' do
+      raw_unit = +'fluid_ounce'
+      item = build_item(
+        pricing_source_kind: nil,
+        needs_review: true,
+        **raw_reference_attributes(
+          reference_quantity_unit_raw: raw_unit,
+          reference_price_tax_inclusion: nil
+        )
+      )
+
+      item.valid?
+
+      aggregate_failures do
+        expect(item).to be_valid
+        expect(item.reference_price_tax_inclusion).to be_nil
+        expect(item.needs_review).to be(true)
+        expect(raw_unit).to eq('fluid_ounce')
+        expect(raw_unit).not_to be_frozen
+      end
+    end
+  end
+
   describe 'exact reference numeric bounds' do
     source_vectors = [
       [ '1.8', '1', 'gram', 'gram' ],
@@ -196,7 +299,8 @@ RSpec.describe ReceiptItem, type: :model do
             quantity_unit_code: purchased_unit,
             reference_price_amount: BigDecimal(amount),
             reference_quantity: BigDecimal(reference_quantity),
-            reference_quantity_unit_code: reference_unit
+            reference_quantity_unit_code: reference_unit,
+            reference_price_tax_inclusion: 'gross'
           )
 
           expect(item).to be_valid, "#{amount}円 / #{reference_quantity} #{reference_unit}"
@@ -221,7 +325,8 @@ RSpec.describe ReceiptItem, type: :model do
             quantity_unit_code: purchased_unit,
             reference_price_amount: amount,
             reference_quantity: reference_quantity,
-            reference_quantity_unit_code: reference_unit
+            reference_quantity_unit_code: reference_unit,
+            reference_price_tax_inclusion: 'gross'
           )
 
           item.save!
@@ -307,7 +412,8 @@ RSpec.describe ReceiptItem, type: :model do
             pricing_source_kind: 'reference_quantity_price',
             reference_price_amount: BigDecimal('1'),
             reference_quantity: quantity,
-            reference_quantity_unit_code: 'milliliter'
+            reference_quantity_unit_code: 'milliliter',
+            reference_price_tax_inclusion: 'gross'
           )
 
           expect(item).to be_valid, quantity.to_s('F')
@@ -331,7 +437,8 @@ RSpec.describe ReceiptItem, type: :model do
             pricing_source_kind: 'reference_quantity_price',
             reference_price_amount: BigDecimal('1'),
             reference_quantity: quantity,
-            reference_quantity_unit_code: 'milliliter'
+            reference_quantity_unit_code: 'milliliter',
+            reference_price_tax_inclusion: 'gross'
           )
 
           expect(item).not_to be_valid, quantity.inspect
@@ -347,7 +454,8 @@ RSpec.describe ReceiptItem, type: :model do
             pricing_source_kind: 'reference_quantity_price',
             reference_price_amount: '1.8',
             reference_quantity: quantity,
-            reference_quantity_unit_code: 'liter'
+            reference_quantity_unit_code: 'liter',
+            reference_price_tax_inclusion: 'gross'
           )
 
           expect(item).to be_valid, quantity
@@ -358,7 +466,8 @@ RSpec.describe ReceiptItem, type: :model do
             pricing_source_kind: 'reference_quantity_price',
             reference_price_amount: '1.8',
             reference_quantity: quantity,
-            reference_quantity_unit_code: 'liter'
+            reference_quantity_unit_code: 'liter',
+            reference_price_tax_inclusion: 'gross'
           )
 
           expect(item).not_to be_valid, quantity
@@ -388,7 +497,8 @@ RSpec.describe ReceiptItem, type: :model do
         pricing_source_kind: 'reference_quantity_price',
         reference_price_amount: amount,
         reference_quantity: quantity,
-        reference_quantity_unit_code: 'liter'
+        reference_quantity_unit_code: 'liter',
+        reference_price_tax_inclusion: 'gross'
       )
 
       aggregate_failures do

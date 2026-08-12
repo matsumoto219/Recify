@@ -30,6 +30,9 @@ RSpec.describe Amounts::ItemPricingSource do
         expect(described_class::SOURCE_RULES.values).to all(be_frozen)
         expect(described_class::SOURCE_RULES.values.flat_map(&:values)).to all(be_frozen)
         expect(described_class::SOURCE_RULES.values.flat_map(&:values).map(&:validation_states)).to all(be_frozen)
+        expect(
+          described_class::SOURCE_RULES.values.flat_map(&:values).map(&:reference_price_tax_inclusions)
+        ).to all(be_frozen)
       end
     end
 
@@ -164,20 +167,29 @@ RSpec.describe Amounts::ItemPricingSource do
     end
 
     it 'manual reference formulaをconfirmed pricing basis authorityとして保持する' do
-      source = described_class.manual_reference(quantity_semantics: reference_quantity)
+      source = described_class.manual_reference(
+        quantity_semantics: reference_quantity,
+        reference_price_tax_inclusion: :gross
+      )
 
       expect(source).to have_attributes(
         authority_kind: :reference_quantity_price,
         context: :manual,
         source_evidence: :confirmed_reference_quantity_price,
-        quantity_semantics: reference_quantity
+        quantity_semantics: reference_quantity,
+        reference_price_tax_inclusion: :gross
       )
       expect(source).to be_formula
     end
 
     it 'edit_save explicit/referenceをmanualと分離したcontextで保持する' do
       explicit = described_class.edit_save_explicit(explicit_line_total: 360)
-      reference = described_class.edit_save_reference(quantity_semantics: reference_quantity)
+      references = %i[gross net].map do |tax_inclusion|
+        described_class.edit_save_reference(
+          quantity_semantics: reference_quantity,
+          reference_price_tax_inclusion: tax_inclusion
+        )
+      end
       countable = described_class.existing_countable(
         context: :edit_save,
         quantity_semantics: countable_quantity
@@ -189,16 +201,74 @@ RSpec.describe Amounts::ItemPricingSource do
           context: :edit_save,
           source_evidence: :entered_explicit_total
         )
-        expect(reference).to have_attributes(
-          authority_kind: :reference_quantity_price,
-          context: :edit_save,
-          source_evidence: :confirmed_reference_quantity_price
-        )
+        references.zip(%i[gross net]).each do |reference, tax_inclusion|
+          expect(reference).to have_attributes(
+            authority_kind: :reference_quantity_price,
+            context: :edit_save,
+            source_evidence: :confirmed_reference_quantity_price,
+            reference_price_tax_inclusion: tax_inclusion
+          )
+        end
         expect(countable).to have_attributes(
           authority_kind: :count_unit_price,
           context: :edit_save,
           source_evidence: :existing_countable_formula
         )
+      end
+    end
+
+    it 'manual reference formulaはgrossだけを許可しnet/unknown/欠損から推測しない' do
+      aggregate_failures do
+        expect do
+          described_class.manual_reference(
+            quantity_semantics: reference_quantity,
+            reference_price_tax_inclusion: :net
+          )
+        end.to raise_error(described_class::InvalidContractError)
+        expect do
+          described_class.new(
+            authority_kind: :reference_quantity_price,
+            context: :manual,
+            source_evidence: :confirmed_reference_quantity_price,
+            quantity_semantics: reference_quantity,
+            reference_price_tax_inclusion: :net
+          )
+        end.to raise_error(described_class::InvalidContractError)
+        expect do
+          described_class.manual_reference(
+            quantity_semantics: reference_quantity,
+            reference_price_tax_inclusion: nil
+          )
+        end.to raise_error(described_class::InvalidContractError)
+        expect do
+          described_class.manual_reference(
+            quantity_semantics: reference_quantity,
+            reference_price_tax_inclusion: :unknown
+          )
+        end.to raise_error(described_class::InvalidContractError)
+      end
+    end
+
+    it 'count/explicit authorityへreference priceのtax inclusionを混ぜない' do
+      aggregate_failures do
+        expect do
+          described_class.new(
+            authority_kind: :count_unit_price,
+            context: :manual,
+            source_evidence: :existing_countable_formula,
+            quantity_semantics: countable_quantity,
+            reference_price_tax_inclusion: :gross
+          )
+        end.to raise_error(described_class::InvalidContractError)
+        expect do
+          described_class.new(
+            authority_kind: :explicit_line_total,
+            context: :manual,
+            source_evidence: :entered_explicit_total,
+            explicit_line_total: 360,
+            reference_price_tax_inclusion: :net
+          )
+        end.to raise_error(described_class::InvalidContractError)
       end
     end
   end
@@ -219,7 +289,8 @@ RSpec.describe Amounts::ItemPricingSource do
             context: :manual,
             source_evidence: :confirmed_reference_quantity_price,
             validation_state: state,
-            quantity_semantics: reference_quantity
+            quantity_semantics: reference_quantity,
+            reference_price_tax_inclusion: :gross
           )
         end.to raise_error(described_class::InvalidContractError), state.to_s
       end
@@ -252,14 +323,16 @@ RSpec.describe Amounts::ItemPricingSource do
           context: :analysis,
           source_evidence: :ambiguous_pricing_evidence,
           validation_state: :ambiguous,
-          quantity_semantics: nil
+          quantity_semantics: nil,
+          reference_price_tax_inclusion: nil
         )
         expect(unsupported).to have_attributes(
           authority_kind: nil,
           context: :analysis,
           source_evidence: :unsupported_pricing_evidence,
           validation_state: :unsupported,
-          quantity_semantics: unknown
+          quantity_semantics: unknown,
+          reference_price_tax_inclusion: nil
         )
         expect(unsupported.quantity_semantics.purchased_unit).to have_attributes(
           status: :unknown,
@@ -270,6 +343,18 @@ RSpec.describe Amounts::ItemPricingSource do
         expect(unsupported).not_to be_authoritative
         expect(unsupported.quantity_semantics).to be_frozen
       end
+    end
+
+    it 'authorityなしのanalysis review evidenceへtax inclusionを混ぜない' do
+      expect do
+        described_class.new(
+          authority_kind: nil,
+          context: :analysis,
+          source_evidence: :unsupported_pricing_evidence,
+          validation_state: :unsupported,
+          reference_price_tax_inclusion: :gross
+        )
+      end.to raise_error(described_class::InvalidContractError)
     end
 
     it 'no-authority state/evidence不一致とformula authorityへの昇格を拒否する' do
@@ -297,7 +382,8 @@ RSpec.describe Amounts::ItemPricingSource do
           context: :analysis,
           source_evidence: :unsupported_pricing_evidence,
           validation_state: :unsupported,
-          quantity_semantics: reference_quantity
+          quantity_semantics: reference_quantity,
+          reference_price_tax_inclusion: :gross
         }
       ]
 
@@ -326,7 +412,8 @@ RSpec.describe Amounts::ItemPricingSource do
           context: :manual,
           source_evidence: :confirmed_reference_quantity_price,
           explicit_line_total: 999,
-          quantity_semantics: reference_quantity
+          quantity_semantics: reference_quantity,
+          reference_price_tax_inclusion: :gross
         )
       end.to raise_error(described_class::InvalidContractError)
     end
@@ -386,7 +473,10 @@ RSpec.describe Amounts::ItemPricingSource do
       )
 
       expect do
-        described_class.manual_reference(quantity_semantics: package_only)
+        described_class.manual_reference(
+          quantity_semantics: package_only,
+          reference_price_tax_inclusion: :gross
+        )
       end.to raise_error(Amounts::ItemQuantitySemantics::InvalidFormulaSourceError)
     end
 
@@ -399,7 +489,10 @@ RSpec.describe Amounts::ItemPricingSource do
       )
 
       expect do
-        described_class.manual_reference(quantity_semantics: unknown)
+        described_class.manual_reference(
+          quantity_semantics: unknown,
+          reference_price_tax_inclusion: :gross
+        )
       end.to raise_error(Amounts::ItemQuantitySemantics::InvalidFormulaSourceError)
       expect(unknown.purchased_unit).to have_attributes(status: :unknown, code: nil)
     end
@@ -413,7 +506,10 @@ RSpec.describe Amounts::ItemPricingSource do
         )
 
         expect do
-          described_class.manual_reference(quantity_semantics: semantics)
+          described_class.manual_reference(
+            quantity_semantics: semantics,
+            reference_price_tax_inclusion: :gross
+          )
         end.to raise_error(Amounts::ItemQuantitySemantics::InvalidFormulaSourceError), value.inspect
       end
     end
@@ -424,7 +520,8 @@ RSpec.describe Amounts::ItemPricingSource do
       authority_kind: :reference_quantity_price,
       context: :manual,
       source_evidence: :confirmed_reference_quantity_price,
-      quantity_semantics: reference_quantity
+      quantity_semantics: reference_quantity,
+      reference_price_tax_inclusion: +'gross'
     }
     original = attributes.dup
 
@@ -434,6 +531,9 @@ RSpec.describe Amounts::ItemPricingSource do
       expect(attributes).to eq(original)
       expect(source).to be_frozen
       expect(source.quantity_semantics).to equal(reference_quantity)
+      expect(source.reference_price_tax_inclusion).to eq(:gross)
+      expect(attributes[:reference_price_tax_inclusion]).to eq('gross')
+      expect(attributes[:reference_price_tax_inclusion]).not_to be_frozen
     end
   end
 end

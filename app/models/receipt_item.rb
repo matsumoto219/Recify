@@ -16,6 +16,7 @@ class ReceiptItem < ApplicationRecord
     explicit_line_total
     reference_quantity_price
   ].freeze
+  REFERENCE_PRICE_TAX_INCLUSIONS = %w[gross net].freeze
   REFERENCE_PRICE_AMOUNT_MAX = BigDecimal("999999999999")
   REFERENCE_PRICE_AMOUNT_MAX_SCALE = 6
   REFERENCE_QUANTITY_MAX = BigDecimal("9999.999")
@@ -82,6 +83,9 @@ class ReceiptItem < ApplicationRecord
             allow_nil: true
   validates :reference_quantity_unit_code,
             inclusion: { in: ->(_item) { ReceiptQuantityUnit.allowed_codes } },
+            allow_nil: true
+  validates :reference_price_tax_inclusion,
+            inclusion: { in: REFERENCE_PRICE_TAX_INCLUSIONS },
             allow_nil: true
   validates :product_code, length: { maximum: 100 }, allow_blank: true    # 商品コード(MAX100文字)
 
@@ -249,11 +253,11 @@ class ReceiptItem < ApplicationRecord
   def validate_pricing_source_integrity
     valid = case pricing_source_kind
     when nil
-      true
+      diagnostic_reference_tax_inclusion_valid?
     when "count_unit_price"
       count_unit_price_source_valid?
     when "explicit_line_total"
-      !line_total.nil?
+      !line_total.nil? && diagnostic_reference_tax_inclusion_valid?
     when "reference_quantity_price"
       reference_quantity_price_source_valid?
     else
@@ -270,6 +274,7 @@ class ReceiptItem < ApplicationRecord
       !quantity.nil? &&
       unit&.kind == :countable &&
       reference_evidence_absent? &&
+      reference_price_tax_inclusion.nil? &&
       quantity_unit_raw.nil? &&
       reference_quantity_unit_raw.nil?
   end
@@ -282,9 +287,18 @@ class ReceiptItem < ApplicationRecord
       !purchased_unit.nil? &&
       !reference_unit.nil? &&
       reference_evidence_canonical? &&
+      REFERENCE_PRICE_TAX_INCLUSIONS.include?(reference_price_tax_inclusion) &&
       quantity_unit_raw.nil? &&
       reference_quantity_unit_raw.nil? &&
       ReceiptQuantityUnit.convertible?(from: purchased_unit.code, to: reference_unit.code)
+  end
+
+  def diagnostic_reference_tax_inclusion_valid?
+    reference_price_tax_inclusion.nil? || reference_evidence_complete?
+  end
+
+  def reference_evidence_complete?
+    reference_evidence_canonical? || reference_evidence_raw?
   end
 
   def reference_evidence_absent?

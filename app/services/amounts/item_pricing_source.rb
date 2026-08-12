@@ -4,78 +4,94 @@ module Amounts
   class ItemPricingSource
     class InvalidContractError < ArgumentError; end
 
-    SourceRule = Data.define(:authority_kind, :validation_states)
+    SourceRule = Data.define(:authority_kind, :validation_states, :reference_price_tax_inclusions)
 
     AUTHORITY_KINDS = %i[
       count_unit_price
       explicit_line_total
       reference_quantity_price
     ].freeze
+    REFERENCE_PRICE_TAX_INCLUSIONS = %i[gross net].freeze
+    NO_REFERENCE_PRICE_TAX_INCLUSIONS = [].freeze
     VALIDATION_STATES = %i[valid missing ambiguous unsupported].freeze
     SOURCE_RULES = {
       analysis: {
         strongly_attributed_printed_total: SourceRule.new(
           authority_kind: :explicit_line_total,
-          validation_states: %i[valid ambiguous unsupported].freeze
+          validation_states: %i[valid ambiguous unsupported].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         ),
         existing_countable_formula: SourceRule.new(
           authority_kind: :count_unit_price,
-          validation_states: %i[valid].freeze
+          validation_states: %i[valid].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         ),
         ambiguous_pricing_evidence: SourceRule.new(
           authority_kind: nil,
-          validation_states: %i[ambiguous].freeze
+          validation_states: %i[ambiguous].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         ),
         unsupported_pricing_evidence: SourceRule.new(
           authority_kind: nil,
-          validation_states: %i[unsupported].freeze
+          validation_states: %i[unsupported].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         )
       }.freeze,
       manual: {
         entered_explicit_total: SourceRule.new(
           authority_kind: :explicit_line_total,
-          validation_states: %i[valid ambiguous unsupported].freeze
+          validation_states: %i[valid ambiguous unsupported].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         ),
         existing_countable_formula: SourceRule.new(
           authority_kind: :count_unit_price,
-          validation_states: %i[valid].freeze
+          validation_states: %i[valid].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         ),
         confirmed_reference_quantity_price: SourceRule.new(
           authority_kind: :reference_quantity_price,
-          validation_states: %i[valid].freeze
+          validation_states: %i[valid].freeze,
+          reference_price_tax_inclusions: %i[gross].freeze
         )
       }.freeze,
       edit_save: {
         entered_explicit_total: SourceRule.new(
           authority_kind: :explicit_line_total,
-          validation_states: %i[valid ambiguous unsupported].freeze
+          validation_states: %i[valid ambiguous unsupported].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         ),
         existing_countable_formula: SourceRule.new(
           authority_kind: :count_unit_price,
-          validation_states: %i[valid].freeze
+          validation_states: %i[valid].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         ),
         confirmed_reference_quantity_price: SourceRule.new(
           authority_kind: :reference_quantity_price,
-          validation_states: %i[valid].freeze
+          validation_states: %i[valid].freeze,
+          reference_price_tax_inclusions: REFERENCE_PRICE_TAX_INCLUSIONS
         )
       }.freeze,
       persisted_without_source_metadata: {
         existing_countable_formula: SourceRule.new(
           authority_kind: :count_unit_price,
-          validation_states: %i[valid].freeze
+          validation_states: %i[valid].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         ),
         persisted_measurement_explicit_total: SourceRule.new(
           authority_kind: :explicit_line_total,
-          validation_states: %i[valid].freeze
+          validation_states: %i[valid].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         ),
         persisted_measurement_missing_total: SourceRule.new(
           authority_kind: nil,
-          validation_states: %i[missing].freeze
+          validation_states: %i[missing].freeze,
+          reference_price_tax_inclusions: NO_REFERENCE_PRICE_TAX_INCLUSIONS
         )
       }.freeze
     }.freeze
     CONTRACT_SYMBOLS = (
       AUTHORITY_KINDS +
+      REFERENCE_PRICE_TAX_INCLUSIONS +
       VALIDATION_STATES +
       SOURCE_RULES.keys +
       SOURCE_RULES.values.flat_map(&:keys)
@@ -87,7 +103,8 @@ module Amounts
       :source_evidence,
       :validation_state,
       :explicit_line_total,
-      :quantity_semantics
+      :quantity_semantics,
+      :reference_price_tax_inclusion
 
     class << self
       def analysis_printed(explicit_line_total:, validation_state: :valid)
@@ -139,12 +156,13 @@ module Amounts
         )
       end
 
-      def manual_reference(quantity_semantics:)
+      def manual_reference(quantity_semantics:, reference_price_tax_inclusion:)
         new(
           authority_kind: :reference_quantity_price,
           context: :manual,
           source_evidence: :confirmed_reference_quantity_price,
-          quantity_semantics: quantity_semantics
+          quantity_semantics: quantity_semantics,
+          reference_price_tax_inclusion: reference_price_tax_inclusion
         )
       end
 
@@ -158,12 +176,13 @@ module Amounts
         )
       end
 
-      def edit_save_reference(quantity_semantics:)
+      def edit_save_reference(quantity_semantics:, reference_price_tax_inclusion:)
         new(
           authority_kind: :reference_quantity_price,
           context: :edit_save,
           source_evidence: :confirmed_reference_quantity_price,
-          quantity_semantics: quantity_semantics
+          quantity_semantics: quantity_semantics,
+          reference_price_tax_inclusion: reference_price_tax_inclusion
         )
       end
 
@@ -192,7 +211,8 @@ module Amounts
       source_evidence:,
       validation_state: :valid,
       explicit_line_total: nil,
-      quantity_semantics: nil
+      quantity_semantics: nil,
+      reference_price_tax_inclusion: nil
     )
       @authority_kind = normalize_optional_symbol(authority_kind)
       @context = normalize_symbol(context)
@@ -200,6 +220,7 @@ module Amounts
       @validation_state = normalize_symbol(validation_state)
       @explicit_line_total = explicit_line_total
       @quantity_semantics = quantity_semantics
+      @reference_price_tax_inclusion = normalize_optional_symbol(reference_price_tax_inclusion)
 
       validate_contract!
       freeze
@@ -223,6 +244,7 @@ module Amounts
       validate_authority_kind!
       validate_state!
       validate_source_rule!
+      validate_reference_price_tax_inclusion!
       validate_authority_value!
       validate_formula_source!
     end
@@ -240,15 +262,30 @@ module Amounts
     end
 
     def validate_source_rule!
-      context_rules = SOURCE_RULES[context]
-      unless context_rules&.key?(source_evidence)
+      rule = source_rule
+      unless rule
         raise InvalidContractError, "unknown item pricing context or source evidence"
       end
 
-      rule = context_rules.fetch(source_evidence)
       return if rule.authority_kind == authority_kind && rule.validation_states.include?(validation_state)
 
       raise InvalidContractError, "item pricing authority or state does not match its explicit source evidence"
+    end
+
+    def validate_reference_price_tax_inclusion!
+      if authority_kind == :reference_quantity_price
+        return if source_rule.reference_price_tax_inclusions.include?(reference_price_tax_inclusion)
+
+        raise InvalidContractError, "reference price authority requires an explicit gross or net tax basis"
+      end
+
+      return if reference_price_tax_inclusion.nil?
+
+      raise InvalidContractError, "reference price tax basis cannot be mixed with another authority"
+    end
+
+    def source_rule
+      SOURCE_RULES.dig(context, source_evidence)
     end
 
     def validate_authority_value!
