@@ -88,7 +88,7 @@ module Amounts
         value.to_r
       when String
         numeric = value.strip
-        return nil unless numeric.match?(/\A\d+(?:\.\d+)?\z/)
+        return nil unless numeric.match?(/\A\+?\d+(?:\.\d+)?\z/)
 
         Rational(numeric)
       end

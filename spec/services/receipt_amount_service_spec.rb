@@ -4178,5 +4178,750 @@ RSpec.describe ReceiptAmountService do
         expect(result[:resolved][:tax_rate]).to eq(BigDecimal('0.1'))
       end
     end
+
+    describe 'reference quantity price integration' do
+      def reference_formula_item(**overrides)
+        {
+          pricing_source_kind: 'reference_quantity_price',
+          reference_price_amount: '120',
+          reference_quantity: '500',
+          reference_quantity_unit_code: 'milliliter',
+          reference_quantity_unit_raw: nil,
+          reference_price_tax_inclusion: 'gross',
+          quantity: '1.5',
+          quantity_unit_code: 'liter',
+          quantity_unit_raw: nil,
+          price: 999,
+          original_line_total: 998,
+          line_total: 997,
+          tax_rate: BigDecimal('0.10')
+        }.merge(overrides)
+      end
+
+      it 'exact extensionを割引前に1回丸め、item-level gross/netをtax projectionへ使う' do
+        gross = call_service(
+          receipt: {},
+          receipt_items: [ reference_formula_item(discount_rate: BigDecimal('0.10')) ],
+          context: :manual,
+          tax_rounding_mode: :floor,
+          discount_rounding_mode: :round
+        )
+        net = call_service(
+          receipt: {},
+          receipt_items: [
+            reference_formula_item(
+              discount_rate: BigDecimal('0.10'),
+              reference_price_tax_inclusion: 'net'
+            )
+          ],
+          context: :edit_save,
+          tax_rounding_mode: :floor,
+          discount_rounding_mode: :round
+        )
+
+        aggregate_failures do
+          expect(gross[:resolved]).to include(subtotal: 295, tax: 29, total: 324)
+          expect(gross.dig(:computed, :items).first).to include(
+            original_line_total: 360,
+            discount_amount: 36,
+            line_total: 324,
+            reference_price_amount: '120',
+            reference_quantity: '500',
+            reference_price_tax_inclusion: 'gross'
+          )
+          expect(net[:resolved]).to include(subtotal: 324, tax: 32, total: 356)
+          expect(net.dig(:computed, :source_items).first).to include(
+            original_line_total: 360,
+            discount_amount: 36,
+            line_total: 324,
+            reference_price_tax_inclusion: 'net'
+          )
+          expect(net.dig(:computed, :items).first).to include(
+            original_line_total: 360,
+            discount_amount: 36,
+            line_total: 356,
+            price: 999
+          )
+        end
+      end
+
+      it 'reference netにitem discount・purchase adjustment・payment adjustmentを各責務で1回だけ適用する' do
+        result = call_service(
+          receipt: {},
+          receipt_items: [
+            reference_formula_item(
+              reference_price_tax_inclusion: 'net',
+              discount_rate: BigDecimal('0.10')
+            )
+          ],
+          receipt_adjustments: [
+            {
+              kind: 'coupon',
+              sign: 'discount',
+              amount: 24,
+              tax_rate: BigDecimal('0.10'),
+              source: 'manual'
+            },
+            {
+              kind: 'bag_fee',
+              sign: 'surcharge',
+              amount: 10,
+              tax_rate: BigDecimal('0.10'),
+              source: 'manual'
+            },
+            {
+              kind: 'point_usage',
+              sign: 'discount',
+              amount: 50,
+              source: 'manual'
+            }
+          ],
+          receipt_payments: [ { method: 'cash', amount: 292 } ],
+          context: :edit_save,
+          tax_rounding_mode: :floor,
+          discount_rounding_mode: :round
+        )
+
+        aggregate_failures do
+          # 120円/500ml × 1.5L = net 360円。item discount 10%=36円を1回引きnet 324円、
+          # 10%税投影後のgross 356円へcoupon -24円・bag fee +10円を反映しpurchase total 342円。
+          # point usage -50円はpurchase totalを変えずfinal paymentのみ292円にする。
+          expect(result.dig(:computed, :source_items).first).to include(
+            original_line_total: 360,
+            discount_amount: 36,
+            line_total: 324,
+            reference_price_tax_inclusion: 'net'
+          )
+          expect(result.dig(:computed, :items).first).to include(
+            original_line_total: 360,
+            discount_amount: 36,
+            line_total: 356
+          )
+          expect(result.dig(:computed, :adjustment_discount_total)).to eq(24)
+          expect(result.dig(:computed, :adjustment_surcharge_total)).to eq(10)
+          expect(result.dig(:computed, :purchase_adjustment_total)).to eq(-14)
+          expect(result.dig(:computed, :payment_adjustment_total)).to eq(-50)
+          expect(result.dig(:computed, :purchase_total)).to eq(342)
+          expect(result.dig(:computed, :final_payment_total)).to eq(292)
+          expect(result.dig(:computed, :payment_amount_sum)).to eq(292)
+          expect(result[:resolved]).to include(subtotal: 312, tax: 30, total: 342)
+          expect(result[:inconsistencies]).not_to include(:item_total_mismatch, :payment_amount_mismatch)
+        end
+      end
+
+      it 'Q2のsource boundsとcanonical unitを計算前に検証し入力をmutationしない' do
+        invalid_items = [
+          reference_formula_item(reference_price_amount: '1.1234567'),
+          reference_formula_item(reference_price_amount: '1000000000000'),
+          reference_formula_item(reference_price_amount: Float::INFINITY),
+          reference_formula_item(reference_quantity: '1.0001'),
+          reference_formula_item(reference_quantity: '10000'),
+          reference_formula_item(quantity: '1.0001'),
+          reference_formula_item(quantity: '10000'),
+          reference_formula_item(quantity_unit_code: 'L'),
+          reference_formula_item(reference_quantity_unit_code: 'ml'),
+          reference_formula_item(quantity_unit_raw: ''),
+          reference_formula_item(reference_quantity_unit_raw: '')
+        ]
+
+        invalid_items.each do |item|
+          before = item.deep_dup
+
+          expect {
+            call_service(receipt: {}, receipt_items: [ item ], context: :edit_save)
+          }.to raise_error(ArgumentError), item.inspect
+          expect(item).to eq(before), item.inspect
+        end
+
+        expect {
+          call_service(
+            receipt: {},
+            receipt_items: [ reference_formula_item(reference_price_tax_inclusion: 'net') ],
+            context: :manual
+          )
+        }.to raise_error(Amounts::ItemPricingSource::InvalidContractError)
+
+        expect {
+          call_service(
+            receipt: {},
+            receipt_items: [ reference_formula_item(pricing_source_kind: 'unsupported') ],
+            context: :analysis
+          )
+        }.to raise_error(Amounts::ItemPricingSource::InvalidContractError)
+      end
+
+      it 'scale 6 priceとscale 3 quantityの承認済み境界をexact sourceのまま通す' do
+        item = reference_formula_item(
+          reference_price_amount: '999999999998.999999',
+          reference_quantity: '9999.999',
+          reference_quantity_unit_code: 'gram',
+          quantity: '0.001',
+          quantity_unit_code: 'gram',
+          tax_rate: BigDecimal('0')
+        )
+
+        result = call_service(receipt: {}, receipt_items: [ item ], context: :edit_save)
+
+        aggregate_failures do
+          expect(result.dig(:computed, :source_items).first).to include(
+            reference_price_amount: '999999999998.999999',
+            reference_quantity: '9999.999',
+            quantity: BigDecimal('0.001')
+          )
+          expect(result.dig(:computed, :source_items).first[:line_total]).to eq(100_000)
+        end
+      end
+
+      it 'leading plus付きの金額・購入数量・基準数量をexact decimalとして計算する' do
+        item = reference_formula_item(
+          reference_price_amount: '+120',
+          reference_quantity: '+500',
+          quantity: '+1.5'
+        )
+        original = item.deep_dup
+
+        result = call_service(receipt: {}, receipt_items: [ item ], context: :manual)
+
+        aggregate_failures do
+          expect(result.dig(:computed, :items).first).to include(
+            reference_price_amount: '+120',
+            reference_quantity: '+500',
+            quantity: BigDecimal('1.5'),
+            original_line_total: 360,
+            line_total: 360
+          )
+          expect(result.dig(:resolved, :total)).to eq(360)
+          expect(item).to eq(original)
+        end
+      end
+
+      it '0円のexplicit formula sourceを全contextでamount dataとして扱う' do
+        %i[manual edit_save analysis].each do |context|
+          result = call_service(
+            receipt: {},
+            receipt_items: [
+              reference_formula_item(
+                reference_price_amount: '0',
+                price: nil,
+                original_line_total: nil,
+                line_total: nil
+              )
+            ],
+            context: context
+          )
+
+          aggregate_failures do
+            expect(result[:resolved]).to include(subtotal: 0, tax: 0, total: 0), context.to_s
+            expect(result.dig(:computed, :items).first[:line_total]).to eq(0), context.to_s
+            expect(result[:inconsistencies]).not_to include(:insufficient_data), context.to_s
+          end
+        end
+      end
+
+      it 'derived amountをclampせず既存limit gateが実値を検出できるように返す' do
+        result = call_service(
+          receipt: {},
+          receipt_items: [
+            reference_formula_item(
+              reference_price_amount: '999999999999',
+              reference_quantity: '0.001',
+              reference_quantity_unit_code: 'gram',
+              quantity: '9999.999',
+              quantity_unit_code: 'gram',
+              tax_rate: BigDecimal('0')
+            )
+          ],
+          context: :edit_save
+        )
+        source_item = result.dig(:computed, :source_items).first
+        projected = 9_999_998_999_990_000_001
+
+        aggregate_failures do
+          expect(projected).to be > (2**63 - 1)
+          expect(source_item).to include(original_line_total: projected, line_total: projected)
+          violations = described_class.violations_for(receipt_items: result.dig(:computed, :items))
+          expect(violations).to include(
+            include(resource: 'receipt_items', field: 'original_line_total', actual_value: projected),
+            include(resource: 'receipt_items', field: 'line_total', actual_value: projected)
+          )
+          expect(violations.map { |violation| violation[:limit] }.uniq).to eq([ 999_999_999 ])
+        end
+      end
+
+      it 'source kindが明示されなければreference evidenceからformula authorityを推測しない' do
+        result = call_service(
+          receipt: {},
+          receipt_items: [
+            reference_formula_item(
+              pricing_source_kind: nil,
+              line_total: 777,
+              original_line_total: 777
+            )
+          ],
+          context: :analysis
+        )
+
+        expect(result.dig(:computed, :items).first).to include(
+          pricing_source_kind: nil,
+          original_line_total: 777,
+          line_total: 777
+        )
+      end
+
+      it '全14 unitのexplicit reference authorityをpublic Amount境界で計算しlegacy price比較へ戻さない' do
+        ReceiptQuantityUnit.allowed_codes.each do |code|
+          result = call_service(
+            receipt: {},
+            receipt_items: [
+              reference_formula_item(
+                reference_price_amount: '100',
+                reference_quantity: '2',
+                reference_quantity_unit_code: code,
+                quantity: '3',
+                quantity_unit_code: code,
+                price: 999,
+                line_total: 777
+              )
+            ],
+            context: :edit_save
+          )
+
+          aggregate_failures do
+            expect(result.dig(:computed, :source_items).first[:line_total]).to eq(150), code
+            expect(result[:inconsistencies]).not_to include(:item_total_mismatch), code
+          end
+        end
+      end
+
+      it 'explicit countable totalをunit kindからformulaへ再解釈しない' do
+        result = call_service(
+          receipt: {},
+          receipt_items: [
+            {
+              pricing_source_kind: 'explicit_line_total',
+              price: 100,
+              quantity: 2,
+              quantity_unit_code: 'each',
+              line_total: 777
+            }
+          ],
+          context: :edit_save
+        )
+
+        aggregate_failures do
+          expect(result.dig(:computed, :source_items).first[:line_total]).to eq(777)
+          expect(result[:inconsistencies]).not_to include(:item_total_mismatch)
+        end
+      end
+
+      it 'count unit price authorityのunknown・blank・alias・raw unitをeachへfallbackしない' do
+        base_item = {
+          pricing_source_kind: 'count_unit_price',
+          price: 125,
+          quantity: '2',
+          quantity_unit_code: 'each',
+          quantity_unit_raw: nil,
+          line_total: 777,
+          tax_rate: BigDecimal('0')
+        }
+        invalid_items = [
+          base_item.merge(quantity_unit_code: 'unknown'),
+          base_item.merge(quantity_unit_code: ''),
+          base_item.merge(quantity_unit_code: '個'),
+          base_item.merge(quantity_unit_raw: ''),
+          base_item.merge(quantity_unit_raw: 'bundle')
+        ]
+
+        invalid_items.each do |item|
+          expect {
+            call_service(receipt: {}, receipt_items: [ item ], context: :edit_save)
+          }.to raise_error(Amounts::ItemQuantitySemantics::InvalidFormulaSourceError), item.inspect
+        end
+      end
+
+      it 'count unit price authorityのmalformed・小数・負数・上限外sourceを正規化前に拒否する' do
+        base_item = {
+          pricing_source_kind: 'count_unit_price',
+          price: '125',
+          quantity: '2',
+          quantity_unit_code: 'each',
+          quantity_unit_raw: nil,
+          line_total: 777,
+          tax_rate: BigDecimal('0')
+        }
+        invalid_items = [
+          base_item.merge(price: '1.8abc'),
+          base_item.merge(price: '1.8'),
+          base_item.merge(price: '-1'),
+          base_item.merge(price: (ReceiptAmountService.receipt_item_price_max + 1).to_s),
+          base_item.merge(price: 125.0),
+          base_item.merge(quantity: '2abc'),
+          base_item.merge(quantity: '1.5'),
+          base_item.merge(quantity: '-1'),
+          base_item.merge(quantity: '0'),
+          base_item.merge(quantity: '9999.001'),
+          base_item.merge(quantity: '10000'),
+          base_item.merge(quantity: 2.0)
+        ]
+
+        invalid_items.each do |item|
+          expect {
+            call_service(receipt: {}, receipt_items: [ item ], context: :edit_save)
+          }.to raise_error(ArgumentError), item.inspect
+        end
+      end
+
+      it 'count unit price authorityはleading plus付きstrict integer sourceを受理する' do
+        item = {
+          pricing_source_kind: 'count_unit_price',
+          price: '+125',
+          quantity: '+2',
+          quantity_unit_code: 'each',
+          quantity_unit_raw: nil,
+          line_total: 777,
+          tax_rate: BigDecimal('0')
+        }
+        original = item.deep_dup
+
+        result = call_service(receipt: {}, receipt_items: [ item ], context: :edit_save)
+
+        aggregate_failures do
+          expect(result.dig(:computed, :source_items).first).to include(
+            pricing_source_kind: 'count_unit_price',
+            price: 125,
+            quantity: BigDecimal('2'),
+            original_line_total: 250,
+            line_total: 250
+          )
+          expect(item).to eq(original)
+        end
+      end
+
+      it 'count unit price authorityの動的price上限をservice instanceごとに1回だけ取得する' do
+        allow(described_class).to receive(:receipt_item_price_max).and_return(500)
+        items = 3.times.map do
+          {
+            pricing_source_kind: 'count_unit_price',
+            price: '125',
+            quantity: '2',
+            quantity_unit_code: 'each',
+            quantity_unit_raw: nil,
+            line_total: 777,
+            tax_rate: BigDecimal('0')
+          }
+        end
+
+        result = call_service(receipt: {}, receipt_items: items, context: :edit_save)
+
+        aggregate_failures do
+          expect(described_class).to have_received(:receipt_item_price_max).once
+          expect(result.dig(:computed, :source_items).map { |item| item[:line_total] }).to eq([ 250, 250, 250 ])
+        end
+      end
+
+      it 'count unit price authorityは全8 canonical countable unitをpublic Amount境界で受理する' do
+        ReceiptQuantityUnit.countable_codes.each do |code|
+          result = call_service(
+            receipt: {},
+            receipt_items: [
+              {
+                pricing_source_kind: 'count_unit_price',
+                price: 125,
+                quantity: '2',
+                quantity_unit_code: code,
+                quantity_unit_raw: nil,
+                line_total: 777,
+                tax_rate: BigDecimal('0')
+              }
+            ],
+            context: :edit_save
+          )
+
+          aggregate_failures do
+            expect(result.dig(:computed, :source_items).first).to include(
+              pricing_source_kind: 'count_unit_price',
+              quantity_unit_code: code,
+              original_line_total: 250,
+              line_total: 250
+            ), code
+            expect(result[:inconsistencies]).not_to include(:item_total_mismatch), code
+          end
+        end
+      end
+
+      it 'count unit price authorityのcanonical measurement unitはcount formulaとして拒否する' do
+        expect {
+          call_service(
+            receipt: {},
+            receipt_items: [
+              {
+                pricing_source_kind: 'count_unit_price',
+                price: 125,
+                quantity: '2',
+                quantity_unit_code: 'liter',
+                quantity_unit_raw: nil,
+                line_total: 777
+              }
+            ],
+            context: :edit_save
+          )
+        }.to raise_error(Amounts::ItemQuantitySemantics::InvalidFormulaSourceError)
+      end
+
+      it 'legacy sourceのunit alias normalizeは維持する' do
+        result = call_service(
+          receipt: {},
+          receipt_items: [
+            {
+              pricing_source_kind: nil,
+              price: 125,
+              quantity: '2',
+              quantity_unit_code: '個',
+              line_total: 777,
+              tax_rate: BigDecimal('0')
+            }
+          ],
+          context: :edit_save
+        )
+
+        expect(result.dig(:computed, :source_items).first).to include(
+          pricing_source_kind: nil,
+          quantity_unit_code: 'each',
+          line_total: 250
+        )
+      end
+
+      it 'legacy sourceの既存permissive numeric normalizeは維持する' do
+        result = call_service(
+          receipt: {},
+          receipt_items: [
+            {
+              pricing_source_kind: nil,
+              price: '1.8abc',
+              quantity: '2abc',
+              quantity_unit_code: 'each',
+              line_total: 777,
+              tax_rate: BigDecimal('0')
+            }
+          ],
+          context: :edit_save
+        )
+
+        expect(result.dig(:computed, :source_items).first).to include(
+          pricing_source_kind: nil,
+          price: 2,
+          quantity: BigDecimal('2'),
+          line_total: 4
+        )
+      end
+
+      it 'explicit totalとsame-basis reference diagnosticの丸め候補をpublic Amount境界で比較する' do
+        expectations = {
+          33 => false,
+          34 => false,
+          35 => true
+        }
+
+        expectations.each do |line_total, mismatch|
+          result = call_service(
+            receipt: {},
+            receipt_items: [
+              {
+                pricing_source_kind: 'explicit_line_total',
+                reference_price_amount: '100',
+                reference_quantity: '3',
+                reference_quantity_unit_code: 'each',
+                reference_quantity_unit_raw: nil,
+                reference_price_tax_inclusion: 'gross',
+                price: nil,
+                quantity: '1',
+                quantity_unit_code: 'each',
+                quantity_unit_raw: nil,
+                original_line_total: line_total,
+                line_total: line_total,
+                tax_rate: BigDecimal('0')
+              }
+            ],
+            context: :analysis
+          )
+
+          aggregate_failures do
+            expect(result[:inconsistencies].include?(:item_total_mismatch)).to eq(mismatch), line_total.to_s
+            expect(result.dig(:computed, :items).first).to include(
+              original_line_total: line_total,
+              line_total: line_total
+            ), line_total.to_s
+            expect(result.dig(:resolved, :total)).to eq(line_total), line_total.to_s
+          end
+        end
+      end
+
+      it 'reference net行と混在してもexplicit行自身のgross diagnostic mismatchを検出する' do
+        explicit_item = {
+          pricing_source_kind: 'explicit_line_total',
+          reference_price_amount: '100',
+          reference_quantity: '3',
+          reference_quantity_unit_code: 'each',
+          reference_quantity_unit_raw: nil,
+          reference_price_tax_inclusion: 'gross',
+          price: nil,
+          quantity: '1',
+          quantity_unit_code: 'each',
+          quantity_unit_raw: nil,
+          original_line_total: 35,
+          line_total: 35,
+          tax_rate: BigDecimal('0.10')
+        }
+        reference_net_item = reference_formula_item(
+          reference_price_amount: '100',
+          reference_quantity: '1',
+          reference_quantity_unit_code: 'each',
+          reference_price_tax_inclusion: 'net',
+          quantity: '1',
+          quantity_unit_code: 'each',
+          price: nil,
+          original_line_total: nil,
+          line_total: nil
+        )
+
+        result = call_service(
+          receipt: {},
+          receipt_items: [ explicit_item, reference_net_item ],
+          context: :edit_save,
+          tax_rounding_mode: :floor
+        )
+        computed_explicit = result.dig(:computed, :items).find do |item|
+          item[:pricing_source_kind] == 'explicit_line_total'
+        end
+        computed_reference = result.dig(:computed, :items).find do |item|
+          item[:pricing_source_kind] == 'reference_quantity_price'
+        end
+
+        aggregate_failures do
+          expect(result[:inconsistencies]).to include(:item_total_mismatch)
+          expect(computed_explicit).to include(original_line_total: 35, line_total: 35)
+          expect(computed_reference).to include(
+            reference_price_tax_inclusion: 'net',
+            original_line_total: 100,
+            line_total: 110
+          )
+        end
+      end
+
+      it 'edit_saveでは保存済みreceipt-wide profileよりitem-level reference basisを優先する' do
+        stored_recorded = {
+          receipt_tax_basis: 'total_includes_tax',
+          item_amount_basis: 'line_total_as_recorded',
+          tax_detail_amount_basis: 'gross'
+        }
+        stored_net = {
+          receipt_tax_basis: 'tax_added_to_subtotal',
+          item_amount_basis: 'line_total_as_net',
+          tax_detail_amount_basis: 'net'
+        }
+
+        net_under_recorded = call_service(
+          receipt: stored_recorded,
+          receipt_items: [
+            reference_formula_item(
+              reference_price_amount: '100',
+              reference_quantity: '1',
+              reference_quantity_unit_code: 'each',
+              quantity: '1',
+              quantity_unit_code: 'each',
+              reference_price_tax_inclusion: 'net'
+            )
+          ],
+          context: :edit_save,
+          tax_rounding_mode: :floor
+        )
+        gross_under_net = call_service(
+          receipt: stored_net,
+          receipt_items: [
+            reference_formula_item(
+              reference_price_amount: '100',
+              reference_quantity: '1',
+              reference_quantity_unit_code: 'each',
+              quantity: '1',
+              quantity_unit_code: 'each',
+              reference_price_tax_inclusion: 'gross'
+            )
+          ],
+          context: :edit_save,
+          tax_rounding_mode: :floor
+        )
+
+        aggregate_failures do
+          expect(net_under_recorded[:resolved]).to include(subtotal: 100, tax: 10, total: 110)
+          expect(net_under_recorded.dig(:computed, :source_items).first[:line_total]).to eq(100)
+          expect(net_under_recorded.dig(:computed, :items).first[:line_total]).to eq(110)
+          expect(gross_under_net[:resolved]).to include(subtotal: 91, tax: 9, total: 100)
+          expect(gross_under_net.dig(:computed, :source_items).first[:line_total]).to eq(100)
+          expect(gross_under_net.dig(:computed, :items).first[:line_total]).to eq(100)
+        end
+      end
+
+      it 'mixed itemでは保存済みprofileをlegacy fallbackだけへ適用する' do
+        result = call_service(
+          receipt: {
+            receipt_tax_basis: 'total_includes_tax',
+            item_amount_basis: 'line_total_as_recorded',
+            tax_detail_amount_basis: 'gross'
+          },
+          receipt_items: [
+            reference_formula_item(
+              reference_price_amount: '100',
+              reference_quantity: '1',
+              reference_quantity_unit_code: 'each',
+              quantity: '1',
+              quantity_unit_code: 'each',
+              reference_price_tax_inclusion: 'net'
+            ),
+            {
+              pricing_source_kind: 'explicit_line_total',
+              price: nil,
+              quantity: 1,
+              quantity_unit_code: 'each',
+              line_total: 110,
+              tax_rate: BigDecimal('0.10')
+            }
+          ],
+          context: :edit_save,
+          tax_rounding_mode: :floor
+        )
+
+        aggregate_failures do
+          expect(result[:resolved]).to include(subtotal: 200, tax: 20, total: 220)
+          expect(result.dig(:computed, :source_items).map { |item| item[:line_total] }).to eq([ 100, 110 ])
+          expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 110, 110 ])
+        end
+      end
+
+      it 'reference extensionの呼出回数はcandidate数ではなくitem数へ線形に増える' do
+        calls = 0
+        allow(Amounts::ReferenceItemExtension).to receive(:call).and_wrap_original do |method, **kwargs|
+          calls += 1
+          method.call(**kwargs)
+        end
+
+        call_service(
+          receipt: {},
+          receipt_items: [ reference_formula_item ],
+          context: :edit_save
+        )
+        one_item_calls = calls
+        call_service(
+          receipt: {},
+          receipt_items: [ reference_formula_item, reference_formula_item ],
+          context: :edit_save
+        )
+        two_item_calls = calls - one_item_calls
+
+        aggregate_failures do
+          expect(one_item_calls).to be_positive
+          expect(two_item_calls).to eq(one_item_calls * 2)
+        end
+      end
+    end
   end
 end

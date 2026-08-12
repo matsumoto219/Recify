@@ -214,6 +214,22 @@ RSpec.describe Amounts::ItemQuantitySemantics do
       end
     end
 
+    it 'leading plus付きdecimalを同じexact positive quantityとして扱う' do
+      semantics = described_class.new(
+        purchased_quantity: '+1.5',
+        purchased_unit_code: 'liter',
+        reference_quantity: '+500',
+        reference_unit_code: 'milliliter'
+      )
+
+      aggregate_failures do
+        expect(semantics).to be_reference_basis_complete
+        expect(semantics.validate_reference_formula!).to equal(semantics)
+        expect(semantics.purchased_quantity).to eq('+1.5')
+        expect(semantics.reference_quantity).to eq('+500')
+      end
+    end
+
     it 'unitごとのinput granularityに合うquantityだけをformula sourceにする' do
       valid_count = described_class.new(purchased_quantity: '2.0', purchased_unit_code: 'box')
       fractional_count = described_class.new(purchased_quantity: '1.5', purchased_unit_code: 'box')

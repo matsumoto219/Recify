@@ -23,7 +23,7 @@ module Amounts
       warnings = []
       warnings << :total_mismatch if total_mismatch?(candidate)
       warnings << :item_total_mismatch if item_total_mismatch?(candidate)
-      warnings << :item_total_mismatch if item_line_total_mismatch?
+      warnings << :item_total_mismatch if item_line_total_mismatch?(candidate)
       warnings << :tax_amount_mismatch if tax_amount_mismatch?(candidate)
       warnings << :tax_detail_incomplete if tax_detail_incomplete?
       warnings << :tax_detail_partial if tax_detail_partial?(candidate)
@@ -62,6 +62,7 @@ module Amounts
       return false if candidate.basis.start_with?("printed_tax_details")
       return false if candidate.basis == "mixed_by_tax_rate_group"
       return false if discounted_original_line_total_tax_excluded_candidate?(candidate)
+      return false if item_derived_candidate?(candidate) && reference_quantity_price_item_present?
 
       expected_total = tax_excluded_total_candidate?(candidate) ? candidate.subtotal : candidate.purchase_total
       adjusted_item_total(candidate) != expected_total.to_i
@@ -521,8 +522,19 @@ module Amounts
       positive && zero
     end
 
-    def item_line_total_mismatch?
-      items.any? { |item| item_line_total_conflicts_with_unit_total?(item) }
+    def item_line_total_mismatch?(candidate)
+      items.each_with_index.any? do |item, index|
+        case pricing_source_kind_for(item)
+        when "explicit_line_total"
+          explicit_reference_diagnostic_mismatch?(item, candidate, index)
+        when "reference_quantity_price"
+          false
+        when nil, "count_unit_price"
+          item_line_total_conflicts_with_unit_total?(item)
+        else
+          false
+        end
+      end
     end
 
     def item_line_total_conflicts_with_unit_total?(item)
@@ -542,6 +554,205 @@ module Amounts
       return true unless tax_rate.positive?
 
       !tax_adjusted_line_total_candidates(unit_total, tax_rate).include?(line_total)
+    end
+
+    def explicit_reference_diagnostic_mismatch?(item, candidate, index)
+      extension = explicit_reference_diagnostic_extension(item, candidate, index)
+      return false unless extension
+
+      printed_total = explicit_reference_comparison_total(item)
+      return false if printed_total.nil?
+
+      rounding_candidates = [
+        extension.exact_amount.floor,
+        extension.projected_amount,
+        extension.exact_amount.ceil
+      ].uniq
+
+      !rounding_candidates.include?(printed_total)
+    end
+
+    def explicit_reference_diagnostic_extension(item, candidate, index)
+      return nil unless value_was_present?(item, :line_total)
+
+      tax_inclusion = fetch_value(item, :reference_price_tax_inclusion).to_s
+      return nil unless candidate_item_reference_tax_inclusion(candidate, index, item) == tax_inclusion
+
+      reference_extension_result(item)
+    end
+
+    def explicit_reference_comparison_total(item)
+      line_total = to_i(fetch_value(item, :line_total))
+      discount_amount_present = value_was_present?(item, :discount_amount)
+      return line_total unless discount_amount_present || present?(fetch_value(item, :discount_rate))
+      return nil unless discount_amount_present
+      return nil unless present?(fetch_value(item, :original_line_total))
+
+      original_line_total = to_i(fetch_value(item, :original_line_total))
+      discount_amount = to_i(fetch_value(item, :discount_amount))
+      return nil if original_line_total.negative? || discount_amount.negative?
+      return nil unless [ original_line_total - discount_amount, 0 ].max == line_total
+
+      original_line_total
+    end
+
+    def candidate_item_reference_tax_inclusion(candidate, index, item)
+      source_tax_inclusion = fetch_value(item, :reference_price_tax_inclusion).to_s
+      return source_tax_inclusion if explicit_zero_tax_rate?(fetch_value(item, :tax_rate))
+      return "gross" if pricing_source_kind_for(item) == "explicit_line_total"
+
+      assignment_basis = candidate_item_amount_basis_assignment(candidate, index)
+      return reference_tax_inclusion_for_item_basis(assignment_basis) if assignment_basis
+
+      profile_basis = candidate_profile_value(candidate, :item_amount_basis)&.to_sym
+      case profile_basis
+      when :line_total_as_recorded
+        return "gross"
+      when :line_total_as_net
+        return "net"
+      end
+
+      case candidate.basis
+      when "items_as_tax_included"
+        "gross"
+      when "items_as_tax_excluded"
+        "net"
+      end
+    end
+
+    def explicit_zero_tax_rate?(value)
+      return false unless present?(value)
+
+      BigDecimal(value.to_s.delete("%")).zero?
+    rescue ArgumentError
+      false
+    end
+
+    def candidate_item_amount_basis_assignment(candidate, index)
+      assignments = Array(candidate_profile_value(candidate, :item_amount_basis_assignments))
+      matching = assignments.select do |assignment|
+        next false unless fetch_value(assignment, :assignment_scope).to_s == "item"
+
+        Array(fetch_value(assignment, :item_indices)).map(&:to_i).include?(index)
+      end
+      return nil unless matching.one?
+
+      fetch_value(matching.first, :basis)&.to_sym
+    end
+
+    def reference_tax_inclusion_for_item_basis(basis)
+      case basis
+      when :tax_included
+        "gross"
+      when :tax_excluded
+        "net"
+      end
+    end
+
+    def reference_quantity_price_item_present?
+      items.any? { |item| pricing_source_kind_for(item) == "reference_quantity_price" }
+    end
+
+    def reference_extension_result(item)
+      return nil unless valid_reference_price_amount_for_diagnostic?(item)
+      return nil unless valid_reference_quantity_for_diagnostic?(item)
+      return nil unless valid_purchased_quantity_for_diagnostic?(item)
+      return nil unless canonical_reference_unit_code?(fetch_value(item, :quantity_unit_code))
+      return nil unless canonical_reference_unit_code?(fetch_value(item, :reference_quantity_unit_code))
+      return nil unless fetch_value(item, :quantity_unit_raw).nil?
+      return nil unless fetch_value(item, :reference_quantity_unit_raw).nil?
+
+      Amounts::ReferenceItemExtension.call(
+        reference_price_amount: fetch_value(item, :reference_price_amount),
+        reference_quantity: fetch_value(item, :reference_quantity),
+        reference_unit_code: fetch_value(item, :reference_quantity_unit_code),
+        purchased_quantity: fetch_value(item, :quantity),
+        purchased_unit_code: fetch_value(item, :quantity_unit_code),
+        reference_price_tax_inclusion: fetch_value(item, :reference_price_tax_inclusion)
+      )
+    rescue Amounts::ReferenceItemExtension::InvalidSourceError,
+      Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+      ReceiptQuantityUnit::ConversionError
+      nil
+    end
+
+    def valid_reference_price_amount_for_diagnostic?(item)
+      exact_bounded_decimal_for_diagnostic?(
+        fetch_value(item, :reference_price_amount),
+        minimum: 0,
+        maximum: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX.to_r,
+        maximum_scale: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX_SCALE,
+        minimum_inclusive: true
+      )
+    end
+
+    def valid_reference_quantity_for_diagnostic?(item)
+      exact_bounded_decimal_for_diagnostic?(
+        fetch_value(item, :reference_quantity),
+        minimum: 0,
+        maximum: ReceiptItem::REFERENCE_QUANTITY_MAX.to_r,
+        maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+        minimum_inclusive: false
+      )
+    end
+
+    def valid_purchased_quantity_for_diagnostic?(item)
+      exact_bounded_decimal_for_diagnostic?(
+        fetch_value(item, :quantity),
+        minimum: 0,
+        maximum: ReceiptItem::REFERENCE_QUANTITY_MAX.to_r,
+        maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+        minimum_inclusive: false
+      )
+    end
+
+    def exact_bounded_decimal_for_diagnostic?(value, minimum:, maximum:, maximum_scale:, minimum_inclusive:)
+      exact = exact_decimal_for_diagnostic(value)
+      return false unless exact
+      return false if minimum_inclusive ? exact < minimum : exact <= minimum
+      return false if exact > maximum
+
+      decimal_scale_for_diagnostic(exact)&.<=(maximum_scale)
+    end
+
+    def exact_decimal_for_diagnostic(value)
+      case value
+      when Integer, Rational
+        value.to_r
+      when BigDecimal
+        value.to_r if value.finite?
+      when String
+        Rational(value) if value.match?(/\A[+-]?\d+(?:\.\d+)?\z/)
+      end
+    rescue ArgumentError, TypeError, FloatDomainError, ZeroDivisionError
+      nil
+    end
+
+    def decimal_scale_for_diagnostic(value)
+      denominator = value.denominator
+      powers_of_two = factor_count_for_diagnostic(denominator, 2)
+      denominator /= 2**powers_of_two
+      powers_of_five = factor_count_for_diagnostic(denominator, 5)
+      denominator /= 5**powers_of_five
+
+      [ powers_of_two, powers_of_five ].max if denominator == 1
+    end
+
+    def factor_count_for_diagnostic(value, factor)
+      count = 0
+      while (value % factor).zero?
+        count += 1
+        value /= factor
+      end
+      count
+    end
+
+    def canonical_reference_unit_code?(code)
+      code.is_a?(String) && ReceiptQuantityUnit.unit_for(code)&.code == code
+    end
+
+    def pricing_source_kind_for(item)
+      fetch_value(item, :pricing_source_kind)&.to_s.presence
     end
 
     def tax_adjusted_line_total_candidates(amount, tax_rate)
@@ -565,7 +776,13 @@ module Amounts
     end
 
     def item_amount_data_present?(item)
-      item_line_total(item).positive? || explicit_zero_amount_item?(item)
+      item_line_total(item).positive? ||
+        explicit_zero_amount_item?(item) ||
+        reference_formula_item_data_present?(item)
+    end
+
+    def reference_formula_item_data_present?(item)
+      pricing_source_kind_for(item) == "reference_quantity_price" && !reference_extension_result(item).nil?
     end
 
     def explicit_zero_amount_item?(item)

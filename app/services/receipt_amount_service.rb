@@ -152,12 +152,12 @@ class ReceiptAmountService
   end
 
   def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+    @context = normalize_context(context)
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
     @adjustments = Array(receipt_adjustments).map { |adjustment| normalize_adjustment(adjustment) }
     @payments = Array(receipt_payments).map { |payment| normalize_payment(payment) }
-    @context = normalize_context(context)
     @tax_rounding_mode_explicit = !rounding_mode.nil? || !tax_rounding_mode.nil?
     @discount_rounding_mode_explicit = !discount_rounding_mode.nil?
     @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
@@ -166,15 +166,7 @@ class ReceiptAmountService
     @discount_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
       discount_rounding_mode || Amounts::Rounding::DISCOUNT_DEFAULT_MODE
     )
-    adjustment_rate_items = if @context == :analysis
-      @items
-    else
-      Amounts::ItemTotalAggregator.new(
-        items: @items,
-        context: @context,
-        discount_rounding_mode: @discount_rounding_mode
-      ).call[:items]
-    end
+    adjustment_rate_items = adjustment_tax_rate_items
     @adjustments = Amounts::AdjustmentTaxRateResolver.call(
       adjustments: @adjustments,
       items: adjustment_rate_items,
@@ -216,6 +208,28 @@ class ReceiptAmountService
   end
 
   private
+
+  def adjustment_tax_rate_items
+    return normalized_items_for_adjustment_tax_rate unless @context == :analysis
+
+    @items.map do |item|
+      next item unless item[:pricing_source_kind] == "reference_quantity_price"
+
+      Amounts::ItemTotalAggregator.new(
+        items: [ item ],
+        context: @context,
+        discount_rounding_mode: @discount_rounding_mode
+      ).call[:items].sole
+    end
+  end
+
+  def normalized_items_for_adjustment_tax_rate
+    Amounts::ItemTotalAggregator.new(
+      items: @items,
+      context: @context,
+      discount_rounding_mode: @discount_rounding_mode
+    ).call[:items]
+  end
 
   def engine_base_result(tax_rounding_mode:, discount_rounding_mode:, receipt_tax_basis:)
     items = Amounts::ItemTotalAggregator.new(
@@ -288,10 +302,23 @@ class ReceiptAmountService
   end
 
   def candidate_matches_edit_source_semantics?(candidate)
+    if reference_price_items_present?
+      expected_basis = if effective_edit_item_amount_basis == :line_total_as_net
+        "items_as_tax_excluded"
+      else
+        "items_as_tax_included"
+      end
+      return candidate.basis == expected_basis
+    end
+
     resolver = Amounts::CandidateProfileResolver.new(candidate)
 
     resolver.receipt_tax_basis == @edit_source_semantics[:receipt_tax_basis] &&
       resolver.item_amount_basis == effective_edit_item_amount_basis
+  end
+
+  def reference_price_items_present?
+    @items.any? { |item| item[:pricing_source_kind] == "reference_quantity_price" }
   end
 
   def effective_edit_item_amount_basis
@@ -648,16 +675,36 @@ class ReceiptAmountService
     original_line_total = fetch_value(i, :original_line_total)
     line_total = fetch_value(i, :line_total)
     discount_amount = fetch_value(i, :discount_amount)
-    quantity_unit_code = ReceiptQuantityUnit.normalize(fetch_value(i, :quantity_unit_code))
+    pricing_source_kind = fetch_value(i, :pricing_source_kind)&.to_s.presence
+    unless pricing_source_kind.nil? || ReceiptItem::PRICING_SOURCE_KINDS.include?(pricing_source_kind)
+      raise Amounts::ItemPricingSource::InvalidContractError, "unknown item pricing authority kind"
+    end
+    reference_formula = pricing_source_kind == "reference_quantity_price"
+    count_formula = pricing_source_kind == "count_unit_price"
+    validate_reference_formula_input!(i) if reference_formula
+    validate_count_formula_input!(i) if count_formula
+    quantity_unit_value = fetch_value(i, :quantity_unit_code)
+    quantity_unit_code = if reference_formula || count_formula
+      quantity_unit_value
+    else
+      ReceiptQuantityUnit.normalize(quantity_unit_value)
+    end
 
     {
       price: to_i_or_nil(price),
-      quantity: to_decimal_or_nil(quantity),
+      quantity: reference_formula ? quantity : to_decimal_or_nil(quantity),
       original_line_total: to_i_or_nil(original_line_total),
       line_total: to_i_or_nil(line_total),
       discount_amount: to_i_or_nil(discount_amount),
       discount_rate: fetch_value(i, :discount_rate),
       quantity_unit_code: quantity_unit_code,
+      pricing_source_kind: pricing_source_kind,
+      reference_price_amount: fetch_value(i, :reference_price_amount),
+      reference_quantity: fetch_value(i, :reference_quantity),
+      reference_quantity_unit_code: fetch_value(i, :reference_quantity_unit_code),
+      quantity_unit_raw: fetch_value(i, :quantity_unit_raw),
+      reference_quantity_unit_raw: fetch_value(i, :reference_quantity_unit_raw),
+      reference_price_tax_inclusion: fetch_value(i, :reference_price_tax_inclusion),
       tax_rate: fetch_value(i, :tax_rate),
       amount_price_present: explicit_input_presence(i, :amount_price_present, price),
       amount_quantity_present: explicit_input_presence(i, :amount_quantity_present, quantity),
@@ -675,6 +722,147 @@ class ReceiptAmountService
         discount_amount
       )
     }
+  end
+
+  def validate_reference_formula_input!(item)
+    exact_bounded_decimal!(
+      fetch_value(item, :reference_price_amount),
+      minimum: 0,
+      maximum: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX.to_r,
+      maximum_scale: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX_SCALE,
+      minimum_inclusive: true,
+      attribute: :reference_price_amount
+    )
+    purchased_quantity = exact_bounded_decimal!(
+      fetch_value(item, :quantity),
+      minimum: 0,
+      maximum: ReceiptItem::REFERENCE_QUANTITY_MAX.to_r,
+      maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+      minimum_inclusive: false,
+      attribute: :quantity
+    )
+    reference_quantity = exact_bounded_decimal!(
+      fetch_value(item, :reference_quantity),
+      minimum: 0,
+      maximum: ReceiptItem::REFERENCE_QUANTITY_MAX.to_r,
+      maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+      minimum_inclusive: false,
+      attribute: :reference_quantity
+    )
+    purchased_unit = canonical_reference_formula_unit!(item, :quantity_unit_code, :quantity_unit_raw)
+    reference_unit = canonical_reference_formula_unit!(
+      item,
+      :reference_quantity_unit_code,
+      :reference_quantity_unit_raw
+    )
+    tax_inclusion = fetch_value(item, :reference_price_tax_inclusion).to_s
+
+    unless %w[gross net].include?(tax_inclusion) && (@context != :manual || tax_inclusion == "gross")
+      raise Amounts::ItemPricingSource::InvalidContractError,
+        "reference price tax inclusion is invalid for the amount context"
+    end
+
+    semantics = Amounts::ItemQuantitySemantics.new(
+      purchased_quantity: purchased_quantity,
+      purchased_unit_code: purchased_unit,
+      reference_quantity: reference_quantity,
+      reference_unit_code: reference_unit
+    )
+    semantics.validate_reference_formula!
+  end
+
+  def canonical_reference_formula_unit!(item, code_attribute, raw_attribute)
+    code = fetch_value(item, code_attribute)
+    unit = ReceiptQuantityUnit.unit_for(code)
+    return code if code.is_a?(String) && unit&.code == code && fetch_value(item, raw_attribute).nil?
+
+    raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+      "reference formula requires canonical unit codes without raw unit evidence"
+  end
+
+  def validate_count_formula_input!(item)
+    validate_count_formula_price!(fetch_value(item, :price))
+    quantity = exact_bounded_decimal!(
+      fetch_value(item, :quantity),
+      minimum: 0,
+      maximum: ReceiptItem::REFERENCE_QUANTITY_MAX.to_r,
+      maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+      minimum_inclusive: false,
+      attribute: :quantity
+    )
+    code = fetch_value(item, :quantity_unit_code)
+    unit = ReceiptQuantityUnit.unit_for(code)
+    unless code.is_a?(String) && unit&.code == code && fetch_value(item, :quantity_unit_raw).nil?
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "count formula requires a canonical unit code without raw unit evidence"
+    end
+
+    Amounts::ItemQuantitySemantics.new(
+      purchased_quantity: quantity,
+      purchased_unit_code: code
+    ).validate_count_formula!
+  end
+
+  def validate_count_formula_price!(value)
+    exact = case value
+    when Integer
+      value
+    when String
+      Integer(value, 10) if value.match?(/\A[+-]?\d+\z/)
+    end
+    return exact if exact&.between?(0, count_formula_price_max)
+
+    raise Amounts::ItemPricingSource::InvalidContractError,
+      "count unit price must be a bounded non-negative integer"
+  rescue ArgumentError
+    raise Amounts::ItemPricingSource::InvalidContractError,
+      "count unit price must be a bounded non-negative integer"
+  end
+
+  def count_formula_price_max
+    @count_formula_price_max ||= self.class.receipt_item_price_max
+  end
+
+  def exact_bounded_decimal!(value, minimum:, maximum:, maximum_scale:, minimum_inclusive:, attribute:)
+    exact = exact_decimal_rational(value)
+    valid_minimum = exact && (minimum_inclusive ? exact >= minimum : exact > minimum)
+    valid = exact && valid_minimum && exact <= maximum && finite_decimal_scale(exact)&.<=(maximum_scale)
+    return exact if valid
+
+    raise Amounts::ReferenceItemExtension::InvalidSourceError,
+      "#{attribute} must be an exact bounded decimal"
+  end
+
+  def exact_decimal_rational(value)
+    case value
+    when Integer, Rational
+      value.to_r
+    when BigDecimal
+      value.to_r if value.finite?
+    when String
+      Rational(value) if value.match?(/\A[+-]?\d+(?:\.\d+)?\z/)
+    end
+  rescue ArgumentError, TypeError, FloatDomainError, ZeroDivisionError
+    nil
+  end
+
+  def finite_decimal_scale(value)
+    denominator = value.denominator
+    powers_of_two = factor_count(denominator, 2)
+    denominator /= 2**powers_of_two
+    powers_of_five = factor_count(denominator, 5)
+    denominator /= 5**powers_of_five
+
+    [ powers_of_two, powers_of_five ].max if denominator == 1
+  end
+
+  def factor_count(value, factor)
+    count = 0
+    while (value % factor).zero?
+      count += 1
+      value /= factor
+    end
+    count
   end
 
   def normalize_adjustment(adjustment)
