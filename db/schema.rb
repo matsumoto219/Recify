@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_10_103002) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_12_211813) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -299,16 +299,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_10_103002) do
     t.bigint "original_line_total"
     t.integer "position_index"
     t.bigint "price"
+    t.string "pricing_source_kind"
     t.string "product_code"
     t.decimal "quantity", precision: 10, scale: 3
     t.string "quantity_unit_code", default: "each", null: false
+    t.string "quantity_unit_raw", limit: 64
     t.text "raw_text"
     t.bigint "receipt_id", null: false
+    t.decimal "reference_price_amount"
+    t.decimal "reference_quantity"
+    t.string "reference_quantity_unit_code"
+    t.string "reference_quantity_unit_raw", limit: 64
     t.jsonb "review_reasons", default: [], null: false
     t.string "suggested_name"
     t.decimal "tax_rate", precision: 5, scale: 4
     t.datetime "updated_at", null: false
     t.index ["receipt_id"], name: "index_receipt_items_on_receipt_id"
+    t.check_constraint "pricing_source_kind IS NULL OR (pricing_source_kind::text = ANY (ARRAY['count_unit_price'::character varying, 'explicit_line_total'::character varying, 'reference_quantity_price'::character varying]::text[]))", name: "check_receipt_items_pricing_source_kind"
+    t.check_constraint "pricing_source_kind IS NULL OR pricing_source_kind::text = 'count_unit_price'::text AND price IS NOT NULL AND quantity IS NOT NULL AND quantity > 0::numeric AND quantity <= 9999.999 AND quantity = trunc(quantity) AND (quantity_unit_code::text = ANY (ARRAY['each'::character varying, 'item'::character varying, 'piece'::character varying, 'bag'::character varying, 'sheet'::character varying, 'unit'::character varying, 'box'::character varying, 'set'::character varying]::text[])) AND reference_price_amount IS NULL AND reference_quantity IS NULL AND reference_quantity_unit_code IS NULL AND quantity_unit_raw IS NULL AND reference_quantity_unit_raw IS NULL OR pricing_source_kind::text = 'explicit_line_total'::text AND line_total IS NOT NULL OR pricing_source_kind::text = 'reference_quantity_price'::text AND quantity IS NOT NULL AND quantity > 0::numeric AND quantity <= 9999.999 AND ((quantity_unit_code::text <> ALL (ARRAY['each'::character varying, 'item'::character varying, 'piece'::character varying, 'bag'::character varying, 'sheet'::character varying, 'unit'::character varying, 'box'::character varying, 'set'::character varying]::text[])) OR quantity = trunc(quantity)) AND (quantity_unit_code::text = reference_quantity_unit_code::text OR (quantity_unit_code::text = ANY (ARRAY['gram'::character varying, 'kilogram'::character varying, 'milligram'::character varying]::text[])) AND (reference_quantity_unit_code::text = ANY (ARRAY['gram'::character varying, 'kilogram'::character varying, 'milligram'::character varying]::text[])) OR (quantity_unit_code::text = ANY (ARRAY['liter'::character varying, 'milliliter'::character varying, 'cubic_centimeter'::character varying]::text[])) AND (reference_quantity_unit_code::text = ANY (ARRAY['liter'::character varying, 'milliliter'::character varying, 'cubic_centimeter'::character varying]::text[]))) AND reference_price_amount IS NOT NULL AND reference_quantity IS NOT NULL AND reference_quantity_unit_code IS NOT NULL AND quantity_unit_raw IS NULL AND reference_quantity_unit_raw IS NULL", name: "check_receipt_items_pricing_source_state"
+    t.check_constraint "quantity_unit_raw IS NULL OR char_length(quantity_unit_raw::text) >= 1 AND char_length(quantity_unit_raw::text) <= 64 AND quantity_unit_raw::text = btrim(quantity_unit_raw::text) AND quantity_unit_raw::text <> ''::text AND quantity_unit_raw::text !~ '[[:cntrl:]]'::text", name: "check_receipt_items_quantity_unit_raw"
+    t.check_constraint "reference_price_amount IS NULL AND reference_quantity IS NULL AND reference_quantity_unit_code IS NULL AND reference_quantity_unit_raw IS NULL OR reference_price_amount IS NOT NULL AND reference_quantity IS NOT NULL AND reference_quantity_unit_code IS NOT NULL AND reference_quantity_unit_raw IS NULL OR reference_price_amount IS NOT NULL AND reference_quantity IS NOT NULL AND reference_quantity_unit_code IS NULL AND reference_quantity_unit_raw IS NOT NULL", name: "check_receipt_items_reference_evidence"
+    t.check_constraint "reference_price_amount IS NULL OR reference_price_amount >= 0::numeric AND reference_price_amount <= '999999999999'::bigint::numeric AND reference_price_amount = round(reference_price_amount, 6)", name: "check_receipt_items_reference_price_amount"
+    t.check_constraint "reference_quantity IS NULL OR reference_quantity > 0::numeric AND reference_quantity <= 9999.999 AND reference_quantity = round(reference_quantity, 3)", name: "check_receipt_items_reference_quantity"
+    t.check_constraint "reference_quantity IS NULL OR reference_quantity_unit_code IS NULL OR (reference_quantity_unit_code::text <> ALL (ARRAY['each'::character varying, 'item'::character varying, 'piece'::character varying, 'bag'::character varying, 'sheet'::character varying, 'unit'::character varying, 'box'::character varying, 'set'::character varying]::text[])) OR reference_quantity = trunc(reference_quantity)", name: "check_receipt_items_reference_quantity_granularity"
+    t.check_constraint "reference_quantity_unit_code IS NULL OR (reference_quantity_unit_code::text = ANY (ARRAY['each'::character varying, 'item'::character varying, 'piece'::character varying, 'bag'::character varying, 'sheet'::character varying, 'unit'::character varying, 'box'::character varying, 'set'::character varying, 'gram'::character varying, 'kilogram'::character varying, 'milligram'::character varying, 'liter'::character varying, 'milliliter'::character varying, 'cubic_centimeter'::character varying]::text[]))", name: "check_receipt_items_reference_unit_code"
+    t.check_constraint "reference_quantity_unit_raw IS NULL OR char_length(reference_quantity_unit_raw::text) >= 1 AND char_length(reference_quantity_unit_raw::text) <= 64 AND reference_quantity_unit_raw::text = btrim(reference_quantity_unit_raw::text) AND reference_quantity_unit_raw::text <> ''::text AND reference_quantity_unit_raw::text !~ '[[:cntrl:]]'::text", name: "check_receipt_items_reference_quantity_unit_raw"
   end
 
   create_table "receipt_payments", force: :cascade do |t|
