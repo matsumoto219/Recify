@@ -13,6 +13,15 @@ class ReceiptsController < ApplicationController
 
   MAX_SEARCH_QUERY_LENGTH = 100
   RECEIPT_FORM_FINGERPRINT_MAX_BYTES = 65_536
+  MEASUREMENT_PRICING_SOURCE_FIELDS = %w[
+    pricing_source_kind
+    reference_price_amount
+    reference_quantity
+    reference_quantity_unit_code
+    quantity_unit_raw
+    reference_quantity_unit_raw
+    reference_price_tax_inclusion
+  ].freeze
   SUSPICIOUS_SEARCH_PATTERN = /(--|;|\/\*|\*\/|\b(drop|delete|insert|update|alter|truncate|union|select)\b)/i
 
   def index
@@ -139,7 +148,7 @@ class ReceiptsController < ApplicationController
     rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
     @receipt = current_user.receipts.new
     begin
-      create_params = normalized_receipt_params.to_h
+      source_params = normalized_receipt_params.to_h
     rescue Receipts::NumericInput::InvalidValue
       render_invalid_numeric_input(
         template: :new,
@@ -147,11 +156,19 @@ class ReceiptsController < ApplicationController
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
       return
+    rescue Receipts::Editing::InvalidItemSourceError
+      render_invalid_item_pricing_source(
+        receipt_params.to_h,
+        template: :new,
+        rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
     end
 
-    if manual_child_count_limit_exceeded?(create_params)
+    if manual_child_count_limit_exceeded?(source_params)
       render_manual_child_count_limit_exceeded(
-        create_params,
+        source_params,
         template: :new,
         rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
@@ -159,10 +176,10 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    if manual_amount_limit_exceeded?(create_params, context: :manual)
+    if manual_amount_limit_exceeded?(source_params, context: :manual, source_only: true)
       render_manual_amount_limit_exceeded(
-        create_params,
-        manual_amount_limit_violations(create_params, context: :manual),
+        source_params,
+        manual_amount_limit_violations(source_params, context: :manual, source_only: true),
         template: :new,
         rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
@@ -170,39 +187,52 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    amount_result = apply_amount_calculation!(create_params, context: :manual)
-    if manual_amount_limit_exceeded?(create_params, context: :manual)
-      render_manual_amount_limit_exceeded(
-        create_params,
-        manual_amount_limit_violations(create_params, context: :manual),
+    persistence_params = source_params.deep_dup
+    persistence_params["image"] = source_params["image"] if source_params.key?("image")
+    begin
+      amount_result = apply_amount_calculation!(source_params, attributes: persistence_params, context: :manual)
+    rescue ReceiptAmountService::InvalidItemSourceError
+      render_invalid_item_pricing_source(
+        source_params,
         template: :new,
         rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
       return
     end
-    consistency_guard = receipt_edit_save_consistency_guard(create_params, amount_result)
+    if manual_amount_limit_exceeded?(persistence_params, context: :manual)
+      render_manual_amount_limit_exceeded(
+        source_params,
+        manual_amount_limit_violations(persistence_params, context: :manual),
+        template: :new,
+        rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+    consistency_guard = receipt_edit_save_consistency_guard(persistence_params, amount_result)
     unless consistency_guard.consistent?
       render_manual_amount_consistency_error!(
-        create_params,
+        source_params,
         template: :new,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
       return
     end
-    create_params["review_reasons"] = (
+    persistence_params["review_reasons"] = (
       manual_update_blocking_review_reasons(amount_result) + consistency_guard.review_reasons
     ).uniq
     apply_current_image_retention_snapshot!(
-      create_params,
-      purge_eligible: create_params["image"].present?
+      persistence_params,
+      purge_eligible: persistence_params["image"].present?
     )
 
-    items_missing = manual_receipt_items_missing?(create_params, context: :manual)
+    items_missing = manual_receipt_items_missing?(source_params, context: :manual)
     begin
       result = Receipts::Editing.create_manual(
         receipt: @receipt,
-        attributes: create_params,
+        attributes: persistence_params,
+        source_attributes: source_params,
         user: current_user,
         items_missing: items_missing
       )
@@ -215,7 +245,7 @@ class ReceiptsController < ApplicationController
     end
 
     if result.items_missing?
-      prepare_manual_receipt_items_missing_error!(create_params)
+      prepare_manual_receipt_items_missing_error!(source_params)
       build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
       prepare_receipt_form_presenter
@@ -227,7 +257,7 @@ class ReceiptsController < ApplicationController
     if result.saved?
       redirect_to receipts_path, **temporary_notice_options(t("flash.receipts.create"))
     else
-      replace_manual_amount_errors!(create_params)
+      replace_manual_amount_errors!(source_params)
       build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
       prepare_receipt_form_presenter
@@ -247,7 +277,7 @@ class ReceiptsController < ApplicationController
 
     if storage_quota_exceeded_for?(uploaded_receipt_image, excluding_blob: existing_receipt_image_blob)
       @receipt.errors.add(:image, :storage_quota_exceeded)
-      prepare_receipt_form_presenter
+      prepare_receipt_form_presenter(submitted_params: receipt_params.to_h)
       flash.now[:alert] = storage_quota_exceeded_message_for(
         uploaded_receipt_image,
         excluding_blob: existing_receipt_image_blob
@@ -264,9 +294,16 @@ class ReceiptsController < ApplicationController
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
       return
+    rescue Receipts::Editing::InvalidItemSourceError
+      render_invalid_item_pricing_source(
+        receipt_params.to_h,
+        template: :edit,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
     end
     if stale_edit_submission?(update_params)
-      render_stale_edit_conflict
+      render_stale_edit_conflict(submitted_params: update_params)
       return
     end
 
@@ -274,6 +311,7 @@ class ReceiptsController < ApplicationController
       receipt_edit_save_input(update_params)
     rescue Receipts::Editing::ConflictError
       render_nested_child_conflict(
+        submitted_params: update_params,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
       return
@@ -292,10 +330,10 @@ class ReceiptsController < ApplicationController
       return
     end
 
-    if manual_amount_limit_exceeded?(update_params, context: :edit_save)
+    if manual_amount_limit_exceeded?(update_params, context: :edit_save, source_only: true)
       render_manual_amount_limit_exceeded(
         update_params,
-        manual_amount_limit_violations(update_params, context: :edit_save),
+        manual_amount_limit_violations(update_params, context: :edit_save, source_only: true),
         template: :edit,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
       )
@@ -310,7 +348,16 @@ class ReceiptsController < ApplicationController
       apply_current_image_retention_snapshot!(persistence_params, purge_eligible: true)
     end
     clear_review_flags_for_edited_items!(persistence_params)
-    amount_result = apply_amount_calculation!(source_params, attributes: persistence_params, context: :edit_save)
+    begin
+      amount_result = apply_amount_calculation!(source_params, attributes: persistence_params, context: :edit_save)
+    rescue ReceiptAmountService::InvalidItemSourceError
+      render_invalid_item_pricing_source(
+        source_params,
+        template: :edit,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
     if manual_amount_limit_exceeded?(persistence_params, context: :edit_save)
       render_manual_amount_limit_exceeded(
         source_params,
@@ -349,7 +396,7 @@ class ReceiptsController < ApplicationController
         items_missing: items_missing
       )
     rescue ActiveRecord::StaleObjectError
-      render_stale_edit_conflict
+      render_stale_edit_conflict(submitted_params: source_params)
       return
     end
 
@@ -672,10 +719,10 @@ class ReceiptsController < ApplicationController
     render template, status: :unprocessable_content, formats: :html
   end
 
-  def render_nested_child_conflict(rebuild_blank_adjustment_row_after_failure: false)
+  def render_nested_child_conflict(submitted_params:, rebuild_blank_adjustment_row_after_failure: false)
     @receipt.errors.add(:base, t("receipts.form.errors.nested_child_conflict"))
     build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
-    prepare_receipt_form_presenter
+    prepare_receipt_form_presenter(submitted_params: submitted_params)
     flash.now[:alert] = @receipt.errors.full_messages
     render :edit, status: :unprocessable_content, formats: :html
   end
@@ -688,11 +735,11 @@ class ReceiptsController < ApplicationController
     true
   end
 
-  def render_stale_edit_conflict
+  def render_stale_edit_conflict(submitted_params: nil)
     @receipt.reload
     @receipt_form_adjustment_absence_confirmed = false
     @receipt.errors.add(:base, t("receipts.form.errors.stale_edit"))
-    prepare_receipt_form_presenter
+    prepare_receipt_form_presenter(submitted_params: submitted_params)
     flash.now[:alert] = @receipt.errors.full_messages
     render :edit, status: :unprocessable_content, formats: :html
   end
@@ -702,6 +749,15 @@ class ReceiptsController < ApplicationController
     @receipt.errors.add(:base, t("receipts.form.errors.amount_consistency_failed"))
     build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
     prepare_receipt_form_presenter
+    flash.now[:alert] = @receipt.errors.full_messages
+    render template, status: :unprocessable_content, formats: :html
+  end
+
+  def render_invalid_item_pricing_source(permitted, template:, rebuild_blank_item_row_after_failure: false, rebuild_blank_adjustment_row_after_failure: false)
+    @receipt.errors.add(:base, t("receipts.form.errors.invalid_item_pricing_source"))
+    build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
+    build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
+    prepare_receipt_form_presenter(submitted_params: permitted)
     flash.now[:alert] = @receipt.errors.full_messages
     render template, status: :unprocessable_content, formats: :html
   end
@@ -736,6 +792,13 @@ class ReceiptsController < ApplicationController
         :price,
         :quantity,
         :quantity_unit_code,
+        :pricing_source_kind,
+        :reference_price_amount,
+        :reference_quantity,
+        :reference_quantity_unit_code,
+        :quantity_unit_raw,
+        :reference_quantity_unit_raw,
+        :reference_price_tax_inclusion,
         # ProductCode は保存/permit済みだが、UI入力欄はまだ出していない。
         :product_code,
         :tax_rate,
@@ -790,17 +853,18 @@ class ReceiptsController < ApplicationController
     manual_child_count_limit_violations(permitted).any?
   end
 
-  def manual_amount_limit_exceeded?(permitted, context:)
-    manual_amount_limit_violations(permitted, context: context).any?
+  def manual_amount_limit_exceeded?(permitted, context:, source_only: false)
+    manual_amount_limit_violations(permitted, context: context, source_only: source_only).any?
   end
 
-  def manual_amount_limit_violations(permitted, context:)
+  def manual_amount_limit_violations(permitted, context:, source_only: false)
     ReceiptAmountService.violations_for(
       receipt: amount_receipt(permitted, context, clear_amounts: false),
       receipt_items: amount_receipt_items(permitted, context),
       receipt_adjustments: amount_receipt_adjustments(permitted, context),
       receipt_payments: amount_receipt_payments(permitted, context),
-      receipt_tax_details: amount_receipt_tax_details_for_limit(permitted, context)
+      receipt_tax_details: amount_receipt_tax_details_for_limit(permitted, context),
+      source_only: source_only
     )
   end
 
@@ -975,6 +1039,7 @@ class ReceiptsController < ApplicationController
 
   def receipt_item_meaningful_input?(item_attributes)
     return true if %w[confirmed_name category product_code].any? { |field| item_attributes[field].present? }
+    return true if MEASUREMENT_PRICING_SOURCE_FIELDS.any? { |field| numeric_input_present?(item_attributes[field]) }
     return true if Array(item_attributes["review_reasons"]).reject(&:blank?).present?
     return true if numeric_input_present?(item_attributes["price"])
     return true if positive_numeric_input?(item_attributes["line_total"])

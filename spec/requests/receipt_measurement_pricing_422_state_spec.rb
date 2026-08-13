@@ -1,0 +1,190 @@
+require 'rails_helper'
+
+RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
+  let(:user) { create(:user) }
+  let(:uploaded_image) do
+    Rack::Test::UploadedFile.new(
+      Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
+      'image/jpeg'
+    )
+  end
+
+  before do
+    sign_in user
+  end
+
+  def create_receipt_with_reference_item
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      store_name: '基準価格保存店',
+      payment_method: 'cash',
+      subtotal_amount: 180,
+      tax_amount: 0,
+      total_amount: 180,
+      review_reasons: []
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '基準価格商品',
+      quantity: BigDecimal('750'),
+      quantity_unit_code: 'milliliter',
+      original_line_total: 180,
+      line_total: 180,
+      tax_rate: BigDecimal('0'),
+      pricing_source_kind: 'reference_quantity_price',
+      reference_price_amount: BigDecimal('120'),
+      reference_quantity: BigDecimal('500'),
+      reference_quantity_unit_code: 'milliliter',
+      reference_price_tax_inclusion: 'gross',
+      needs_review: false,
+      review_reasons: []
+    )
+
+    [ receipt, item ]
+  end
+
+  def reference_item_attributes(item, overrides = {})
+    {
+      id: item.id,
+      confirmed_name: item.confirmed_name,
+      quantity: item.quantity.to_s('F'),
+      quantity_unit_code: item.quantity_unit_code,
+      original_line_total: item.original_line_total,
+      line_total: item.line_total,
+      pricing_source_kind: item.pricing_source_kind,
+      reference_price_amount: item.reference_price_amount.to_s('F'),
+      reference_quantity: item.reference_quantity.to_s('F'),
+      reference_quantity_unit_code: item.reference_quantity_unit_code,
+      reference_price_tax_inclusion: item.reference_price_tax_inclusion,
+      _destroy: '0'
+    }.merge(overrides)
+  end
+
+  def capture_presenter_arguments
+    arguments = []
+    allow(ReceiptFormPresenter).to receive(:new).and_wrap_original do |original, **kwargs|
+      arguments << kwargs
+      original.call(**kwargs)
+    end
+    arguments
+  end
+
+  def submitted_item_rows(arguments)
+    arguments.fetch(:submitted_params).to_h
+      .fetch('receipt_items_attributes')
+      .to_h
+      .values
+  end
+
+  it 'storage quotaの422でも入力中のreference sourceをPresenterへ渡す' do
+    receipt, item = create_receipt_with_reference_item
+    before = item.attributes.deep_dup
+    presenters = capture_presenter_arguments
+    user.update!(storage_limit_bytes: 1)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        image: uploaded_image,
+        receipt_items_attributes: {
+          '0' => reference_item_attributes(
+            item,
+            reference_price_amount: '130',
+            reference_quantity: '600'
+          )
+        }
+      }
+    }
+
+    submitted = submitted_item_rows(presenters.last).sole
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(submitted['reference_price_amount']).to eq('130')
+      expect(submitted['reference_quantity']).to eq('600')
+      expect(submitted['pricing_source_kind']).to eq('reference_quantity_price')
+      expect(item.reload.attributes).to eq(before)
+    end
+  end
+
+  it 'duplicate nested child conflictの422でも全submitted source rowをPresenterへ渡す' do
+    receipt, item = create_receipt_with_reference_item
+    before = item.attributes.deep_dup
+    presenters = capture_presenter_arguments
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => reference_item_attributes(item, reference_price_amount: '130'),
+          '1' => reference_item_attributes(item, reference_price_amount: '140')
+        }
+      }
+    }
+
+    submitted = submitted_item_rows(presenters.last)
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(submitted.map { |row| BigDecimal(row['reference_price_amount'].to_s) }).to contain_exactly(
+        BigDecimal('130'),
+        BigDecimal('140')
+      )
+      expect(submitted.map { |row| row['pricing_source_kind'] }.uniq).to eq([ 'reference_quantity_price' ])
+      expect(item.reload.attributes).to eq(before)
+    end
+  end
+
+  [
+    [ 'invalid source', :invalid_source ],
+    [ 'stale edit', :stale_edit ]
+  ].each do |label, failure_kind|
+    it "#{label}の422で保存済み明細の_destroy操作をhidden行として保持する" do
+      receipt, item = create_receipt_with_reference_item
+      destroyed_item = receipt.receipt_items.create!(
+        confirmed_name: '削除中の商品',
+        quantity: 1,
+        quantity_unit_code: 'each',
+        original_line_total: 50,
+        line_total: 50,
+        tax_rate: BigDecimal('0'),
+        needs_review: false,
+        review_reasons: []
+      )
+      submitted_lock_version = receipt.lock_version
+      receipt.update!(memo: '別保存') if failure_kind == :stale_edit
+      before = receipt.reload.attributes.deep_dup
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          lock_version: submitted_lock_version,
+          receipt_items_attributes: {
+            '0' => reference_item_attributes(
+              item,
+              pricing_source_kind: failure_kind == :invalid_source ? 'unsupported' : item.pricing_source_kind,
+              reference_price_amount: '130'
+            ),
+            '1' => {
+              id: destroyed_item.id,
+              _destroy: '1'
+            }
+          }
+        }
+      }
+
+      document = Nokogiri::HTML(response.body)
+      visible_ids = document.css('[data-receipt-form-target="itemRow"] input[name$="[id]"]')
+        .map { |input| input['value'] }
+      destroy_input = document.at_css(
+        "input[name='receipt[receipt_items_attributes][destroy_#{destroyed_item.id}][_destroy]']"
+      )
+
+      aggregate_failures do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(visible_ids).not_to include(destroyed_item.id.to_s)
+        expect(destroy_input&.[]('value')).to eq('1')
+        expect(receipt.reload.attributes).to eq(before)
+        expect(ReceiptItem.exists?(destroyed_item.id)).to be(true)
+      end
+    end
+  end
+end

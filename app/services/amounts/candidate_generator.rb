@@ -434,11 +434,30 @@ module Amounts
     def item_data_present?
       items.any? do |item|
         normalized = indifferent_hash(item)
+        next false if unresolved_persisted_authority_free_diagnostic?(normalized)
+
         item_line_total(normalized).positive? ||
           explicit_zero_amount_item?(normalized) ||
           to_i(normalized[:original_line_total]).positive? ||
           to_i(normalized[:discount_amount]).positive?
       end
+    end
+
+    def unresolved_persisted_authority_free_diagnostic?(item)
+      return false if item[:pricing_source_kind].present?
+      return false unless item[:amount_persisted_item] == true
+      return false unless item[:amount_countable_source_changed] == false
+      return false unless item[:amount_line_total_changed] == false
+      return false unless item[:amount_persisted_line_total].nil?
+
+      %i[
+        quantity_unit_raw
+        reference_price_amount
+        reference_quantity
+        reference_quantity_unit_code
+        reference_quantity_unit_raw
+        reference_price_tax_inclusion
+      ].any? { |attribute| !item[attribute].nil? }
     end
 
     def explicit_zero_amount_item?(item)

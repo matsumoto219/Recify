@@ -5,7 +5,34 @@ class Receipts::Editing::InputNormalizer
   RECEIPT_DECIMAL_FIELDS = %w[tax_rate].freeze
   ITEM_INTEGER_FIELDS = %w[price original_line_total line_total].freeze
   ITEM_QUANTITY_FIELDS = %w[quantity].freeze
+  ITEM_REFERENCE_DECIMAL_FIELDS = %w[reference_price_amount reference_quantity].freeze
+  ITEM_RAW_UNIT_FIELDS = %w[quantity_unit_raw reference_quantity_unit_raw].freeze
+  ITEM_REFERENCE_EVIDENCE_FIELDS = %w[
+    reference_price_amount
+    reference_quantity
+    reference_quantity_unit_code
+    reference_quantity_unit_raw
+    reference_price_tax_inclusion
+  ].freeze
+  ITEM_MANUAL_AMOUNT_SOURCE_FIELDS = %w[
+    price
+    quantity
+    quantity_unit_code
+    original_line_total
+    line_total
+    discount_rate
+  ].freeze
   ITEM_PERCENTAGE_FIELDS = %w[tax_rate discount_rate].freeze
+  ITEM_NULLABLE_SOURCE_FIELDS = %w[
+    pricing_source_kind
+    reference_price_amount
+    reference_quantity
+    reference_quantity_unit_code
+    quantity_unit_raw
+    reference_quantity_unit_raw
+    reference_price_tax_inclusion
+  ].freeze
+  FORMULA_PRICING_SOURCE_KINDS = %w[count_unit_price reference_quantity_price].freeze
   ADJUSTMENT_REVIEW_TARGET_FIELDS = %i[kind label amount sign tax_rate].freeze
 
   def self.call(receipt:, attributes:)
@@ -18,9 +45,15 @@ class Receipts::Editing::InputNormalizer
   end
 
   def call
+    validate_manual_raw_unit_input!
+    validate_authority_free_diagnostic_input!
+    validate_pricing_source_transition!
     normalize_purchased_at!
     normalize_numeric_inputs!
+    discard_inferred_discount_rate_echoes!
+    normalize_nullable_item_sources!
     normalize_item_quantity_units!
+    validate_authority_free_diagnostic_amount_changes!
     normalize_adjustments!
     attributes
   end
@@ -28,6 +61,76 @@ class Receipts::Editing::InputNormalizer
   private
 
   attr_reader :receipt, :attributes
+
+  def validate_manual_raw_unit_input!
+    attributes["receipt_items_attributes"]&.each_value do |item|
+      existing_item = existing_item_for(item)
+      next unless ITEM_RAW_UNIT_FIELDS.any? do |field|
+        item.key?(field) && (item[field].present? || existing_item&.public_send(field).present?)
+      end
+
+      raise Receipts::Editing::InvalidItemSourceError, "Raw unit evidence is not a manual input"
+    end
+  end
+
+  def validate_authority_free_diagnostic_input!
+    attributes["receipt_items_attributes"]&.each_value do |item|
+      submitted_kind = item["pricing_source_kind"].presence if item.key?("pricing_source_kind")
+      existing_item = existing_item_for(item)
+      effective_kind = item.key?("pricing_source_kind") ? submitted_kind : existing_item&.pricing_source_kind
+      next unless effective_kind.nil?
+      next unless ITEM_REFERENCE_EVIDENCE_FIELDS.any? do |field|
+        item.key?(field) && (item[field].present? || existing_item&.public_send(field).present?)
+      end
+
+      raise Receipts::Editing::InvalidItemSourceError, "Diagnostic reference evidence is not a manual source"
+    end
+  end
+
+  def validate_pricing_source_transition!
+    attributes["receipt_items_attributes"]&.each_value do |item|
+      next unless item.key?("pricing_source_kind")
+
+      submitted_kind = item["pricing_source_kind"].presence
+      existing_item = existing_item_for(item)
+      next unless existing_item
+
+      existing_kind = existing_item.pricing_source_kind
+      next if submitted_kind == existing_kind
+      next if submitted_kind.nil? && existing_kind.nil?
+
+      required_fields = case submitted_kind
+      when "count_unit_price"
+        %w[price quantity quantity_unit_code]
+      when "explicit_line_total"
+        %w[line_total]
+      when "reference_quantity_price"
+        %w[
+          quantity
+          quantity_unit_code
+          reference_price_amount
+          reference_quantity
+          reference_quantity_unit_code
+          reference_price_tax_inclusion
+        ]
+      else
+        []
+      end
+
+      valid = submitted_kind.present? && required_fields.all? do |field|
+        item.key?(field) && item[field].present?
+      end
+      valid &&= !effective_discount_source_present?(item, existing_item) if submitted_kind == "explicit_line_total"
+      raise Receipts::Editing::InvalidItemSourceError, "Incomplete pricing source transition" unless valid
+    end
+  end
+
+  def effective_discount_source_present?(item, existing_item)
+    %w[discount_rate discount_amount].any? do |field|
+      value = item.key?(field) ? item[field] : existing_item.public_send(field)
+      value.present?
+    end
+  end
 
   def normalize_purchased_at!
     submitted = attributes.key?("purchased_on") || attributes.key?("purchased_time")
@@ -53,6 +156,7 @@ class Receipts::Editing::InputNormalizer
     attributes["receipt_items_attributes"]&.each_value do |item_attributes|
       normalize_numeric_fields!(item_attributes, ITEM_INTEGER_FIELDS, :integer)
       normalize_numeric_fields!(item_attributes, ITEM_QUANTITY_FIELDS, :decimal)
+      normalize_numeric_fields!(item_attributes, ITEM_REFERENCE_DECIMAL_FIELDS, :decimal)
       normalize_numeric_fields!(item_attributes, ITEM_PERCENTAGE_FIELDS, :percentage)
     end
 
@@ -74,12 +178,42 @@ class Receipts::Editing::InputNormalizer
     end
   end
 
+  def discard_inferred_discount_rate_echoes!
+    attributes["receipt_items_attributes"]&.each_value do |item|
+      next unless item.key?("discount_rate")
+
+      existing_item = existing_item_for(item)
+      next unless existing_item
+      next unless existing_item.discount_rate.nil?
+      next unless existing_item.discount_amount.to_i.positive?
+
+      inferred_rate = Receipts::NumericInput.percentage(existing_item.discount_rate_percentage_input)
+      item.delete("discount_rate") if item["discount_rate"] == inferred_rate
+    end
+  end
+
+  def normalize_nullable_item_sources!
+    item_attributes = attributes["receipt_items_attributes"]
+    return if item_attributes.blank?
+
+    item_attributes.each_value do |item|
+      ITEM_NULLABLE_SOURCE_FIELDS.each do |field|
+        item[field] = nil if item.key?(field) && item[field].blank?
+      end
+    end
+  end
+
   def normalize_item_quantity_units!
     item_attributes = attributes["receipt_items_attributes"]
     return if item_attributes.blank?
 
     item_attributes.each_value do |item|
       next if item["id"].present? && !item.key?("quantity_unit_code")
+
+      if formula_pricing_source?(item)
+        item["quantity_unit_code"] = nil if item["quantity_unit_code"].blank?
+        next
+      end
 
       raw_code = item["quantity_unit_code"]
       code = if raw_code.blank?
@@ -90,6 +224,52 @@ class Receipts::Editing::InputNormalizer
 
       item["quantity_unit_code"] = code || raw_code.to_s
     end
+  end
+
+  def validate_authority_free_diagnostic_amount_changes!
+    attributes["receipt_items_attributes"]&.each_value do |item|
+      existing_item = existing_item_for(item)
+      next unless authority_free_diagnostic_record?(existing_item)
+
+      effective_kind = item.key?("pricing_source_kind") ? item["pricing_source_kind"].presence : existing_item.pricing_source_kind
+      next unless effective_kind.nil?
+      next unless ITEM_MANUAL_AMOUNT_SOURCE_FIELDS.any? do |field|
+        item.key?(field) && item[field] != existing_item.public_send(field)
+      end
+
+      raise Receipts::Editing::InvalidItemSourceError,
+        "Authority-free diagnostic amount source cannot be changed manually"
+    end
+  end
+
+  def authority_free_diagnostic_record?(item)
+    return false unless item
+    return false unless item.pricing_source_kind.nil?
+
+    (ITEM_RAW_UNIT_FIELDS + ITEM_REFERENCE_EVIDENCE_FIELDS).any? do |field|
+      !item.public_send(field).nil?
+    end
+  end
+
+  def formula_pricing_source?(item)
+    kind = if item.key?("pricing_source_kind")
+      item["pricing_source_kind"]
+    else
+      existing_item_for(item)&.pricing_source_kind
+    end
+
+    FORMULA_PRICING_SOURCE_KINDS.include?(kind.to_s)
+  end
+
+  def existing_item_for(item)
+    id = item["id"].to_s
+    return if id.empty?
+
+    existing_items_by_id[id]
+  end
+
+  def existing_items_by_id
+    @existing_items_by_id ||= receipt&.receipt_items&.index_by { |item| item.id.to_s } || {}
   end
 
   def normalize_adjustments!

@@ -128,6 +128,72 @@ RSpec.describe ReceiptFormPresenter do
         expect(payment_row.amount_value).to eq('1e2')
       end
     end
+
+    it '保存済み明細の削除操作を422再表示用のhidden行として保持する' do
+      receipt = create(:receipt)
+      visible_item = receipt.receipt_items.create!(
+        confirmed_name: '表示する商品',
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 100
+      )
+      destroyed_item = receipt.receipt_items.create!(
+        confirmed_name: '削除中の商品',
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 200
+      )
+      presenter = described_class.new(
+        receipt: receipt,
+        submitted_params: {
+          receipt_items_attributes: {
+            '0' => { id: visible_item.id, _destroy: '0' },
+            '1' => { id: destroyed_item.id, _destroy: '1' }
+          }
+        }
+      )
+
+      aggregate_failures do
+        expect(presenter.visible_receipt_items).to contain_exactly(visible_item)
+        expect(presenter.destroyed_receipt_items).to contain_exactly(destroyed_item)
+      end
+    end
+
+    it '1万件相当の422再表示でもsubmitted child rowsをcollectionごとに1回だけ列挙する' do
+      item_class = Struct.new(:id) do
+        def persisted? = true
+        def marked_for_destruction? = false
+      end
+      items = Array.new(10_000) { |index| item_class.new(index + 1) }
+      rows = Array.new(9_999) do |index|
+        { id: items[index].id, _destroy: (index == 5_000) ? '1' : '0' }
+      end
+      rows << { confirmed_name: '422で再表示する新規商品', quantity_unit_code: 'each' }
+
+      submitted_collection = Object.new
+      submitted_collection.define_singleton_method(:enumeration_count) { @enumeration_count.to_i }
+      submitted_collection.define_singleton_method(:each_value) do |&block|
+        @enumeration_count = enumeration_count + 1
+        raise 'submitted rows were enumerated more than once' if enumeration_count > 1
+
+        rows.each(&block)
+      end
+      receipt = instance_double(Receipt, receipt_items: items)
+      presenter = described_class.new(
+        receipt: receipt,
+        submitted_params: { receipt_items_attributes: submitted_collection }
+      )
+
+      visible = presenter.visible_receipt_items
+      destroyed = presenter.destroyed_receipt_items
+      presenter.item_row(items.last, new_record: false)
+
+      aggregate_failures do
+        expect(visible.size).to eq(10_000)
+        expect(destroyed).to eq([ items[5_000] ])
+        expect(submitted_collection.enumeration_count).to eq(1)
+      end
+    end
   end
 
   describe '#error_flags' do

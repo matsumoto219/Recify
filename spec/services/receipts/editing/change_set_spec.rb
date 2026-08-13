@@ -12,6 +12,24 @@ RSpec.describe Receipts::Editing::ChangeSet do
     )
   end
 
+  def create_reference_item(**attributes)
+    receipt.receipt_items.create!(
+      {
+        confirmed_name: '基準価格商品',
+        price: nil,
+        quantity: BigDecimal('8.12'),
+        quantity_unit_code: 'liter',
+        original_line_total: 1_137,
+        line_total: 1_137,
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: BigDecimal('140'),
+        reference_quantity: BigDecimal('1'),
+        reference_quantity_unit_code: 'liter',
+        reference_price_tax_inclusion: 'gross'
+      }.merge(attributes)
+    )
+  end
+
   it 'itemの表示項目だけの変更をpurchase amount変更にしない' do
     item = receipt.receipt_items.create!(
       confirmed_name: '変更前', price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100
@@ -47,6 +65,170 @@ RSpec.describe Receipts::Editing::ChangeSet do
     )
 
     expect(result.purchase_amounts_changed?).to be(true)
+  end
+
+  it '1万件相当のitem照合でもassociationを1回だけ読み1回だけ走査する' do
+    lightweight_item_class = Struct.new(:id) do
+      def assign_attributes(attributes)
+        raise "unexpected attributes: #{attributes.inspect}" if attributes.present?
+      end
+    end
+    records = Array.new(10_000) { |index| lightweight_item_class.new(index + 1) }
+    association_reads = 0
+    association_iterations = 0
+    collection = Object.new
+    collection.extend(Enumerable)
+    collection.define_singleton_method(:each) do |&block|
+      association_iterations += 1
+      raise 'receipt_items association was scanned more than once' if association_iterations > 1
+
+      records.each(&block)
+    end
+    large_receipt = instance_double(Receipt)
+    allow(large_receipt).to receive(:receipt_items) do
+      association_reads += 1
+      raise 'receipt_items association was read more than once' if association_reads > 1
+
+      collection
+    end
+    permitted = {
+      'receipt_items_attributes' => records.to_h do |record|
+        [ record.id.to_s, { 'id' => record.id.to_s } ]
+      end
+    }
+
+    result = described_class.call(receipt: large_receipt, permitted: permitted)
+
+    aggregate_failures do
+      expect(result.amount_related_changed?).to be(false)
+      expect(association_reads).to eq(1)
+      expect(association_iterations).to eq(1)
+    end
+  end
+
+  it 'Q2の全source fieldの変更をpurchase amount変更として検出する' do
+    changed_values = {
+      'pricing_source_kind' => 'explicit_line_total',
+      'reference_price_amount' => BigDecimal('141'),
+      'reference_quantity' => BigDecimal('2'),
+      'reference_quantity_unit_code' => 'milliliter',
+      'quantity_unit_raw' => 'unknown-purchased-unit',
+      'reference_quantity_unit_raw' => 'unknown-reference-unit',
+      'reference_price_tax_inclusion' => 'net'
+    }
+
+    results = changed_values.map do |field, value|
+      item = create_reference_item
+
+      described_class.call(
+        receipt: receipt,
+        permitted: {
+          'receipt_items_attributes' => {
+            '0' => { 'id' => item.id.to_s, field => value }
+          }
+        }
+      )
+    end
+
+    aggregate_failures do
+      expect(results).to all(have_attributes(item_amounts_changed: true))
+      expect(results).to all(be_amount_inputs_submitted)
+    end
+  end
+
+  it '0円のreference authorityを金額sourceとして検出する' do
+    item = create_reference_item(
+      reference_price_amount: BigDecimal('0'),
+      original_line_total: nil,
+      line_total: nil
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => { 'id' => item.id.to_s, 'quantity' => BigDecimal('9.12') }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.item_amounts_changed).to be(true)
+      expect(result.amount_inputs_submitted?).to be(true)
+    end
+  end
+
+  it 'Q2 source fieldの同値再送をpurchase amount変更にしない' do
+    item = create_reference_item
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => item.pricing_source_kind,
+            'reference_price_amount' => item.reference_price_amount,
+            'reference_quantity' => item.reference_quantity,
+            'reference_quantity_unit_code' => item.reference_quantity_unit_code,
+            'quantity_unit_raw' => item.quantity_unit_raw,
+            'reference_quantity_unit_raw' => item.reference_quantity_unit_raw,
+            'reference_price_tax_inclusion' => item.reference_price_tax_inclusion
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.item_amounts_changed).to be(false)
+      expect(result.amount_inputs_submitted?).to be(true)
+    end
+  end
+
+  it '非金額項目だけを変更してQ2 sourceを同値再送しても金額再確認扱いにしない' do
+    item = create_reference_item(category: nil)
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'category' => 'drink',
+            'pricing_source_kind' => item.pricing_source_kind,
+            'reference_price_amount' => item.reference_price_amount,
+            'reference_quantity' => item.reference_quantity,
+            'reference_quantity_unit_code' => item.reference_quantity_unit_code,
+            'quantity_unit_raw' => item.quantity_unit_raw,
+            'reference_quantity_unit_raw' => item.reference_quantity_unit_raw,
+            'reference_price_tax_inclusion' => item.reference_price_tax_inclusion
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.amount_related_changed?).to be(false)
+      expect(result.amount_inputs_submitted?).to be(false)
+    end
+  end
+
+  it 'reference formulaのstale line_totalだけをpurchase amount変更にしない' do
+    item = create_reference_item
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => { 'id' => item.id.to_s, 'line_total' => '999' }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.purchase_amounts_changed?).to be(false)
+      expect(result.amount_inputs_submitted?).to be(true)
+    end
   end
 
   it '金額sourceを持たないplaceholderのquantity変更をpurchase amount変更にしない' do

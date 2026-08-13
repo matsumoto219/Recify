@@ -36,6 +36,12 @@ RSpec.describe "root service and lifecycle status boundary" do
     "users.rb" => { constant: "Users", role: :public_facade, owner: "user account workflow facade", remove_in_loop: nil }
   }.freeze
 
+  PUBLIC_NESTED_ERRORS = {
+    "receipt_amount_service.rb" => {
+      "ReceiptAmountService::InvalidItemSourceError" => ArgumentError
+    }.freeze
+  }.freeze
+
   EXTERNAL_METHODS = {
     "admin.rb" => %i[announcement_filter_options announcements audit_log_filter_options audit_logs contact_request contact_request_filter_options contact_requests dashboard database_status_snapshot ip_actions ip_block ip_block_filter_options ip_blocks legal_acceptance_status passkey_reauth_fresh? passkey_reauth_window_duration passkey_reauthenticated_at receipt receipt_analysis_cleanup_preview receipt_analysis_run_filter_options receipt_analysis_runs receipts security_event security_event_filter_options security_events system_operations_dashboard system_setting system_settings user users],
     "analysis.rb" => %i[build_receipt_params detect_category enforce_ownership_consistency evaluate_receipt_signal money_token_matches normalize_compact_store_name_candidate normalize_receipt_items normalize_store_name_candidate ownership_review_reason_resolved? processing_error_category processing_error_mapping store_name_brand_candidate_from_legal_entity store_name_candidate_valid? store_name_customer_facing_heading_candidates store_name_descriptive_heading_line? store_name_isolated_logo_fragment? store_name_latin_logo_prefix_duplicate? store_name_legal_entity_name? store_name_message_line? store_name_operator_candidates store_name_operator_context_line? store_name_operator_legal_entity_candidate? tax_detail_line_evidence],
@@ -131,6 +137,7 @@ RSpec.describe "root service and lifecycle status boundary" do
         external_methods: EXTERNAL_METHODS.fetch(file),
         declared_singleton_methods: DECLARED_SINGLETON_METHODS.fetch(file),
         declared_instance_methods: DECLARED_INSTANCE_METHODS.fetch(file, []),
+        public_nested_errors: PUBLIC_NESTED_ERRORS.fetch(file, {}),
         constructible: CONSTRUCTIBLE_ROOTS.include?(file)
       ).freeze
     ]
@@ -171,6 +178,25 @@ RSpec.describe "root service and lifecycle status boundary" do
 
   it "宣言済みpublic APIを増減させない" do
     expect(scanner.declared_api_issues).to be_empty, scanner.declared_api_issues.join("\n")
+  end
+
+  it "外部公開するroot facadeのnested Errorをconstant単位で固定する" do
+    PUBLIC_NESTED_ERRORS.each do |file, expected_errors|
+      metadata = ROOT_SERVICE_REGISTRY.fetch(file)
+      facade = metadata.fetch(:constant).constantize
+      actual_errors = facade.constants(false).filter_map do |name|
+        nested = facade.const_get(name, false)
+        "#{metadata.fetch(:constant)}::#{name}" if nested.is_a?(Class) && nested <= StandardError
+      end.sort
+
+      expect(actual_errors).to eq(expected_errors.keys.sort)
+      expected_errors.each do |constant_name, expected_parent|
+        error_class = constant_name.safe_constantize
+
+        expect(error_class).to be_a(Class)
+        expect(error_class).to be < expected_parent
+      end
+    end
   end
 
   it "production callerが利用するroot public APIを増減させない" do

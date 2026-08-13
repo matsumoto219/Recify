@@ -95,6 +95,57 @@ RSpec.describe ReceiptAmountService do
     end
   end
 
+  describe 'invalid item source error boundary' do
+    let(:invalid_item_source) do
+      {
+        pricing_source_kind: 'count_unit_price',
+        price: 125,
+        quantity: '2',
+        quantity_unit_code: 'unknown',
+        quantity_unit_raw: nil,
+        line_total: 250
+      }
+    end
+
+    let(:service_attributes) do
+      {
+        receipt: {},
+        receipt_items: [],
+        receipt_tax_details: [],
+        context: :edit_save
+      }
+    end
+
+    it 'singleton callでprivate source errorをpublic errorへ正規化する' do
+      expect {
+        described_class.call(**service_attributes, receipt_items: [ invalid_item_source ])
+      }.to raise_error(described_class::InvalidItemSourceError)
+    end
+
+    it 'public constructorでprivate source errorをpublic errorへ正規化する' do
+      expect {
+        described_class.new(**service_attributes, receipt_items: [ invalid_item_source ])
+      }.to raise_error(described_class::InvalidItemSourceError)
+    end
+
+    it 'instance callでprivate source errorをpublic errorへ正規化する' do
+      service = described_class.new(**service_attributes)
+      allow(Amounts::Engine).to receive(:new)
+        .and_raise(Amounts::ReferenceItemExtension::InvalidSourceError, 'invalid source')
+
+      expect { service.call }.to raise_error(described_class::InvalidItemSourceError)
+    end
+
+    it 'allowlist外のArgumentErrorはpublic source errorへ変換しない' do
+      service = described_class.new(**service_attributes)
+      allow(Amounts::Engine).to receive(:new).and_raise(ArgumentError, 'programming error')
+
+      expect { service.call }.to raise_error(ArgumentError, 'programming error') do |error|
+        expect(error).not_to be_a(described_class::InvalidItemSourceError)
+      end
+    end
+  end
+
   describe '.call' do
     it 'analysisでは評価済みcandidateを再利用し候補生成を二重実行しない' do
       expect(Amounts::CandidateGenerator).to receive(:new).once.and_call_original
@@ -4329,7 +4380,7 @@ RSpec.describe ReceiptAmountService do
 
           expect {
             call_service(receipt: {}, receipt_items: [ item ], context: :edit_save)
-          }.to raise_error(ArgumentError), item.inspect
+          }.to raise_error(ReceiptAmountService::InvalidItemSourceError), item.inspect
           expect(item).to eq(before), item.inspect
         end
 
@@ -4339,7 +4390,7 @@ RSpec.describe ReceiptAmountService do
             receipt_items: [ reference_formula_item(reference_price_tax_inclusion: 'net') ],
             context: :manual
           )
-        }.to raise_error(Amounts::ItemPricingSource::InvalidContractError)
+        }.to raise_error(ReceiptAmountService::InvalidItemSourceError)
 
         expect {
           call_service(
@@ -4347,7 +4398,7 @@ RSpec.describe ReceiptAmountService do
             receipt_items: [ reference_formula_item(pricing_source_kind: 'unsupported') ],
             context: :analysis
           )
-        }.to raise_error(Amounts::ItemPricingSource::InvalidContractError)
+        }.to raise_error(ReceiptAmountService::InvalidItemSourceError)
       end
 
       it 'scale 6 priceとscale 3 quantityの承認済み境界をexact sourceのまま通す' do
@@ -4535,7 +4586,7 @@ RSpec.describe ReceiptAmountService do
         invalid_items.each do |item|
           expect {
             call_service(receipt: {}, receipt_items: [ item ], context: :edit_save)
-          }.to raise_error(Amounts::ItemQuantitySemantics::InvalidFormulaSourceError), item.inspect
+          }.to raise_error(ReceiptAmountService::InvalidItemSourceError), item.inspect
         end
       end
 
@@ -4567,7 +4618,7 @@ RSpec.describe ReceiptAmountService do
         invalid_items.each do |item|
           expect {
             call_service(receipt: {}, receipt_items: [ item ], context: :edit_save)
-          }.to raise_error(ArgumentError), item.inspect
+          }.to raise_error(ReceiptAmountService::InvalidItemSourceError), item.inspect
         end
       end
 
@@ -4665,7 +4716,7 @@ RSpec.describe ReceiptAmountService do
             ],
             context: :edit_save
           )
-        }.to raise_error(Amounts::ItemQuantitySemantics::InvalidFormulaSourceError)
+        }.to raise_error(ReceiptAmountService::InvalidItemSourceError)
       end
 
       it 'legacy sourceのunit alias normalizeは維持する' do

@@ -24,7 +24,11 @@ module Amounts
     def normalized_items
       @items.map do |item|
         pricing_source_kind = pricing_source_kind_for(item)
-        if pricing_source_kind == "reference_quantity_price"
+        if persisted_authority_free_diagnostic_item?(item)
+          next persisted_authority_free_diagnostic_item(item)
+        elsif pricing_source_kind.nil? && persisted_missing_manual_amount?(item)
+          next item_to_hash(item).merge(quantity: normalized_quantity_for(item))
+        elsif pricing_source_kind == "reference_quantity_price"
           original_line_total = reference_item_extension_for(item).projected_amount
         elsif pricing_source_kind == "explicit_line_total"
           original_line_total = explicit_line_total_for(item)
@@ -340,8 +344,49 @@ module Amounts
 
     def manual_countable_unit_price_input?(item)
       manual_input_context? &&
+        !authority_free_diagnostic_evidence?(item) &&
         countable_quantity_unit_for_item?(item) &&
         value_present?(fetch_value(item, :price))
+    end
+
+    def authority_free_diagnostic_evidence?(item)
+      return false unless pricing_source_kind_for(item).nil?
+
+      %i[
+        quantity_unit_raw
+        reference_price_amount
+        reference_quantity
+        reference_quantity_unit_code
+        reference_quantity_unit_raw
+        reference_price_tax_inclusion
+      ].any? { |attribute| !fetch_value(item, attribute).nil? }
+    end
+
+    def persisted_authority_free_diagnostic_item?(item)
+      manual_input_context? &&
+        authority_free_diagnostic_evidence?(item) &&
+        fetch_value(item, :amount_persisted_item) == true &&
+        fetch_value(item, :amount_countable_source_changed) == false &&
+        fetch_value(item, :amount_line_total_changed) == false
+    end
+
+    def persisted_authority_free_diagnostic_item(item)
+      item_to_hash(item).merge(
+        quantity: normalized_quantity_for(item),
+        original_line_total: to_i_or_nil(fetch_value(item, :amount_persisted_original_line_total)),
+        discount_amount: to_i_or_nil(fetch_value(item, :amount_persisted_discount_amount)),
+        discount_rate: normalize_discount_rate(fetch_value(item, :amount_persisted_discount_rate)),
+        line_total: to_i_or_nil(fetch_value(item, :amount_persisted_line_total))
+      )
+    end
+
+    def persisted_missing_manual_amount?(item)
+      manual_input_context? &&
+        fetch_value(item, :amount_persisted_item) == true &&
+        fetch_value(item, :amount_line_total_present) == false &&
+        fetch_value(item, :amount_persisted_original_line_total).nil? &&
+        fetch_value(item, :amount_persisted_line_total).nil? &&
+        !manual_countable_unit_price_input?(item)
     end
 
     def normalize_context(value)

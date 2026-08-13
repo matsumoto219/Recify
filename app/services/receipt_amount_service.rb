@@ -39,6 +39,16 @@
 # }
 #
 class ReceiptAmountService
+  class InvalidItemSourceError < ArgumentError; end
+
+  INVALID_ITEM_SOURCE_ERRORS = [
+    Amounts::ItemPricingSource::InvalidContractError,
+    Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+    Amounts::ReferenceItemExtension::InvalidSourceError,
+    ReceiptQuantityUnit::ConversionError
+  ].freeze
+  private_constant :INVALID_ITEM_SOURCE_ERRORS
+
   TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY = "amount_engine.tax_excluded_price_conversion_enabled"
   RECEIPT_TAX_BASES = %i[tax_added_to_subtotal total_includes_tax].freeze
   ITEM_AMOUNT_BASES = %i[line_total_as_net line_total_as_recorded mixed_by_tax_rate_group].freeze
@@ -56,6 +66,8 @@ class ReceiptAmountService
       tax_rounding_mode: tax_rounding_mode,
       discount_rounding_mode: discount_rounding_mode
     ).call
+  rescue *INVALID_ITEM_SOURCE_ERRORS
+    raise InvalidItemSourceError, "Invalid item pricing source"
   end
 
   def self.calculation_profile_snapshot(result, context: nil, rounding_mode: nil)
@@ -141,13 +153,14 @@ class ReceiptAmountService
     Amounts::Limits.receipt_payment_amount_max
   end
 
-  def self.violations_for(receipt: {}, receipt_items: [], receipt_adjustments: [], receipt_payments: [], receipt_tax_details: [])
+  def self.violations_for(receipt: {}, receipt_items: [], receipt_adjustments: [], receipt_payments: [], receipt_tax_details: [], source_only: false)
     Amounts::Limits.violations_for(
       receipt: receipt,
       receipt_items: receipt_items,
       receipt_adjustments: receipt_adjustments,
       receipt_payments: receipt_payments,
-      receipt_tax_details: receipt_tax_details
+      receipt_tax_details: receipt_tax_details,
+      source_only: source_only
     )
   end
 
@@ -175,6 +188,8 @@ class ReceiptAmountService
     @adjustments = canonical_adjustments(@adjustments, @payments)
     @payments = canonical_payments(@payments, @adjustments)
     @edit_source_semantics = normalized_edit_source_semantics
+  rescue *INVALID_ITEM_SOURCE_ERRORS
+    raise InvalidItemSourceError, "Invalid item pricing source"
   end
 
   def call
@@ -205,6 +220,8 @@ class ReceiptAmountService
       calculation_profile_result: profile_estimation,
       evaluated_candidates: evaluated_candidates_for_engine
     ).call
+  rescue *INVALID_ITEM_SOURCE_ERRORS
+    raise InvalidItemSourceError, "Invalid item pricing source"
   end
 
   private
@@ -681,6 +698,7 @@ class ReceiptAmountService
     end
     reference_formula = pricing_source_kind == "reference_quantity_price"
     count_formula = pricing_source_kind == "count_unit_price"
+    authority_free_diagnostic = pricing_source_kind.nil? && item_pricing_diagnostic_evidence_present?(i)
     validate_reference_formula_input!(i) if reference_formula
     validate_count_formula_input!(i) if count_formula
     quantity_unit_value = fetch_value(i, :quantity_unit_code)
@@ -691,7 +709,7 @@ class ReceiptAmountService
     end
 
     {
-      price: to_i_or_nil(price),
+      price: authority_free_diagnostic ? nil : to_i_or_nil(price),
       quantity: reference_formula ? quantity : to_decimal_or_nil(quantity),
       original_line_total: to_i_or_nil(original_line_total),
       line_total: to_i_or_nil(line_total),
@@ -722,6 +740,17 @@ class ReceiptAmountService
         discount_amount
       )
     }
+  end
+
+  def item_pricing_diagnostic_evidence_present?(item)
+    %i[
+      quantity_unit_raw
+      reference_price_amount
+      reference_quantity
+      reference_quantity_unit_code
+      reference_quantity_unit_raw
+      reference_price_tax_inclusion
+    ].any? { |attribute| !fetch_value(item, attribute).nil? }
   end
 
   def validate_reference_formula_input!(item)

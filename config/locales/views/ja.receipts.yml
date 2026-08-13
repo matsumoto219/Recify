@@ -147,6 +147,7 @@ ja:
         amount_consistency_failed: 金額の再計算結果を確認できませんでした。画面を再読み込みして、もう一度お試しください。
         stale_edit: 別の画面または処理でレシートが更新されました。最新の内容を確認して、もう一度編集してください。
         invalid_numeric_input: 金額・数量・税率・割引率には有効な数値を入力してください。
+        invalid_item_pricing_source: 金額の基準、数量、単位の組み合わせを確認してください。
         amount_limit_exceeded: "%{resource}.%{field} は%{limit}以下で入力してください（入力値: %{actual_value}）"
     item_fields:
       name: 品名

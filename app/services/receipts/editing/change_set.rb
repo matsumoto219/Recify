@@ -36,6 +36,13 @@ class Receipts::Editing::ChangeSet
     quantity_unit_code
     tax_rate
     discount_rate
+    pricing_source_kind
+    reference_price_amount
+    reference_quantity
+    reference_quantity_unit_code
+    quantity_unit_raw
+    reference_quantity_unit_raw
+    reference_price_tax_inclusion
   ].freeze
   ITEM_NON_AMOUNT_FIELDS = %w[
     confirmed_name
@@ -71,6 +78,7 @@ class Receipts::Editing::ChangeSet
   def initialize(receipt:, permitted:)
     @receipt = receipt
     @permitted = permitted
+    @existing_records_by_association = {}
   end
 
   def call
@@ -123,7 +131,8 @@ class Receipts::Editing::ChangeSet
   def item_monetary_source_present?(record)
     return false unless record
 
-    value_present?(record.price) ||
+    value_present?(record.pricing_source_kind) ||
+      value_present?(record.price) ||
       value_present?(record.line_total) ||
       record.original_line_total.to_i.positive? ||
       record.discount_amount.to_i.positive?
@@ -135,6 +144,10 @@ class Receipts::Editing::ChangeSet
 
   def item_line_total_source_changed?(record, attributes)
     return false unless attributes.key?("line_total")
+
+    pricing_source_kind = attributes.fetch("pricing_source_kind", record.pricing_source_kind).presence
+    return false if %w[count_unit_price reference_quantity_price].include?(pricing_source_kind)
+    return record_changed?(record, attributes, %w[line_total]) if pricing_source_kind == "explicit_line_total"
 
     quantity_unit_code = attributes.fetch("quantity_unit_code", record.quantity_unit_code)
     price = attributes.fetch("price", record.price)
@@ -240,7 +253,13 @@ class Receipts::Editing::ChangeSet
   def existing_record(association_name, id)
     return nil if id.blank?
 
-    @receipt.public_send(association_name).find { |record| record.id.to_s == id.to_s }
+    existing_records_by_id(association_name)[id.to_s]
+  end
+
+  def existing_records_by_id(association_name)
+    @existing_records_by_association[association_name] ||= @receipt
+      .public_send(association_name)
+      .index_by { |record| record.id.to_s }
   end
 
   def submitted_attributes(key)

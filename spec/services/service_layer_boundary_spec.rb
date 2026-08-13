@@ -71,6 +71,7 @@ RSpec.describe "Service layer child implementation boundary" do
       public_constants: %w[
         Receipts::Editing
         Receipts::Editing::ConflictError
+        Receipts::Editing::InvalidItemSourceError
         Receipts::Processing
         Receipts::Uploads
         Receipts::Uploads::Result

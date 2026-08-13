@@ -11,6 +11,8 @@ class ReceiptFormPresenter
     @receipt = receipt
     @submitted_params = submitted_params.to_h.with_indifferent_access
     @submitted_values_by_object_id = {}
+    @submitted_rows_cache = {}
+    @submitted_rows_by_id_cache = {}
     @purchase_inputs_changed = purchase_inputs_changed == true
     @adjustment_tax_detail_evidence_stale = adjustment_tax_detail_evidence_stale == true
     @adjustment_absence_confirmed = adjustment_absence_confirmed == true
@@ -44,35 +46,47 @@ class ReceiptFormPresenter
 
   def visible_receipt_items
     @visible_receipt_items ||= begin
-      persisted = receipt.receipt_items.reject(&:marked_for_destruction?)
+      persisted = receipt.receipt_items.reject do |item|
+        item.marked_for_destruction? || submitted_destroyed?(:receipt_items_attributes, item)
+      end
       persisted + submitted_new_items
     end
   end
 
   def destroyed_receipt_items
-    receipt.receipt_items.select(&:marked_for_destruction?)
+    receipt.receipt_items.select do |item|
+      item.marked_for_destruction? || submitted_destroyed?(:receipt_items_attributes, item)
+    end
   end
 
   def visible_receipt_adjustments
     @visible_receipt_adjustments ||= begin
-      persisted = receipt.receipt_adjustments.reject(&:marked_for_destruction?)
+      persisted = receipt.receipt_adjustments.reject do |adjustment|
+        adjustment.marked_for_destruction? || submitted_destroyed?(:receipt_adjustments_attributes, adjustment)
+      end
       persisted + submitted_new_adjustments
     end
   end
 
   def destroyed_receipt_adjustments
-    receipt.receipt_adjustments.select(&:marked_for_destruction?)
+    receipt.receipt_adjustments.select do |adjustment|
+      adjustment.marked_for_destruction? || submitted_destroyed?(:receipt_adjustments_attributes, adjustment)
+    end
   end
 
   def visible_receipt_payments
     @visible_receipt_payments ||= begin
-      persisted = receipt.receipt_payments.reject(&:marked_for_destruction?)
+      persisted = receipt.receipt_payments.reject do |payment|
+        payment.marked_for_destruction? || submitted_destroyed?(:receipt_payments_attributes, payment)
+      end
       persisted + submitted_new_payments
     end
   end
 
   def destroyed_receipt_payments
-    receipt.receipt_payments.select(&:marked_for_destruction?)
+    receipt.receipt_payments.select do |payment|
+      payment.marked_for_destruction? || submitted_destroyed?(:receipt_payments_attributes, payment)
+    end
   end
 
   def next_item_index
@@ -198,23 +212,44 @@ class ReceiptFormPresenter
 
   private
 
-  attr_reader :submitted_params, :submitted_values_by_object_id
+  attr_reader :submitted_params, :submitted_values_by_object_id, :submitted_rows_cache, :submitted_rows_by_id_cache
 
   def submitted_child_values(collection_key, record)
     transient_values = submitted_values_by_object_id[record.object_id]
     return transient_values if transient_values
     return {} unless record.persisted?
 
-    submitted_child_rows(collection_key).find do |values|
-      values["id"].to_s == record.id.to_s
-    end || {}
+    submitted_child_rows_by_id(collection_key)[record.id.to_s] || {}
   end
 
   def submitted_child_rows(collection_key)
-    values = submitted_params[collection_key]
-    return [] unless values.respond_to?(:each_value)
+    cache_key = collection_key.to_sym
+    return submitted_rows_cache[cache_key] if submitted_rows_cache.key?(cache_key)
 
-    values.each_value.map { |row| row.to_h.with_indifferent_access }
+    values = submitted_params[collection_key]
+    rows = if values.respond_to?(:each_value)
+      values.each_value.map { |row| row.to_h.with_indifferent_access }
+    else
+      []
+    end
+
+    submitted_rows_cache[cache_key] = rows
+  end
+
+  def submitted_child_rows_by_id(collection_key)
+    cache_key = collection_key.to_sym
+    return submitted_rows_by_id_cache[cache_key] if submitted_rows_by_id_cache.key?(cache_key)
+
+    submitted_rows_by_id_cache[cache_key] = submitted_child_rows(collection_key).each_with_object({}) do |values, index|
+      id = values["id"].to_s
+      index[id] ||= values if id.present?
+    end
+  end
+
+  def submitted_destroyed?(collection_key, record)
+    return false unless record.persisted?
+
+    ActiveModel::Type::Boolean.new.cast(submitted_child_values(collection_key, record)["_destroy"])
   end
 
   def submitted_new_items

@@ -64,33 +64,42 @@ module Amounts::Limits
       DEFAULT_MAX
     end
 
-    def violations_for(receipt: {}, receipt_items: [], receipt_adjustments: [], receipt_payments: [], receipt_tax_details: [])
+    def violations_for(receipt: {}, receipt_items: [], receipt_adjustments: [], receipt_payments: [], receipt_tax_details: [], source_only: false)
+      limits = violation_limits
+
       [
-        *record_violations(resource: :receipt, record: receipt, index: nil),
-        *collection_violations(resource: :receipt_items, records: receipt_items),
-        *collection_violations(resource: :receipt_adjustments, records: receipt_adjustments),
-        *collection_violations(resource: :receipt_payments, records: receipt_payments),
-        *collection_violations(resource: :receipt_tax_details, records: receipt_tax_details)
+        *record_violations(resource: :receipt, record: receipt, index: nil, source_only: source_only, limits: limits),
+        *collection_violations(resource: :receipt_items, records: receipt_items, source_only: source_only, limits: limits),
+        *collection_violations(resource: :receipt_adjustments, records: receipt_adjustments, source_only: source_only, limits: limits),
+        *collection_violations(resource: :receipt_payments, records: receipt_payments, source_only: source_only, limits: limits),
+        *collection_violations(resource: :receipt_tax_details, records: receipt_tax_details, source_only: source_only, limits: limits)
       ]
     end
 
     private
 
-    def collection_violations(resource:, records:)
+    def violation_limits
+      stored_limits = SystemSettings.limits_for(KEYS.values)
+      KEYS.to_h { |name, key| [ name, stored_limits.fetch(key) ] }
+    rescue KeyError, SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError
+      KEYS.keys.index_with { |name| limit_for(name) }
+    end
+
+    def collection_violations(resource:, records:, source_only:, limits:)
       Array(records).flat_map.with_index do |record, index|
-        record_violations(resource: resource, record: record, index: index)
+        record_violations(resource: resource, record: record, index: index, source_only: source_only, limits: limits)
       end
     end
 
-    def record_violations(resource:, record:, index:)
-      fields = FIELD_LIMITS.fetch(resource)
+    def record_violations(resource:, record:, index:, source_only:, limits:)
       attributes = normalized_attributes(record)
+      fields = fields_for(resource, attributes, source_only: source_only)
 
       fields.filter_map do |field, limit_name|
         actual_value = amount_value(attributes[field])
         next if actual_value.nil?
 
-        limit = limit_for(limit_name)
+        limit = limits.fetch(limit_name)
         next if actual_value <= limit
 
         {
@@ -100,6 +109,20 @@ module Amounts::Limits
           actual_value: actual_value,
           index: index
         }.compact
+      end
+    end
+
+    def fields_for(resource, attributes, source_only:)
+      fields = FIELD_LIMITS.fetch(resource)
+      return fields unless source_only && resource == :receipt_items
+
+      case attributes[:pricing_source_kind].to_s
+      when "reference_quantity_price"
+        fields.except(:price, :line_total, :original_line_total)
+      when "count_unit_price"
+        fields.except(:line_total, :original_line_total)
+      else
+        fields
       end
     end
 
