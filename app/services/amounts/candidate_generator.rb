@@ -312,7 +312,7 @@ module Amounts
     def trusted_reference_projection_tax_rate(item)
       item = indifferent_hash(item)
       if value_present?(item[:tax_rate])
-        return trusted_explicit_projection_tax_rate(item[:tax_rate])
+        return tax_detail_evidence.trusted_explicit_projection_rate(item[:tax_rate])
       end
 
       trusted_reference_projection_fallback_tax_rate
@@ -321,26 +321,8 @@ module Amounts
     def trusted_reference_projection_fallback_tax_rate
       return @trusted_reference_projection_fallback_tax_rate if defined?(@trusted_reference_projection_fallback_tax_rate)
 
-      detail_rates = final_detected_tax_details.map { |detail| detail[:rate] }.uniq
-      @trusted_reference_projection_fallback_tax_rate = if detail_rates.one?
-        detail_rates.first if tax_detail_evidence.purchase_amount_evidence_present?
-      elsif detail_rates.many?
-        nil
-      elsif value_present?(receipt[:tax_rate])
-        trusted_explicit_projection_tax_rate(receipt[:tax_rate])
-      end
-    end
-
-    def trusted_explicit_projection_tax_rate(value)
-      raw = value.to_s.strip
-      raw = raw.delete_suffix("%").strip
-      return nil unless raw.match?(/\A[+-]?\d+(?:\.\d+)?\z/)
-
-      rate = BigDecimal(raw)
-      rate /= 100 if rate > 1
-      rate if rate.between?(0, 1)
-    rescue ArgumentError
-      nil
+      @trusted_reference_projection_fallback_tax_rate = tax_detail_evidence
+        .trusted_reference_projection_fallback_rate(receipt_tax_rate: receipt[:tax_rate])
     end
 
     def authoritative_reference_item_amount_basis

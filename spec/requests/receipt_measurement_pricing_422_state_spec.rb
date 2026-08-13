@@ -134,6 +134,218 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     end
   end
 
+  it 'input normalizationのInvalidItemSource 422をPresenterへ明示する' do
+    receipt, item = create_receipt_with_reference_item
+    presenters = capture_presenter_arguments
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => reference_item_attributes(item, pricing_source_kind: 'unsupported')
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(presenters.last.fetch(:invalid_item_source)).to be(true)
+      expect(presenters.last.fetch(:submitted_params).dig('receipt_items_attributes', '0', 'id')).to eq(item.id.to_s)
+    end
+  end
+
+  it 'Amount EngineのInvalidItemSource 422もPresenterへ明示する' do
+    receipt, item = create_receipt_with_reference_item
+    presenters = capture_presenter_arguments
+    allow(ReceiptAmountService).to receive(:call).and_raise(ReceiptAmountService::InvalidItemSourceError)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => reference_item_attributes(item, reference_price_amount: '130')
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(presenters.last.fetch(:invalid_item_source)).to be(true)
+      expect(
+        BigDecimal(
+          presenters.last.fetch(:submitted_params)
+            .dig('receipt_items_attributes', '0', 'reference_price_amount')
+            .to_s
+        )
+      ).to eq(BigDecimal('130'))
+    end
+  end
+
+  it 'InvalidItemSource以外の422ではPresenter flagを立てない' do
+    receipt, item = create_receipt_with_reference_item
+    presenters = capture_presenter_arguments
+    user.update!(storage_limit_bytes: 1)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        image: uploaded_image,
+        receipt_items_attributes: {
+          '0' => reference_item_attributes(item)
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(presenters.last.fetch(:invalid_item_source)).to be(false)
+    end
+  end
+
+  it 'stale conflictでformulaからexplicitへのdiscount置換入力をraw percentageのまま再送できる' do
+    receipt, item = create_receipt_with_reference_item
+    item.update!(
+      original_line_total: 180,
+      discount_rate: BigDecimal('0.1'),
+      discount_amount: 18,
+      line_total: 162
+    )
+    receipt.update!(subtotal_amount: 162, total_amount: 162)
+    stale_lock_version = receipt.lock_version
+    receipt.update!(memo: '別保存')
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: stale_lock_version,
+        receipt_items_attributes: {
+          '0' => reference_item_attributes(
+            item,
+            pricing_source_kind: 'explicit_line_total',
+            original_line_total: '200',
+            line_total: '999',
+            discount_rate: '10',
+            clear_item_discount_before_explicit: '1'
+          )
+        }
+      }
+    }
+
+    document = Nokogiri::HTML(response.body)
+    rendered_item = document.css('[data-receipt-form-target="itemRow"]').find do |row|
+      row.at_css("input[name$='[id]']")&.[]('value') == item.id.to_s
+    end
+    rendered_original = rendered_item&.css("input[name$='[original_line_total]']")&.find do |input|
+      input['disabled'].nil?
+    end
+    rendered_rate = rendered_item&.at_css("input[name$='[discount_rate]']")
+    rendered_clear_intent = rendered_item&.at_css("input[name$='[clear_item_discount_before_explicit]']")
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(rendered_original&.[]('value')).to eq('200')
+      expect(rendered_rate&.[]('value')).to eq('10')
+      expect(rendered_clear_intent&.[]('value')).to eq('1')
+      expect(item.reload).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        original_line_total: 180,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 162
+      )
+    end
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.reload.lock_version,
+        receipt_items_attributes: {
+          '0' => reference_item_attributes(
+            item,
+            pricing_source_kind: 'explicit_line_total',
+            original_line_total: rendered_original&.[]('value'),
+            line_total: '999',
+            discount_rate: rendered_rate&.[]('value'),
+            clear_item_discount_before_explicit: rendered_clear_intent&.[]('value')
+          )
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(item.reload).to have_attributes(
+        pricing_source_kind: 'explicit_line_total',
+        original_line_total: 200,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 20,
+        line_total: 180
+      )
+    end
+  end
+
+  it 'stale conflictの422で曖昧なexplicit行の保存済みpositive rateを推測解除しない' do
+    receipt, item = create_receipt_with_reference_item
+    item.update_columns(
+      pricing_source_kind: 'explicit_line_total',
+      reference_price_amount: nil,
+      reference_quantity: nil,
+      reference_quantity_unit_code: nil,
+      reference_price_tax_inclusion: nil,
+      original_line_total: nil,
+      line_total: 180,
+      discount_rate: BigDecimal('0.1'),
+      discount_amount: nil
+    )
+    stale_lock_version = receipt.lock_version
+    receipt.update!(memo: '別保存')
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: stale_lock_version,
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            confirmed_name: item.confirmed_name,
+            quantity: item.quantity.to_s('F'),
+            quantity_unit_code: item.quantity_unit_code,
+            pricing_source_kind: 'explicit_line_total',
+            original_line_total: '',
+            line_total: '180',
+            discount_rate: '',
+            clear_item_discount_before_explicit: '0',
+            _destroy: '0'
+          }
+        }
+      }
+    }
+
+    document = Nokogiri::HTML(response.body)
+    rendered_item = document.css('[data-receipt-form-target="itemRow"]').find do |row|
+      row.at_css("input[name$='[id]']")&.[]('value') == item.id.to_s
+    end
+    rendered_source = rendered_item&.css("input[name$='[original_line_total]']")&.find do |input|
+      input['disabled'].nil?
+    end
+    rendered_summary = rendered_item&.at_css('[data-receipt-form-target="pricingSourceSummary"]:not([hidden])')
+    rendered_line = rendered_item&.at_css('[data-receipt-form-target="lineTotalInput"]')
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(rendered_item&.[]('data-receipt-form-explicit-line-total-source-missing')).to eq('true')
+      expect(rendered_source&.[]('value')).to be_nil
+      expect(rendered_source&.[]('required')).to eq('required')
+      expect(rendered_source&.[]('aria-label')).to eq('割引前明細金額')
+      expect(rendered_summary&.text&.strip).to eq('割引前明細金額')
+      expect(rendered_line&.[]('value')).to eq('180')
+      expect(item.reload).to have_attributes(
+        pricing_source_kind: 'explicit_line_total',
+        original_line_total: nil,
+        line_total: 180,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: nil
+      )
+    end
+  end
+
   [
     [ 'invalid source', :invalid_source ],
     [ 'stale edit', :stale_edit ]

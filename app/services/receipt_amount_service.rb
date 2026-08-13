@@ -121,6 +121,12 @@ class ReceiptAmountService
     )
   end
 
+  def self.reference_projection_fallback_tax_rate(receipt_tax_rate:, receipt_tax_details:)
+    Amounts::TaxDetailEvidence.new(receipt_tax_details).trusted_reference_projection_fallback_rate(
+      receipt_tax_rate: receipt_tax_rate
+    )
+  end
+
   def self.warning_mismatch_codes
     Amounts::MismatchSeverity::WARNING
   end

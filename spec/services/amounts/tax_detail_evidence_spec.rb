@@ -92,4 +92,54 @@ RSpec.describe Amounts::TaxDetailEvidence do
       expect(mixed_complete_and_incomplete.purchase_amount_evidence_present?).to be(false)
     end
   end
+
+  describe '#trusted_reference_projection_fallback_rate' do
+    it '購入金額を説明する単一税率の完全な内訳をreference net投影へ使う' do
+      source = [
+        { rate: BigDecimal('0.10'), net_amount: 100, amount: 10, description: '外税10%' }
+      ]
+      source_snapshot = Marshal.load(Marshal.dump(source))
+
+      rate = described_class.new(source).trusted_reference_projection_fallback_rate(
+        receipt_tax_rate: BigDecimal('0.08')
+      )
+
+      aggregate_failures do
+        expect(rate).to eq(BigDecimal('0.10'))
+        expect(source).to eq(source_snapshot)
+      end
+    end
+
+    it '複数税率または未解決の値付き内訳がある場合はfallbackを返さない' do
+      multiple_rates = described_class.new([
+        { rate: BigDecimal('0.08'), net_amount: 100, amount: 8, description: '外税8%' },
+        { rate: BigDecimal('0.10'), net_amount: 100, amount: 10, description: '外税10%' }
+      ])
+      unresolved_amount = described_class.new([
+        { rate: BigDecimal('0.10'), net_amount: 100, amount: 10, description: '外税10%' },
+        { rate: nil, net_amount: nil, amount: 8, description: '税額のみ' }
+      ])
+
+      aggregate_failures do
+        expect(multiple_rates.trusted_reference_projection_fallback_rate(receipt_tax_rate: '8%')).to be_nil
+        expect(unresolved_amount.trusted_reference_projection_fallback_rate(receipt_tax_rate: '8%')).to be_nil
+      end
+    end
+
+    it '確定税内訳がない場合だけ明示receipt税率を使い、明示0%も維持する' do
+      incomplete = described_class.new([
+        { rate: nil, net_amount: nil, amount: 10, description: '内消費税等' }
+      ])
+      empty = described_class.new([])
+
+      aggregate_failures do
+        expect(incomplete.trusted_reference_projection_fallback_rate(receipt_tax_rate: '10%'))
+          .to eq(BigDecimal('0.10'))
+        expect(empty.trusted_reference_projection_fallback_rate(receipt_tax_rate: BigDecimal('0')))
+          .to eq(BigDecimal('0'))
+        expect(empty.trusted_reference_projection_fallback_rate(receipt_tax_rate: nil)).to be_nil
+        expect(empty.trusted_reference_projection_fallback_rate(receipt_tax_rate: 'invalid')).to be_nil
+      end
+    end
+  end
 end

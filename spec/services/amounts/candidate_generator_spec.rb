@@ -287,6 +287,28 @@ RSpec.describe Amounts::CandidateGenerator do
       expect(candidates).to be_empty
     end
 
+    it 'fallback resolverとcandidate projectionで同じ単一税率を使う' do
+      tax_details = [
+        { rate: BigDecimal('0.10'), net_amount: 100, amount: 10, description: '外税10%' }
+      ]
+      fallback_rate = Amounts::TaxDetailEvidence.new(tax_details)
+        .trusted_reference_projection_fallback_rate(receipt_tax_rate: BigDecimal('0.08'))
+      candidates = generate(
+        receipt: { tax_rate: BigDecimal('0.08') },
+        items: [ reference_item(amount: 100, tax_inclusion: 'net', tax_rate: nil) ],
+        tax_details: tax_details,
+        context: :analysis
+      )
+      included = candidates.find do |candidate|
+        candidate.basis == 'items_as_tax_included' && candidate.rounding_scope == :per_item
+      end
+
+      aggregate_failures do
+        expect(fallback_rate).to eq(BigDecimal('0.10'))
+        expect(included.computed_items.first[:line_total]).to eq(110)
+      end
+    end
+
     it '明示0%のreference netはgrossと同額の有効候補として維持する' do
       candidates = generate(
         items: [ reference_item(amount: 100, tax_inclusion: 'net', tax_rate: BigDecimal('0')) ],

@@ -152,6 +152,7 @@
       <button type="button"
               class="<%= stepper_button_classes %>"
               aria-label="<%= t("shared.number_field.decrement_aria", label: label) %>"
+              data-number-field-stepper-direction="decrement"
               data-action="pointerdown->number-field#startDecrementing pointerup->number-field#stopChanging pointerleave->number-field#stopChanging pointercancel->number-field#stopChanging">
         <span class="material-symbols-outlined text-base" aria-hidden="true">remove</span>
       </button>
@@ -181,6 +182,7 @@
       <button type="button"
               class="<%= stepper_button_classes %>"
               aria-label="<%= t("shared.number_field.increment_aria", label: label) %>"
+              data-number-field-stepper-direction="increment"
               data-action="pointerdown->number-field#startIncrementing pointerup->number-field#stopChanging pointerleave->number-field#stopChanging pointercancel->number-field#stopChanging">
         <span class="material-symbols-outlined text-base" aria-hidden="true">add</span>
       </button>

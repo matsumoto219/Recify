@@ -103,6 +103,52 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     [ receipt, item ]
   end
 
+  def create_original_unrecorded_discounted_explicit_receipt
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      store_name: 'authority未記録明示金額店',
+      subtotal_amount: 164,
+      tax_amount: 16,
+      total_amount: 180,
+      tax_rate: BigDecimal('0.1'),
+      review_reasons: [],
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'line_total_as_recorded',
+          'tax_detail_amount_basis' => 'gross'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: 'authority未記録割引商品',
+      pricing_source_kind: 'explicit_line_total',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      original_line_total: nil,
+      discount_rate: BigDecimal('0.1'),
+      discount_amount: 18,
+      line_total: 180,
+      tax_rate: BigDecimal('0.1'),
+      needs_review: false,
+      review_reasons: []
+    )
+    receipt.receipt_tax_details.create!(
+      description: '10%対象',
+      rate: BigDecimal('0.1'),
+      net_amount: 164,
+      amount: 16
+    )
+
+    [ receipt, item ]
+  end
+
   def external_net_profile
     {
       'schema_version' => 1,
@@ -217,7 +263,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     end
   end
 
-  it 'reference formulaの非authority legacy priceとhidden totalsが上限超過でも無視して保存する' do
+  it 'reference authorityに属さないpriceとhidden totalsが上限超過でも無視して保存する' do
     hidden_price = ReceiptAmountService.receipt_item_price_max + 1
     hidden_total = ReceiptAmountService.receipt_item_line_total_max + 1
 
@@ -406,6 +452,129 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     end
   end
 
+  it 'pricing modeと自動入力metadataだけの新規行を永続化しない' do
+    %w[count_unit_price reference_quantity_price explicit_line_total].each do |pricing_source_kind|
+      expect do
+        post receipts_path, params: {
+          receipt: {
+            store_name: "modeのみ除外店 #{pricing_source_kind}",
+            payment_method: 'cash',
+            receipt_items_attributes: {
+              '0' => {
+                confirmed_name: '',
+                category: '',
+                pricing_source_kind: pricing_source_kind,
+                quantity: '1',
+                quantity_unit_code: 'each',
+                reference_price_amount: '',
+                reference_quantity: '',
+                reference_quantity_unit_code: '',
+                reference_price_tax_inclusion: pricing_source_kind == 'reference_quantity_price' ? 'gross' : '',
+                price: '',
+                original_line_total: '',
+                line_total: '',
+                tax_rate: ''
+              }
+            }
+          }
+        }
+      end.not_to change(Receipt, :count)
+
+      aggregate_failures pricing_source_kind do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include(I18n.t('receipts.form.errors.items_required'))
+      end
+    end
+  end
+
+  it '商品名のある新規explicit rowのblank authorityを422にして保存しない' do
+    expect do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'authority未入力店',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: 'authority未入力商品',
+              pricing_source_kind: 'explicit_line_total',
+              quantity: '1',
+              quantity_unit_code: 'each',
+              original_line_total: '',
+              line_total: '999'
+            }
+          }
+        }
+      }
+    end.not_to change(Receipt, :count)
+
+    expect(response).to have_http_status(:unprocessable_content)
+  end
+
+  it 'explicitな0円sourceをmodeだけの空行と区別して保存する' do
+    expect do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '0円explicit店',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '',
+              pricing_source_kind: 'explicit_line_total',
+              quantity: '1',
+              quantity_unit_code: 'each',
+              original_line_total: '0',
+              tax_rate: '0'
+            }
+          }
+        }
+      }
+    end.to change(Receipt, :count).by(1)
+
+    receipt = user.receipts.find_by!(store_name: '0円explicit店')
+    aggregate_failures do
+      expect(response).to redirect_to(receipts_path)
+      expect(receipt).to have_attributes(subtotal_amount: 0, tax_amount: 0, total_amount: 0)
+      expect(receipt.receipt_items.sole).to have_attributes(
+        pricing_source_kind: 'explicit_line_total',
+        original_line_total: 0,
+        line_total: 0
+      )
+    end
+  end
+
+  it 'explicitのhidden line total改ざんを無視し、可視original line totalから再計算する' do
+    expect do
+      post receipts_path, params: {
+        receipt: {
+          store_name: 'explicit authority店',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '明示金額商品',
+              pricing_source_kind: 'explicit_line_total',
+              quantity: '1',
+              quantity_unit_code: 'each',
+              original_line_total: '240',
+              line_total: ReceiptAmountService.receipt_item_line_total_max + 1,
+              tax_rate: '0'
+            }
+          }
+        }
+      }
+    end.to change(Receipt, :count).by(1)
+
+    receipt = user.receipts.find_by!(store_name: 'explicit authority店')
+    aggregate_failures do
+      expect(response).to redirect_to(receipts_path)
+      expect(receipt).to have_attributes(subtotal_amount: 240, tax_amount: 0, total_amount: 240)
+      expect(receipt.receipt_items.sole).to have_attributes(
+        pricing_source_kind: 'explicit_line_total',
+        original_line_total: 240,
+        line_total: 240
+      )
+    end
+  end
+
   it 'edit_saveのnet formulaでreference quantity変更をsourceとderivedへ一度だけ反映する' do
     receipt, item = create_reference_receipt(
       quantity: BigDecimal('1'),
@@ -447,7 +616,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     end
   end
 
-  it 'edit_saveでtampered legacy priceとhidden totalsを無視し、保存済みlegacy priceだけを維持する' do
+  it 'edit_saveでtampered non-authority priceとhidden totalsを無視し、保存済みpriceを維持する' do
     receipt, item = create_reference_receipt
     item.update!(price: 999)
     hidden_price = ReceiptAmountService.receipt_item_price_max + 1
@@ -461,6 +630,27 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
         quantity: '800',
         original_line_total: hidden_total,
         line_total: hidden_total
+      }
+    )
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(item.reload).to have_attributes(price: 999, original_line_total: 192, line_total: 192)
+    end
+  end
+
+  it 'edit_saveでblank送信されたreferenceのnon-authority priceを保存済みdiagnostic値へ戻す' do
+    receipt, item = create_reference_receipt
+    item.update!(price: 999)
+
+    patch_item(
+      receipt,
+      item,
+      {
+        price: '',
+        quantity: '800',
+        original_line_total: '',
+        line_total: ''
       }
     )
 
@@ -520,10 +710,121 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
       item,
       {
         pricing_source_kind: 'explicit_line_total',
-        line_total: '181',
+        line_total: '999',
         original_line_total: '181'
       }
     )
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(item.reload).to have_attributes(
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        reference_price_amount: nil,
+        reference_quantity: nil,
+        reference_quantity_unit_code: nil,
+        reference_price_tax_inclusion: nil,
+        original_line_total: 181,
+        line_total: 181
+      )
+    end
+
+    patch_item(
+      receipt,
+      item,
+      {
+        pricing_source_kind: 'reference_quantity_price',
+        price: '999',
+        quantity: '750',
+        quantity_unit_code: 'milliliter',
+        reference_price_amount: '120',
+        reference_quantity: '500',
+        reference_quantity_unit_code: 'milliliter',
+        reference_price_tax_inclusion: 'gross',
+        original_line_total: '999',
+        line_total: '999'
+      }
+    )
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.reload).to have_attributes(subtotal_amount: 180, tax_amount: 0, total_amount: 180)
+      expect(item.reload).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('120'),
+        reference_quantity: BigDecimal('500'),
+        reference_quantity_unit_code: 'milliliter',
+        reference_price_tax_inclusion: 'gross',
+        original_line_total: 180,
+        line_total: 180
+      )
+    end
+  end
+
+  it 'count authorityへ切り替える際に非選択のreference draftを永続化しない' do
+    receipt, item = create_reference_receipt
+
+    patch_item(
+      receipt,
+      item,
+      {
+        pricing_source_kind: 'count_unit_price',
+        price: '100',
+        quantity: '2',
+        quantity_unit_code: 'each',
+        reference_price_amount: '999',
+        reference_quantity: '9',
+        reference_quantity_unit_code: 'each',
+        reference_price_tax_inclusion: 'gross',
+        original_line_total: '999',
+        line_total: '999'
+      }
+    )
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.reload).to have_attributes(subtotal_amount: 200, tax_amount: 0, total_amount: 200)
+      expect(item.reload).to have_attributes(
+        pricing_source_kind: 'count_unit_price',
+        price: 100,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'each',
+        reference_price_amount: nil,
+        reference_quantity: nil,
+        reference_quantity_unit_code: nil,
+        reference_price_tax_inclusion: nil,
+        original_line_total: 200,
+        line_total: 200
+      )
+    end
+  end
+
+  it '同一explicit authorityの通常保存で保存済みdiagnostic reference evidenceを消去しない' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 181,
+      tax_amount: 0,
+      total_amount: 181,
+      review_reasons: []
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: 'diagnostic evidence付き明細',
+      pricing_source_kind: 'explicit_line_total',
+      quantity: BigDecimal('750'),
+      quantity_unit_code: 'milliliter',
+      reference_price_amount: BigDecimal('120'),
+      reference_quantity: BigDecimal('500'),
+      reference_quantity_unit_code: 'milliliter',
+      reference_price_tax_inclusion: 'gross',
+      original_line_total: 181,
+      line_total: 181,
+      tax_rate: BigDecimal('0')
+    )
+
+    patch_item(receipt, item, { confirmed_name: 'diagnostic evidenceを維持した明細' })
 
     aggregate_failures do
       expect(response).to redirect_to(receipt_path(receipt))
@@ -537,28 +838,256 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
         line_total: 181
       )
     end
+  end
+
+  it '割引済みexplicit authorityの同値保存で税投影をdriftさせず、authority変更だけを再計算する' do
+    receipt = create(
+      :receipt,
+      user: user,
+      status: 'completed',
+      subtotal_amount: 164,
+      tax_amount: 16,
+      total_amount: 180,
+      tax_rate: BigDecimal('0.1'),
+      review_reasons: [],
+      amount_calculation_profile: {
+        'schema_version' => 1,
+        'context' => 'analysis',
+        'profile' => {
+          'tax_rounding_mode' => 'floor',
+          'discount_rounding_mode' => 'round',
+          'receipt_tax_basis' => 'total_includes_tax',
+          'item_amount_basis' => 'line_total_as_recorded',
+          'tax_detail_amount_basis' => 'gross'
+        }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '割引済み明示金額商品',
+      pricing_source_kind: 'explicit_line_total',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      original_line_total: 200,
+      discount_rate: BigDecimal('0.1'),
+      discount_amount: 20,
+      line_total: 180,
+      tax_rate: BigDecimal('0.1'),
+      needs_review: false,
+      review_reasons: []
+    )
+    receipt.receipt_tax_details.create!(
+      description: '10%対象',
+      rate: BigDecimal('0.1'),
+      net_amount: 164,
+      amount: 16
+    )
+    before_profile = receipt.amount_calculation_profile.fetch('profile').deep_dup
+    before_tax_details = receipt.receipt_tax_details.map { |detail| detail.attributes.deep_dup }
+
+    patch_item(receipt, item)
+
+    aggregate_failures '同値保存' do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.reload).to have_attributes(subtotal_amount: 164, tax_amount: 16, total_amount: 180)
+      expect(receipt.amount_calculation_profile.fetch('profile')).to eq(before_profile)
+      expect(receipt.receipt_tax_details.map { |detail| detail.attributes.deep_dup }).to eq(before_tax_details)
+      expect(item.reload).to have_attributes(
+        original_line_total: 200,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 20,
+        line_total: 180
+      )
+    end
+
+    patch_item(receipt, item, { original_line_total: '220', line_total: '999' })
+
+    aggregate_failures 'authority変更' do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.reload).to have_attributes(subtotal_amount: 180, tax_amount: 18, total_amount: 198)
+      expect(receipt.receipt_tax_details.sole).to have_attributes(
+        rate: BigDecimal('0.1'),
+        net_amount: 180,
+        amount: 18
+      )
+      expect(item.reload).to have_attributes(
+        original_line_total: 220,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 22,
+        line_total: 198
+      )
+    end
+  end
+
+  it 'original未記録positive-discount explicit rowのnon-amount partial編集で金額sourceと税証跡を保持する' do
+    receipt, item = create_original_unrecorded_discounted_explicit_receipt
+    before_receipt_amounts = receipt.attributes.slice(
+      'subtotal_amount', 'tax_amount', 'total_amount', 'tax_rate'
+    ).deep_dup
+    before_profile = receipt.amount_calculation_profile.fetch('profile').deep_dup
+    before_item_amounts = item.attributes.slice(
+      'pricing_source_kind', 'original_line_total', 'discount_rate', 'discount_amount', 'line_total', 'tax_rate'
+    ).deep_dup
+    before_tax_details = receipt.receipt_tax_details.map { |detail| detail.attributes.deep_dup }
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => { id: item.id, confirmed_name: '名称だけ変更' }
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(item.reload.confirmed_name).to eq('名称だけ変更')
+      expect(item.attributes.slice(*before_item_amounts.keys)).to eq(before_item_amounts)
+      expect(receipt.reload.attributes.slice(*before_receipt_amounts.keys)).to eq(before_receipt_amounts)
+      expect(receipt.amount_calculation_profile.fetch('profile')).to eq(before_profile)
+      expect(receipt.receipt_tax_details.map { |detail| detail.attributes.deep_dup }).to eq(before_tax_details)
+    end
+  end
+
+  it 'original未記録positive-discount explicit rowのquantity partial編集で金額shapeを保持する' do
+    receipt, item = create_original_unrecorded_discounted_explicit_receipt
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => { id: item.id, quantity: '2' }
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.reload).to have_attributes(subtotal_amount: 164, tax_amount: 16, total_amount: 180)
+      expect(item.reload).to have_attributes(
+        quantity: BigDecimal('2'),
+        original_line_total: nil,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 180
+      )
+      expect(receipt.receipt_tax_details.sole).to have_attributes(
+        rate: BigDecimal('0.1'),
+        net_amount: 164,
+        amount: 16
+      )
+    end
+  end
+
+  it 'original未記録positive-discount explicit rowのdiscount実変更を422にしてDBを保持する' do
+    receipt, item = create_original_unrecorded_discounted_explicit_receipt
+    before = persisted_graph_snapshot(receipt)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => { id: item.id, discount_rate: '20' }
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(persisted_graph_snapshot(receipt)).to eq(before)
+    end
+  end
+
+  it 'original未記録zero-only-discount explicit rowのnon-amount partial編集で物理shapeを保持する' do
+    [
+      { discount_rate: nil, discount_amount: nil },
+      { discount_rate: BigDecimal('0'), discount_amount: 0 }
+    ].each_with_index do |discounts, index|
+      receipt, item = create_original_unrecorded_discounted_explicit_receipt
+      item.update!(discounts)
+      before = persisted_snapshot(receipt, item)
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          lock_version: receipt.lock_version,
+          receipt_items_attributes: {
+            '0' => { id: item.id, confirmed_name: "0割引名称変更#{index}" }
+          }
+        }
+      }
+
+      after = persisted_snapshot(receipt, item)
+      aggregate_failures discounts.inspect do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.reload.confirmed_name).to eq("0割引名称変更#{index}")
+        expect(after[:item]).to eq(before[:item])
+        expect(after[:receipt].except('lock_version')).to eq(before[:receipt].except('lock_version'))
+      end
+    end
+  end
+
+  it 'original未記録positive-discount explicit rowのfull-form blank authorityを422にしてDBを保持する' do
+    receipt, item = create_original_unrecorded_discounted_explicit_receipt
+    before = persisted_graph_snapshot(receipt)
 
     patch_item(
       receipt,
       item,
       {
-        pricing_source_kind: 'reference_quantity_price',
-        original_line_total: '999',
-        line_total: '999'
+        original_line_total: '',
+        line_total: '999',
+        discount_rate: '10'
       }
     )
 
     aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(persisted_graph_snapshot(receipt)).to eq(before)
+    end
+  end
+
+  it 'original未記録positive-discount explicit rowは明示authorityから一度だけ割引を適用する' do
+    receipt, item = create_original_unrecorded_discounted_explicit_receipt
+
+    patch_item(
+      receipt,
+      item,
+      {
+        original_line_total: '220',
+        line_total: '999',
+        discount_rate: '10'
+      }
+    )
+
+    aggregate_failures '正数authority' do
       expect(response).to redirect_to(receipt_path(receipt))
-      expect(receipt.reload).to have_attributes(subtotal_amount: 180, tax_amount: 0, total_amount: 180)
+      expect(receipt.reload).to have_attributes(subtotal_amount: 180, tax_amount: 18, total_amount: 198)
       expect(item.reload).to have_attributes(
-        pricing_source_kind: 'reference_quantity_price',
-        reference_price_amount: BigDecimal('120'),
-        reference_quantity: BigDecimal('500'),
-        reference_quantity_unit_code: 'milliliter',
-        reference_price_tax_inclusion: 'gross',
-        original_line_total: 180,
-        line_total: 180
+        original_line_total: 220,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 22,
+        line_total: 198
+      )
+    end
+
+    receipt, item = create_original_unrecorded_discounted_explicit_receipt
+    patch_item(
+      receipt,
+      item,
+      {
+        original_line_total: '0',
+        line_total: '999',
+        discount_rate: '10'
+      }
+    )
+
+    aggregate_failures '0円authority' do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.reload).to have_attributes(subtotal_amount: 0, tax_amount: 0, total_amount: 0)
+      expect(item.reload).to have_attributes(
+        original_line_total: 0,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 0,
+        line_total: 0
       )
     end
   end
@@ -584,7 +1113,8 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
           '0' => {
             id: item.id,
             pricing_source_kind: 'explicit_line_total',
-            line_total: '200'
+            original_line_total: '200',
+            line_total: '999'
           }
         }
       }
@@ -593,6 +1123,177 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     aggregate_failures do
       expect(response).to have_http_status(:unprocessable_content)
       expect(persisted_snapshot(receipt, item)).to eq(before)
+    end
+  end
+
+  it 'formulaからexplicitへの明示intentでdiscount sourceをatomicに解除する' do
+    receipt, item = create_reference_receipt(
+      line_total: 162,
+      subtotal_amount: 162,
+      total_amount: 162
+    )
+    item.update!(
+      original_line_total: 180,
+      discount_amount: 18,
+      discount_rate: BigDecimal('0.1'),
+      line_total: 162
+    )
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            pricing_source_kind: 'explicit_line_total',
+            original_line_total: '200',
+            line_total: '999',
+            discount_rate: '',
+            discount_amount: '999999',
+            clear_item_discount_before_explicit: '1'
+          }
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.reload).to have_attributes(subtotal_amount: 200, tax_amount: 0, total_amount: 200)
+      expect(item.reload).to have_attributes(
+        pricing_source_kind: 'explicit_line_total',
+        original_line_total: 200,
+        line_total: 200,
+        discount_rate: nil,
+        discount_amount: nil
+      )
+    end
+  end
+
+  it 'formulaの旧discount解除確認後に入力したexplicit discount rateを新sourceとして保存する' do
+    receipt, item = create_reference_receipt(
+      line_total: 162,
+      subtotal_amount: 162,
+      total_amount: 162
+    )
+    item.update!(
+      original_line_total: 180,
+      discount_amount: 18,
+      discount_rate: BigDecimal('0.1'),
+      line_total: 162
+    )
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            pricing_source_kind: 'explicit_line_total',
+            original_line_total: '200',
+            line_total: '999',
+            discount_rate: '10',
+            discount_amount: '999999',
+            clear_item_discount_before_explicit: '1'
+          }
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(receipt.reload).to have_attributes(subtotal_amount: 180, tax_amount: 0, total_amount: 180)
+      expect(item.reload).to have_attributes(
+        pricing_source_kind: 'explicit_line_total',
+        original_line_total: 200,
+        line_total: 180,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 20
+      )
+    end
+  end
+
+  it 'formulaからexplicitへの確認済みdiscount解除intentを422再表示後も保持する' do
+    receipt, item = create_reference_receipt(
+      line_total: 162,
+      subtotal_amount: 162,
+      total_amount: 162
+    )
+    item.update!(
+      original_line_total: 180,
+      discount_amount: 18,
+      discount_rate: BigDecimal('0.1'),
+      line_total: 162
+    )
+    before = persisted_graph_snapshot(receipt)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        memo: 'x' * 1_001,
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            pricing_source_kind: 'explicit_line_total',
+            original_line_total: '200',
+            line_total: '999',
+            discount_rate: '10',
+            clear_item_discount_before_explicit: '1'
+          }
+        }
+      }
+    }
+
+    document = Nokogiri::HTML(response.body)
+    rendered_item = document.at_css("input[name$='[receipt_items_attributes][0][id]'][value='#{item.id}']")&.ancestors('div')&.find do |node|
+      node['data-receipt-form-target'] == 'itemRow'
+    end
+    clear_intent = rendered_item&.at_css("input[name$='[clear_item_discount_before_explicit]']")
+    explicit_source = rendered_item&.css("input[name$='[original_line_total]']")&.find do |input|
+      input['disabled'].nil?
+    end
+    discount_rate = rendered_item&.at_css("input[name$='[discount_rate]']")
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(clear_intent&.[]('value')).to eq('1')
+      expect(explicit_source&.[]('value')).to eq('200')
+      expect(discount_rate&.[]('value')).to eq('10')
+      expect(persisted_graph_snapshot(receipt)).to eq(before)
+    end
+  end
+
+  it 'discount解除intentが未確認ならformula sourceとdiscountを一切変更しない' do
+    receipt, item = create_reference_receipt(
+      line_total: 162,
+      subtotal_amount: 162,
+      total_amount: 162
+    )
+    item.update!(
+      original_line_total: 180,
+      discount_amount: 18,
+      discount_rate: BigDecimal('0.1'),
+      line_total: 162
+    )
+    before = persisted_graph_snapshot(receipt)
+
+    patch receipt_path(receipt), params: {
+      receipt: {
+        lock_version: receipt.lock_version,
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            pricing_source_kind: 'explicit_line_total',
+            original_line_total: '200',
+            line_total: '999',
+            clear_item_discount_before_explicit: '0'
+          }
+        }
+      }
+    }
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(persisted_graph_snapshot(receipt)).to eq(before)
     end
   end
 
@@ -907,7 +1608,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     end
   end
 
-  it '金額未確定のlegacy measurement rowを非金額編集してもnilを0円へ変えない' do
+  it '金額未確定のpricing source kind未記録measurement rowを非金額編集してもnilを0円へ変えない' do
     receipt = create(
       :receipt,
       :with_image,
@@ -1055,7 +1756,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     end
   end
 
-  it 'authority-free diagnosticの金額source変更を422にしてlegacy formulaへ昇格させない' do
+  it 'authority-free diagnosticの金額source変更を422にしてkind未記録formulaへ昇格させない' do
     changes = [
       { price: '101' },
       { quantity: '3' },

@@ -185,6 +185,327 @@ RSpec.describe Receipts::Editing::ChangeSet do
     end
   end
 
+  it '割引済みexplicit authorityの同値再送をpurchase amount変更にしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '明示金額商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 200,
+      discount_rate: BigDecimal('0.1'),
+      discount_amount: 20,
+      line_total: 180
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '200',
+            'line_total' => '200',
+            'discount_rate' => BigDecimal('0.1')
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.item_amounts_changed).to be(false)
+      expect(result.derived_purchase_inputs_changed?).to be(false)
+      expect(result.amount_inputs_submitted?).to be(true)
+    end
+  end
+
+  it '割引済みexplicit authorityの変更を保存済みderived totalと同値でも検出する' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '明示金額商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 200,
+      discount_rate: BigDecimal('0.1'),
+      discount_amount: 20,
+      line_total: 180
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '180',
+            'line_total' => '180',
+            'discount_rate' => BigDecimal('0.1')
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(result.item_amounts_changed).to be(true)
+      expect(result.derived_purchase_inputs_changed?).to be(true)
+    end
+  end
+
+  it '0円のexplicit authorityをblankと混同せず同値と変更を区別する' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '0円商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 0,
+      line_total: 0
+    )
+
+    unchanged = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '0',
+            'line_total' => '0'
+          }
+        }
+      }
+    )
+    changed = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '1',
+            'line_total' => '1'
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(unchanged.item_amounts_changed).to be(false)
+      expect(changed.item_amounts_changed).to be(true)
+    end
+  end
+
+  it '絶対額割引のexplicit authority同値再送をpurchase amount変更にしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '絶対額割引商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 200,
+      discount_rate: nil,
+      discount_amount: 20,
+      line_total: 180
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '200',
+            'line_total' => '200'
+          }
+        }
+      }
+    )
+
+    expect(result.derived_purchase_inputs_changed?).to be(false)
+  end
+
+  it 'original未記録の保存済みexplicit rowは明示送信値をauthority化する' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: 'original未記録商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: nil,
+      line_total: 200
+    )
+
+    unchanged = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '200',
+            'line_total' => '200'
+          }
+        }
+      }
+    )
+    changed = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '180',
+            'line_total' => '180'
+          }
+        }
+      }
+    )
+
+    aggregate_failures do
+      expect(unchanged.derived_purchase_inputs_changed?).to be(true)
+      expect(changed.derived_purchase_inputs_changed?).to be(true)
+    end
+  end
+
+  it 'originalが0の保存済みexplicit rowは0円authorityを優先しderived不整合を検出する' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: 'original 0円商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 0,
+      line_total: 500
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '0',
+            'line_total' => '0'
+          }
+        }
+      }
+    )
+
+    expect(result.derived_purchase_inputs_changed?).to be(true)
+  end
+
+  it 'original未記録positive-discount explicit rowのnon-amount partial入力をsource変更にしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: 'authority不明商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: nil,
+      discount_rate: BigDecimal('0.1'),
+      discount_amount: 18,
+      line_total: 180
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'confirmed_name' => '名称だけ変更'
+          }
+        }
+      }
+    )
+
+    expect(result.derived_purchase_inputs_changed?).to be(false)
+  end
+
+  it 'discount sourceのないexplicit rowの説明不能なderived totalを正規化対象として検出する' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: 'derived不整合商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 200,
+      discount_rate: nil,
+      discount_amount: nil,
+      line_total: 180
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '200',
+            'line_total' => '200'
+          }
+        }
+      }
+    )
+
+    expect(result.derived_purchase_inputs_changed?).to be(true)
+  end
+
+  it 'explicitのhidden line totalのみの差し替えをsource変更にしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '明示金額商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 200,
+      line_total: 200
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'line_total' => '999'
+          }
+        }
+      }
+    )
+
+    expect(result.derived_purchase_inputs_changed?).to be(false)
+  end
+
+  it 'explicitのdiscount rate変更はauthority同値でも検出する' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '割引率変更商品',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 200,
+      discount_rate: BigDecimal('0.1'),
+      discount_amount: 20,
+      line_total: 180
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'pricing_source_kind' => 'explicit_line_total',
+            'original_line_total' => '200',
+            'line_total' => '200',
+            'discount_rate' => BigDecimal('0.2')
+          }
+        }
+      }
+    )
+
+    expect(result.derived_purchase_inputs_changed?).to be(true)
+  end
+
   it '非金額項目だけを変更してQ2 sourceを同値再送しても金額再確認扱いにしない' do
     item = create_reference_item(category: nil)
 

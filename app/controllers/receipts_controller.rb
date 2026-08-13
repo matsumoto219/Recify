@@ -13,14 +13,11 @@ class ReceiptsController < ApplicationController
 
   MAX_SEARCH_QUERY_LENGTH = 100
   RECEIPT_FORM_FINGERPRINT_MAX_BYTES = 65_536
-  MEASUREMENT_PRICING_SOURCE_FIELDS = %w[
-    pricing_source_kind
+  ITEM_PRICING_DETAIL_INPUT_FIELDS = %w[
     reference_price_amount
     reference_quantity
-    reference_quantity_unit_code
     quantity_unit_raw
     reference_quantity_unit_raw
-    reference_price_tax_inclusion
   ].freeze
   SUSPICIOUS_SEARCH_PATTERN = /(--|;|\/\*|\*\/|\b(drop|delete|insert|update|alter|truncate|union|select)\b)/i
 
@@ -165,6 +162,7 @@ class ReceiptsController < ApplicationController
       )
       return
     end
+    remember_confirmed_discount_clear_submission
 
     if manual_child_count_limit_exceeded?(source_params)
       render_manual_child_count_limit_exceeded(
@@ -302,6 +300,7 @@ class ReceiptsController < ApplicationController
       )
       return
     end
+    remember_confirmed_discount_clear_submission
     if stale_edit_submission?(update_params)
       render_stale_edit_conflict(submitted_params: update_params)
       return
@@ -441,13 +440,41 @@ class ReceiptsController < ApplicationController
   end
 
   def prepare_receipt_form_presenter(submitted_params: nil)
+    submitted_params ||= @receipt_form_submitted_params
+    submitted_params = receipt_form_params_with_confirmed_discount_clear_intents(submitted_params)
     @receipt_form_presenter = ReceiptFormPresenter.new(
       receipt: @receipt,
       submitted_params: submitted_params,
       purchase_inputs_changed: @receipt_form_purchase_inputs_changed,
       adjustment_tax_detail_evidence_stale: receipt_form_adjustment_tax_detail_evidence_stale?,
-      adjustment_absence_confirmed: @receipt_form_adjustment_absence_confirmed
+      adjustment_absence_confirmed: @receipt_form_adjustment_absence_confirmed,
+      invalid_item_source: @receipt_form_invalid_item_source == true
     )
+  end
+
+  def remember_confirmed_discount_clear_submission
+    submitted_items = receipt_params.to_h["receipt_items_attributes"]
+    return unless submitted_items.respond_to?(:each_value)
+    return unless submitted_items.each_value.any? do |item|
+      item["clear_item_discount_before_explicit"].to_s == "1"
+    end
+
+    @receipt_form_submitted_params = receipt_params.to_h
+  end
+
+  def receipt_form_params_with_confirmed_discount_clear_intents(submitted_params)
+    rendered = submitted_params.to_h.deep_dup
+    submitted_items = rendered["receipt_items_attributes"]
+    raw_items = params.dig(:receipt, :receipt_items_attributes)
+    return rendered unless submitted_items.respond_to?(:each_pair) && raw_items.respond_to?(:[])
+
+    submitted_items.each_pair do |index, item|
+      raw_intent = raw_items.dig(index.to_s, :clear_item_discount_before_explicit) ||
+        raw_items.dig(index.to_s, "clear_item_discount_before_explicit")
+      item["clear_item_discount_before_explicit"] = "1" if raw_intent.to_s == "1"
+    end
+
+    rendered
   end
 
   def receipt_form_adjustment_tax_detail_evidence_stale?
@@ -739,7 +766,7 @@ class ReceiptsController < ApplicationController
     @receipt.reload
     @receipt_form_adjustment_absence_confirmed = false
     @receipt.errors.add(:base, t("receipts.form.errors.stale_edit"))
-    prepare_receipt_form_presenter(submitted_params: submitted_params)
+    prepare_receipt_form_presenter(submitted_params: @receipt_form_submitted_params || submitted_params)
     flash.now[:alert] = @receipt.errors.full_messages
     render :edit, status: :unprocessable_content, formats: :html
   end
@@ -754,6 +781,7 @@ class ReceiptsController < ApplicationController
   end
 
   def render_invalid_item_pricing_source(permitted, template:, rebuild_blank_item_row_after_failure: false, rebuild_blank_adjustment_row_after_failure: false)
+    @receipt_form_invalid_item_source = true
     @receipt.errors.add(:base, t("receipts.form.errors.invalid_item_pricing_source"))
     build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
     build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
@@ -799,6 +827,7 @@ class ReceiptsController < ApplicationController
         :quantity_unit_raw,
         :reference_quantity_unit_raw,
         :reference_price_tax_inclusion,
+        :clear_item_discount_before_explicit,
         # ProductCode は保存/permit済みだが、UI入力欄はまだ出していない。
         :product_code,
         :tax_rate,
@@ -1039,9 +1068,12 @@ class ReceiptsController < ApplicationController
 
   def receipt_item_meaningful_input?(item_attributes)
     return true if %w[confirmed_name category product_code].any? { |field| item_attributes[field].present? }
-    return true if MEASUREMENT_PRICING_SOURCE_FIELDS.any? { |field| numeric_input_present?(item_attributes[field]) }
+    return true if ITEM_PRICING_DETAIL_INPUT_FIELDS.any? { |field| numeric_input_present?(item_attributes[field]) }
     return true if Array(item_attributes["review_reasons"]).reject(&:blank?).present?
     return true if numeric_input_present?(item_attributes["price"])
+    if item_attributes["pricing_source_kind"] == "explicit_line_total"
+      return numeric_input_present?(item_attributes["original_line_total"])
+    end
     return true if positive_numeric_input?(item_attributes["line_total"])
     return true if positive_numeric_input?(item_attributes["tax_rate"])
     return true if positive_numeric_input?(item_attributes["discount_rate"])

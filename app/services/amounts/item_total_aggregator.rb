@@ -31,6 +31,9 @@ module Amounts
         elsif pricing_source_kind == "reference_quantity_price"
           original_line_total = reference_item_extension_for(item).projected_amount
         elsif pricing_source_kind == "explicit_line_total"
+          preserved_item = persisted_unsubmitted_explicit_item(item)
+          next preserved_item if preserved_item
+
           original_line_total = explicit_line_total_for(item)
         elsif pricing_source_kind == "count_unit_price"
           validate_count_unit_price_source!(item)
@@ -122,11 +125,24 @@ module Amounts
           "explicit line total authority requires a line total"
       end
 
-      original_line_total = to_i(fetch_value(item, :original_line_total))
-      return original_line_total if manual_discount_input?(item) && original_line_total.positive?
-      return original_line_total if analysis_context? && original_line_total.positive?
+      original_line_total = fetch_value(item, :original_line_total)
+      return to_i(original_line_total) if value_present?(original_line_total)
 
       to_i(line_total)
+    end
+
+    def persisted_unsubmitted_explicit_item(item)
+      return unless manual_input_context?
+      return unless fetch_value(item, :amount_persisted_item) == true
+      return unless fetch_value(item, :amount_persisted_original_line_total).nil?
+      return unless fetch_value(item, :original_line_total).nil?
+
+      item_to_hash(item).merge(
+        original_line_total: nil,
+        discount_amount: to_i_or_nil(fetch_value(item, :amount_persisted_discount_amount)),
+        discount_rate: normalize_discount_rate(fetch_value(item, :amount_persisted_discount_rate)),
+        line_total: to_i_or_nil(fetch_value(item, :amount_persisted_line_total))
+      )
     end
 
     def validate_count_unit_price_source!(item)

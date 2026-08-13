@@ -431,6 +431,129 @@ RSpec.describe Amounts::ItemTotalAggregator do
       end
     end
 
+    it 'authority未送信のoriginal未記録positive-discount explicit rowを再割引せず保持する' do
+      item = {
+        pricing_source_kind: 'explicit_line_total',
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: nil,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 180,
+        amount_countable_source_changed: false,
+        amount_line_total_present: false,
+        amount_line_total_changed: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: nil,
+        amount_persisted_discount_rate: BigDecimal('0.1'),
+        amount_persisted_discount_amount: 18,
+        amount_persisted_line_total: 180
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:total]).to eq(180)
+        expect(result[:items].sole).to include(
+          original_line_total: nil,
+          discount_rate: BigDecimal('0.1'),
+          discount_amount: 18,
+          line_total: 180
+        )
+      end
+    end
+
+    it 'original未記録explicit rowのquantity変更でも保存済みamount shapeを保持する' do
+      item = {
+        pricing_source_kind: 'explicit_line_total',
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'each',
+        original_line_total: nil,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 180,
+        amount_countable_source_changed: true,
+        amount_line_total_present: false,
+        amount_line_total_changed: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: nil,
+        amount_persisted_discount_rate: BigDecimal('0.1'),
+        amount_persisted_discount_amount: 18,
+        amount_persisted_line_total: 180
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      expect(result[:items].sole).to include(
+        quantity: BigDecimal('2'),
+        original_line_total: nil,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 180
+      )
+    end
+
+    it 'explicitのnon-nil 0円authorityをpositive discount付きでも0円として計算する' do
+      item = {
+        pricing_source_kind: 'explicit_line_total',
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: 0,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 500,
+        amount_line_total_present: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: 0,
+        amount_persisted_discount_rate: BigDecimal('0.1'),
+        amount_persisted_discount_amount: 18,
+        amount_persisted_line_total: 500
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:total]).to eq(0)
+        expect(result[:items].sole).to include(
+          original_line_total: 0,
+          discount_rate: BigDecimal('0.1'),
+          discount_amount: 0,
+          line_total: 0
+        )
+      end
+    end
+
+    it 'original未記録でzero-only discountのexplicit rowはline total fallbackを使う' do
+      item = {
+        pricing_source_kind: 'explicit_line_total',
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: nil,
+        discount_rate: BigDecimal('0'),
+        discount_amount: 0,
+        line_total: 180,
+        amount_countable_source_changed: false,
+        amount_line_total_present: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: nil,
+        amount_persisted_discount_rate: BigDecimal('0'),
+        amount_persisted_discount_amount: 0,
+        amount_persisted_line_total: 180
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:total]).to eq(180)
+        expect(result[:items].sole).to include(
+          original_line_total: nil,
+          discount_rate: BigDecimal('0'),
+          discount_amount: 0,
+          line_total: 180
+        )
+      end
+    end
+
     it 'count authorityをmeasurement unitやreference evidenceへ暗黙拡張しない' do
       invalid_items = [
         {

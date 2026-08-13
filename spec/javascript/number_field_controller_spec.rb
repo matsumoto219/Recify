@@ -75,4 +75,66 @@ RSpec.describe "Number field Stimulus controller" do
       expect(result["events"]).to eq(%w[input change])
     end
   end
+
+  it "increments large decimal source values without binary floating-point drift" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      class TestEvent {
+        constructor (type) { this.type = type }
+      }
+      globalThis.Event = TestEvent
+      const input = {
+        value: '999999999998.999999',
+        step: '1',
+        min: '0',
+        max: '999999999999.999999',
+        dispatchEvent: () => {}
+      }
+      const controller = Object.create(NumberFieldController.prototype)
+      Object.defineProperties(controller, {
+        hasInputTarget: { value: true },
+        inputTarget: { value: input },
+        hasDecimalPrecisionValue: { value: true },
+        decimalPrecisionValue: { value: 6 }
+      })
+
+      controller.changeValue(-1)
+      const decremented = input.value
+      controller.changeValue(1)
+
+      process.stdout.write(JSON.stringify({ decremented, incremented: input.value }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "decremented" => "999999999997.999999",
+      "incremented" => "999999999998.999999"
+    )
+  end
+
+  it "keeps decimal step rounding exact" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      class TestEvent {
+        constructor (type) { this.type = type }
+      }
+      globalThis.Event = TestEvent
+      const input = {
+        value: '9.95',
+        step: '0.1',
+        min: '0',
+        max: '100',
+        dispatchEvent: () => {}
+      }
+      const controller = Object.create(NumberFieldController.prototype)
+      Object.defineProperties(controller, {
+        hasInputTarget: { value: true },
+        inputTarget: { value: input },
+        hasDecimalPrecisionValue: { value: true },
+        decimalPrecisionValue: { value: 1 }
+      })
+
+      controller.changeValue(1)
+      process.stdout.write(JSON.stringify({ value: input.value }))
+    JAVASCRIPT
+
+    expect(result).to eq("value" => "10.1")
+  end
 end

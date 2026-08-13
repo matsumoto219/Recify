@@ -73,6 +73,25 @@ RSpec.describe ReceiptAmountService do
     end
   end
 
+  describe '.reference_projection_fallback_tax_rate' do
+    it 'private Amount規則を公開facade越しに返し、入力を変更しない' do
+      tax_details = [
+        { rate: BigDecimal('0.10'), net_amount: 100, amount: 10, description: '外税10%' }
+      ]
+      source_snapshot = Marshal.load(Marshal.dump(tax_details))
+
+      rate = described_class.reference_projection_fallback_tax_rate(
+        receipt_tax_rate: BigDecimal('0.08'),
+        receipt_tax_details: tax_details
+      )
+
+      aggregate_failures do
+        expect(rate).to eq(BigDecimal('0.10'))
+        expect(tax_details).to eq(source_snapshot)
+      end
+    end
+  end
+
   describe 'amount limit facade' do
     it 'exposes configured limits through the Amount Engine public entry point' do
       aggregate_failures do

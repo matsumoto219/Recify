@@ -155,7 +155,8 @@ RSpec.describe Receipts::Editing::InputNormalizer do
           "0" => {
             "id" => reference_item.id.to_s,
             "pricing_source_kind" => "explicit_line_total",
-            "line_total" => "181"
+            "original_line_total" => "181",
+            "line_total" => "999"
           }
         }
       }
@@ -163,8 +164,188 @@ RSpec.describe Receipts::Editing::InputNormalizer do
 
     expect(explicit.dig("receipt_items_attributes", "0")).to include(
       "pricing_source_kind" => "explicit_line_total",
+      "original_line_total" => 181,
       "line_total" => 181
     )
+  end
+
+  it "explicitの可視original line totalを唯一の送信authorityとしてhidden line totalを置き換える" do
+    normalized = described_class.call(
+      receipt: receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => {
+            "pricing_source_kind" => "explicit_line_total",
+            "original_line_total" => "0",
+            "line_total" => "999"
+          },
+          "1" => {
+            "pricing_source_kind" => "explicit_line_total",
+            "original_line_total" => "200"
+          }
+        }
+      }
+    ).fetch("receipt_items_attributes")
+
+    aggregate_failures do
+      expect(normalized["0"]).to include("original_line_total" => 0, "line_total" => 0)
+      expect(normalized["1"]).to include("original_line_total" => 200, "line_total" => 200)
+    end
+  end
+
+  it "original未記録でpositive discountが残るexplicit rowのfull-form blank authorityを拒否する" do
+    persisted_receipt = create(:receipt)
+    item = persisted_receipt.receipt_items.create!(
+      confirmed_name: "authority不明商品",
+      pricing_source_kind: "explicit_line_total",
+      quantity: BigDecimal("1"),
+      quantity_unit_code: "each",
+      original_line_total: nil,
+      discount_rate: BigDecimal("0.1"),
+      discount_amount: 18,
+      line_total: 180
+    )
+
+    expect do
+      described_class.call(
+        receipt: persisted_receipt,
+        attributes: {
+          "receipt_items_attributes" => {
+            "0" => {
+              "id" => item.id.to_s,
+              "pricing_source_kind" => "explicit_line_total",
+              "original_line_total" => "",
+              "line_total" => "180",
+              "discount_rate" => "10"
+            }
+          }
+        }
+      )
+    end.to raise_error(Receipts::Editing::InvalidItemSourceError)
+  end
+
+  it "original未記録explicit rowのzero-only discountは保存済みline totalへfallbackする" do
+    persisted_receipt = create(:receipt)
+    item = persisted_receipt.receipt_items.create!(
+      confirmed_name: "0割引商品",
+      pricing_source_kind: "explicit_line_total",
+      quantity: BigDecimal("1"),
+      quantity_unit_code: "each",
+      original_line_total: nil,
+      discount_rate: BigDecimal("0"),
+      discount_amount: 0,
+      line_total: 180
+    )
+
+    normalized = described_class.call(
+      receipt: persisted_receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => {
+            "id" => item.id.to_s,
+            "pricing_source_kind" => "explicit_line_total",
+            "original_line_total" => "",
+            "line_total" => "999",
+            "discount_rate" => "0"
+          }
+        }
+      }
+    ).dig("receipt_items_attributes", "0")
+
+    expect(normalized).to include(
+      "original_line_total" => nil,
+      "line_total" => 180,
+      "discount_rate" => BigDecimal("0")
+    )
+  end
+
+  it "original未記録positive-discount explicit rowのquantity変更はamount authority変更にしない" do
+    persisted_receipt = create(:receipt)
+    item = persisted_receipt.receipt_items.create!(
+      confirmed_name: "authority不明商品",
+      pricing_source_kind: "explicit_line_total",
+      quantity: BigDecimal("1"),
+      quantity_unit_code: "each",
+      original_line_total: nil,
+      discount_rate: BigDecimal("0.1"),
+      discount_amount: 18,
+      line_total: 180
+    )
+
+    normalized = described_class.call(
+      receipt: persisted_receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => {
+            "id" => item.id.to_s,
+            "quantity" => "2"
+          }
+        }
+      }
+    ).dig("receipt_items_attributes", "0")
+
+    expect(normalized).to include("quantity" => BigDecimal("2"))
+    expect(normalized).not_to have_key("line_total")
+  end
+
+  it "original未記録explicit rowのdiscount source実変更を拒否し、同値echoは許可する" do
+    persisted_receipt = create(:receipt)
+    item = persisted_receipt.receipt_items.create!(
+      confirmed_name: "authority不明商品",
+      pricing_source_kind: "explicit_line_total",
+      quantity: BigDecimal("1"),
+      quantity_unit_code: "each",
+      original_line_total: nil,
+      discount_rate: BigDecimal("0.1"),
+      discount_amount: 18,
+      line_total: 180
+    )
+
+    expect do
+      described_class.call(
+        receipt: persisted_receipt,
+        attributes: {
+          "receipt_items_attributes" => {
+            "0" => {
+              "id" => item.id.to_s,
+              "discount_rate" => "20"
+            }
+          }
+        }
+      )
+    end.to raise_error(Receipts::Editing::InvalidItemSourceError)
+
+    normalized = described_class.call(
+      receipt: persisted_receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => {
+            "id" => item.id.to_s,
+            "discount_rate" => "10"
+          }
+        }
+      }
+    ).dig("receipt_items_attributes", "0")
+
+    expect(normalized).to include("discount_rate" => BigDecimal("0.1"))
+  end
+
+  it "新規explicit rowのblank authorityでhidden line totalを破棄する" do
+    normalized = described_class.call(
+      receipt: receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => {
+            "confirmed_name" => "authority未入力商品",
+            "pricing_source_kind" => "explicit_line_total",
+            "original_line_total" => "",
+            "line_total" => "999"
+          }
+        }
+      }
+    ).dig("receipt_items_attributes", "0")
+
+    expect(normalized).to include("original_line_total" => nil, "line_total" => nil)
   end
 
   it "discount sourceが残るformulaからexplicitへの曖昧な切替を拒否する" do
@@ -180,6 +361,345 @@ RSpec.describe Receipts::Editing::InputNormalizer do
       quantity_unit_code: "milliliter",
       original_line_total: 180,
       discount_amount: 18,
+      discount_rate: nil,
+      line_total: 162
+    )
+
+    expect do
+      described_class.call(
+        receipt: persisted_receipt,
+        attributes: {
+          "receipt_items_attributes" => {
+            "0" => {
+              "id" => reference_item.id.to_s,
+              "pricing_source_kind" => "explicit_line_total",
+              "original_line_total" => "200",
+              "line_total" => "999"
+            }
+          }
+        }
+      )
+    end.to raise_error(Receipts::Editing::InvalidItemSourceError)
+  end
+
+  it "formulaからexplicitへの明示切替でだけdiscount source解除intentを受理する" do
+    persisted_receipt = create(:receipt)
+    reference_item = persisted_receipt.receipt_items.create!(
+      confirmed_name: "割引付き基準価格商品",
+      pricing_source_kind: "reference_quantity_price",
+      reference_price_amount: BigDecimal("120"),
+      reference_quantity: BigDecimal("500"),
+      reference_quantity_unit_code: "milliliter",
+      reference_price_tax_inclusion: "gross",
+      quantity: BigDecimal("750"),
+      quantity_unit_code: "milliliter",
+      original_line_total: 180,
+      discount_amount: 18,
+      discount_rate: nil,
+      line_total: 162
+    )
+
+    normalized = described_class.call(
+      receipt: persisted_receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => {
+            "id" => reference_item.id.to_s,
+            "pricing_source_kind" => "explicit_line_total",
+            "original_line_total" => "200",
+            "line_total" => "999",
+            "discount_rate" => "",
+            "clear_item_discount_before_explicit" => "1"
+          }
+        }
+      }
+    ).dig("receipt_items_attributes", "0")
+
+    expect(normalized).to include(
+      "pricing_source_kind" => "explicit_line_total",
+      "original_line_total" => 200,
+      "line_total" => 200,
+      "discount_rate" => nil,
+      "discount_amount" => nil
+    )
+    expect(normalized).not_to have_key("clear_item_discount_before_explicit")
+  end
+
+  it "新規rowの未保存formula draftからexplicitへの切替intentを受理する" do
+    normalized = described_class.call(
+      receipt: receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => {
+            "pricing_source_kind" => "explicit_line_total",
+            "original_line_total" => "200",
+            "discount_rate" => "",
+            "clear_item_discount_before_explicit" => "1"
+          }
+        }
+      }
+    ).dig("receipt_items_attributes", "0")
+
+    expect(normalized).to include(
+      "pricing_source_kind" => "explicit_line_total",
+      "original_line_total" => 200,
+      "line_total" => 200,
+      "discount_rate" => nil,
+      "discount_amount" => nil
+    )
+  end
+
+  it "保存済みformula rowの未保存discount draftを明示intentで破棄する" do
+    persisted_receipt = create(:receipt)
+    reference_item = persisted_receipt.receipt_items.create!(
+      confirmed_name: "基準価格商品",
+      pricing_source_kind: "reference_quantity_price",
+      reference_price_amount: BigDecimal("120"),
+      reference_quantity: BigDecimal("500"),
+      reference_quantity_unit_code: "milliliter",
+      reference_price_tax_inclusion: "gross",
+      quantity: BigDecimal("750"),
+      quantity_unit_code: "milliliter",
+      original_line_total: 180,
+      discount_amount: nil,
+      discount_rate: nil,
+      line_total: 180
+    )
+
+    normalized = described_class.call(
+      receipt: persisted_receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => {
+            "id" => reference_item.id.to_s,
+            "pricing_source_kind" => "explicit_line_total",
+            "original_line_total" => "200",
+            "discount_rate" => "",
+            "clear_item_discount_before_explicit" => "1"
+          }
+        }
+      }
+    ).dig("receipt_items_attributes", "0")
+
+    expect(normalized).to include(
+      "pricing_source_kind" => "explicit_line_total",
+      "original_line_total" => 200,
+      "line_total" => 200,
+      "discount_rate" => nil,
+      "discount_amount" => nil
+    )
+  end
+
+  it "新規explicit rowのintentなしdiscountを割引前sourceとして維持する" do
+    normalized = described_class.call(
+      receipt: receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => {
+            "pricing_source_kind" => "explicit_line_total",
+            "original_line_total" => "200",
+            "line_total" => "200",
+            "discount_rate" => "10"
+          }
+        }
+      }
+    ).dig("receipt_items_attributes", "0")
+
+    expect(normalized).to include(
+      "pricing_source_kind" => "explicit_line_total",
+      "original_line_total" => 200,
+      "line_total" => 200,
+      "discount_rate" => BigDecimal("0.1")
+    )
+    expect(normalized).not_to have_key("discount_amount")
+  end
+
+  it "formula割引解除の確認後に明示金額へ入力し直したdiscountを新sourceとして維持する" do
+    persisted_receipt = create(:receipt)
+    reference_item = persisted_receipt.receipt_items.create!(
+      confirmed_name: "割引付き基準価格商品",
+      pricing_source_kind: "reference_quantity_price",
+      reference_price_amount: BigDecimal("120"),
+      reference_quantity: BigDecimal("500"),
+      reference_quantity_unit_code: "milliliter",
+      reference_price_tax_inclusion: "gross",
+      quantity: BigDecimal("750"),
+      quantity_unit_code: "milliliter",
+      original_line_total: 180,
+      discount_amount: 18,
+      discount_rate: nil,
+      line_total: 162
+    )
+
+    { "10" => BigDecimal("0.1"), "0" => BigDecimal("0") }.each do |submitted_rate, expected_rate|
+      normalized = described_class.call(
+        receipt: persisted_receipt,
+        attributes: {
+          "receipt_items_attributes" => {
+            "0" => {
+              "id" => reference_item.id.to_s,
+              "pricing_source_kind" => "explicit_line_total",
+              "original_line_total" => "200",
+              "line_total" => "999",
+              "discount_rate" => submitted_rate,
+              "clear_item_discount_before_explicit" => "1"
+            }
+          }
+        }
+      ).dig("receipt_items_attributes", "0")
+
+      aggregate_failures submitted_rate do
+        expect(normalized).to include(
+          "pricing_source_kind" => "explicit_line_total",
+          "original_line_total" => 200,
+          "line_total" => 200,
+          "discount_rate" => expected_rate,
+          "discount_amount" => nil
+        )
+        expect(normalized).not_to have_key("clear_item_discount_before_explicit")
+      end
+    end
+  end
+
+  it "保存済みdiscountは0を含むnon-nil値をsourceと判定し、nilだけを未記録と判定する" do
+    persisted_receipt = create(:receipt)
+    absent_discount_values = [ [ nil, nil ] ]
+    present_discount_values = [
+      [ BigDecimal("0"), nil ],
+      [ nil, 0 ],
+      [ BigDecimal("0"), 0 ],
+      [ BigDecimal("0.1"), nil ],
+      [ nil, 18 ]
+    ]
+
+    absent_discount_values.each_with_index do |(discount_rate, discount_amount), index|
+      item = persisted_receipt.receipt_items.create!(
+        confirmed_name: "解除不要#{index}",
+        pricing_source_kind: "reference_quantity_price",
+        reference_price_amount: BigDecimal("120"),
+        reference_quantity: BigDecimal("500"),
+        reference_quantity_unit_code: "milliliter",
+        reference_price_tax_inclusion: "gross",
+        quantity: BigDecimal("750"),
+        quantity_unit_code: "milliliter",
+        original_line_total: 180,
+        discount_rate: discount_rate,
+        discount_amount: discount_amount,
+        line_total: 180
+      )
+
+      normalized = described_class.call(
+        receipt: persisted_receipt,
+        attributes: {
+          "receipt_items_attributes" => {
+            "0" => {
+              "id" => item.id.to_s,
+              "pricing_source_kind" => "explicit_line_total",
+              "original_line_total" => "200"
+            }
+          }
+        }
+      )
+
+      expect(normalized.dig("receipt_items_attributes", "0", "line_total")).to eq(200)
+    end
+
+    present_discount_values.each_with_index do |(discount_rate, discount_amount), index|
+      item = persisted_receipt.receipt_items.create!(
+        confirmed_name: "解除必要#{index}",
+        pricing_source_kind: "reference_quantity_price",
+        reference_price_amount: BigDecimal("120"),
+        reference_quantity: BigDecimal("500"),
+        reference_quantity_unit_code: "milliliter",
+        reference_price_tax_inclusion: "gross",
+        quantity: BigDecimal("750"),
+        quantity_unit_code: "milliliter",
+        original_line_total: 180,
+        discount_rate: discount_rate,
+        discount_amount: discount_amount,
+        line_total: discount_rate.to_d.positive? || discount_amount.to_i.positive? ? 162 : 180
+      )
+
+      expect do
+        described_class.call(
+          receipt: persisted_receipt,
+          attributes: {
+            "receipt_items_attributes" => {
+              "0" => {
+                "id" => item.id.to_s,
+                "pricing_source_kind" => "explicit_line_total",
+                "original_line_total" => "200"
+              }
+            }
+          }
+        )
+      end.to raise_error(Receipts::Editing::InvalidItemSourceError)
+    end
+  end
+
+  it "discount source解除intentをformulaからexplicitへの完全な切替以外で受理しない" do
+    persisted_receipt = create(:receipt)
+    reference_item = persisted_receipt.receipt_items.create!(
+      confirmed_name: "基準価格商品",
+      pricing_source_kind: "reference_quantity_price",
+      reference_price_amount: BigDecimal("120"),
+      reference_quantity: BigDecimal("500"),
+      reference_quantity_unit_code: "milliliter",
+      reference_price_tax_inclusion: "gross",
+      quantity: BigDecimal("750"),
+      quantity_unit_code: "milliliter",
+      original_line_total: 180,
+      line_total: 180
+    )
+
+    invalid_inputs = [
+      {
+        "id" => reference_item.id.to_s,
+        "pricing_source_kind" => "reference_quantity_price",
+        "clear_item_discount_before_explicit" => "1"
+      },
+      {
+        "id" => reference_item.id.to_s,
+        "pricing_source_kind" => "explicit_line_total",
+        "original_line_total" => "200",
+        "clear_item_discount_before_explicit" => "true"
+      },
+      {
+        "pricing_source_kind" => "explicit_line_total",
+        "original_line_total" => "200",
+        "clear_item_discount_before_explicit" => "true"
+      },
+      {
+        "pricing_source_kind" => "explicit_line_total",
+        "original_line_total" => "200",
+        "discount_rate" => "10",
+        "clear_item_discount_before_explicit" => "2"
+      }
+    ]
+
+    invalid_inputs.each do |item_attributes|
+      expect do
+        described_class.call(
+          receipt: persisted_receipt,
+          attributes: { "receipt_items_attributes" => { "0" => item_attributes } }
+        )
+      end.to raise_error(Receipts::Editing::InvalidItemSourceError), item_attributes.inspect
+    end
+  end
+
+  it "discount rateのblank送信だけでformulaからexplicitへ切り替えない" do
+    persisted_receipt = create(:receipt)
+    reference_item = persisted_receipt.receipt_items.create!(
+      confirmed_name: "割引率付き基準価格商品",
+      pricing_source_kind: "reference_quantity_price",
+      reference_price_amount: BigDecimal("120"),
+      reference_quantity: BigDecimal("500"),
+      reference_quantity_unit_code: "milliliter",
+      reference_price_tax_inclusion: "gross",
+      quantity: BigDecimal("750"),
+      quantity_unit_code: "milliliter",
+      original_line_total: 180,
+      discount_amount: nil,
       discount_rate: BigDecimal("0.1"),
       line_total: 162
     )
@@ -192,7 +712,8 @@ RSpec.describe Receipts::Editing::InputNormalizer do
             "0" => {
               "id" => reference_item.id.to_s,
               "pricing_source_kind" => "explicit_line_total",
-              "line_total" => "200"
+              "original_line_total" => "200",
+              "discount_rate" => ""
             }
           }
         }
@@ -405,7 +926,7 @@ RSpec.describe Receipts::Editing::InputNormalizer do
     )
   end
 
-  it "legacy rowでは現行のblank defaultとalias normalizationを維持する" do
+  it "pricing source kind未記録rowではblank defaultとalias normalizationを維持する" do
     normalized = described_class.call(
       receipt: receipt,
       attributes: {

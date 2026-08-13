@@ -128,7 +128,7 @@ ja:
       item_columns:
         name: 品名
         quantity: 数量
-        unit_price: 単価
+        amount: 金額
         details: 詳細
       image:
         title: 画像プレビュー
@@ -159,6 +159,46 @@ ja:
       unit: 単位
       amount: 金額
       unit_price: 単価
+      pricing_source: 金額の計算方式
+      pricing_source_select: 計算方式
+      pricing_source_help: 保存する金額の根拠を1つ選択します。
+      change_pricing_source: 計算方式を変更
+      pricing_source_unclassified: 方式未記録
+      pricing_modes:
+        count_unit_price: 単価 × 数量
+        reference_quantity_price: 基準価格から計算
+        explicit_line_total: 明細金額を直接入力
+      pricing_summaries:
+        count_unit_price: "%{price}円 × %{quantity}%{unit}"
+        count_unit_price_unset: 単価と数量
+        reference_quantity_price: "%{amount}円 / %{quantity}%{unit}（%{tax_inclusion}）"
+        reference_quantity_price_unset: 基準価格と基準数量
+        explicit_line_total: "明細金額 %{amount}円"
+        explicit_line_total_before_discount: "割引前明細金額 %{amount}円"
+        unclassified_count: "%{price}円 × %{quantity}%{unit}（方式未記録）"
+        unclassified_saved_total: "保存済み明細金額 %{amount}円（方式未記録）"
+        unclassified_amount_missing: 金額未設定（方式未記録）
+      reference_price_amount: 基準価格
+      reference_quantity: 基準数量
+      reference_quantity_unit: 基準単位
+      reference_price_tax_inclusions:
+        gross: 税込基準
+        net: 税抜基準
+      reference_price_tax_inclusions_short:
+        gross: 税込
+        net: 税抜
+      reference_price_tax_inclusion_note:
+        gross: この基準価格は税込金額として計算します。
+        net: 保存済みの税抜基準を維持して計算します。
+      explicit_line_total: 明細金額
+      explicit_line_total_before_discount: 割引前明細金額
+      explicit_line_total_help: レシートに印字された明細金額を入力します。
+      explicit_line_total_discount_help: 入力値に明細割引を1回適用し、割引後の小計を表示します。
+      reference_calculated_amount: 計算金額
+      pricing_source_summary_aria: 金額の根拠
+      clear_discount_before_explicit_confirm: 現在の明細割引を解除して、明細金額の直接入力に切り替えますか？
+      clear_discount_before_explicit_title: 金額の計算方式を切り替え
+      clear_discount_before_explicit_label: 割引を解除して切り替える
       discount_rate: 割引率
       tax_rate: 税率
       category: カテゴリ
