@@ -131,7 +131,7 @@ module Amounts
       end
 
       def alternative_rate_mixed_candidate(rounding_mode, targets)
-        if !tax_excluded_price_conversion_enabled? && legacy_taxable_item_for_mixed_assignment?
+        if !tax_excluded_price_conversion_enabled? && taxable_basis_inference_required?
           return { status: :not_applicable }
         end
         return { status: :not_applicable } unless targets.keys.many?
@@ -361,7 +361,7 @@ module Amounts
           item_tax_rate(item).zero?
       end
 
-      def legacy_taxable_item_for_mixed_assignment?
+      def taxable_basis_inference_required?
         items.any? do |item|
           item_line_total(item).positive? &&
             !zero_rate_item_for_mixed_assignment?(item) &&

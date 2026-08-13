@@ -7,15 +7,15 @@ module Amounts
     end
 
     def receipt_tax_basis
-      candidate_profile_basis(:receipt_tax_basis) || legacy_receipt_tax_basis
+      candidate_profile_basis(:receipt_tax_basis) || basis_derived_receipt_tax_basis
     end
 
     def item_amount_basis
-      candidate_profile_basis(:item_amount_basis) || legacy_item_amount_basis
+      candidate_profile_basis(:item_amount_basis) || basis_derived_item_amount_basis
     end
 
     def tax_detail_amount_basis
-      candidate_profile_basis(:tax_detail_amount_basis) || legacy_tax_detail_amount_basis
+      candidate_profile_basis(:tax_detail_amount_basis) || basis_derived_tax_detail_amount_basis
     end
 
     private
@@ -34,7 +34,7 @@ module Amounts
       profile[key] || profile[key.to_s]
     end
 
-    def legacy_item_amount_basis
+    def basis_derived_item_amount_basis
       case candidate.basis
       when "external_tax_from_receipt", "items_as_tax_excluded"
         :line_total_as_net
@@ -45,11 +45,11 @@ module Amounts
       end
     end
 
-    def legacy_receipt_tax_basis
+    def basis_derived_receipt_tax_basis
       %w[external_tax_from_receipt items_as_tax_excluded printed_tax_details_net].include?(candidate.basis) ? :tax_added_to_subtotal : :total_includes_tax
     end
 
-    def legacy_tax_detail_amount_basis
+    def basis_derived_tax_detail_amount_basis
       case candidate.basis
       when "printed_tax_details_gross"
         :gross

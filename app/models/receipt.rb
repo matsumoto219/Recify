@@ -68,7 +68,7 @@ class Receipt < ApplicationRecord
     net
     unknown
   ].freeze
-  LEGACY_AMOUNT_SOURCE_SEMANTICS = {
+  PROFILELESS_SELECTED_BASIS_SOURCE_SEMANTICS = {
     "external_tax_from_receipt" => {
       "receipt_tax_basis" => "tax_added_to_subtotal",
       "item_amount_basis" => "line_total_as_net",
@@ -325,7 +325,7 @@ class Receipt < ApplicationRecord
     profile_semantics = sanitized_amount_source_semantics(snapshot[:profile])
     return edit_source_semantics_projection(profile_semantics) if profile_semantics.present?
 
-    legacy_amount_source_semantics(snapshot)
+    profileless_selected_basis_source_semantics(snapshot)
   end
 
   def receipt_items_limit
@@ -376,11 +376,11 @@ class Receipt < ApplicationRecord
     semantics
   end
 
-  def legacy_amount_source_semantics(snapshot)
+  def profileless_selected_basis_source_semantics(snapshot)
     return {} unless snapshot[:selected_candidate_status].to_s == "accepted"
 
     selected_basis = snapshot.dig(:amount_engine, :selected_basis).to_s
-    LEGACY_AMOUNT_SOURCE_SEMANTICS.fetch(selected_basis, {}).dup
+    PROFILELESS_SELECTED_BASIS_SOURCE_SEMANTICS.fetch(selected_basis, {}).dup
   end
 
   def edit_source_semantics_projection(semantics)
@@ -419,7 +419,7 @@ class Receipt < ApplicationRecord
   end
 
   private :sanitized_amount_source_semantics,
-    :legacy_amount_source_semantics,
+    :profileless_selected_basis_source_semantics,
     :edit_source_semantics_projection,
     :valid_amount_source_basis_pair?
 
