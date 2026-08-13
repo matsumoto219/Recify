@@ -141,6 +141,8 @@ class ReceiptsController < ApplicationController
 
   def create
     carry_receipt_form_initial_purchase_input_fingerprint
+    carry_receipt_form_raw_percentage_inputs
+    carry_receipt_form_raw_item_pricing_inputs
     rebuild_blank_item_row_after_failure = blank_new_receipt_item_rows_submitted?
     rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
     @receipt = current_user.receipts.new
@@ -270,6 +272,8 @@ class ReceiptsController < ApplicationController
 
   def update
     carry_receipt_form_initial_purchase_input_fingerprint
+    carry_receipt_form_raw_percentage_inputs
+    carry_receipt_form_raw_item_pricing_inputs
     @receipt_form_adjustment_absence_confirmed = receipt_form_adjustment_absence_confirmed?
     rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
 
@@ -442,6 +446,8 @@ class ReceiptsController < ApplicationController
   def prepare_receipt_form_presenter(submitted_params: nil)
     submitted_params ||= @receipt_form_submitted_params
     submitted_params = receipt_form_params_with_confirmed_discount_clear_intents(submitted_params)
+    submitted_params = receipt_form_params_with_raw_percentage_inputs(submitted_params)
+    submitted_params = receipt_form_params_with_raw_item_pricing_inputs(submitted_params)
     @receipt_form_presenter = ReceiptFormPresenter.new(
       receipt: @receipt,
       submitted_params: submitted_params,
@@ -472,6 +478,92 @@ class ReceiptsController < ApplicationController
       raw_intent = raw_items.dig(index.to_s, :clear_item_discount_before_explicit) ||
         raw_items.dig(index.to_s, "clear_item_discount_before_explicit")
       item["clear_item_discount_before_explicit"] = "1" if raw_intent.to_s == "1"
+    end
+
+    rendered
+  end
+
+  def carry_receipt_form_raw_percentage_inputs
+    submitted = receipt_params.to_h
+    @receipt_form_raw_percentage_inputs = submitted.slice("tax_rate")
+
+    {
+      "receipt_items_attributes" => [ %w[tax_rate discount_rate], method(:receipt_item_meaningful_input?) ],
+      "receipt_adjustments_attributes" => [ %w[tax_rate], method(:receipt_adjustment_meaningful_input?) ]
+    }.each do |collection_key, (percentage_fields, meaningful)|
+      rows = submitted[collection_key]
+      next unless rows.respond_to?(:each_pair)
+
+      percentage_rows = rows.each_with_object({}) do |(index, row), result|
+        if row["id"].blank?
+          next if ActiveModel::Type::Boolean.new.cast(row["_destroy"])
+          next unless meaningful.call(row)
+        end
+
+        values = row.slice("id", *percentage_fields)
+        result[index.to_s] = values if percentage_fields.any? { |field| row.key?(field) }
+      end
+      @receipt_form_raw_percentage_inputs[collection_key] = percentage_rows if percentage_rows.present?
+    end
+  end
+
+  def receipt_form_params_with_raw_percentage_inputs(submitted_params)
+    rendered = submitted_params.to_h.deep_dup
+    raw = @receipt_form_raw_percentage_inputs
+    return rendered if raw.blank?
+
+    rendered["tax_rate"] = raw["tax_rate"] if raw.key?("tax_rate")
+    %w[receipt_items_attributes receipt_adjustments_attributes].each do |collection_key|
+      rows = raw[collection_key]
+      next unless rows.respond_to?(:each_pair)
+
+      rendered[collection_key] ||= {}
+      rows.each_pair do |index, values|
+        rendered[collection_key][index.to_s] ||= {}
+        rendered[collection_key][index.to_s].merge!(values)
+      end
+    end
+
+    rendered
+  end
+
+  def carry_receipt_form_raw_item_pricing_inputs
+    submitted_rows = receipt_params.to_h["receipt_items_attributes"]
+    return unless submitted_rows.respond_to?(:each_pair)
+
+    @receipt_form_raw_item_pricing_inputs = submitted_rows.each_with_object({}) do |(index, row), result|
+      next if row["id"].present?
+      next if ActiveModel::Type::Boolean.new.cast(row["_destroy"])
+      next if row["pricing_source_kind"].blank?
+      next unless receipt_item_meaningful_input?(row)
+
+      values = row.slice(
+        "price",
+        "quantity",
+        "quantity_unit_code",
+        "pricing_source_kind",
+        "reference_price_amount",
+        "reference_quantity",
+        "reference_quantity_unit_code",
+        "quantity_unit_raw",
+        "reference_quantity_unit_raw",
+        "reference_price_tax_inclusion",
+        "original_line_total",
+        "line_total"
+      )
+      result[index.to_s] = values if values.present?
+    end
+  end
+
+  def receipt_form_params_with_raw_item_pricing_inputs(submitted_params)
+    rendered = submitted_params.to_h.deep_dup
+    rows = @receipt_form_raw_item_pricing_inputs
+    return rendered unless rows.respond_to?(:each_pair)
+
+    rendered["receipt_items_attributes"] ||= {}
+    rows.each_pair do |index, values|
+      rendered["receipt_items_attributes"][index.to_s] ||= {}
+      rendered["receipt_items_attributes"][index.to_s].merge!(values)
     end
 
     rendered
@@ -1130,7 +1222,7 @@ class ReceiptsController < ApplicationController
     adjustment_attribute_values = submitted_receipt_adjustment_attribute_values
     return false if adjustment_attribute_values.blank?
 
-    adjustment_attribute_values.any? do |adjustment_attributes|
+    adjustment_attribute_values.all? do |adjustment_attributes|
       next false unless adjustment_attributes.respond_to?(:stringify_keys)
 
       blank_new_receipt_adjustment_attributes?(adjustment_attributes.stringify_keys)

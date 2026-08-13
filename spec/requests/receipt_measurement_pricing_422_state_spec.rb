@@ -77,6 +77,12 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
       .values
   end
 
+  def rendered_item_row(document, name)
+    document.css('[data-receipt-form-target="itemRow"]').find do |row|
+      row.at_css("input[name$='[confirmed_name]']")&.[]('value') == name
+    end
+  end
+
   it 'storage quotaの422でも入力中のreference sourceをPresenterへ渡す' do
     receipt, item = create_receipt_with_reference_item
     before = item.attributes.deep_dup
@@ -178,6 +184,136 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
             .to_s
         )
       ).to eq(BigDecimal('130'))
+    end
+  end
+
+  it 'createの非互換reference source 422でraw百分率を保持し、修正再送で同じrateを保存する' do
+    presenters = capture_presenter_arguments
+    submitted_receipt = {
+      store_name: '百分率再送店',
+      payment_method: 'cash',
+      tax_rate: '0.10',
+      receipt_items_attributes: {
+        '0' => {
+          confirmed_name: '百分率再送商品',
+          quantity: '1.5',
+          quantity_unit_code: 'liter',
+          tax_rate: '10',
+          discount_rate: '5.5',
+          pricing_source_kind: 'reference_quantity_price',
+          reference_price_amount: '120',
+          reference_quantity: '500',
+          reference_quantity_unit_code: 'gram',
+          reference_price_tax_inclusion: 'gross'
+        }
+      }
+    }
+
+    expect do
+      post receipts_path, params: { receipt: submitted_receipt }
+    end.not_to change(Receipt, :count)
+
+    document = Nokogiri::HTML(response.body)
+    rendered_item = rendered_item_row(document, '百分率再送商品')
+    rendered_tax_rate = rendered_item&.at_css('[data-receipt-form-target="taxRateInput"]')&.[]('value')
+    rendered_discount_rate = rendered_item&.at_css('[data-receipt-form-target="discountRateInput"]')&.[]('value')
+    presented = presenters.last.fetch(:submitted_params)
+
+    aggregate_failures '422 response' do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(presented['tax_rate']).to eq('0.10')
+      expect(presented.dig('receipt_items_attributes', '0', 'tax_rate')).to eq('10')
+      expect(presented.dig('receipt_items_attributes', '0', 'discount_rate')).to eq('5.5')
+      expect(rendered_tax_rate).to eq('10')
+      expect(rendered_discount_rate).to eq('5.5')
+    end
+
+    corrected_receipt = submitted_receipt.deep_dup
+    corrected_receipt[:receipt_items_attributes]['0'][:reference_quantity_unit_code] = 'milliliter'
+    corrected_receipt[:receipt_items_attributes]['0'][:tax_rate] = rendered_tax_rate
+    corrected_receipt[:receipt_items_attributes]['0'][:discount_rate] = rendered_discount_rate
+
+    expect do
+      post receipts_path, params: { receipt: corrected_receipt }
+    end.to change(Receipt, :count).by(1)
+
+    saved_item = user.receipts.find_by!(store_name: '百分率再送店').receipt_items.sole
+    aggregate_failures 'corrected resubmission' do
+      expect(response).to redirect_to(receipts_path)
+      expect(saved_item.tax_rate).to eq(BigDecimal('0.1'))
+      expect(saved_item.discount_rate).to eq(BigDecimal('0.055'))
+    end
+  end
+
+  [
+    [ 'Amount domain error', :domain_error ],
+    [ 'stale conflict', :stale_conflict ]
+  ].each do |label, failure_kind|
+    it "#{label}のupdate 422でitem/adjustment/receiptのraw百分率を保持しDBを変更しない" do
+      receipt, item = create_receipt_with_reference_item
+      adjustment = receipt.receipt_adjustments.create!(
+        kind: 'coupon',
+        label: '保存済みクーポン',
+        amount: 10,
+        sign: 'discount',
+        source: 'manual',
+        tax_rate: BigDecimal('0.08'),
+        needs_review: false,
+        review_reasons: []
+      )
+      submitted_lock_version = receipt.lock_version
+      receipt.update!(memo: '別タブで保存済み') if failure_kind == :stale_conflict
+      before_receipt = receipt.reload.attributes.deep_dup
+      before_item = item.reload.attributes.deep_dup
+      before_adjustment = adjustment.reload.attributes.deep_dup
+      presenters = capture_presenter_arguments
+
+      patch receipt_path(receipt), params: {
+        receipt: {
+          lock_version: submitted_lock_version,
+          tax_rate: '0.10',
+          receipt_items_attributes: {
+            '0' => reference_item_attributes(
+              item,
+              quantity_unit_code: failure_kind == :domain_error ? 'liter' : 'milliliter',
+              reference_quantity_unit_code: failure_kind == :domain_error ? 'gram' : 'milliliter',
+              tax_rate: '10.0',
+              discount_rate: '5.5'
+            )
+          },
+          receipt_adjustments_attributes: {
+            '0' => {
+              id: adjustment.id,
+              kind: adjustment.kind,
+              label: adjustment.label,
+              amount: adjustment.amount,
+              sign: adjustment.sign,
+              tax_rate: '8.0',
+              _destroy: '0'
+            }
+          }
+        }
+      }
+
+      presented = presenters.last.fetch(:submitted_params)
+      document = Nokogiri::HTML(response.body)
+      rendered_item = rendered_item_row(document, item.confirmed_name)
+      rendered_adjustment = document.css('[data-receipt-form-target="adjustmentRow"]').find do |row|
+        row.at_css("input[name$='[id]']")&.[]('value') == adjustment.id.to_s
+      end
+      aggregate_failures label do
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(presented['tax_rate']).to eq('0.10')
+        expect(presented.dig('receipt_items_attributes', '0', 'tax_rate')).to eq('10.0')
+        expect(presented.dig('receipt_items_attributes', '0', 'discount_rate')).to eq('5.5')
+        expect(presented.dig('receipt_adjustments_attributes', '0', 'tax_rate')).to eq('8.0')
+        expect(rendered_item&.at_css('[data-receipt-form-target="taxRateInput"]')&.[]('value')).to eq('10.0')
+        expect(rendered_item&.at_css('[data-receipt-form-target="discountRateInput"]')&.[]('value')).to eq('5.5')
+        expect(rendered_adjustment&.at_css('[data-receipt-form-target="adjustmentTaxRateInput"]')&.[]('value')).to eq('8.0')
+        expect(receipt.reload.attributes).to eq(before_receipt)
+        expect(item.reload.attributes).to eq(before_item)
+        expect(adjustment.reload.attributes).to eq(before_adjustment)
+      end
     end
   end
 

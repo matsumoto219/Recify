@@ -67,10 +67,10 @@ class ReceiptFormPresenter
 
   def visible_receipt_adjustments
     @visible_receipt_adjustments ||= begin
-      persisted = receipt.receipt_adjustments.reject do |adjustment|
+      associated = receipt.receipt_adjustments.reject do |adjustment|
         adjustment.marked_for_destruction? || submitted_destroyed?(:receipt_adjustments_attributes, adjustment)
       end
-      persisted + submitted_new_adjustments
+      associated + submitted_new_adjustments(existing_records: associated.reject(&:persisted?))
     end
   end
 
@@ -82,10 +82,10 @@ class ReceiptFormPresenter
 
   def visible_receipt_payments
     @visible_receipt_payments ||= begin
-      persisted = receipt.receipt_payments.reject do |payment|
+      associated = receipt.receipt_payments.reject do |payment|
         payment.marked_for_destruction? || submitted_destroyed?(:receipt_payments_attributes, payment)
       end
-      persisted + submitted_new_payments
+      associated + submitted_new_payments(existing_records: associated.reject(&:persisted?))
     end
   end
 
@@ -303,8 +303,8 @@ class ReceiptFormPresenter
     end
   end
 
-  def submitted_new_adjustments
-    build_submitted_rows(:receipt_adjustments_attributes, ReceiptAdjustment) do |values|
+  def submitted_new_adjustments(existing_records: [])
+    build_submitted_rows(:receipt_adjustments_attributes, ReceiptAdjustment, existing_records: existing_records) do |values|
       {
         kind: values["kind"],
         label: values["label"],
@@ -314,8 +314,8 @@ class ReceiptFormPresenter
     end
   end
 
-  def submitted_new_payments
-    build_submitted_rows(:receipt_payments_attributes, ReceiptPayment) do |values|
+  def submitted_new_payments(existing_records: [])
+    build_submitted_rows(:receipt_payments_attributes, ReceiptPayment, existing_records: existing_records) do |values|
       { method: values["method"] }
     end
   end

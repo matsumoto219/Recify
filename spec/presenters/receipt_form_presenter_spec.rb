@@ -190,6 +190,175 @@ RSpec.describe ReceiptFormPresenter do
       end
     end
 
+    it '保存失敗後の複数新規reference行へsubmitted authorityを対応付けて重複なく再構築する' do
+      receipt = build(:receipt)
+      normalized_items = [
+        [ '基準価格商品A', '1.0', '1000.0', '1000.5' ],
+        [ '基準価格商品B', '2.0', '2000.0', '2000.5' ],
+        [ '基準価格商品C', '3.0', '3000.0', '3000.5' ]
+      ].map do |name, quantity, price, reference_quantity|
+        receipt.receipt_items.build(
+          confirmed_name: name,
+          quantity: BigDecimal(quantity),
+          quantity_unit_code: 'liter',
+          pricing_source_kind: 'reference_quantity_price',
+          reference_price_amount: BigDecimal(price),
+          reference_quantity: BigDecimal(reference_quantity),
+          reference_quantity_unit_code: 'milliliter',
+          reference_price_tax_inclusion: 'gross'
+        )
+      end
+      submitted_rows = normalized_items.each_with_index.to_h do |item, index|
+        [
+          index.to_s,
+          {
+            confirmed_name: item.confirmed_name,
+            quantity: "#{index + 1}.0",
+            quantity_unit_code: 'liter',
+            pricing_source_kind: 'reference_quantity_price',
+            reference_price_amount: "#{index + 1}000.0",
+            reference_quantity: "#{index + 1}000.5",
+            reference_quantity_unit_code: 'milliliter',
+            reference_price_tax_inclusion: 'gross'
+          }
+        ]
+      end
+      presenter = described_class.new(
+        receipt: receipt,
+        submitted_params: { receipt_items_attributes: submitted_rows }
+      )
+
+      visible_items = presenter.visible_receipt_items
+      rows = visible_items.map { |item| presenter.item_row(item, new_record: true) }
+
+      aggregate_failures do
+        expect(visible_items).to eq(normalized_items)
+        expect(visible_items.size).to eq(3)
+        expect(rows.map(&:pricing_source_kind_value)).to eq([ 'reference_quantity_price' ] * 3)
+        expect(rows.map(&:quantity_value)).to eq(%w[1.0 2.0 3.0])
+        expect(rows.map(&:reference_price_amount_value)).to eq(%w[1000.0 2000.0 3000.0])
+        expect(rows.map(&:reference_quantity_value)).to eq(%w[1000.5 2000.5 3000.5])
+        expect(rows.map(&:reference_price_tax_inclusion_value)).to eq([ 'gross' ] * 3)
+      end
+    end
+
+    it 'prune済みの新規item行をassociated rowへ同じ順序で対応し重複しない' do
+      receipt = build(:receipt)
+      normalized_items = [
+        receipt.receipt_items.build(
+          confirmed_name: '基準価格商品A',
+          quantity: BigDecimal('1'),
+          quantity_unit_code: 'liter',
+          pricing_source_kind: 'reference_quantity_price',
+          reference_price_amount: BigDecimal('100'),
+          reference_quantity: BigDecimal('500'),
+          reference_quantity_unit_code: 'milliliter',
+          reference_price_tax_inclusion: 'gross'
+        ),
+        receipt.receipt_items.build(
+          confirmed_name: '基準価格商品C',
+          quantity: BigDecimal('3'),
+          quantity_unit_code: 'liter',
+          pricing_source_kind: 'reference_quantity_price',
+          reference_price_amount: BigDecimal('300'),
+          reference_quantity: BigDecimal('750'),
+          reference_quantity_unit_code: 'milliliter',
+          reference_price_tax_inclusion: 'gross'
+        )
+      ]
+      presenter = described_class.new(
+        receipt: receipt,
+        submitted_params: {
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '基準価格商品A',
+              quantity: '1.00',
+              quantity_unit_code: 'liter',
+              pricing_source_kind: 'reference_quantity_price',
+              reference_price_amount: '100.00',
+              reference_quantity: '500.00',
+              reference_quantity_unit_code: 'milliliter',
+              reference_price_tax_inclusion: 'gross'
+            },
+            '2' => {
+              confirmed_name: '基準価格商品C',
+              quantity: '3.00',
+              quantity_unit_code: 'liter',
+              pricing_source_kind: 'reference_quantity_price',
+              reference_price_amount: '300.00',
+              reference_quantity: '750.00',
+              reference_quantity_unit_code: 'milliliter',
+              reference_price_tax_inclusion: 'gross'
+            }
+          }
+        }
+      )
+
+      visible_items = presenter.visible_receipt_items
+      rows = visible_items.map { |item| presenter.item_row(item, new_record: true) }
+
+      aggregate_failures do
+        expect(visible_items).to eq(normalized_items)
+        expect(rows.map(&:item_name)).to eq([ '基準価格商品A', '基準価格商品C' ])
+        expect(rows.map(&:quantity_value)).to eq(%w[1.00 3.00])
+        expect(rows.map(&:reference_price_amount_value)).to eq(%w[100.00 300.00])
+        expect(rows.map(&:reference_quantity_value)).to eq(%w[500.00 750.00])
+      end
+    end
+
+    it '保存済み行はindexではなくidでsubmitted valueを対応する' do
+      receipt = create(:receipt)
+      item_a = receipt.receipt_items.create!(
+        confirmed_name: '保存済み商品A', quantity: 1, quantity_unit_code: 'each', line_total: 100
+      )
+      item_c = receipt.receipt_items.create!(
+        confirmed_name: '保存済み商品C', quantity: 1, quantity_unit_code: 'each', line_total: 300
+      )
+      presenter = described_class.new(
+        receipt: receipt,
+        submitted_params: {
+          receipt_items_attributes: {
+            '8' => { id: item_c.id, tax_rate: '10.55' },
+            '9' => { id: item_a.id, tax_rate: '8.25' }
+          }
+        }
+      )
+
+      aggregate_failures do
+        expect(presenter.item_row(item_a, new_record: false).tax_rate_percentage_value).to eq('8.25')
+        expect(presenter.item_row(item_c, new_record: false).tax_rate_percentage_value).to eq('10.55')
+      end
+    end
+
+    it '保存失敗後のassociated new adjustment/paymentへsubmitted rowを対応し重複しない' do
+      receipt = build(:receipt)
+      adjustment = receipt.receipt_adjustments.build(
+        kind: 'delivery_fee', label: '配送料', amount: 550, sign: 'surcharge', source: 'manual'
+      )
+      payment = receipt.receipt_payments.build(method: '現金', amount: 550)
+      presenter = described_class.new(
+        receipt: receipt,
+        submitted_params: {
+          receipt_adjustments_attributes: {
+            '0' => { kind: 'delivery_fee', label: '配送料', amount: '550.00', sign: 'surcharge' }
+          },
+          receipt_payments_attributes: {
+            '0' => { method: '現金', amount: '550.00' }
+          }
+        }
+      )
+
+      visible_adjustments = presenter.visible_receipt_adjustments
+      visible_payments = presenter.visible_receipt_payments
+
+      aggregate_failures do
+        expect(visible_adjustments).to eq([ adjustment ])
+        expect(visible_payments).to eq([ payment ])
+        expect(presenter.adjustment_row(adjustment, new_record: true).amount_value).to eq('550.00')
+        expect(presenter.payment_row(payment, new_record: true).amount_value).to eq('550.00')
+      end
+    end
+
     it '保存済み明細の削除操作を422再表示用のhidden行として保持する' do
       receipt = create(:receipt)
       visible_item = receipt.receipt_items.create!(

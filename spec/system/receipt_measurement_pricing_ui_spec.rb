@@ -615,8 +615,10 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
 
     reference_price = row.find("[data-receipt-form-target='referencePriceAmountInput']", visible: :all)
     reference_quantity = row.find("[data-receipt-form-target='referenceQuantityInput']", visible: :all)
+    tax_rate = row.find("[data-receipt-form-target='taxRateInput']", visible: :all)
     reference_price.set("120.5")
     reference_quantity.set("500")
+    tax_rate.set("10")
     select_option(row, target: "referenceQuantityUnitInput", value: "milliliter")
 
     reference_increment = row.find(
@@ -737,12 +739,14 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     mode_select = row.find("[data-receipt-form-target='pricingSourceModeInput']", visible: :all)
     reference_price = row.find("[data-receipt-form-target='referencePriceAmountInput']", visible: :all)
     reference_quantity = row.find("[data-receipt-form-target='referenceQuantityInput']", visible: :all)
+    tax_rate = row.find("[data-receipt-form-target='taxRateInput']", visible: :all)
     aggregate_failures "422再表示でtyped sourceを保持する" do
       expect(mode_select.value).to eq("reference_quantity_price")
       expect(row.find("[data-receipt-form-target='quantityInput']", visible: :all).value).to eq("1.5")
       expect(row.find("[data-receipt-form-target='quantityUnitInput']", visible: :all).value).to eq("gram")
       expect(reference_price.value.to_d).to eq(BigDecimal("120"))
       expect(reference_quantity.value.to_d).to eq(BigDecimal("500"))
+      expect(tax_rate.value).to eq("10")
       expect(row.find("[data-receipt-form-target='referenceQuantityUnitInput']", visible: :all).value).to eq("milliliter")
       expect(row.find("[data-receipt-form-target='referencePriceTaxInclusionInput']", visible: :all).value).to eq("gross")
     end
@@ -761,6 +765,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
       reference_quantity: BigDecimal("500"),
       reference_quantity_unit_code: "milliliter",
       reference_price_tax_inclusion: "gross",
+      tax_rate: BigDecimal("0.1"),
       original_line_total: 360,
       line_total: 360
     )
@@ -1082,5 +1087,113 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     expect(row).to have_text("税抜基準")
     expect_mobile_viewport_without_horizontal_overflow
     expect_browser_console_clean
+  end
+
+  it "手動作成の日次上限422で3行のreference authorityを重複なく保持する" do
+    user = create_system_test_user
+    create(:usage_counter, user: user, key: "manual_receipts_per_day", used_count: 50)
+
+    sign_in_through_browser(user)
+    visit new_receipt_path
+    wait_for_stimulus_controller("receipt-form")
+    find("input[name='receipt[store_name]']").set("日次上限browser保持店")
+    find("select[name='receipt[payment_method]'] option[value='cash']").select_option
+
+    sources = [
+      {
+        name: "基準価格商品A",
+        quantity: "1.0",
+        unit: "liter",
+        price: "1000.0",
+        reference_quantity: "1000.5",
+        reference_unit: "milliliter"
+      },
+      {
+        name: "基準価格商品B",
+        quantity: "750.25",
+        unit: "gram",
+        price: "123.45",
+        reference_quantity: "100.0",
+        reference_unit: "gram"
+      },
+      {
+        name: "基準価格商品C",
+        quantity: "2.0",
+        unit: "liter",
+        price: "45.6",
+        reference_quantity: "0.5",
+        reference_unit: "liter"
+      }
+    ]
+    actual_row_selector =
+      "[data-receipt-form-target='itemsContainer'] > " \
+      "[data-controller~='swipe-action'] [data-receipt-form-target='itemRow']"
+
+    sources.each_with_index do |source, index|
+      click_button I18n.t("receipts.form.buttons.add_item") if index.positive?
+      row = all(actual_row_selector, visible: :all).last
+      row.find("input[name$='[confirmed_name]']", visible: :all).set(source.fetch(:name))
+      expand_item_row(row)
+      expand_pricing_source_details(row)
+      row.find("[data-receipt-form-target='quantityInput']", visible: :all).set(source.fetch(:quantity))
+      select_option(row, target: "quantityUnitInput", value: source.fetch(:unit))
+      select_option(row, target: "pricingSourceModeInput", value: "reference_quantity_price")
+      row.find("[data-receipt-form-target='referencePriceAmountInput']", visible: :all).set(source.fetch(:price))
+      row.find("[data-receipt-form-target='referenceQuantityInput']", visible: :all).set(
+        source.fetch(:reference_quantity)
+      )
+      select_option(row, target: "referenceQuantityUnitInput", value: source.fetch(:reference_unit))
+    end
+
+    save_receipt
+
+    expect(page).to have_css("form#new_receipt_form")
+    expect(page).to have_text(I18n.t("flash.usage_limits.manual_receipts_exceeded"))
+    rows = all(actual_row_selector, visible: :all)
+
+    aggregate_failures "failure response" do
+      expect(rows.size).to eq(3)
+      expect(user.receipts.where(store_name: "日次上限browser保持店")).to be_empty
+      expect(UsageCounter.find_by!(user: user, key: "manual_receipts_per_day").used_count).to eq(50)
+    end
+
+    sources.each do |source|
+      row = item_row_named(source.fetch(:name))
+
+      aggregate_failures source.fetch(:name) do
+        expect(row.find("[data-receipt-form-target='pricingSourceModeInput']", visible: :all).value).to eq(
+          "reference_quantity_price"
+        )
+        expect(row.find("[data-receipt-form-target='quantityInput']", visible: :all).value).to eq(
+          source.fetch(:quantity)
+        )
+        expect(row.find("[data-receipt-form-target='quantityUnitInput']", visible: :all).value).to eq(
+          source.fetch(:unit)
+        )
+        expect(row.find("[data-receipt-form-target='referencePriceAmountInput']", visible: :all).value).to eq(
+          source.fetch(:price)
+        )
+        expect(row.find("[data-receipt-form-target='referenceQuantityInput']", visible: :all).value).to eq(
+          source.fetch(:reference_quantity)
+        )
+        expect(row.find("[data-receipt-form-target='referenceQuantityUnitInput']", visible: :all).value).to eq(
+          source.fetch(:reference_unit)
+        )
+        expect(row.find("[data-receipt-form-target='referencePriceTaxInclusionInput']", visible: :all).value).to eq(
+          "gross"
+        )
+      end
+    end
+
+    severe_entries = page.driver.browser.logs.get(:browser).select do |entry|
+      entry.level == "SEVERE" && !blocked_external_font_entry?(entry)
+    end
+    validation_entries, unexpected_entries = severe_entries.partition do |entry|
+      entry.message.include?("/receipts") && entry.message.include?("422 (Unprocessable Content)")
+    end
+    aggregate_failures "browser console" do
+      expect(validation_entries.size).to eq(1)
+      expect(unexpected_entries).to be_empty
+    end
   end
 end
