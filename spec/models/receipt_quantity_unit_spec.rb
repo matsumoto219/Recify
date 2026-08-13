@@ -136,7 +136,7 @@ RSpec.describe ReceiptQuantityUnit, type: :model do
   end
 
   describe '.resolve' do
-    it 'canonical codeと既知aliasをcanonical codeとして解決する' do
+    it 'canonical codeと国非依存symbol aliasをcanonical codeとして解決する' do
       aggregate_failures do
         expect(described_class.resolve(' kilogram ')).to have_attributes(
           status: :known, code: 'kilogram', raw: 'kilogram'
@@ -145,6 +145,20 @@ RSpec.describe ReceiptQuantityUnit, type: :model do
           status: :known, code: 'kilogram', raw: 'kg'
         )
       end
+    end
+
+    it '国固有aliasをglobal catalogで解決しない' do
+      aggregate_failures do
+        expect(described_class.resolve('個')).to have_attributes(status: :unknown, code: nil, raw: '個')
+        expect(described_class.resolve('グラム')).to have_attributes(status: :unknown, code: nil, raw: 'グラム')
+        expect(described_class.resolve('リットル')).to have_attributes(status: :unknown, code: nil, raw: 'リットル')
+      end
+    end
+
+    it '全catalog aliasをcanonical codeか国非依存symbolだけに限定する' do
+      expect(described_class::UNITS.flat_map(&:input_aliases)).to contain_exactly(
+        'g', 'kg', 'mg', 'L', 'l', 'ml', 'mL', 'cc'
+      )
     end
 
     it 'blankとunknownをeachへfallbackせず区別する' do
@@ -175,6 +189,34 @@ RSpec.describe ReceiptQuantityUnit, type: :model do
         expect(resolution.raw).to be_frozen
         expect { resolution.raw << 'changed' }.to raise_error(FrozenError)
         expect(source).to eq(' kg ')
+      end
+    end
+
+    it 'invalid encodingやcontrolを除去して既知単位へ昇格しない' do
+      invalid = "kg\xFF".b.force_encoding(Encoding::UTF_8)
+
+      aggregate_failures do
+        [ "g\0", "kg\u0001", invalid ].each do |input|
+          expect(described_class.resolve(input).known?).to be(false), input.inspect
+        end
+      end
+    end
+
+    it '64 bytesを超えるraw inputをboundedなunknownとしてfail closedにする' do
+      inputs = [
+        '杯' * 65,
+        "kg#{' ' * 100}",
+        "kg#{'x' * 100_000}"
+      ]
+
+      inputs.each do |input|
+        resolution = described_class.resolve(input)
+
+        aggregate_failures input.bytesize.to_s do
+          expect(resolution.known?).to be(false)
+          expect(resolution.raw).to be_valid_encoding
+          expect(resolution.raw.bytesize).to be <= 64
+        end
       end
     end
   end
@@ -292,16 +334,16 @@ RSpec.describe ReceiptQuantityUnit, type: :model do
       expect(described_class.normalize('kilogram')).to eq('kilogram')
     end
 
-    it '旧日本語ラベルを保存codeへ変換する' do
+    it '国固有aliasはglobal catalogで変換せずdefault codeへfallbackする' do
       aggregate_failures do
         expect(described_class.normalize('個')).to eq('each')
-        expect(described_class.normalize('点')).to eq('item')
-        expect(described_class.normalize('本')).to eq('piece')
-        expect(described_class.normalize('袋')).to eq('bag')
-        expect(described_class.normalize('枚')).to eq('sheet')
-        expect(described_class.normalize('台')).to eq('unit')
-        expect(described_class.normalize('箱')).to eq('box')
-        expect(described_class.normalize('セット')).to eq('set')
+        expect(described_class.normalize('点')).to eq('each')
+        expect(described_class.normalize('本')).to eq('each')
+        expect(described_class.normalize('袋')).to eq('each')
+        expect(described_class.normalize('枚')).to eq('each')
+        expect(described_class.normalize('台')).to eq('each')
+        expect(described_class.normalize('箱')).to eq('each')
+        expect(described_class.normalize('セット')).to eq('each')
       end
     end
 

@@ -80,5 +80,36 @@ RSpec.describe Ai::ReceiptAnalysisSchema do
 
       expect(schema.dig('properties', 'receipt_adjustments', 'items', 'properties', 'amount', 'maximum')).to eq(1_500)
     end
+
+    it 'reference pricingのnumeric/source fieldsとcandidate選択をAI output schemaへ追加しない' do
+      item_properties = schema.dig('properties', 'items', 'items', 'properties')
+      prohibited_keys = %w[
+        reference_pricing_candidate_id
+        selected_reference_pricing_candidate_id
+        candidate_id
+        reference_price
+        reference_price_amount
+        reference_quantity
+        purchased_quantity
+        unit_raw
+        reference_unit_code
+        reference_unit_raw
+        reference_price_tax_inclusion
+        tax_inclusion_evidence
+        pricing_source_kind
+        printed_line_total
+        source_text
+        evidence
+        corroboration
+      ]
+
+      aggregate_failures do
+        expect(schema.fetch('properties')).not_to have_key('reference_pricing_candidates')
+        expect(schema.fetch('properties')).not_to have_key('selected_reference_pricing_candidate_id')
+        expect(schema.fetch('properties')).not_to have_key('selected_reference_pricing_candidate_ids')
+        expect(item_properties.keys & prohibited_keys).to be_empty
+        expect(schema.dig('properties', 'items', 'items', 'additionalProperties')).to be(false)
+      end
+    end
   end
 end

@@ -92,6 +92,46 @@ RSpec.describe ReceiptAmountService do
     end
   end
 
+  describe '.reference_item_extension_projection' do
+    it 'reference sourceをexactのまま既存Amount計算へ委譲する' do
+      result = described_class.reference_item_extension_projection(
+        reference_price_amount: '1480',
+        reference_quantity: '100',
+        reference_unit_code: 'gram',
+        purchased_quantity: '342',
+        purchased_unit_code: 'gram'
+      )
+
+      expect(result).to eq(
+        exact_amount: Rational(25_308, 5),
+        projected_amount: 5_062
+      )
+      expect(result).to be_frozen
+    end
+
+    it 'unknown unitやdimension不一致をpublic source errorへ正規化する' do
+      expect {
+        described_class.reference_item_extension_projection(
+          reference_price_amount: '120',
+          reference_quantity: '500',
+          reference_unit_code: 'unknown',
+          purchased_quantity: '1.5',
+          purchased_unit_code: 'liter'
+        )
+      }.to raise_error(described_class::InvalidItemSourceError)
+
+      expect {
+        described_class.reference_item_extension_projection(
+          reference_price_amount: '120',
+          reference_quantity: '500',
+          reference_unit_code: 'gram',
+          purchased_quantity: '1.5',
+          purchased_unit_code: 'liter'
+        )
+      }.to raise_error(described_class::InvalidItemSourceError)
+    end
+  end
+
   describe 'amount limit facade' do
     it 'exposes configured limits through the Amount Engine public entry point' do
       aggregate_failures do

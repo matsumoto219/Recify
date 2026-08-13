@@ -127,6 +127,30 @@ class ReceiptAmountService
     )
   end
 
+  def self.reference_item_extension_projection(
+    reference_price_amount:,
+    reference_quantity:,
+    reference_unit_code:,
+    purchased_quantity:,
+    purchased_unit_code:
+  )
+    result = Amounts::ReferenceItemExtension.call(
+      reference_price_amount: reference_price_amount,
+      reference_quantity: reference_quantity,
+      reference_unit_code: reference_unit_code,
+      purchased_quantity: purchased_quantity,
+      purchased_unit_code: purchased_unit_code,
+      reference_price_tax_inclusion: :gross
+    )
+
+    {
+      exact_amount: result.exact_amount,
+      projected_amount: result.projected_amount
+    }.freeze
+  rescue *INVALID_ITEM_SOURCE_ERRORS
+    raise InvalidItemSourceError, "Invalid item pricing source"
+  end
+
   def self.warning_mismatch_codes
     Amounts::MismatchSeverity::WARNING
   end

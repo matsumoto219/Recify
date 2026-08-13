@@ -39,73 +39,75 @@ class ReceiptQuantityUnit
   end
 
   DEFAULT_CODE = "each"
+  RAW_INPUT_MAX_BYTES = 64
+  CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.freeze
   PRICING_ROLES = %i[purchased reference].freeze
   COUNTABLE_GRANULARITY = Rational(1).freeze
   MEASUREMENT_GRANULARITY = Rational(1, 1_000).freeze
 
   UNITS = [
     Unit.new(
-      code: "each", input_aliases: %w[個].freeze, kind: :countable,
+      code: "each", input_aliases: [].freeze, kind: :countable,
       dimension: :count, conversion_group: "count:each", exact_scale: Rational(1),
       input_granularity: COUNTABLE_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "item", input_aliases: %w[点].freeze, kind: :countable,
+      code: "item", input_aliases: [].freeze, kind: :countable,
       dimension: :count, conversion_group: "count:item", exact_scale: Rational(1),
       input_granularity: COUNTABLE_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "piece", input_aliases: %w[本].freeze, kind: :countable,
+      code: "piece", input_aliases: [].freeze, kind: :countable,
       dimension: :count, conversion_group: "count:piece", exact_scale: Rational(1),
       input_granularity: COUNTABLE_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "bag", input_aliases: %w[袋].freeze, kind: :countable,
+      code: "bag", input_aliases: [].freeze, kind: :countable,
       dimension: :count, conversion_group: "count:bag", exact_scale: Rational(1),
       input_granularity: COUNTABLE_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "sheet", input_aliases: %w[枚].freeze, kind: :countable,
+      code: "sheet", input_aliases: [].freeze, kind: :countable,
       dimension: :count, conversion_group: "count:sheet", exact_scale: Rational(1),
       input_granularity: COUNTABLE_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "unit", input_aliases: %w[台].freeze, kind: :countable,
+      code: "unit", input_aliases: [].freeze, kind: :countable,
       dimension: :count, conversion_group: "count:unit", exact_scale: Rational(1),
       input_granularity: COUNTABLE_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "box", input_aliases: %w[箱].freeze, kind: :countable,
+      code: "box", input_aliases: [].freeze, kind: :countable,
       dimension: :count, conversion_group: "count:box", exact_scale: Rational(1),
       input_granularity: COUNTABLE_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "set", input_aliases: %w[セット].freeze, kind: :countable,
+      code: "set", input_aliases: [].freeze, kind: :countable,
       dimension: :count, conversion_group: "count:set", exact_scale: Rational(1),
       input_granularity: COUNTABLE_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "gram", input_aliases: %w[g グラム].freeze, kind: :decimal,
+      code: "gram", input_aliases: %w[g].freeze, kind: :decimal,
       dimension: :mass, conversion_group: "mass", exact_scale: Rational(1),
       input_granularity: MEASUREMENT_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "kilogram", input_aliases: %w[kg キログラム].freeze, kind: :decimal,
+      code: "kilogram", input_aliases: %w[kg].freeze, kind: :decimal,
       dimension: :mass, conversion_group: "mass", exact_scale: Rational(1_000),
       input_granularity: MEASUREMENT_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "milligram", input_aliases: %w[mg ミリグラム].freeze, kind: :decimal,
+      code: "milligram", input_aliases: %w[mg].freeze, kind: :decimal,
       dimension: :mass, conversion_group: "mass", exact_scale: Rational(1, 1_000),
       input_granularity: MEASUREMENT_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "liter", input_aliases: %w[L l リットル].freeze, kind: :decimal,
+      code: "liter", input_aliases: %w[L l].freeze, kind: :decimal,
       dimension: :volume, conversion_group: "volume", exact_scale: Rational(1_000),
       input_granularity: MEASUREMENT_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
     Unit.new(
-      code: "milliliter", input_aliases: %w[ml mL ミリリットル].freeze, kind: :decimal,
+      code: "milliliter", input_aliases: %w[ml mL].freeze, kind: :decimal,
       dimension: :volume, conversion_group: "volume", exact_scale: Rational(1),
       input_granularity: MEASUREMENT_GRANULARITY, allowed_pricing_roles: PRICING_ROLES
     ),
@@ -146,7 +148,7 @@ class ReceiptQuantityUnit
     end
 
     def resolve(value, aliases: INPUT_ALIAS_TO_CODE)
-      raw = value.to_s.strip.freeze
+      raw = safe_input(value)
       return Resolution.new(status: :blank, code: nil, raw: raw) if raw.empty?
 
       unit = unit_for(raw) || unit_for(aliases[raw])
@@ -217,6 +219,28 @@ class ReceiptQuantityUnit
     end
 
     private
+
+    def safe_input(value)
+      string = value.to_s
+      return "".freeze unless string.encoding.ascii_compatible?
+
+      if string.bytesize > RAW_INPUT_MAX_BYTES
+        bounded = string.byteslice(0, RAW_INPUT_MAX_BYTES).to_s
+        bounded = bounded.byteslice(0, bounded.bytesize - 1).to_s until bounded.valid_encoding?
+        return "".freeze if bounded.match?(CONTROL_CHARACTER_PATTERN)
+
+        return bounded.encode(Encoding::UTF_8).freeze
+      end
+
+      return "".freeze unless string.valid_encoding?
+      return "".freeze if string.match?(CONTROL_CHARACTER_PATTERN)
+
+      string.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: "")
+        .strip
+        .freeze
+    rescue EncodingError
+      "".freeze
+    end
 
     def fetch_unit!(code)
       unit_for(code) || raise(UnknownUnitError, "unknown quantity unit: #{code.inspect}")

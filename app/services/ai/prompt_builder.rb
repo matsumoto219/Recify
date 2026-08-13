@@ -169,7 +169,7 @@ module Ai
         raw_text: raw_text,
         price: normalize_number(fetch(item, :price)),
         quantity: normalize_number(fetch(item, :quantity)),
-        quantity_unit_code: ReceiptQuantityUnit.normalize(fetch(item, :quantity_unit_code)),
+        quantity_unit_code: normalize_item_quantity_unit_code(item),
         line_total: normalize_number(fetch(item, :line_total) || fetch(item, :total_price)),
         tax_rate: normalize_tax_rate(fetch(item, :tax_rate)),
         product_code: fetch(item, :product_code),
@@ -177,6 +177,15 @@ module Ai
         matched_content_lines: item_content_lines(raw_text),
         matched_filtered_content_lines: item_filtered_content_lines(raw_text)
       }.compact
+    end
+
+    def normalize_item_quantity_unit_code(item)
+      return nil if fetch(item, :quantity_unit_status).to_s == "unknown"
+
+      value = fetch(item, :quantity_unit_code)
+      return ReceiptQuantityUnit.default_code if value.blank?
+
+      ReceiptQuantityUnit.normalize(value, default: nil)
     end
 
     def build_meta

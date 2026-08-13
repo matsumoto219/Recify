@@ -37,6 +37,7 @@ module Ocr
         payments: [],
         tax_details: [],
         adjustment_candidates: [],
+        reference_pricing_candidates: [],
         payment_method_text: nil,
         payment_candidates: [],
         items: [],
