@@ -5018,6 +5018,34 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '詳細画面の調整税率を最大2桁で表示する' do
+      receipt.receipt_adjustments.create!(
+        kind: 'delivery_fee',
+        label: '税率精度確認配送料',
+        amount: 550,
+        sign: 'surcharge',
+        source: 'manual',
+        tax_rate: BigDecimal('0.1055'),
+        needs_review: false,
+        position_index: 1
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      adjustment_label = document.css('p').find { |node| node.text.strip == '税率精度確認配送料' }
+      adjustment_row = adjustment_label&.ancestors('div')&.find do |node|
+        node.text.include?(I18n.t('receipts.show.adjustment_tax_rate', rate: '10.55%'))
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(adjustment_row).to be_present
+        expect(adjustment_row.text.squish).to include('税率: 10.55%')
+        expect(adjustment_row.text.squish).not_to include('税率: 10.6%')
+      end
+    end
+
     it '詳細画面は支払調整がある時だけ支払調整と実支払額を表示する' do
       receipt.update!(
         subtotal_amount: 1_066,
@@ -5163,6 +5191,27 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(amount_summary_tax_rate_value(document)).to eq('8%')
+      end
+    end
+
+    it '詳細画面の明細税率サマリーは百分率の小数第2位を保持する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '小数第2位税率商品',
+        price: 1_000,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 1_000,
+        tax_rate: BigDecimal('0.1055'),
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(amount_summary_tax_rate_value(document)).to eq('10.55%')
       end
     end
 

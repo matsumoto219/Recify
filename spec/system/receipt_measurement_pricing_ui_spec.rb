@@ -773,6 +773,47 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     expect_browser_console_clean
   end
 
+  it "基準価格の3桁区切りと全角小数をserverと同じHALF_UP金額でpreviewする" do
+    user = create_system_test_user
+    receipt = create_editable_receipt(user: user, store_name: "基準価格数値入力確認店")
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    click_button I18n.t("receipts.form.buttons.add_item")
+
+    row = all("[data-receipt-form-target='itemRow']", visible: :all).last
+    row.find("input[name$='[confirmed_name]']").set("桁区切り基準価格商品")
+    expand_item_row(row)
+    expand_pricing_source_details(row)
+    select_option(row, target: "pricingSourceModeInput", value: "reference_quantity_price")
+    row.find("[data-receipt-form-target='quantityInput']", visible: true).set("１")
+    reference_price = row.find("[data-receipt-form-target='referencePriceAmountInput']", visible: true)
+    row.find("[data-receipt-form-target='referenceQuantityInput']", visible: true).set("１")
+    row.find("[data-receipt-form-target='taxRateInput']", visible: true).set("０")
+
+    reference_price.set("１，０００")
+    expect(reference_line_total_display(row)).to have_text("¥1,000")
+
+    reference_price.set("１，０００．５")
+    expect(reference_line_total_display(row)).to have_text("¥1,001")
+
+    save_receipt
+
+    expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    saved_item = receipt.reload.receipt_items.find_by!(confirmed_name: "桁区切り基準価格商品")
+    aggregate_failures do
+      expect(receipt).to have_attributes(subtotal_amount: 1_101, tax_amount: 0, total_amount: 1_101)
+      expect(saved_item).to have_attributes(
+        reference_price_amount: BigDecimal("1000.5"),
+        original_line_total: 1_001,
+        line_total: 1_001
+      )
+    end
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
   it "formulaから明示金額への切替で割引解除を取消でき、確定した場合だけintentを保存する" do
     user = create_system_test_user
     receipt = create_editable_receipt(user: user, store_name: "割引切替確認店")

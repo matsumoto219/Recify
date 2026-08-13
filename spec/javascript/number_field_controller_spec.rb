@@ -137,4 +137,100 @@ RSpec.describe "Number field Stimulus controller" do
 
     expect(result).to eq("value" => "10.1")
   end
+
+  it "preserves the accepted two-decimal tax rate while stepping by one tenth" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      class TestEvent {
+        constructor (type) { this.type = type }
+      }
+      globalThis.Event = TestEvent
+      const input = {
+        value: '10.55',
+        step: '0.1',
+        min: '0',
+        max: '100',
+        dispatchEvent: () => {}
+      }
+      const controller = Object.create(NumberFieldController.prototype)
+      Object.defineProperties(controller, {
+        hasInputTarget: { value: true },
+        inputTarget: { value: input },
+        hasDecimalPrecisionValue: { value: true },
+        decimalPrecisionValue: { value: 2 }
+      })
+
+      controller.changeValue(1)
+      const incremented = input.value
+      controller.changeValue(-1)
+      controller.changeValue(-1)
+
+      process.stdout.write(JSON.stringify({ incremented, decremented: input.value }))
+    JAVASCRIPT
+
+    expect(result).to eq("incremented" => "10.65", "decremented" => "10.45")
+  end
+
+  it "increments grouped and full-width decimal amounts from their exact current values" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      class TestEvent {
+        constructor (type) { this.type = type }
+      }
+      globalThis.Event = TestEvent
+      const controller = Object.create(NumberFieldController.prototype)
+      Object.defineProperties(controller, {
+        hasInputTarget: { value: true },
+        hasDecimalPrecisionValue: { value: true },
+        decimalPrecisionValue: { value: 6 },
+        hasDecimalCommaValue: { value: false },
+        decimalCommaValue: { value: false }
+      })
+      const values = ['1,000', '１，０００．５']
+      const stepped = values.map((value) => {
+        const input = {
+          value,
+          step: '1',
+          min: '0',
+          max: '999999999999',
+          dispatchEvent: () => {}
+        }
+        Object.defineProperty(controller, 'inputTarget', { configurable: true, value: input })
+        controller.changeValue(1)
+        return input.value
+      })
+
+      process.stdout.write(JSON.stringify(stepped))
+    JAVASCRIPT
+
+    expect(result).to eq(%w[1001 1001.5])
+  end
+
+  it "keeps decimal-comma percentage semantics when a stepper is explicitly configured for them" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      class TestEvent {
+        constructor (type) { this.type = type }
+      }
+      globalThis.Event = TestEvent
+      const input = {
+        value: '10,55',
+        step: '0.1',
+        min: '0',
+        max: '100',
+        dispatchEvent: () => {}
+      }
+      const controller = Object.create(NumberFieldController.prototype)
+      Object.defineProperties(controller, {
+        hasInputTarget: { value: true },
+        inputTarget: { value: input },
+        hasDecimalPrecisionValue: { value: true },
+        decimalPrecisionValue: { value: 2 },
+        hasDecimalCommaValue: { value: true },
+        decimalCommaValue: { value: true }
+      })
+
+      controller.changeValue(1)
+      process.stdout.write(JSON.stringify({ value: input.value }))
+    JAVASCRIPT
+
+    expect(result).to eq("value" => "10.65")
+  end
 end

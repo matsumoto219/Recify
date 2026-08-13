@@ -430,9 +430,12 @@ class ReceiptFormPresenter
     end
 
     def quantity_value
-      submitted_value(:quantity) do
+      value = submitted_value(:quantity) do
         new_record? ? "1" : (item.formatted_quantity_for_input.presence || "1")
       end
+      return "" if value.nil? && submitted_values.key?(:quantity)
+
+      value
     end
 
     def quantity_step

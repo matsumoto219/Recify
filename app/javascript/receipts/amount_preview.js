@@ -40,9 +40,22 @@ function reducedRatio (numerator, denominator) {
   }
 }
 
-function exactUnsignedDecimalRatio (value) {
-  let text = String(value ?? '')
-    .trim()
+function trimNumericInputText (value) {
+  const text = String(value ?? '')
+  let start = 0
+  let finish = text.length
+  while (start < finish && rubyStripCodePoint(text.charCodeAt(start))) start += 1
+  while (finish > start && rubyStripCodePoint(text.charCodeAt(finish - 1))) finish -= 1
+
+  return text.slice(start, finish)
+}
+
+function rubyStripCodePoint (codePoint) {
+  return codePoint === 0 || codePoint === 32 || (codePoint >= 9 && codePoint <= 13)
+}
+
+function exactUnsignedDecimalRatio (value, { decimalComma = true } = {}) {
+  let text = trimNumericInputText(value)
     .replace(/[０-９]/g, (character) => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
     .replace(/＋/g, '+')
     .replace(/－/g, '-')
@@ -51,7 +64,7 @@ function exactUnsignedDecimalRatio (value) {
   if (text === '') return null
 
   const commaCount = (text.match(/,/g) || []).length
-  if (!text.includes('.') && commaCount === 1) text = text.replace(',', '.')
+  if (decimalComma && !text.includes('.') && commaCount === 1) text = text.replace(',', '.')
 
   const integerComponent = '(?:\\d+|\\d{1,3}(?:,\\d{3})+)'
   const match = text.match(new RegExp(`^(${integerComponent})?(?:\\.(\\d*))?$`))
@@ -69,7 +82,7 @@ function exactUnsignedDecimalRatio (value) {
 }
 
 function exactQuantityRatio (value, unit, { maximum, maximumScale }) {
-  const ratio = exactUnsignedDecimalRatio(value)
+  const ratio = exactUnsignedDecimalRatio(value, { decimalComma: true })
   if (!ratio || ratio.numerator <= 0n || ratio.scale > maximumScale) return null
   if (ratio.numerator * maximum.denominator > maximum.numerator * ratio.denominator) return null
   if ((ratio.numerator * unit.granularityDenominator) %
@@ -159,7 +172,7 @@ export function referenceItemExtension ({
     !purchasedUnit.allowedPricingRoles.has('purchased')) return null
   if (referenceUnit.conversionGroup !== purchasedUnit.conversionGroup) return null
 
-  const price = exactUnsignedDecimalRatio(referencePriceAmount)
+  const price = exactUnsignedDecimalRatio(referencePriceAmount, { decimalComma: false })
   if (!price || price.scale > semantics.priceMaximumScale) return null
   if (price.numerator * semantics.priceMaximum.denominator >
     semantics.priceMaximum.numerator * price.denominator) return null

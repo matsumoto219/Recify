@@ -2,10 +2,11 @@
 
 class Receipts::Editing::InputNormalizer
   RECEIPT_INTEGER_FIELDS = %w[total_amount subtotal_amount tax_amount].freeze
-  RECEIPT_DECIMAL_FIELDS = %w[tax_rate].freeze
+  RECEIPT_TAX_RATE_FIELDS = %w[tax_rate].freeze
   ITEM_INTEGER_FIELDS = %w[price original_line_total line_total].freeze
   ITEM_QUANTITY_FIELDS = %w[quantity].freeze
-  ITEM_REFERENCE_DECIMAL_FIELDS = %w[reference_price_amount reference_quantity].freeze
+  ITEM_REFERENCE_AMOUNT_FIELDS = %w[reference_price_amount].freeze
+  ITEM_REFERENCE_QUANTITY_FIELDS = %w[reference_quantity].freeze
   ITEM_RAW_UNIT_FIELDS = %w[quantity_unit_raw reference_quantity_unit_raw].freeze
   ITEM_REFERENCE_EVIDENCE_FIELDS = %w[
     reference_price_amount
@@ -22,7 +23,8 @@ class Receipts::Editing::InputNormalizer
     line_total
     discount_rate
   ].freeze
-  ITEM_PERCENTAGE_FIELDS = %w[tax_rate discount_rate].freeze
+  ITEM_TAX_PERCENTAGE_FIELDS = %w[tax_rate].freeze
+  ITEM_DISCOUNT_PERCENTAGE_FIELDS = %w[discount_rate].freeze
   ITEM_NULLABLE_SOURCE_FIELDS = %w[
     pricing_source_kind
     reference_price_amount
@@ -53,8 +55,8 @@ class Receipts::Editing::InputNormalizer
     validate_pricing_source_transition!
     normalize_selected_pricing_source_fields!
     normalize_purchased_at!
-    normalize_numeric_inputs!
     discard_inferred_discount_rate_echoes!
+    normalize_numeric_inputs!
     validate_unrecorded_explicit_discount_changes!
     normalize_nullable_item_sources!
     normalize_item_quantity_units!
@@ -245,7 +247,7 @@ class Receipts::Editing::InputNormalizer
 
   def effective_positive_discount?(item, existing_item)
     rate = if item.key?("discount_rate")
-      Receipts::NumericInput.percentage(item["discount_rate"])
+      Receipts::NumericInput.discount_percentage(item["discount_rate"])
     else
       existing_item&.discount_rate
     end
@@ -277,18 +279,20 @@ class Receipts::Editing::InputNormalizer
 
   def normalize_numeric_inputs!
     normalize_numeric_fields!(attributes, RECEIPT_INTEGER_FIELDS, :integer)
-    normalize_numeric_fields!(attributes, RECEIPT_DECIMAL_FIELDS, :decimal)
+    normalize_numeric_fields!(attributes, RECEIPT_TAX_RATE_FIELDS, :receipt_tax_rate)
 
     attributes["receipt_items_attributes"]&.each_value do |item_attributes|
       normalize_numeric_fields!(item_attributes, ITEM_INTEGER_FIELDS, :integer)
       normalize_numeric_fields!(item_attributes, ITEM_QUANTITY_FIELDS, :decimal)
-      normalize_numeric_fields!(item_attributes, ITEM_REFERENCE_DECIMAL_FIELDS, :decimal)
-      normalize_numeric_fields!(item_attributes, ITEM_PERCENTAGE_FIELDS, :percentage)
+      normalize_numeric_fields!(item_attributes, ITEM_REFERENCE_AMOUNT_FIELDS, :grouped_decimal)
+      normalize_numeric_fields!(item_attributes, ITEM_REFERENCE_QUANTITY_FIELDS, :decimal)
+      normalize_numeric_fields!(item_attributes, ITEM_TAX_PERCENTAGE_FIELDS, :tax_percentage)
+      normalize_numeric_fields!(item_attributes, ITEM_DISCOUNT_PERCENTAGE_FIELDS, :discount_percentage)
     end
 
     attributes["receipt_adjustments_attributes"]&.each_value do |adjustment_attributes|
       normalize_numeric_fields!(adjustment_attributes, %w[amount], :integer)
-      normalize_numeric_fields!(adjustment_attributes, %w[tax_rate], :percentage)
+      normalize_numeric_fields!(adjustment_attributes, %w[tax_rate], :tax_percentage)
     end
 
     attributes["receipt_payments_attributes"]&.each_value do |payment_attributes|
@@ -314,8 +318,9 @@ class Receipts::Editing::InputNormalizer
       next unless existing_item.discount_rate.nil?
       next unless existing_item.discount_amount.to_i.positive?
 
+      submitted_rate = Receipts::NumericInput.percentage(item["discount_rate"])
       inferred_rate = Receipts::NumericInput.percentage(existing_item.discount_rate_percentage_input)
-      item.delete("discount_rate") if item["discount_rate"] == inferred_rate
+      item.delete("discount_rate") if submitted_rate == inferred_rate
     end
   end
 

@@ -2876,6 +2876,67 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    it 'manualのmeaningful explicit sourceでblankとscale 3超過のquantityを拒否する' do
+      [ nil, BigDecimal('1.2345') ].each do |quantity|
+        expect do
+          call_service(
+            receipt: {},
+            receipt_items: [
+              {
+                pricing_source_kind: 'explicit_line_total',
+                quantity: quantity,
+                quantity_unit_code: 'kilogram',
+                original_line_total: 250,
+                line_total: 250,
+                tax_rate: BigDecimal('0')
+              }
+            ],
+            context: :manual
+          )
+        end.to raise_error(ReceiptAmountService::InvalidItemSourceError), quantity.inspect
+      end
+    end
+
+    it 'manualのexplicit sourceでscale 3と末尾0のみの追加precisionを受け入れる' do
+      [ BigDecimal('1.234'), BigDecimal('1.2300') ].each do |quantity|
+        result = call_service(
+          receipt: {},
+          receipt_items: [
+            {
+              pricing_source_kind: 'explicit_line_total',
+              quantity: quantity,
+              quantity_unit_code: 'kilogram',
+              original_line_total: 250,
+              line_total: 250,
+              tax_rate: BigDecimal('0')
+            }
+          ],
+          context: :manual
+        )
+
+        expect(result.dig(:computed, :items).first[:quantity]).to eq(quantity), quantity.inspect
+      end
+    end
+
+    it 'analysisのexplicit sourceはmanual strict quantity検証の対象にしない' do
+      result = call_service(
+        receipt: {},
+        receipt_items: [
+          {
+            pricing_source_kind: 'explicit_line_total',
+            quantity: BigDecimal('1.2345'),
+            quantity_unit_code: 'kilogram',
+            original_line_total: 250,
+            line_total: 250,
+            tax_rate: BigDecimal('0')
+          }
+        ],
+        context: :analysis
+      )
+
+      expect(result.dig(:computed, :items).first[:quantity]).to eq(BigDecimal('1.2345'))
+    end
+
     it 'keeps discounted line_total derived from original_line_total minus discount_amount' do
       result = call_service(
         receipt: {},

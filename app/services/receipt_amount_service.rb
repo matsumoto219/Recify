@@ -643,6 +643,10 @@ class ReceiptAmountService
     %i[analysis edit_save manual].include?(context) ? context : :analysis
   end
 
+  def manual_input_context?
+    @context == :manual || @context == :edit_save
+  end
+
   # -----------------------------
   # Normalizers (accept Hash/AR)
   # -----------------------------
@@ -704,9 +708,11 @@ class ReceiptAmountService
     end
     reference_formula = pricing_source_kind == "reference_quantity_price"
     count_formula = pricing_source_kind == "count_unit_price"
+    explicit_line_total = pricing_source_kind == "explicit_line_total"
     authority_free_diagnostic = pricing_source_kind.nil? && item_pricing_diagnostic_evidence_present?(i)
     validate_reference_formula_input!(i) if reference_formula
     validate_count_formula_input!(i) if count_formula
+    validate_manual_explicit_quantity_input!(quantity) if explicit_line_total && manual_input_context?
     quantity_unit_value = fetch_value(i, :quantity_unit_code)
     quantity_unit_code = if reference_formula || count_formula
       quantity_unit_value
@@ -836,6 +842,17 @@ class ReceiptAmountService
       purchased_quantity: quantity,
       purchased_unit_code: code
     ).validate_count_formula!
+  end
+
+  def validate_manual_explicit_quantity_input!(quantity)
+    exact_bounded_decimal!(
+      quantity,
+      minimum: 0,
+      maximum: ReceiptItem::REFERENCE_QUANTITY_MAX.to_r,
+      maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+      minimum_inclusive: false,
+      attribute: :quantity
+    )
   end
 
   def validate_count_formula_price!(value)

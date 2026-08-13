@@ -263,6 +263,58 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     end
   end
 
+  it '基準価格の3桁区切りと全角小数を金額sourceとしてexactに保存する' do
+    expect do
+      post receipts_path, params: {
+        receipt: {
+          store_name: '基準価格桁区切り店',
+          payment_method: 'cash',
+          receipt_items_attributes: {
+            '0' => {
+              confirmed_name: '半角桁区切り商品',
+              quantity: '1',
+              quantity_unit_code: 'each',
+              tax_rate: '0',
+              **reference_source_attributes(
+                reference_price_amount: '1,000',
+                reference_quantity: '1',
+                reference_quantity_unit_code: 'each'
+              )
+            },
+            '1' => {
+              confirmed_name: '全角桁区切り小数商品',
+              quantity: '１',
+              quantity_unit_code: 'each',
+              tax_rate: '０',
+              **reference_source_attributes(
+                reference_price_amount: '１，０００．５',
+                reference_quantity: '１',
+                reference_quantity_unit_code: 'each'
+              )
+            }
+          }
+        }
+      }
+    end.to change(Receipt, :count).by(1)
+
+    receipt = user.receipts.find_by!(store_name: '基準価格桁区切り店')
+    grouped, full_width = receipt.receipt_items.order(:position_index)
+    aggregate_failures do
+      expect(response).to redirect_to(receipts_path)
+      expect(receipt).to have_attributes(subtotal_amount: 2_001, tax_amount: 0, total_amount: 2_001)
+      expect(grouped).to have_attributes(
+        reference_price_amount: BigDecimal('1000'),
+        original_line_total: 1_000,
+        line_total: 1_000
+      )
+      expect(full_width).to have_attributes(
+        reference_price_amount: BigDecimal('1000.5'),
+        original_line_total: 1_001,
+        line_total: 1_001
+      )
+    end
+  end
+
   it 'reference authorityに属さないpriceとhidden totalsが上限超過でも無視して保存する' do
     hidden_price = ReceiptAmountService.receipt_item_price_max + 1
     hidden_total = ReceiptAmountService.receipt_item_line_total_max + 1

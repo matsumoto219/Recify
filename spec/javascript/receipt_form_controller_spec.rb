@@ -2754,6 +2754,142 @@ RSpec.describe "Receipt form Stimulus controller" do
     )
   end
 
+  it "enforces Ruby whitespace and scale 3 for typed item quantity without rewriting the draft" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const quantity = { value: '1.234' }
+      const inputs = {
+        quantityInput: quantity,
+        quantityUnitInput: { value: 'kilogram' },
+        explicitLineTotalInput: { value: '250' },
+        discountRateInput: { value: '' },
+        taxRateInput: { value: '0' }
+      }
+      const row = {
+        style: { display: '' },
+        querySelector: (selector) => {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? inputs[match[1]] ?? null : null
+        }
+      }
+      Object.defineProperties(controller, {
+        itemRowTargets: { value: [row] },
+        adjustmentRowTargets: { value: [] },
+        paymentRowTargets: { value: [] },
+        decimalQuantityUnitsValue: { value: 'gram,kilogram,milligram,liter,milliliter,cubic_centimeter' },
+        receiptItemPriceMaxValue: { value: 999999999 },
+        receiptItemLineTotalMaxValue: { value: 999999999 },
+        receiptAdjustmentAmountMaxValue: { value: 999999999 },
+        receiptPaymentAmountMaxValue: { value: 999999999 }
+      })
+      controller.pricingSourceModeForRow = () => 'explicit_line_total'
+
+      const evaluate = (value) => {
+        quantity.value = value
+        const valid = controller.previewNumericInputsValid()
+        return { valid, value: quantity.value }
+      }
+      const asciiQuantity = ' ' + String.fromCharCode(9) + '1.234' + String.fromCharCode(13, 10)
+      const nbspQuantity = String.fromCharCode(160) + '1.234' + String.fromCharCode(160)
+      process.stdout.write(JSON.stringify({
+        scale3: evaluate('1.234'),
+        trailingZeros: evaluate('1.2300'),
+        scale4: evaluate('1.2345'),
+        ascii: evaluate(asciiQuantity),
+        ideographic: evaluate('　1.234　'),
+        nbsp: evaluate(nbspQuantity),
+        ambiguousComma: evaluate('1,000')
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "scale3" => { "valid" => true, "value" => "1.234" },
+      "trailingZeros" => { "valid" => true, "value" => "1.2300" },
+      "scale4" => { "valid" => false, "value" => "1.2345" },
+      "ascii" => { "valid" => true, "value" => " \t1.234\r\n" },
+      "ideographic" => { "valid" => false, "value" => "　1.234　" },
+      "nbsp" => { "valid" => false, "value" => "\u00a01.234\u00a0" },
+      "ambiguousComma" => { "valid" => true, "value" => "1,000" }
+    )
+  end
+
+  it "suspends preview for tax and discount percentages that persistence would round" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const itemInputs = {
+        quantityInput: { value: '1' },
+        quantityUnitInput: { value: 'each' },
+        priceInput: { value: '52' },
+        discountRateInput: { value: '10.5' },
+        taxRateInput: { value: '10.55' }
+      }
+      const adjustmentInputs = {
+        adjustmentAmountInput: { value: '10' },
+        adjustmentTaxRateInput: { value: '10.55' }
+      }
+      const buildRow = (inputs) => ({
+        style: { display: '' },
+        querySelector: (selector) => {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? inputs[match[1]] ?? null : null
+        }
+      })
+      Object.defineProperties(controller, {
+        itemRowTargets: { value: [buildRow(itemInputs)] },
+        adjustmentRowTargets: { value: [buildRow(adjustmentInputs)] },
+        paymentRowTargets: { value: [] },
+        decimalQuantityUnitsValue: { value: 'gram,kilogram' },
+        receiptItemPriceMaxValue: { value: 999999999 },
+        receiptAdjustmentAmountMaxValue: { value: 999999999 },
+        receiptPaymentAmountMaxValue: { value: 999999999 }
+      })
+
+      const boundaryValid = controller.previewNumericInputsValid()
+      itemInputs.discountRateInput.value = '10.55'
+      const discountTooPrecise = controller.previewNumericInputsValid()
+      itemInputs.discountRateInput.value = '10.5'
+      itemInputs.taxRateInput.value = '10.555'
+      const itemTaxTooPrecise = controller.previewNumericInputsValid()
+      itemInputs.taxRateInput.value = '10.55'
+      adjustmentInputs.adjustmentTaxRateInput.value = '10.555'
+      const adjustmentTaxTooPrecise = controller.previewNumericInputsValid()
+      adjustmentInputs.adjustmentTaxRateInput.value = '10.55'
+      itemInputs.discountRateInput.value = '10.5000000000000000000000001'
+      const longDiscountTooPrecise = controller.previewNumericInputsValid()
+      itemInputs.discountRateInput.value = '10.5'
+      itemInputs.taxRateInput.value = '10.5500000000000000000000001'
+      const longTaxTooPrecise = controller.previewNumericInputsValid()
+
+      process.stdout.write(JSON.stringify({
+        boundaryValid,
+        discountTooPrecise,
+        itemTaxTooPrecise,
+        adjustmentTaxTooPrecise,
+        longDiscountTooPrecise,
+        longTaxTooPrecise,
+        rawValues: {
+          discount: itemInputs.discountRateInput.value,
+          itemTax: itemInputs.taxRateInput.value,
+          adjustmentTax: adjustmentInputs.adjustmentTaxRateInput.value
+        }
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "boundaryValid" => true,
+      "discountTooPrecise" => false,
+      "itemTaxTooPrecise" => false,
+      "adjustmentTaxTooPrecise" => false,
+      "longDiscountTooPrecise" => false,
+      "longTaxTooPrecise" => false,
+      "rawValues" => {
+        "discount" => "10.5",
+        "itemTax" => "10.5500000000000000000000001",
+        "adjustmentTax" => "10.55"
+      }
+    )
+  end
+
   it "characterizes the current amount and quantity limit contract for all 14 units" do
     countable_unit_codes = %w[each item piece bag sheet unit box set]
     measurement_unit_codes = %w[gram kilogram milligram liter milliliter cubic_centimeter]

@@ -4,7 +4,8 @@ import { Controller } from '@hotwired/stimulus'
 export default class extends Controller {
   static targets = ['input']
   static values = {
-    decimalPrecision: Number
+    decimalPrecision: Number,
+    decimalComma: Boolean
   }
 
   connect () {
@@ -163,12 +164,24 @@ export default class extends Controller {
   }
 
   parseStepperValue (value) {
-    const text = String(value ?? '').trim()
+    let text = String(value ?? '')
+      .trim()
+      .replace(/[０-９]/g, (character) => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
+      .replace(/－/g, '-')
+      .replace(/．/g, '.')
+      .replace(/，/g, ',')
     if (text.length > 64) return null
-    if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return null
+
+    const commaCount = (text.match(/,/g) || []).length
+    if (this.hasDecimalCommaValue && this.decimalCommaValue && !text.includes('.') && commaCount === 1) {
+      text = text.replace(',', '.')
+    }
+
+    const integerComponent = '(?:\\d+|\\d{1,3}(?:,\\d{3})+)'
+    if (!new RegExp(`^-?(?:${integerComponent}(?:\\.\\d*)?|\\.\\d+)$`).test(text)) return null
 
     const negative = text.startsWith('-')
-    const unsignedText = negative ? text.slice(1) : text
+    const unsignedText = (negative ? text.slice(1) : text).replace(/,/g, '')
     const [integerDigits = '0', fractionalDigits = ''] = unsignedText.split('.')
     const units = BigInt(`${integerDigits || '0'}${fractionalDigits}` || '0')
 

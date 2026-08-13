@@ -49,7 +49,18 @@ RSpec.describe UserNumericInput do
     it "レシート数量だけで使うdecimal comma契約を分離する" do
       aggregate_failures do
         expect(described_class.decimal("0,300", signed: false, decimal_comma: true)).to eq(BigDecimal("0.3"))
+        expect(described_class.decimal("1,000", signed: false, decimal_comma: true)).to eq(BigDecimal("1"))
         expect { described_class.decimal("-0,300", signed: false, decimal_comma: true) }
+          .to raise_error(UserNumericInput::InvalidValue)
+      end
+    end
+
+    it "ASCIIの外側空白だけをstripし、U+3000とNBSPを入力文字として拒否する" do
+      aggregate_failures do
+        expect(described_class.decimal(" \t1.5\r\n")).to eq(BigDecimal("1.5"))
+        expect { described_class.decimal("\u30001.5\u3000") }
+          .to raise_error(UserNumericInput::InvalidValue)
+        expect { described_class.decimal("\u00a01.5\u00a0") }
           .to raise_error(UserNumericInput::InvalidValue)
       end
     end

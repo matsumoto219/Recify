@@ -99,6 +99,46 @@ RSpec.describe "Receipts input forms" do
       }.to raise_error(Receipts::NumericInput::InvalidValue)
     end
 
+    it "永続tax rateのscaleを超えるreceipt入力を拒否する" do
+      expect {
+        normalize_with(
+          form_class,
+          receipt: build(:receipt),
+          attributes: { "tax_rate" => "0.10555" }
+        )
+      }.to raise_error(Receipts::NumericInput::InvalidValue)
+    end
+
+    it "永続tax rateのscaleを超えるitem百分率入力を拒否する" do
+      expect {
+        normalize_with(
+          form_class,
+          receipt: build(:receipt),
+          attributes: { "receipt_items_attributes" => { "0" => { "tax_rate" => "10.555" } } }
+        )
+      }.to raise_error(Receipts::NumericInput::InvalidValue)
+    end
+
+    it "永続discount rateのscaleを超えるitem百分率入力を拒否する" do
+      expect {
+        normalize_with(
+          form_class,
+          receipt: build(:receipt),
+          attributes: { "receipt_items_attributes" => { "0" => { "discount_rate" => "10.55" } } }
+        )
+      }.to raise_error(Receipts::NumericInput::InvalidValue)
+    end
+
+    it "永続tax rateのscaleを超えるadjustment百分率入力を拒否する" do
+      expect {
+        normalize_with(
+          form_class,
+          receipt: build(:receipt),
+          attributes: { "receipt_adjustments_attributes" => { "0" => { "tax_rate" => "10.555" } } }
+        )
+      }.to raise_error(Receipts::NumericInput::InvalidValue)
+    end
+
     it "blank数量単位をdefaultへ補い、未知の入力値はvalidation用に保持する" do
       receipt = build(:receipt)
       attributes = {

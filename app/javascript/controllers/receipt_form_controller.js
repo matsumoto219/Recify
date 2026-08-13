@@ -4,7 +4,10 @@ import {
   normalizeNumericInputText,
   parseDecimalInput,
   parseDiscountRateInput,
+  parseGroupedDecimalInput,
   parseIntegerInput,
+  parseQuantityInput,
+  parseTaxRateInput,
   previewValueInRange,
   quantityUnitList
 } from 'receipts/numeric_input'
@@ -1147,7 +1150,7 @@ export default class extends Controller {
       const price = this.clampNumber(this.parseIntegerInput(priceInput?.value), 0, this.receiptItemPriceMaxValue)
       const discountRatePercent = this.parseDiscountRateInput(discountRateInput?.value)
       const itemTaxRateInputPresent = String(taxRateInput?.value ?? '').trim() !== ''
-      let taxRatePercent = this.clampNumber(this.parseDecimalInput(taxRateInput?.value), 0, 100)
+      let taxRatePercent = this.clampNumber(this.parseTaxRateInput(taxRateInput?.value), 0, 100)
       const quantityUnit = quantityUnitInput?.value
       const pricingSourceMode = this.pricingSourceModeForRow(row)
       const itemSource = this.itemPreviewSourceFor({
@@ -1191,7 +1194,7 @@ export default class extends Controller {
         !itemTaxRateInputPresent && !purchaseInputsChanged) {
         const fallbackTaxRate = String(this.referenceProjectionFallbackTaxRateValue ?? '').trim()
         itemTaxRateAvailable = fallbackTaxRate !== ''
-        taxRatePercent = this.clampNumber(this.parseDecimalInput(fallbackTaxRate), 0, 100)
+        taxRatePercent = this.clampNumber(this.parseTaxRateInput(fallbackTaxRate), 0, 100)
       }
       if (itemTaxBasis === 'unavailable' || (
         pricingSourceMode === 'reference_quantity_price' && itemTaxBasis === 'net' && !itemTaxRateAvailable
@@ -1264,7 +1267,7 @@ export default class extends Controller {
       const sign = this.adjustmentSignForRow(row)
       const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, this.receiptAdjustmentAmountMaxValue)
       const explicitTaxRate = String(taxRateInput?.value ?? '').trim() !== ''
-      const submittedTaxRatePercent = this.clampNumber(this.parseDecimalInput(taxRateInput?.value), 0, 100)
+      const submittedTaxRatePercent = this.clampNumber(this.parseTaxRateInput(taxRateInput?.value), 0, 100)
       const taxRatePercent = explicitTaxRate ? submittedTaxRatePercent : inheritedAdjustmentTaxRate
       if (amount <= 0) return
 
@@ -1457,7 +1460,7 @@ export default class extends Controller {
         ]
         if (mode === 'reference_quantity_price') {
           return common.concat([
-            this.normalizedOptionalDecimalInput(inputValue('referencePriceAmountInput')),
+            this.normalizedOptionalGroupedDecimalInput(inputValue('referencePriceAmountInput')),
             this.normalizedOptionalDecimalInput(inputValue('referenceQuantityInput')),
             String(inputValue('referenceQuantityUnitInput') ?? '').trim(),
             String(inputValue('referencePriceTaxInclusionInput') ?? '').trim()
@@ -1500,10 +1503,18 @@ export default class extends Controller {
   }
 
   normalizedOptionalIntegerInput (value) {
-    const rawValue = String(value ?? '').trim()
+    const rawValue = this.normalizeNumericInputText(value)
     if (rawValue === '') return ''
 
     const parsedValue = this.parseIntegerInput(rawValue)
+    return Number.isFinite(parsedValue) ? String(parsedValue) : rawValue
+  }
+
+  normalizedOptionalGroupedDecimalInput (value) {
+    const rawValue = this.normalizeNumericInputText(value)
+    if (rawValue === '') return ''
+
+    const parsedValue = this.parseGroupedDecimalInput(rawValue)
     return Number.isFinite(parsedValue) ? String(parsedValue) : rawValue
   }
 
@@ -2145,12 +2156,24 @@ export default class extends Controller {
     return parseDecimalInput(value)
   }
 
+  parseGroupedDecimalInput (value) {
+    return parseGroupedDecimalInput(value)
+  }
+
+  parseQuantityInput (value) {
+    return parseQuantityInput(value)
+  }
+
   normalizeNumericInputText (value) {
     return normalizeNumericInputText(value)
   }
 
   parseDiscountRateInput (value) {
     return parseDiscountRateInput(value)
+  }
+
+  parseTaxRateInput (value) {
+    return parseTaxRateInput(value)
   }
 
   previewNumericInputsValid () {
@@ -2163,7 +2186,7 @@ export default class extends Controller {
       const discountRateInput = row.querySelector('[data-receipt-form-target="discountRateInput"]')
       const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
       const pricingSourceMode = this.pricingSourceModeForRow(row)
-      const quantity = this.previewInputValue(quantityInput, 'decimal')
+      const quantity = this.previewInputValue(quantityInput, 'quantity')
       const referencePriceAmountInput = row.querySelector(
         '[data-receipt-form-target="referencePriceAmountInput"]'
       )
@@ -2181,7 +2204,7 @@ export default class extends Controller {
         ),
         reference: () => this.previewInputInRange(
           referencePriceAmountInput,
-          'decimal',
+          'groupedDecimal',
           { minimum: 0, maximum: 999999999999 }
         ) && this.previewInputInRange(
           referenceQuantityInput,
@@ -2199,8 +2222,8 @@ export default class extends Controller {
         this.previewValueInRange(quantity, { minimum: 0, maximum: 9999.999, exclusiveMinimum: true }) &&
         (this.decimalQuantityUnit(quantityUnitInput?.value) || !Number.isFinite(quantity) || Number.isInteger(quantity)) &&
         modeSourceValid &&
-        this.previewInputInRange(discountRateInput, 'decimal', { minimum: 0, maximum: 100 }) &&
-        this.previewInputInRange(taxRateInput, 'decimal', { minimum: 0, maximum: 100 })
+        this.previewInputInRange(discountRateInput, 'discountPercentage', { minimum: 0, maximum: 100 }) &&
+        this.previewInputInRange(taxRateInput, 'taxPercentage', { minimum: 0, maximum: 100 })
     })
 
     if (!itemsValid) return false
@@ -2215,7 +2238,7 @@ export default class extends Controller {
         amountInput,
         'integer',
         { minimum: 0, maximum: this.receiptAdjustmentAmountMaxValue }
-      ) && this.previewInputInRange(taxRateInput, 'decimal', { minimum: 0, maximum: 100 })
+      ) && this.previewInputInRange(taxRateInput, 'taxPercentage', { minimum: 0, maximum: 100 })
     })
 
     if (!adjustmentsValid) return false
@@ -2251,12 +2274,16 @@ export default class extends Controller {
   }
 
   previewInputValue (input, parser) {
-    const rawValue = String(input?.value ?? '').trim()
+    const rawValue = this.normalizeNumericInputText(input?.value)
     if (rawValue === '') return null
 
-    return parser === 'integer'
-      ? this.parseIntegerInput(rawValue)
-      : this.parseDecimalInput(rawValue)
+    if (parser === 'integer') return this.parseIntegerInput(rawValue)
+    if (parser === 'groupedDecimal') return this.parseGroupedDecimalInput(rawValue)
+    if (parser === 'quantity') return this.parseQuantityInput(rawValue)
+    if (parser === 'discountPercentage') return this.parseDiscountRateInput(rawValue)
+    if (parser === 'taxPercentage') return this.parseTaxRateInput(rawValue)
+
+    return this.parseDecimalInput(rawValue)
   }
 
   previewValueInRange (value, { minimum, maximum, exclusiveMinimum = false }) {
