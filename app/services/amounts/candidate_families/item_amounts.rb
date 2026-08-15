@@ -59,20 +59,27 @@ module Amounts
 
         items.each_with_index do |item, index|
           line_total = item_basis_line_total(item, item_basis: item_basis, line_total_source: line_total_source)
-          rate = item_tax_rate(item)
+          rate = projection_tax_rate_for(item)
+          return nil if rate.nil?
           group = groups[rate]
 
-          amounts = item_basis_amounts(line_total, rate, item_basis, rounding_mode)
+          amounts = item_amount_projection(
+            item,
+            line_total: line_total,
+            rate: rate,
+            fallback_basis: item_basis,
+            rounding_mode: rounding_mode
+          )
           group[:item_amounts] << amounts
           computed_items[index] = item_with_line_total(
             item,
             amounts[:gross_amount],
-            normalize_price: item_basis == :tax_excluded
+            normalize_price: normalize_price_for_tax_basis?(item, amounts[:basis])
           )
         end
 
         apply_purchase_adjustments_to_groups!(groups, item_basis: item_basis, rounding_mode: rounding_mode)
-        tax_rate_groups = build_tax_rate_groups(groups, rounding_mode, rounding_scope, item_basis: item_basis)
+        tax_rate_groups = build_tax_rate_groups(groups, rounding_mode, rounding_scope)
         purchase_total = tax_rate_groups.sum { |group| group[:gross] }
         tax = tax_rate_groups.sum { |group| group[:tax] }
         payment = payment_reconciliation(purchase_total, payment_adjustment_total)
@@ -102,53 +109,26 @@ module Amounts
             }.compact
           ],
           computed_items: computed_items,
-          calculation_profile: item_candidate_calculation_profile(line_total_source),
+          calculation_profile: item_candidate_calculation_profile(line_total_source, item_basis),
           source: :amount_engine
         )
       end
 
-      def item_basis_amounts(line_total, rate, item_basis, rounding_mode)
-        return { gross_amount: line_total, net_amount: line_total, tax_amount: 0 } if rate <= 0
-
-        case item_basis
-        when :tax_excluded
-          tax = Amounts::Rounding.apply_rounding(BigDecimal(line_total.to_s) * rate, rounding_mode)
-          { gross_amount: line_total + tax, net_amount: line_total, tax_amount: tax }
-        else
-          tax = rounded_tax_from_gross(line_total, rate, rounding_mode)
-          { gross_amount: line_total, net_amount: line_total - tax, tax_amount: tax }
-        end
-      end
-
-      def build_tax_rate_groups(groups, rounding_mode, rounding_scope, item_basis:)
+      def build_tax_rate_groups(groups, rounding_mode, rounding_scope)
         groups.values.map do |group|
           rate = group[:rate]
-          if rate <= 0
-            gross = group[:item_amounts].sum { |amounts| amounts[:gross_amount] }
-            next { rate: rate, gross: gross, net: gross, tax: 0 }
-          end
-
-          gross, net, tax = rounded_group_amounts(group[:item_amounts], rate, rounding_mode, rounding_scope, item_basis: item_basis)
-          { rate: rate, gross: gross, net: net, tax: tax }
-        end
-      end
-
-      def rounded_group_amounts(amounts, rate, rounding_mode, rounding_scope, item_basis:)
-        case rounding_scope
-        when :per_item
-          gross = amounts.sum { |amount| amount[:gross_amount] }
-          tax = amounts.sum { |amount| amount[:tax_amount] }
-          [ gross, gross - tax, tax ]
-        else
-          if item_basis == :tax_excluded
-            net = amounts.sum { |amount| amount[:net_amount] }
-            tax = Amounts::Rounding.apply_rounding(BigDecimal(net.to_s) * rate, rounding_mode)
-            [ net + tax, net, tax ]
-          else
-            gross = amounts.sum { |amount| amount[:gross_amount] }
-            tax = rounded_tax_from_gross(gross, rate, rounding_mode)
-            [ gross, gross - tax, tax ]
-          end
+          projection = grouped_item_amount_projection(
+            group[:item_amounts],
+            rate: rate,
+            rounding_mode: rounding_mode,
+            rounding_scope: rounding_scope
+          )
+          {
+            rate: rate,
+            gross: projection[:gross_amount],
+            net: projection[:net_amount],
+            tax: projection[:tax_amount]
+          }
         end
       end
 
@@ -166,6 +146,7 @@ module Amounts
 
       def discounted_original_line_total_for(item)
         item = indifferent_hash(item)
+        return nil if item[:pricing_source_kind].present?
         return nil unless discount_applied?(item)
 
         original_line_total = to_i(item[:original_line_total])
@@ -183,11 +164,12 @@ module Amounts
         line_total_source
       end
 
-      def item_candidate_calculation_profile(line_total_source)
+      def item_candidate_calculation_profile(line_total_source, item_basis)
         source = item_candidate_line_total_source(line_total_source)
-        return calculation_profile unless source
-
-        calculation_profile(line_total_source: source)
+        item_projection_calculation_profile(
+          fallback_basis: item_basis,
+          attributes: { line_total_source: source }
+        )
       end
 
       def apply_purchase_adjustments_to_groups!(groups, item_basis:, rounding_mode:)
@@ -200,10 +182,20 @@ module Amounts
           amount = classification[:signed_amount]
           groups[rate][:item_amounts] << if item_basis == :tax_excluded && rate.positive?
             tax = signed_tax_from_net(amount, rate, rounding_mode)
-            { gross_amount: amount + tax, net_amount: amount, tax_amount: tax }
+            {
+              basis: :tax_excluded,
+              gross_amount: amount + tax,
+              net_amount: amount,
+              tax_amount: tax
+            }
           else
             tax = rate.positive? ? signed_tax_from_gross(amount, rate, rounding_mode) : 0
-            { gross_amount: amount, net_amount: amount - tax, tax_amount: tax }
+            {
+              basis: item_basis,
+              gross_amount: amount,
+              net_amount: amount - tax,
+              tax_amount: tax
+            }
           end
         end
       end

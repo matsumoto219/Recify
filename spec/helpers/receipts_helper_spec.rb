@@ -1,6 +1,16 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptsHelper, type: :helper do
+  describe '#receipt_rate_display' do
+    it '税率を最大2桁で表示し、不要な末尾0を除く' do
+      aggregate_failures do
+        expect(helper.receipt_rate_display(BigDecimal('0.1'))).to eq('10%')
+        expect(helper.receipt_rate_display(BigDecimal('0.105'))).to eq('10.5%')
+        expect(helper.receipt_rate_display(BigDecimal('0.1055'))).to eq('10.55%')
+      end
+    end
+  end
+
   describe '#receipt_item_discount_label' do
     def discount_item(discount_amount:, original_line_total:, discount_rate: nil)
       instance_double(

@@ -1,0 +1,87 @@
+{
+  "case_id": "g120_reference_decimal_milligram",
+  "category": "measurement",
+  "intent": "A decimal-yen milligram reference price remains exact through a large purchased quantity.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル粉末B 税込 ¥0.9/1mg 1200mg", "¥1,080"],
+        "purchased_quantity": "1200",
+        "purchased_unit": "milligram",
+        "reference_price_amount": "0.9",
+        "reference_quantity": "1",
+        "reference_unit": "milligram",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 1080
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル量売 微量価格店",
+    "store_address": "サンプル県サンプル市基準町1-8",
+    "purchased_at": "2026-08-08T10:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル粉末B",
+        "unit_price": null,
+        "quantity": "1200",
+        "quantity_unit_code": "milligram",
+        "pricing_source_kind": null,
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 1080,
+        "line_total": 1080,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "measurement_projections": [
+      {
+        "item_index": 0,
+        "exact_reference_amount": {"numerator": "1080", "denominator": "1"},
+        "projected_reference_line_total": 1080,
+        "discount_amount": 0,
+        "discounted_source_line_total": 1080,
+        "projected_gross_line_total": 1080
+      }
+    ],
+    "reference_pricing_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "0.9",
+        "reference_quantity": "1",
+        "reference_unit_code": "milligram",
+        "purchased_quantity": "1200",
+        "purchased_unit_code": "milligram",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 1080,
+        "printed_line_total": "1080",
+        "rounding_matches": ["floor", "half_up", "ceil"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 982, "tax": 98, "gross": 1080, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 982,
+    "tax": 98,
+    "total": 1080,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1080}],
+    "payment_sum": 1080,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "measurement_projections", "reference_pricing_candidates"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

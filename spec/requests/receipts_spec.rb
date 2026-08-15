@@ -1607,6 +1607,7 @@ RSpec.describe 'Receipts', type: :request do
 
       document = Nokogiri::HTML(response.body)
       form = document.at_css('[data-controller~="receipt-form"]')
+      item_header = document.at_css('[data-receipt-form-target="itemsContainer"] > .receipt-form-item-layout')
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -1614,6 +1615,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(response.body).to include(I18n.t('receipts.form.titles.new'))
         expect(response.body).to include(I18n.t('receipts.form.sections.basic_info'))
         expect(response.body).to include(I18n.t('receipts.form.buttons.add_item'))
+        expect(item_header.element_children[2].text.strip).to eq(I18n.t('receipts.form.item_columns.amount'))
         expect(form['data-receipt-form-subtotal-label-value']).to eq(I18n.t('receipts.item_fields.subtotal'))
         expect(form['data-receipt-form-unset-label-value']).to eq(I18n.t('receipts.common.not_available'))
         expect(form['data-receipt-form-multiple-tax-rates-label-value']).to eq(I18n.t('receipts.common.multiple_tax_rates'))
@@ -5016,6 +5018,34 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '詳細画面の調整税率を最大2桁で表示する' do
+      receipt.receipt_adjustments.create!(
+        kind: 'delivery_fee',
+        label: '税率精度確認配送料',
+        amount: 550,
+        sign: 'surcharge',
+        source: 'manual',
+        tax_rate: BigDecimal('0.1055'),
+        needs_review: false,
+        position_index: 1
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+      adjustment_label = document.css('p').find { |node| node.text.strip == '税率精度確認配送料' }
+      adjustment_row = adjustment_label&.ancestors('div')&.find do |node|
+        node.text.include?(I18n.t('receipts.show.adjustment_tax_rate', rate: '10.55%'))
+      end
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(adjustment_row).to be_present
+        expect(adjustment_row.text.squish).to include('税率: 10.55%')
+        expect(adjustment_row.text.squish).not_to include('税率: 10.6%')
+      end
+    end
+
     it '詳細画面は支払調整がある時だけ支払調整と実支払額を表示する' do
       receipt.update!(
         subtotal_amount: 1_066,
@@ -5161,6 +5191,27 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(amount_summary_tax_rate_value(document)).to eq('8%')
+      end
+    end
+
+    it '詳細画面の明細税率サマリーは百分率の小数第2位を保持する' do
+      receipt.receipt_items.create!(
+        confirmed_name: '小数第2位税率商品',
+        price: 1_000,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        line_total: 1_000,
+        tax_rate: BigDecimal('0.1055'),
+        needs_review: false
+      )
+
+      get receipt_path(receipt)
+
+      document = Nokogiri::HTML(response.body)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(amount_summary_tax_rate_value(document)).to eq('10.55%')
       end
     end
 
@@ -6603,6 +6654,10 @@ RSpec.describe 'Receipts', type: :request do
       target_link = document.at_css("a[data-review-reason-target-item='#{target_id}']")
       item_details_panel = item_row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
       template_html = document.at_css('template[data-receipt-form-target="template"]')&.inner_html.to_s
+      template_fragment = Nokogiri::HTML.fragment(template_html)
+      template_row = template_fragment.at_css('[data-receipt-form-target="itemRow"]')
+      template_details_panel = template_row&.at_css('[data-receipt-form-target="itemDetailsPanel"]')
+      template_details_toggles = template_row&.css('[data-receipt-form-target="itemDetailsToggle"]') || []
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
@@ -6616,7 +6671,11 @@ RSpec.describe 'Receipts', type: :request do
         expect(target_link['data-review-reason-target']).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
         expect(target_link['data-review-reason-anchor-target']).to eq(target_id)
         expect(template_html).not_to include('data-receipt-review-item-row="true"')
-        expect(template_html).not_to include('id="receipt-item-')
+        expect(template_details_panel&.[]('id')).to include('NEW_RECORD')
+        expect(template_details_toggles).not_to be_empty
+        expect(template_details_toggles).to all(satisfy do |toggle|
+          toggle['aria-controls'] == template_details_panel['id']
+        end)
       end
     end
 
@@ -6764,17 +6823,28 @@ RSpec.describe 'Receipts', type: :request do
         expect(item_details_panel.at_css('.receipt-form-item-detail-subtotal')['class']).to include('md:flex')
         expect(template_html).to include('receipt-form-item-mobile-summary')
         expect(template_html).to include('receipt-form-item-mobile-detail-divider')
-        expect(template_html.scan('receipt-form-item-mobile-detail-field').size).to eq(2)
+        mobile_detail_fields = item_row.css('.receipt-form-item-mobile-detail-field')
+        amount_cell = item_row.at_css('[data-receipt-item-amount-cell]')
+        pricing_mode_panels = amount_cell.css('[data-receipt-form-target="pricingModePanel"]')
+        expect(mobile_detail_fields).to include(amount_cell)
+        expect(amount_cell.css('[data-receipt-item-mobile-amount-label]').size).to eq(1)
+        expect(pricing_mode_panels.map { |panel| panel['data-receipt-form-pricing-modes'] }).to contain_exactly(
+          'count_unit_price unclassified',
+          'reference_quantity_price',
+          'explicit_line_total'
+        )
 
         %w[
           quantityInput
           priceInput
-          discountRateInput
           taxRateInput
         ].each do |target|
           input = item_row.at_css(%([data-receipt-form-target="#{target}"]))
           expect(input['data-action']).to include('input->receipt-form#recalculate')
         end
+        expect(item_row.at_css('[data-receipt-form-target="discountRateInput"]')['data-action']).to include(
+          'input->receipt-form#discountRateChanged'
+        )
 
         quantity_wrapper = item_row.at_css('[data-receipt-form-target="quantityInput"]').ancestors.find { |node| node['class'].to_s.include?('receipt-form-item-mobile-detail-field') }
         price_wrapper = item_row.at_css('[data-receipt-form-target="priceInput"]').ancestors.find { |node| node['class'].to_s.include?('receipt-form-item-mobile-detail-field') }
@@ -6924,7 +6994,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it 'discount_rate入力をreceipt formの再計算に接続する' do
+    it 'discount_rate入力をsummary同期付きのreceipt form再計算に接続する' do
       receipt.receipt_items.create!(
         confirmed_name: '割引商品',
         price: 310,
@@ -6942,7 +7012,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(discount_rate_input['data-receipt-form-target']).to eq('discountRateInput')
-        expect(discount_rate_input['data-action']).to include('input->receipt-form#recalculate')
+        expect(discount_rate_input['data-action']).to include('input->receipt-form#discountRateChanged')
       end
     end
 

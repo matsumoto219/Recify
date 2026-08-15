@@ -112,6 +112,49 @@ RSpec.describe Ai::ResponseParser do
         end
       end
 
+      it 'AIが返したreference pricingのnumeric/source fieldsとcandidate IDを破棄する' do
+        payload['reference_pricing_candidates'] = [ { 'candidate_id' => 'azure_items_0_reference_pricing' } ]
+        payload['selected_reference_pricing_candidate_id'] = 'azure_items_0_reference_pricing'
+        payload['selected_reference_pricing_candidate_ids'] = [ 'azure_items_0_reference_pricing' ]
+        payload['items'].first.merge!(
+          'reference_pricing_candidate_id' => 'azure_items_0_reference_pricing',
+          'candidate_id' => 'azure_items_0_reference_pricing',
+          'reference_price' => { 'amount' => '498' },
+          'reference_price_amount' => '498',
+          'reference_quantity' => { 'amount' => '100', 'unit_status' => 'unknown', 'unit_raw' => '杯' },
+          'purchased_quantity' => { 'amount' => '342', 'unit_status' => 'unknown', 'unit_raw' => '杯' },
+          'reference_unit_code' => 'gram',
+          'reference_unit_raw' => 'g',
+          'reference_price_tax_inclusion' => 'gross',
+          'tax_inclusion_evidence' => { 'source_field_path' => 'documents[0].fields.Items[0].Price' },
+          'pricing_source_kind' => 'reference_quantity_price',
+          'printed_line_total' => 1_703,
+          'source_text' => '498円/100g',
+          'evidence' => { 'source_text' => '498円/100g' },
+          'corroboration' => { 'printed_line_total' => 1_703 }
+        )
+
+        result = described_class.parse(payload, provider: provider, meta: meta)
+        item = result.fetch(:receipt_items_attributes).first
+
+        aggregate_failures do
+          expect(item.keys).to match_array(%i[
+            index
+            suggested_name
+            category
+            needs_review
+            tax_rate
+            tax_rate_confidence
+            tax_rate_reason
+          ])
+          expect(result.to_json).not_to include(
+            'azure_items_0_reference_pricing',
+            '498円/100g',
+            'reference_price_amount'
+          )
+        end
+      end
+
       it '明示されたotherは有効なcategoryとして保持する' do
         payload['items'].first['category'] = 'other'
         payload['items'].first['needs_review'] = false

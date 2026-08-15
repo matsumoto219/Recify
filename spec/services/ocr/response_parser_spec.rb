@@ -143,6 +143,8 @@ RSpec.describe Ocr::ResponseParser do
         expect(first_item[:price]).to eq(180)
         expect(first_item[:quantity]).to eq(1)
         expect(first_item[:quantity_unit_code]).to eq('each')
+        expect(first_item[:quantity_unit_status]).to eq('unknown')
+        expect(first_item[:quantity_unit_raw]).to eq('杯')
         expect(first_item[:product_code]).to eq('C001')
         expect(first_item[:line_total]).to eq(180)
         expect(first_item[:confidence]).to eq(0.98)
@@ -151,6 +153,8 @@ RSpec.describe Ocr::ResponseParser do
         expect(second_item[:price]).to eq(550)
         expect(second_item[:quantity]).to eq(2)
         expect(second_item[:quantity_unit_code]).to eq('each')
+        expect(second_item[:quantity_unit_status]).to eq('known')
+        expect(second_item).not_to have_key(:quantity_unit_raw)
         expect(second_item[:product_code]).to eq('S001')
         expect(second_item[:line_total]).to eq(1100)
         expect(second_item[:confidence]).to eq(0.97)
@@ -1598,6 +1602,23 @@ RSpec.describe Ocr::ResponseParser do
         expect(candidates[:payments]).to eq([])
         expect(candidates[:tax_details]).to eq([])
         expect(candidates[:items]).to eq([])
+        expect(candidates[:reference_pricing_candidates]).to eq([])
+      end
+    end
+
+    it 'weighted / unusual fixtureのreference pricing candidatesをtop-level collectionへ返す' do
+      expected_counts = {
+        'weighted_units_receipt' => 8,
+        'unusual_units_receipt' => 2
+      }
+
+      aggregate_failures do
+        expected_counts.each do |fixture_name, expected_count|
+          response = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{fixture_name}.json").read)
+          result = described_class.new(response: response, provider: 'azure_document_intelligence').call
+
+          expect(result.dig(:candidates, :reference_pricing_candidates).size).to eq(expected_count), fixture_name
+        end
       end
     end
 
@@ -1675,6 +1696,7 @@ RSpec.describe Ocr::ResponseParser do
         expect(result[:candidates][:items]).to eq([])
         expect(result[:candidates][:payments]).to eq([])
         expect(result[:candidates][:tax_details]).to eq([])
+        expect(result[:candidates][:reference_pricing_candidates]).to eq([])
         expect(result.dig(:meta, :provider)).to eq('azure_document_intelligence')
       end
     end

@@ -20,26 +20,24 @@ RSpec.describe ServiceLayerBoundary::Scanner do
     end
   RUBY
 
-  def registry_entry(directory, namespace, facade: nil, public_constants: [], legacy_exceptions: [])
+  def registry_entry(directory, namespace, facade: nil, public_constants: [])
     private_root = "app/services/#{directory}"
     {
       namespace: namespace,
       private_root: private_root,
       internal_reference_roots: [ private_root ],
       public_facades: Array(facade),
-      public_constants: public_constants,
-      legacy_exceptions: legacy_exceptions
+      public_constants: public_constants
     }
   end
 
-  def analysis_registry(public_constants: [], legacy_exceptions: [])
+  def analysis_registry(public_constants: [])
     {
       "analysis" => registry_entry(
         "analysis",
         "Analysis",
         facade: "app/services/analysis.rb",
-        public_constants: public_constants,
-        legacy_exceptions: legacy_exceptions
+        public_constants: public_constants
       )
     }
   end
@@ -302,57 +300,13 @@ RSpec.describe ServiceLayerBoundary::Scanner do
     end
   end
 
-  it "source pathとconstantが一致するlegacy exceptionだけを許可する" do
-    exception = {
-      source_path: "app/controllers/reports_controller.rb",
-      referenced_constant: "Analysis::PrivateWorker",
-      reason: "facade未整備の既存参照",
-      remove_in_loop: 22
-    }
-    with_scanner(
-      registry: analysis_registry(legacy_exceptions: [ exception ]),
-      files: {
-        "app/controllers/reports_controller.rb" => "Analysis::PrivateWorker.call\n"
-      }
-    ) do |scanner|
-      expect(scanner.violations).to be_empty
-      expect(scanner.unused_legacy_exceptions).to be_empty
-    end
-  end
+  it "registryの未定義keyを許可機構として使えない" do
+    registry = analysis_registry.deep_dup
+    registry.fetch("analysis")[:private_reference_exceptions] = []
 
-  it "同じconstantでも別source pathへlegacy exceptionを拡大しない" do
-    exception = {
-      source_path: "app/controllers/reports_controller.rb",
-      referenced_constant: "Analysis::PrivateWorker",
-      reason: "facade未整備の既存参照",
-      remove_in_loop: 22
-    }
-    with_scanner(
-      registry: analysis_registry(legacy_exceptions: [ exception ]),
-      files: {
-        "app/controllers/reports_controller.rb" => "Analysis::PrivateWorker.call\n",
-        "app/controllers/exports_controller.rb" => "Analysis::PrivateWorker.call\n"
-      }
-    ) do |scanner|
-      expect(scanner.violations.map(&:source_path)).to eq([ "app/controllers/exports_controller.rb" ])
-    end
-  end
-
-  it "malformed legacy exceptionを例外送出せず読みやすく報告する" do
-    malformed = {
-      source_path: "app/controllers/reports_controller.rb",
-      referenced_constant: nil,
-      reason: "壊れたfixture",
-      remove_in_loop: 22
-    }
-    with_scanner(
-      registry: analysis_registry(legacy_exceptions: [ malformed ]),
-      files: {
-        "app/controllers/reports_controller.rb" => "Analysis.call\n"
-      }
-    ) do |scanner|
-      expect(scanner.catalog_issues).to include(
-        "legacy exception must use an exact referenced_constant: nil"
+    with_scanner(registry: registry) do |scanner|
+      expect(scanner.registry_issues).to include(
+        "analysis: unexpected registry keys: private_reference_exceptions"
       )
     end
   end

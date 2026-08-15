@@ -12,6 +12,41 @@ RSpec.describe 'Amount Engine integration' do
     )
   end
 
+  def reference_formula_item(tax_rate:, tax_inclusion: 'net')
+    {
+      pricing_source_kind: 'reference_quantity_price',
+      reference_price_amount: '100',
+      reference_quantity: '1',
+      reference_quantity_unit_code: 'each',
+      reference_quantity_unit_raw: nil,
+      reference_price_tax_inclusion: tax_inclusion,
+      quantity: '1',
+      quantity_unit_code: 'each',
+      quantity_unit_raw: nil,
+      price: 999,
+      line_total: 777,
+      tax_rate: tax_rate
+    }
+  end
+
+  def explicit_item_with_reference_diagnostic(line_total:, tax_inclusion:)
+    {
+      pricing_source_kind: 'explicit_line_total',
+      reference_price_amount: '100',
+      reference_quantity: '3',
+      reference_quantity_unit_code: 'each',
+      reference_quantity_unit_raw: nil,
+      reference_price_tax_inclusion: tax_inclusion,
+      quantity: '1',
+      quantity_unit_code: 'each',
+      quantity_unit_raw: nil,
+      price: nil,
+      original_line_total: line_total,
+      line_total: line_total,
+      tax_rate: BigDecimal('0.10')
+    }
+  end
+
   def matrix_tax_from_gross(gross, rate)
     rate = BigDecimal(rate.to_s)
     return 0 if rate.zero?
@@ -1607,6 +1642,108 @@ RSpec.describe 'Amount Engine integration' do
       expect(result[:warning_inconsistencies]).to include(:mixed_basis_search_truncated)
       expect(result[:review_reasons]).to include('mixed_basis_search_truncated')
       expect(result[:needs_review]).to be(true)
+    end
+  end
+
+
+  it 'reference netの税率根拠がない場合はpublic Amount境界でsilent totalを作らない' do
+    result = call_amount_engine(
+      receipt: {},
+      items: [ reference_formula_item(tax_rate: nil) ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:amount_engine, :candidates)).to be_empty
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to be_nil
+      expect(result[:selected_candidate_status]).to be_nil
+      expect(result[:resolved]).to eq({})
+      expect(result[:safe_to_auto_complete]).to be(false)
+    end
+  end
+
+  it '非課税らしい商品textだけでreference netを0%投影しない' do
+    result = call_amount_engine(
+      receipt: {},
+      items: [ reference_formula_item(tax_rate: nil).merge(raw_text: 'サンプル非課税券') ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:amount_engine, :candidates)).to be_empty
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to be_nil
+      expect(result[:resolved]).to eq({})
+      expect(result[:safe_to_auto_complete]).to be(false)
+    end
+  end
+
+  it '未解決の値付き税内訳が残ると単一の完全内訳からreference net税率を推測しない' do
+    result = call_amount_engine(
+      receipt: {},
+      items: [ reference_formula_item(tax_rate: nil) ],
+      tax_details: [
+        { rate: BigDecimal('0.10'), net_amount: 100, amount: 10, description: '10%対象' },
+        { rate: nil, net_amount: nil, amount: 8, description: '税額のみ' }
+      ]
+    )
+
+    aggregate_failures do
+      expect(result.dig(:amount_engine, :candidates)).to be_empty
+      expect(result.dig(:amount_engine, :selected_candidate_id)).to be_nil
+      expect(result[:resolved]).to eq({})
+      expect(result[:safe_to_auto_complete]).to be(false)
+    end
+  end
+
+  it 'reference netの明示0%はpublic Amount境界でgrossと同額の有効値として扱う' do
+    result = call_amount_engine(
+      receipt: {},
+      items: [ reference_formula_item(tax_rate: BigDecimal('0')) ]
+    )
+
+    aggregate_failures do
+      expect(result[:resolved]).to include(subtotal: 100, tax: 0, total: 100)
+      expect(result.dig(:computed, :items).first).to include(
+        line_total: 100,
+        price: 999,
+        tax_rate: BigDecimal('0'),
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_tax_inclusion: 'net'
+      )
+      expect(result[:selected_candidate_status]).to eq('accepted')
+      expect(result[:safe_to_auto_complete]).to be(true)
+    end
+  end
+
+  it 'explicit totalはdiagnostic referenceのgross/netと候補選択から上書きされない' do
+    aggregate_failures do
+      expectations = {
+        'gross' => { 33 => false, 34 => false, 35 => true },
+        'net' => { 33 => false, 34 => false, 35 => false }
+      }
+      expectations.each do |tax_inclusion, totals|
+        totals.each do |line_total, mismatch|
+          result = call_amount_engine(
+            receipt: {},
+            items: [
+              explicit_item_with_reference_diagnostic(
+                line_total: line_total,
+                tax_inclusion: tax_inclusion
+              )
+            ]
+          )
+          label = "#{tax_inclusion}:#{line_total}"
+
+          expect(result.dig(:computed, :items).first).to include(
+            original_line_total: line_total,
+            line_total: line_total,
+            price: nil,
+            pricing_source_kind: 'explicit_line_total',
+            reference_price_tax_inclusion: tax_inclusion
+          ), label
+          expect(result.dig(:resolved, :total)).to eq(line_total), label
+          expect(result[:inconsistencies].include?(:item_total_mismatch)).to eq(mismatch), label
+          expect(result[:needs_review]).to eq(mismatch), label
+        end
+      end
     end
   end
 end

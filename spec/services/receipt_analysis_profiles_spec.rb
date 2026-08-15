@@ -230,14 +230,24 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
-    it 'JPN profile経由で数量単位を保存codeへ正規化する' do
+    it 'blank・unknown・knownをfallback前にstrictに区別する' do
       profile = described_class.fetch('JPN')
 
       aggregate_failures do
-        expect(profile.normalize_quantity_unit('個')).to eq('each')
-        expect(profile.normalize_quantity_unit('kg')).to eq('kilogram')
-        expect(profile.normalize_quantity_unit('ml')).to eq('milliliter')
-        expect(profile.normalize_quantity_unit('通')).to eq('each')
+        expect(profile.resolve_quantity_unit('個')).to have_attributes(status: :known, code: 'each', raw: '個')
+        expect(profile.resolve_quantity_unit('')).to have_attributes(status: :blank, code: nil, raw: '')
+        expect(profile.resolve_quantity_unit('通')).to have_attributes(status: :unknown, code: nil, raw: '通')
+      end
+    end
+
+    it 'reference expressionに直接結合したtax basisだけを分類する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect(profile.reference_price_tax_inclusion('税込 ¥498/100g')).to eq('gross')
+        expect(profile.reference_price_tax_inclusion('¥498/100g 税抜')).to eq('net')
+        expect(profile.reference_price_tax_inclusion("外8\n¥498/100g")).to eq('unknown')
+        expect(profile.reference_price_tax_inclusion('¥498/100g')).to eq('unknown')
       end
     end
   end

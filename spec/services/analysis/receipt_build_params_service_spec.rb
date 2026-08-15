@@ -100,6 +100,51 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       end
     end
 
+    it 'reference pricing candidateを診断境界に保持しReceiptItem authorityへ自動採用しない' do
+      candidate = {
+        candidate_id: 'azure_items_0_reference_pricing',
+        item_index: 0,
+        validation_state: 'ambiguous',
+        rejection_reasons: [ 'ambiguous_tax_inclusion' ],
+        reference_price: {
+          amount: '498',
+          evidence: {
+            source_provider: 'azure_structured',
+            source_field_path: 'documents[0].fields.Items[0].Price',
+            item_index: 0,
+            provider_span_start: 10,
+            provider_span_end: 13
+          }
+        },
+        reference_quantity: {
+          amount: '100', unit_code: 'gram', unit_status: 'known', origin: 'explicit'
+        },
+        purchased_quantity: { amount: '342', unit_code: 'gram', unit_status: 'known' },
+        reference_price_tax_inclusion: 'unknown',
+        tax_inclusion_evidence: nil,
+        printed_line_total: { amount: '1703' },
+        corroboration: {
+          exact_amount: { numerator: '42579', denominator: '25' },
+          projected_amount: 1_703,
+          printed_line_total: '1703',
+          rounding_matches: %w[floor half_up]
+        }
+      }
+      ocr_result[:candidates][:reference_pricing_candidates] = [ candidate ]
+
+      params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+      item = params.fetch(:receipt_items_attributes).first
+
+      aggregate_failures do
+        expect(params[:reference_pricing_candidates]).to eq([ candidate.deep_symbolize_keys ])
+        expect(item).not_to have_key(:pricing_source_kind)
+        expect(item).not_to have_key(:reference_price_amount)
+        expect(item).not_to have_key(:reference_quantity)
+        expect(item).not_to have_key(:reference_quantity_unit_code)
+        expect(item[:line_total]).to eq(180)
+      end
+    end
+
     context 'AI結果なしの場合' do
       it 'receipt_attributesが正しく生成される' do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
@@ -159,6 +204,121 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(items.second[:quantity_unit_code]).to eq('each')
           expect(items.second[:product_code]).to eq('S001')
           expect(items.second[:line_total]).to eq(1100)
+        end
+      end
+
+      it 'OCR TotalPrice由来の明示line_totalはmeasurementのpriceとquantityから再計算しない' do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: 'レギュラーガソリン',
+            price: 140,
+            quantity: BigDecimal('8.12'),
+            quantity_unit_code: 'liter',
+            original_line_total: 1_136,
+            line_total: 1_136,
+            source_field_path: 'documents[0].fields.Items[0].TotalPrice',
+            confidence: 0.98
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        item = params[:receipt_items_attributes].first
+
+        expect(item).to include(
+          price: 140,
+          quantity: BigDecimal('8.12'),
+          quantity_unit_code: 'liter',
+          original_line_total: 1_136,
+          line_total: 1_136
+        )
+      end
+
+      it 'OCR TotalPriceとreference basisがないmeasurementをpriceとquantityだけでformula化しない' do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: 'レギュラーガソリン',
+            price: 140,
+            quantity: BigDecimal('8.12'),
+            quantity_unit_code: 'liter',
+            original_line_total: nil,
+            line_total: nil,
+            source_field_path: 'documents[0].fields.Items[0].Price',
+            confidence: 0.98
+          }
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        item = params[:receipt_items_attributes].first
+
+        expect(item).to include(
+          price: 140,
+          quantity: BigDecimal('8.12'),
+          quantity_unit_code: 'liter',
+          original_line_total: nil,
+          line_total: nil,
+          needs_review: true
+        )
+        expect(item[:review_reasons]).to include('item_quantity_uncertain')
+      end
+
+      it 'OCR TotalPriceがないknown countable itemは既存のpriceとquantityによる金額を維持する' do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: 'コーヒー 2個',
+            price: 180,
+            quantity: BigDecimal('2'),
+            quantity_unit_code: 'each',
+            quantity_unit_status: 'known',
+            original_line_total: nil,
+            line_total: nil,
+            source_field_path: 'documents[0].fields.Items[0].Price',
+            confidence: 0.98
+          }
+        ]
+
+        item = described_class.call(ocr_result: ocr_result, ai_result: nil)
+          .fetch(:receipt_items_attributes).sole
+
+        expect(item).to include(
+          price: 180,
+          quantity: BigDecimal('2'),
+          quantity_unit_code: 'each',
+          original_line_total: 360,
+          line_total: 360
+        )
+      end
+
+      it 'OCR unknown unitをeachのformulaとして扱わずraw evidenceを永続sourceへ昇格しない' do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: '量り売り商品',
+            price: 180,
+            quantity: BigDecimal('2'),
+            quantity_unit_code: 'each',
+            quantity_unit_status: 'unknown',
+            quantity_unit_raw: '杯',
+            original_line_total: nil,
+            line_total: nil,
+            source_field_path: 'documents[0].fields.Items[0].Price',
+            confidence: 0.98
+          }
+        ]
+
+        item = described_class.call(ocr_result: ocr_result, ai_result: nil)
+          .fetch(:receipt_items_attributes).sole
+
+        aggregate_failures do
+          expect(item).to include(
+            price: 180,
+            quantity: BigDecimal('2'),
+            quantity_unit_code: 'each',
+            original_line_total: nil,
+            line_total: nil,
+            needs_review: true
+          )
+          expect(item[:review_reasons]).to include('item_quantity_uncertain')
+          expect(item).not_to have_key(:pricing_source_kind)
+          expect(item).not_to have_key(:quantity_unit_raw)
         end
       end
 
@@ -3493,7 +3653,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
-      it 'quantityだけはdecimal commaを小数として正規化する' do
+      it 'quantityだけはdecimal commaを小数として正規化しmeasurement totalは推測しない' do
         ocr_result[:candidates][:items].first[:price] = '14,400円'
         ocr_result[:candidates][:items].first[:quantity] = '0,300'
         ocr_result[:candidates][:items].first[:quantity_unit_code] = 'kilogram'
@@ -3506,7 +3666,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(item[:price]).to eq(14_400)
           expect(item[:quantity]).to eq(BigDecimal('0.300'))
           expect(item[:quantity_unit_code]).to eq('kilogram')
-          expect(item[:line_total]).to eq(4_320)
+          expect(item[:line_total]).to be_nil
+          expect(item[:review_reasons]).to include('item_quantity_uncertain')
         end
       end
 
