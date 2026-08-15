@@ -23,6 +23,10 @@
   quantity_step = row_state.quantity_step
   quantity_inputmode = row_state.quantity_inputmode
   item_target_id = receipt_review_item_target_id(item)
+  item_row_dom_key = item.persisted? ? item.id : item_form.object_name.to_s.gsub(/[^a-zA-Z0-9_-]/, "-")
+  item_details_id = "receipt-item-#{item_row_dom_key}-details"
+  pricing_source_ui_mode = row_state.pricing_source_ui_mode
+  pricing_source_details_open = local_assigns.fetch(:pricing_source_details_open, false)
 %>
 
 <div class="swipe-action rounded-lg"
@@ -45,6 +49,11 @@
     <div class="<%= row_class %>"
          <% if item_target_id.present? %> id="<%= item_target_id %>" data-receipt-review-item-row="true"<% end %>
          data-receipt-form-target="itemRow"
+         data-receipt-form-active-pricing-mode="<%= pricing_source_ui_mode %>"
+         data-receipt-form-explicit-line-total-source-missing="<%= row_state.explicit_line_total_source_missing? %>"
+         data-receipt-form-has-persisted-absolute-discount-source="<%= row_state.persisted_absolute_discount_source? %>"
+         data-receipt-form-has-persisted-explicit-positive-discount-rate-source="<%= row_state.persisted_explicit_positive_discount_rate_source? %>"
+         <% unless row_state.persisted_formula_discount_input_value.nil? %> data-receipt-form-persisted-formula-discount-input="<%= row_state.persisted_formula_discount_input_value %>"<% end %>
          data-action="mouseenter->receipt-form#scheduleLineTotalTooltip mouseleave->receipt-form#hideLineTotalTooltip focusin->receipt-form#hideLineTotalTooltipOnFocus">
   <div class="col-span-2 md:col-span-1 relative">
     <div class="flex items-center gap-2 md:block">
@@ -69,6 +78,7 @@
               class="ui-touch-control receipt-form-item-mobile-name-toggle flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border token-border-soft token-bg-input token-text-muted transition-colors md:hidden"
               data-action="click->receipt-form#toggleItemDetails"
               data-receipt-form-target="itemDetailsToggle"
+              aria-controls="<%= item_details_id %>"
               aria-expanded="false"
               aria-label="<%= t("receipts.item_fields.details_aria") %>">
         <span class="material-symbols-outlined text-lg transition-transform duration-150" data-receipt-form-target="itemDetailsIcon">expand_more</span>
@@ -113,35 +123,105 @@
     </div>
   </div>
 
-  <div class="receipt-form-item-mobile-detail receipt-form-item-mobile-detail-field col-span-2 md:col-span-1">
+  <div class="receipt-form-item-mobile-detail receipt-form-item-mobile-detail-field col-span-2 min-w-0 md:col-span-1"
+       data-receipt-item-amount-cell>
     <div class="flex items-center gap-2 md:block">
-      <span class="w-12 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden shrink-0"><%= t("receipts.item_fields.amount") %></span>
+      <span class="w-12 shrink-0 whitespace-nowrap text-xs font-bold uppercase tracking-wider token-text-muted md:hidden"
+            data-receipt-item-mobile-amount-label><%= t("receipts.item_fields.amount") %></span>
       <div class="flex-1 min-w-0 md:block">
-        <%= render "shared/ui/form/number_field",
-                   f: item_form,
-                   attribute: :price,
-                   label: t("receipts.item_fields.unit_price"),
-                   show_label: false,
-                   text_align: :center,
-                   show_stepper_buttons: true,
-                   stepper_button_class: "md:hidden",
-                   input_wrapper_class: "receipt-form-item-price-control",
-                   input_class: "receipt-form-item-price-input",
-                   value: row_state.price_value,
-                   min: 0,
-                   max: ReceiptAmountService.receipt_item_price_max,
-                   step: 1,
-                   inputmode: :numeric,
-                   size: :dense,
-                   highlight_variant: row_state.price_highlight_variant,
-                   show_error_message: false,
-                   html_options: {
-                     aria: { label: t("receipts.item_fields.unit_price") },
-                     data: {
-                       action: "input->receipt-form#recalculate",
-                       receipt_form_target: "priceInput"
-                     }
-                   } %>
+        <div class="min-w-0"
+             data-receipt-form-target="pricingModePanel"
+             data-receipt-form-pricing-modes="count_unit_price unclassified"
+             <% unless row_state.pricing_mode_active?("count_unit_price", "unclassified") %> hidden inert<% end %>>
+          <%= render "shared/ui/form/number_field",
+                     f: item_form,
+                     attribute: :price,
+                     label: t("receipts.item_fields.unit_price"),
+                     show_label: false,
+                     text_align: :center,
+                     show_stepper_buttons: true,
+                     stepper_button_class: "md:hidden",
+                     input_wrapper_class: "receipt-form-item-price-control",
+                     input_class: "receipt-form-item-price-input",
+                     value: row_state.price_value,
+                     min: 0,
+                     max: ReceiptAmountService.receipt_item_price_max,
+                     step: 1,
+                     inputmode: :numeric,
+                     size: :dense,
+                     highlight_variant: row_state.price_highlight_variant,
+                     show_error_message: false,
+                     html_options: {
+                       disabled: !row_state.pricing_mode_active?("count_unit_price", "unclassified"),
+                       aria: { label: t("receipts.item_fields.unit_price") },
+                       data: {
+                         action: "input->receipt-form#recalculate",
+                         receipt_form_target: "priceInput"
+                       }
+                     } %>
+        </div>
+
+        <div class="min-w-0"
+             data-receipt-form-target="pricingModePanel"
+             data-receipt-form-pricing-modes="reference_quantity_price"
+             <% unless row_state.pricing_mode_active?("reference_quantity_price") %> hidden inert<% end %>>
+          <div class="receipt-form-pricing-result flex h-[42px] min-w-0 items-center justify-between gap-2 overflow-hidden rounded-lg border token-border-soft token-bg-card px-3">
+            <span class="truncate text-xs font-medium token-text-muted"><%= t("receipts.item_fields.reference_calculated_amount") %></span>
+            <output class="truncate text-right text-base font-bold token-text-base"
+                    data-receipt-form-target="lineTotalDisplay"
+                    aria-label="<%= t("receipts.item_fields.reference_calculated_amount") %>"><%= line_total_display %></output>
+          </div>
+        </div>
+
+        <div class="min-w-0"
+             data-receipt-form-target="pricingModePanel"
+             data-receipt-form-pricing-modes="explicit_line_total"
+             <% unless row_state.pricing_mode_active?("explicit_line_total") %> hidden inert<% end %>>
+          <%= render "shared/ui/form/number_field",
+                     f: item_form,
+                     attribute: :original_line_total,
+                     label: row_state.explicit_line_total_label,
+                     show_label: false,
+                     value: row_state.explicit_line_total_value,
+                     min: 0,
+                     max: ReceiptAmountService.receipt_item_line_total_max,
+                     step: 1,
+                     inputmode: :numeric,
+                     text_align: :center,
+                     size: :dense,
+                     required: row_state.pricing_mode_active?("explicit_line_total"),
+                     show_stepper_buttons: true,
+                     stepper_button_class: "md:hidden",
+                     input_wrapper_class: "receipt-form-explicit-line-total-control",
+                     show_error_message: false,
+                     html_options: {
+                       disabled: !row_state.pricing_mode_active?("explicit_line_total"),
+                       aria: { label: row_state.explicit_line_total_label },
+                       data: {
+                         action: "input->receipt-form#explicitLineTotalChanged",
+                         receipt_form_target: "explicitLineTotalInput",
+                         receipt_form_required_when_active: true,
+                         receipt_form_label_with_discount: t("receipts.item_fields.explicit_line_total_before_discount"),
+                         receipt_form_label_without_discount: t("receipts.item_fields.explicit_line_total"),
+                         receipt_form_decrement_label_with_discount: t(
+                           "shared.number_field.decrement_aria",
+                           label: t("receipts.item_fields.explicit_line_total_before_discount")
+                         ),
+                         receipt_form_decrement_label_without_discount: t(
+                           "shared.number_field.decrement_aria",
+                           label: t("receipts.item_fields.explicit_line_total")
+                         ),
+                         receipt_form_increment_label_with_discount: t(
+                           "shared.number_field.increment_aria",
+                           label: t("receipts.item_fields.explicit_line_total_before_discount")
+                         ),
+                         receipt_form_increment_label_without_discount: t(
+                           "shared.number_field.increment_aria",
+                           label: t("receipts.item_fields.explicit_line_total")
+                         )
+                       }
+                     } %>
+        </div>
       </div>
     </div>
   </div>
@@ -151,6 +231,7 @@
             class="ui-touch-control flex h-10 w-full cursor-pointer items-center justify-center gap-1 rounded-lg border token-border-soft token-bg-input token-text-muted transition-colors md:w-10"
             data-action="click->receipt-form#toggleItemDetails"
             data-receipt-form-target="itemDetailsToggle"
+            aria-controls="<%= item_details_id %>"
             aria-expanded="false"
             aria-label="<%= t("receipts.item_fields.details_aria") %>">
       <span class="text-xs font-bold md:sr-only"><%= t("receipts.item_fields.details") %></span>
@@ -167,9 +248,181 @@
     </button>
   </div>
 
-  <div class="col-span-2 md:col-span-full collapsible-grid" data-receipt-form-target="itemDetailsPanel" aria-hidden="true" inert>
+  <div class="receipt-form-pricing-source-summary col-span-2 min-w-0 md:col-span-full"
+       aria-label="<%= t("receipts.item_fields.pricing_source_summary_aria") %>"
+       aria-live="polite">
+    <% %w[count_unit_price reference_quantity_price explicit_line_total unclassified].each do |mode| %>
+      <span class="block min-w-0 whitespace-normal break-words text-xs font-medium token-text-muted"
+            data-receipt-form-target="pricingSourceSummary"
+            data-receipt-form-pricing-modes="<%= mode %>"
+            <% if row_state.pricing_source_summary_template_for(mode) %> data-receipt-form-summary-template="<%= row_state.pricing_source_summary_template_for(mode) %>"<% end %>
+            <% if row_state.pricing_source_summary_unset_for(mode) %> data-receipt-form-summary-unset="<%= row_state.pricing_source_summary_unset_for(mode) %>"<% end %>
+            <% if mode == "explicit_line_total" %>
+              data-receipt-form-summary-template-with-discount="<%= t("receipts.item_fields.pricing_summaries.explicit_line_total_before_discount") %>"
+              data-receipt-form-summary-template-without-discount="<%= t("receipts.item_fields.pricing_summaries.explicit_line_total") %>"
+              data-receipt-form-summary-unset-with-discount="<%= t("receipts.item_fields.explicit_line_total_before_discount") %>"
+              data-receipt-form-summary-unset-without-discount="<%= t("receipts.item_fields.explicit_line_total") %>"
+            <% end %>
+            <% unless row_state.pricing_mode_active?(mode) %> hidden<% end %>><%= row_state.pricing_source_summary_for(mode) %></span>
+    <% end %>
+  </div>
+
+  <div id="<%= item_details_id %>"
+       class="col-span-2 md:col-span-full collapsible-grid"
+       data-receipt-form-target="itemDetailsPanel"
+       aria-hidden="true"
+       inert>
     <div class="collapsible-grid-inner min-w-0">
       <div class="grid grid-cols-2 md:grid-cols-12 gap-4 p-0 md:rounded-lg md:border token-border-default md:p-3">
+        <details class="collapsible-details group col-span-2 min-w-0 md:col-span-12"
+                 data-controller="collapsible-details"
+                 data-receipt-pricing-source-details
+                 <% if pricing_source_details_open %> open<% end %>>
+          <summary class="ui-touch-control btn-link-primary inline-flex min-h-10 max-w-full cursor-pointer list-none items-center gap-1 rounded-md px-1 py-2 text-sm font-semibold focus:outline-none focus-visible:ring-2 token-focus-ring-brand [&::-webkit-details-marker]:hidden"
+                   data-receipt-pricing-source-summary>
+            <span class="min-w-0 break-words"><%= t("receipts.item_fields.change_pricing_source") %></span>
+            <span class="material-symbols-outlined shrink-0 text-lg transition-transform duration-150 group-open:rotate-180" aria-hidden="true">expand_more</span>
+          </summary>
+
+          <div class="collapsible-grid min-w-0 max-w-full"
+               data-collapsible-details-target="content"
+               aria-hidden="<%= !pricing_source_details_open %>"
+               <% unless pricing_source_details_open %> inert<% end %>>
+            <div class="collapsible-grid-inner min-w-0">
+              <fieldset class="receipt-form-pricing-source-fields mt-3 min-w-0 rounded-lg border token-border-soft p-3 max-[359px]:px-1">
+                <legend class="px-1 text-xs font-bold uppercase tracking-wider token-text-muted"><%= t("receipts.item_fields.pricing_source") %></legend>
+                <p class="mb-3 text-xs leading-relaxed token-text-muted"><%= t("receipts.item_fields.pricing_source_help") %></p>
+
+                <div class="grid min-w-0 grid-cols-1 gap-3 2xl:grid-cols-12">
+                  <div class="min-w-0 2xl:col-span-5">
+                    <%= render "shared/ui/form/select_field",
+                               f: item_form,
+                               attribute: :pricing_source_kind,
+                               label: t("receipts.item_fields.pricing_source_select"),
+                               options: row_state.pricing_source_mode_options,
+                               selected: row_state.pricing_source_kind_value,
+                               include_blank: (row_state.pricing_source_kind_value.nil? ? t("receipts.item_fields.pricing_source_unclassified") : nil),
+                               size: :dense,
+                               select_class: "pr-10",
+                               highlight_variant: row_state.pricing_source_kind_highlight_variant,
+                               show_error_message: false,
+                               html_options: {
+                                 data: {
+                                   action: "change->receipt-form#pricingSourceModeChanged",
+                                   receipt_form_target: "pricingSourceModeInput"
+                                 }
+                               } %>
+                  </div>
+
+                  <div class="min-w-0 2xl:col-span-7"
+                       data-receipt-form-target="pricingModePanel"
+                       data-receipt-form-pricing-modes="count_unit_price unclassified"
+                       <% unless row_state.pricing_mode_active?("count_unit_price", "unclassified") %> hidden inert<% end %>>
+                    <p class="rounded-lg token-bg-card px-3 py-2 text-sm leading-relaxed token-text-muted"><%= row_state.pricing_source_summary_for(pricing_source_ui_mode == "unclassified" ? "unclassified" : "count_unit_price") %></p>
+                  </div>
+
+                  <div class="min-w-0 2xl:col-span-7"
+                       data-receipt-form-target="pricingModePanel"
+                       data-receipt-form-pricing-modes="reference_quantity_price"
+                       <% unless row_state.pricing_mode_active?("reference_quantity_price") %> hidden inert<% end %>>
+                    <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                      <%= render "shared/ui/form/number_field",
+                                 f: item_form,
+                                 attribute: :reference_price_amount,
+                                 label: t("receipts.item_fields.reference_price_amount"),
+                                 value: row_state.reference_price_amount_value,
+                                 min: 0,
+                                 max: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX.to_s("F"),
+                                 step: 1,
+                                 decimal_precision: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX_SCALE,
+                                 inputmode: :decimal,
+                                 text_align: :center,
+                                 size: :dense,
+                                 required: row_state.pricing_mode_active?("reference_quantity_price"),
+                                 show_stepper_buttons: true,
+                                 stepper_button_class: "md:hidden",
+                                 highlight_variant: row_state.reference_price_amount_highlight_variant,
+                                 show_error_message: false,
+                                 html_options: {
+                                   disabled: !row_state.pricing_mode_active?("reference_quantity_price"),
+                                   data: {
+                                     action: "input->receipt-form#recalculate",
+                                     receipt_form_target: "referencePriceAmountInput",
+                                     receipt_form_required_when_active: true
+                                   }
+                                 } %>
+
+                      <%= render "shared/ui/form/quantity_unit_number_field",
+                                 f: item_form,
+                                 label: t("receipts.item_fields.reference_quantity"),
+                                 quantity_attribute: :reference_quantity,
+                                 unit_attribute: :reference_quantity_unit_code,
+                                 value: row_state.reference_quantity_value,
+                                 selected_unit: row_state.selected_reference_quantity_unit,
+                                 unit_options: row_state.quantity_unit_options,
+                                 min: 0,
+                                 max: ReceiptItem::REFERENCE_QUANTITY_MAX.to_s("F"),
+                                 step: row_state.reference_quantity_step,
+                                 decimal_precision: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+                                 inputmode: row_state.reference_quantity_inputmode,
+                                 text_align: :center,
+                                 unit_select_variant: :compact_suffix,
+                                 highlight_variant: row_state.reference_quantity_highlight_variant,
+                                 show_error_message: false,
+                                 unit_data: {
+                                   action: "change->receipt-form#referenceQuantityUnitChanged",
+                                   receipt_form_target: "referenceQuantityUnitInput"
+                                 },
+                                 unit_html_options: {
+                                   disabled: !row_state.pricing_mode_active?("reference_quantity_price")
+                                 },
+                                 unit_aria_label: t("receipts.item_fields.reference_quantity_unit"),
+                                 html_options: {
+                                   required: row_state.pricing_mode_active?("reference_quantity_price"),
+                                   disabled: !row_state.pricing_mode_active?("reference_quantity_price"),
+                                   aria: { label: t("receipts.item_fields.reference_quantity") },
+                                   data: {
+                                     action: "input->receipt-form#recalculate",
+                                     receipt_form_target: "referenceQuantityInput",
+                                     receipt_form_required_when_active: true
+                                   }
+                                 } %>
+                    </div>
+
+                    <div class="mt-3 flex min-w-0 items-center gap-2 rounded-lg token-bg-card px-3 py-2"
+                         data-receipt-reference-tax-note>
+                      <span class="inline-flex shrink-0 items-center rounded-full border token-border-soft px-2 py-0.5 text-xs font-bold token-text-base"
+                            data-receipt-reference-tax-badge><%= row_state.reference_price_tax_inclusion_label %></span>
+                      <p class="min-w-0 text-xs leading-relaxed token-text-muted"
+                         data-receipt-reference-tax-description><%= t("receipts.item_fields.reference_price_tax_inclusion_note.#{row_state.reference_price_tax_inclusion_value}") %></p>
+                    </div>
+
+                    <%= item_form.hidden_field :reference_price_tax_inclusion,
+                          value: row_state.reference_price_tax_inclusion_value,
+                          disabled: !row_state.pricing_mode_active?("reference_quantity_price"),
+                          data: {
+                            receipt_form_target: "referencePriceTaxInclusionInput",
+                            receipt_form_tax_inclusion_label: t("receipts.item_fields.reference_price_tax_inclusions_short.#{row_state.reference_price_tax_inclusion_value}")
+                          } %>
+                  </div>
+
+                  <div class="min-w-0 2xl:col-span-7"
+                       data-receipt-form-target="pricingModePanel"
+                       data-receipt-form-pricing-modes="explicit_line_total"
+                       <% unless row_state.pricing_mode_active?("explicit_line_total") %> hidden inert<% end %>>
+                    <p class="rounded-lg token-bg-card px-3 py-2 text-sm leading-relaxed token-text-muted"
+                       data-receipt-form-target="explicitLineTotalHelp"
+                       data-receipt-form-text-with-discount="<%= t("receipts.item_fields.explicit_line_total_discount_help") %>"
+                       data-receipt-form-text-without-discount="<%= t("receipts.item_fields.explicit_line_total_help") %>">
+                      <%= row_state.discount_source_present? ? t("receipts.item_fields.explicit_line_total_discount_help") : t("receipts.item_fields.explicit_line_total_help") %>
+                    </p>
+                  </div>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+        </details>
+
         <div class="col-span-2 md:col-span-3">
           <div class="space-y-2">
             <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.discount_rate") %></p>
@@ -181,6 +434,7 @@
                          value: row_state.discount_rate_percentage_input,
                          step: 0.1,
                          decimal_precision: 1,
+                         decimal_comma: true,
                          min: 0,
                          max: 100,
                          suffix: "%",
@@ -193,7 +447,7 @@
                          show_error_message: false,
                          html_options: {
                            data: {
-                             action: "input->receipt-form#recalculate",
+                             action: "input->receipt-form#discountRateChanged",
                              receipt_form_target: "discountRateInput",
                              original_discount_rate: row_state.discount_rate_percentage_input
                            }
@@ -212,7 +466,8 @@
                          label: t("receipts.item_fields.tax_rate"),
                          value: row_state.tax_rate_percentage_value,
                          step: 0.1,
-                         decimal_precision: 1,
+                         decimal_precision: 2,
+                         decimal_comma: true,
                          min: 0,
                          max: 100,
                          suffix: "%",
@@ -310,9 +565,19 @@
     <%= item_form.hidden_field :id %>
   <% end %>
 
-  <%= item_form.hidden_field :original_line_total,
-        value: row_state.original_line_total_value,
-        data: { receipt_form_target: "originalLineTotalInput" } %>
+  <%= item_form.hidden_field :clear_item_discount_before_explicit,
+        value: row_state.clear_item_discount_before_explicit_value,
+        data: { receipt_form_target: "clearItemDiscountBeforeExplicitInput" } %>
+
+  <div data-receipt-form-target="pricingModePanel"
+       data-receipt-form-pricing-modes="count_unit_price reference_quantity_price unclassified"
+       <% if row_state.pricing_mode_active?("explicit_line_total") %> hidden inert<% end %>>
+    <%= item_form.hidden_field :original_line_total,
+          value: (row_state.explicit_line_total_source_missing? ? nil : row_state.original_line_total_value),
+          id: "#{item_form.field_id(:original_line_total)}_formula_state",
+          disabled: row_state.pricing_mode_active?("explicit_line_total"),
+          data: { receipt_form_target: "originalLineTotalInput" } %>
+  </div>
 
   <% if new_record %>
     <%= item_form.hidden_field :line_total,

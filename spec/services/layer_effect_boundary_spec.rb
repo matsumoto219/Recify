@@ -2,8 +2,6 @@ require "rails_helper"
 require_relative "../support/layer_effect_boundary_scanner"
 
 RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
-  ADMIN_MUTATION_EXCEPTIONS = {}.freeze
-
   ADMIN_OPERATION_CALLS = {
     [ "app/controllers/admin/announcements_controller.rb", :archive_announcement ] => 1,
     [ "app/controllers/admin/announcements_controller.rb", :create_announcement ] => 1,
@@ -35,8 +33,6 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
     [ "app/services/system_operations/ip_access_operation_executor.rb", :record_ip_access_operation ] => 1
   }.freeze
 
-  SERVICE_RENDER_EXCEPTIONS = [].freeze
-
   before(:context) do
     @scanner = LayerEffectBoundary::Scanner.new(root: Rails.root)
   end
@@ -62,12 +58,10 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
     expect(mutable).to be_empty, "Mutable Query/Form Result contracts:\n#{mutable.join("\n")}"
   end
 
-  it "Admin controllerの直接DB mutationをexact legacy fingerprintだけに限定する" do
-    actual = scanner.admin_controller_mutations.map do |effect|
-      [ effect.source_path, effect.receiver_source, effect.method_name ]
-    end.tally
+  it "Admin controllerから直接DB mutationを行わない" do
+    mutations = scanner.admin_controller_mutations
 
-    expect(actual).to eq(ADMIN_MUTATION_EXCEPTIONS)
+    expect(mutations).to be_empty, mutations.map(&:to_h).join("\n")
   end
 
   it "routine Admin mutationをAdmin::Operationsのexact facade callへ限定する" do
@@ -120,20 +114,10 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
     )
   end
 
-  it "serviceのHTML renderingをexact legacy exceptionだけに限定する" do
-    actual = scanner.service_render_calls.map do |effect|
-      {
-        source_path: effect.source_path,
-        receiver_source: effect.receiver_source,
-        method_name: effect.method_name
-      }
-    end
-    expected = SERVICE_RENDER_EXCEPTIONS.map do |exception|
-      exception.slice(:source_path, :receiver_source, :method_name)
-    end
+  it "serviceからHTML renderingを行わない" do
+    rendering_calls = scanner.service_render_calls
 
-    expect(actual).to eq(expected)
-    expect(SERVICE_RENDER_EXCEPTIONS).to all(include(reason: be_present, remove_in_loop: 15))
+    expect(rendering_calls).to be_empty, rendering_calls.map(&:to_h).join("\n")
   end
 
   it "対象production sourceをPrismで解析できる" do

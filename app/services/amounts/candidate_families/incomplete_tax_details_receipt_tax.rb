@@ -14,6 +14,8 @@ module Amounts
         return nil unless incomplete_tax_detail_amounts_present?
 
         payment = payment_reconciliation(total, payment_adjustment_total)
+        computed_items = reference_items_projected_to_gross(rounding_mode: :floor)
+        return nil unless computed_items
 
         Amounts::Candidate.new(
           candidate_id: "incomplete_tax_details_receipt_tax/floor",
@@ -38,7 +40,7 @@ module Amounts
             subtotal: total - tax,
             item_total: item_total
           } ],
-          computed_items: items,
+          computed_items: computed_items,
           calculation_profile: calculation_profile(
             receipt_tax_basis: :total_includes_tax,
             item_amount_basis: :line_total_as_recorded,

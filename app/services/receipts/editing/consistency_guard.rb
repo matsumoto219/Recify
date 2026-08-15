@@ -88,7 +88,8 @@ class Receipts::Editing::ConsistencyGuard
   end
 
   def item_amount_source_present?(item)
-    value_present?(fetch_value(item, :price)) ||
+    value_present?(fetch_value(item, :pricing_source_kind)) ||
+      value_present?(fetch_value(item, :price)) ||
       value_present?(fetch_value(item, :line_total)) ||
       positive_amount?(fetch_value(item, :original_line_total)) ||
       positive_amount?(fetch_value(item, :discount_amount))

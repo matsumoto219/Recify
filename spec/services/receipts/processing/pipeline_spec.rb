@@ -3978,6 +3978,55 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
+    it 'OCR item TotalPrice欠損のmeasurementをformula化せず印字receipt totalを保持する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = rich_ocr_result(
+        candidates: {
+          total_amount: 1_137,
+          subtotal_amount: nil,
+          tax_amount: nil,
+          tax_rate: nil,
+          payment_method_text: 'Cash',
+          items: [
+            {
+              raw_text: '量り売り商品',
+              price: 140,
+              quantity: '8.12',
+              quantity_unit_code: 'liter',
+              quantity_unit_status: 'known',
+              line_total: nil,
+              confidence: 0.98
+            }
+          ],
+          payments: [ { method: 'Cash', amount: 1_137 } ],
+          tax_details: []
+        }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
+      )
+
+      item = receipt.reload.receipt_items.sole
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.total_amount).to eq(1_137)
+        expect(item).to have_attributes(
+          price: 140,
+          quantity: BigDecimal('8.12'),
+          quantity_unit_code: 'liter',
+          original_line_total: nil,
+          line_total: nil,
+          pricing_source_kind: nil,
+          reference_price_amount: nil,
+          reference_quantity: nil,
+          reference_quantity_unit_code: nil
+        )
+        expect(item.review_reasons).to include('item_quantity_uncertain')
+      end
+    end
+
     it 'ocr_only decisionではitem_sum drift検出を発火させない' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = rich_ocr_result(

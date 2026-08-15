@@ -3,37 +3,43 @@ require_relative "../support/application_structure_boundary_scanner"
 
 RSpec.describe "root service and lifecycle status boundary" do
   ROOT_CLASSIFICATIONS = {
-    "admin.rb" => { constant: "Admin", role: :public_facade, owner: "admin read API and reauthentication policy facade", remove_in_loop: nil },
-    "analysis.rb" => { constant: "Analysis", role: :public_facade, owner: "receipt analysis specialist facade", remove_in_loop: nil },
-    "audit_logs.rb" => { constant: "AuditLogs", role: :public_facade, owner: "audit platform facade", remove_in_loop: nil },
-    "bot_protection.rb" => { constant: "BotProtection", role: :public_facade, owner: "bot protection facade", remove_in_loop: nil },
-    "contact_requests.rb" => { constant: "ContactRequests", role: :public_facade, owner: "contact request facade", remove_in_loop: nil },
-    "external_services.rb" => { constant: "ExternalServices", role: :public_facade, owner: "external service platform facade", remove_in_loop: nil },
-    "legal_acceptances.rb" => { constant: "LegalAcceptances", role: :public_facade, owner: "legal acceptance persistence facade", remove_in_loop: nil },
-    "legal_consents.rb" => { constant: "LegalConsents", role: :public_facade, owner: "legal consent requirement facade", remove_in_loop: nil },
-    "legal_documents.rb" => { constant: "LegalDocuments", role: :public_facade, owner: "legal document query and maintenance facade", remove_in_loop: nil },
-    "maintenance.rb" => { constant: "Maintenance", role: :public_facade, owner: "maintenance policy facade", remove_in_loop: nil },
-    "passkeys.rb" => { constant: "Passkeys", role: :public_facade, owner: "WebAuthn facade", remove_in_loop: nil },
-    "production_data_plane_validator.rb" => { constant: "ProductionDataPlaneValidator", role: :platform_contract, owner: "production boot validation", remove_in_loop: nil },
-    "production_env_validator.rb" => { constant: "ProductionEnvValidator", role: :platform_contract, owner: "production environment validation", remove_in_loop: nil },
-    "production_legal_documents_validator.rb" => { constant: "ProductionLegalDocumentsValidator", role: :platform_contract, owner: "production legal document validation", remove_in_loop: nil },
-    "production_runtime_config.rb" => { constant: "ProductionRuntimeConfig", role: :platform_contract, owner: "production runtime configuration", remove_in_loop: nil },
-    "receipt_ai_enrichment_service.rb" => { constant: "ReceiptAiEnrichmentService", role: :public_facade, owner: "AI specialist facade", remove_in_loop: nil },
-    "receipt_amount_service.rb" => { constant: "ReceiptAmountService", role: :public_facade, owner: "Amount Engine facade", remove_in_loop: nil },
-    "receipt_analysis_profiles.rb" => { constant: "ReceiptAnalysisProfiles", role: :public_facade, owner: "country analysis profile facade", remove_in_loop: nil },
-    "receipt_ocr_service.rb" => { constant: "ReceiptOcrService", role: :public_facade, owner: "OCR specialist facade", remove_in_loop: nil },
-    "review_reasons.rb" => { constant: "ReviewReasons", role: :domain_policy, owner: "review reason policy", remove_in_loop: nil },
-    "security.rb" => { constant: "Security", role: :public_facade, owner: "security platform facade", remove_in_loop: nil },
-    "security_events.rb" => { constant: "SecurityEvents", role: :public_facade, owner: "security event facade", remove_in_loop: nil },
-    "sensitive_metadata_keys.rb" => { constant: "SensitiveMetadataKeys", role: :domain_policy, owner: "sensitive metadata key catalog", remove_in_loop: nil },
-    "storage.rb" => { constant: "Storage", role: :public_facade, owner: "storage platform facade", remove_in_loop: nil },
-    "system_operations.rb" => { constant: "SystemOperations", role: :public_facade, owner: "high-risk operation facade", remove_in_loop: nil },
-    "system_settings.rb" => { constant: "SystemSettings", role: :public_facade, owner: "system setting facade", remove_in_loop: nil },
-    "two_factor.rb" => { constant: "TwoFactor", role: :public_facade, owner: "two-factor authentication facade", remove_in_loop: nil },
-    "usage.rb" => { constant: "Usage", role: :public_facade, owner: "usage and limit facade", remove_in_loop: nil },
-    "user_limits.rb" => { constant: "UserLimits", role: :domain_policy, owner: "user limit policy", remove_in_loop: nil },
-    "user_sessions.rb" => { constant: "UserSessions", role: :public_facade, owner: "user session lifecycle facade", remove_in_loop: nil },
-    "users.rb" => { constant: "Users", role: :public_facade, owner: "user account workflow facade", remove_in_loop: nil }
+    "admin.rb" => { constant: "Admin", role: :public_facade, owner: "admin read API and reauthentication policy facade" },
+    "analysis.rb" => { constant: "Analysis", role: :public_facade, owner: "receipt analysis specialist facade" },
+    "audit_logs.rb" => { constant: "AuditLogs", role: :public_facade, owner: "audit platform facade" },
+    "bot_protection.rb" => { constant: "BotProtection", role: :public_facade, owner: "bot protection facade" },
+    "contact_requests.rb" => { constant: "ContactRequests", role: :public_facade, owner: "contact request facade" },
+    "external_services.rb" => { constant: "ExternalServices", role: :public_facade, owner: "external service platform facade" },
+    "legal_acceptances.rb" => { constant: "LegalAcceptances", role: :public_facade, owner: "legal acceptance persistence facade" },
+    "legal_consents.rb" => { constant: "LegalConsents", role: :public_facade, owner: "legal consent requirement facade" },
+    "legal_documents.rb" => { constant: "LegalDocuments", role: :public_facade, owner: "legal document query and maintenance facade" },
+    "maintenance.rb" => { constant: "Maintenance", role: :public_facade, owner: "maintenance policy facade" },
+    "passkeys.rb" => { constant: "Passkeys", role: :public_facade, owner: "WebAuthn facade" },
+    "production_data_plane_validator.rb" => { constant: "ProductionDataPlaneValidator", role: :platform_contract, owner: "production boot validation" },
+    "production_env_validator.rb" => { constant: "ProductionEnvValidator", role: :platform_contract, owner: "production environment validation" },
+    "production_legal_documents_validator.rb" => { constant: "ProductionLegalDocumentsValidator", role: :platform_contract, owner: "production legal document validation" },
+    "production_runtime_config.rb" => { constant: "ProductionRuntimeConfig", role: :platform_contract, owner: "production runtime configuration" },
+    "receipt_ai_enrichment_service.rb" => { constant: "ReceiptAiEnrichmentService", role: :public_facade, owner: "AI specialist facade" },
+    "receipt_amount_service.rb" => { constant: "ReceiptAmountService", role: :public_facade, owner: "Amount Engine facade" },
+    "receipt_analysis_profiles.rb" => { constant: "ReceiptAnalysisProfiles", role: :public_facade, owner: "country analysis profile facade" },
+    "receipt_ocr_service.rb" => { constant: "ReceiptOcrService", role: :public_facade, owner: "OCR specialist facade" },
+    "review_reasons.rb" => { constant: "ReviewReasons", role: :domain_policy, owner: "review reason policy" },
+    "security.rb" => { constant: "Security", role: :public_facade, owner: "security platform facade" },
+    "security_events.rb" => { constant: "SecurityEvents", role: :public_facade, owner: "security event facade" },
+    "sensitive_metadata_keys.rb" => { constant: "SensitiveMetadataKeys", role: :domain_policy, owner: "sensitive metadata key catalog" },
+    "storage.rb" => { constant: "Storage", role: :public_facade, owner: "storage platform facade" },
+    "system_operations.rb" => { constant: "SystemOperations", role: :public_facade, owner: "high-risk operation facade" },
+    "system_settings.rb" => { constant: "SystemSettings", role: :public_facade, owner: "system setting facade" },
+    "two_factor.rb" => { constant: "TwoFactor", role: :public_facade, owner: "two-factor authentication facade" },
+    "usage.rb" => { constant: "Usage", role: :public_facade, owner: "usage and limit facade" },
+    "user_limits.rb" => { constant: "UserLimits", role: :domain_policy, owner: "user limit policy" },
+    "user_sessions.rb" => { constant: "UserSessions", role: :public_facade, owner: "user session lifecycle facade" },
+    "users.rb" => { constant: "Users", role: :public_facade, owner: "user account workflow facade" }
+  }.freeze
+
+  PUBLIC_NESTED_ERRORS = {
+    "receipt_amount_service.rb" => {
+      "ReceiptAmountService::InvalidItemSourceError" => ArgumentError
+    }.freeze
   }.freeze
 
   EXTERNAL_METHODS = {
@@ -53,7 +59,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     "production_legal_documents_validator.rb" => %i[],
     "production_runtime_config.rb" => %i[new],
     "receipt_ai_enrichment_service.rb" => %i[available? call error_result provider_metrics],
-    "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_label_pattern_source payment_adjustment_summary purchase_adjustment_kinds receipt_adjustment_amount_max receipt_item_line_total_max receipt_item_price_max receipt_payment_amount_max receipt_tax_amount_max receipt_total_amount_max violations_for warning_mismatch_codes],
+    "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_label_pattern_source payment_adjustment_summary purchase_adjustment_kinds receipt_adjustment_amount_max receipt_item_line_total_max receipt_item_price_max receipt_payment_amount_max receipt_tax_amount_max receipt_total_amount_max reference_item_extension_projection reference_projection_fallback_tax_rate violations_for warning_mismatch_codes],
     "receipt_analysis_profiles.rb" => %i[default fetch],
     "receipt_ocr_service.rb" => %i[available? call error_result],
     "review_reasons.rb" => %i[blocking_reasons_for_user group_by_display_category normalize normalize_ai_output_reasons review_reasons_for_user user_facing_reason? warning_reasons_for_user],
@@ -87,7 +93,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     "production_legal_documents_validator.rb" => %i[call validate!],
     "production_runtime_config.rb" => %i[],
     "receipt_ai_enrichment_service.rb" => %i[available? call error_result provider_metrics],
-    "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call mismatch_code parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_label_pattern_source payment_adjustment_summary purchase_adjustment_kinds receipt_adjustment_amount_max receipt_item_line_total_max receipt_item_price_max receipt_payment_amount_max receipt_tax_amount_max receipt_total_amount_max violations_for warning_mismatch_codes],
+    "receipt_amount_service.rb" => %i[adjustment_classification adjustment_effect apply_rounding calculation_profile_snapshot call mismatch_code parse_amount parse_amount_or_nil parse_quantity payment_adjustment_kinds payment_adjustment_label_pattern_source payment_adjustment_summary purchase_adjustment_kinds receipt_adjustment_amount_max receipt_item_line_total_max receipt_item_price_max receipt_payment_amount_max receipt_tax_amount_max receipt_total_amount_max reference_item_extension_projection reference_projection_fallback_tax_rate violations_for warning_mismatch_codes],
     "receipt_analysis_profiles.rb" => %i[default fetch for_country],
     "receipt_ocr_service.rb" => %i[available? call error_result],
     "review_reasons.rb" => %i[blocking_reason? blocking_reasons_for_user display_category_for group_by_display_category internal_processing_reasons known_reason? normalize normalize_ai_output_reasons normalize_allowed_reasons review_reasons_for_user user_facing_reason? warning_reason? warning_reasons_for_user],
@@ -131,6 +137,7 @@ RSpec.describe "root service and lifecycle status boundary" do
         external_methods: EXTERNAL_METHODS.fetch(file),
         declared_singleton_methods: DECLARED_SINGLETON_METHODS.fetch(file),
         declared_instance_methods: DECLARED_INSTANCE_METHODS.fetch(file, []),
+        public_nested_errors: PUBLIC_NESTED_ERRORS.fetch(file, {}),
         constructible: CONSTRUCTIBLE_ROOTS.include?(file)
       ).freeze
     ]
@@ -173,6 +180,25 @@ RSpec.describe "root service and lifecycle status boundary" do
     expect(scanner.declared_api_issues).to be_empty, scanner.declared_api_issues.join("\n")
   end
 
+  it "外部公開するroot facadeのnested Errorをconstant単位で固定する" do
+    PUBLIC_NESTED_ERRORS.each do |file, expected_errors|
+      metadata = ROOT_SERVICE_REGISTRY.fetch(file)
+      facade = metadata.fetch(:constant).constantize
+      actual_errors = facade.constants(false).filter_map do |name|
+        nested = facade.const_get(name, false)
+        "#{metadata.fetch(:constant)}::#{name}" if nested.is_a?(Class) && nested <= StandardError
+      end.sort
+
+      expect(actual_errors).to eq(expected_errors.keys.sort)
+      expected_errors.each do |constant_name, expected_parent|
+        error_class = constant_name.safe_constantize
+
+        expect(error_class).to be_a(Class)
+        expect(error_class).to be < expected_parent
+      end
+    end
+  end
+
   it "production callerが利用するroot public APIを増減させない" do
     expect(scanner.external_api_issues).to be_empty, scanner.external_api_issues.join("\n")
   end
@@ -198,7 +224,7 @@ RSpec.describe "root service and lifecycle status boundary" do
     expect(forbidden).to be_empty
   end
 
-  it "間接的なstatus decision ownerを理由と削除予定付きで固定する" do
+  it "間接的なstatus decision ownerを理由付きで固定する" do
     missing = INDIRECT_STATUS_OWNERS.keys.reject { |path| Rails.root.join(path).file? }
 
     expect(missing).to be_empty

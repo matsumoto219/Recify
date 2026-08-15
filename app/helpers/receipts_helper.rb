@@ -132,7 +132,7 @@ module ReceiptsHelper
     return rate if rate.is_a?(String) && rate.include?("%")
 
     percentage = BigDecimal(rate.to_s) * 100
-    "#{number_with_precision(percentage, precision: 1, strip_insignificant_zeros: true)}%"
+    "#{number_with_precision(percentage, precision: 2, strip_insignificant_zeros: true)}%"
   rescue ArgumentError
     rate.to_s.presence || t("receipts.common.not_available")
   end

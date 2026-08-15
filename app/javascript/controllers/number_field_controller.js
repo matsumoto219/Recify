@@ -4,7 +4,8 @@ import { Controller } from '@hotwired/stimulus'
 export default class extends Controller {
   static targets = ['input']
   static values = {
-    decimalPrecision: Number
+    decimalPrecision: Number,
+    decimalComma: Boolean
   }
 
   connect () {
@@ -94,53 +95,99 @@ export default class extends Controller {
     if (!this.hasInputTarget) return
 
     const input = this.inputTarget
-    const step = Number.parseFloat(input.step || '1') || 1
-    const currentValue = this.parseStepperValue(input.value) ?? 0
-    const nextValue = this.clampValue(currentValue + (step * delta), input)
+    const step = this.parseStepperValue(input.step || '1') || this.parseStepperValue('1')
+    const currentValue = this.parseStepperValue(input.value) || this.parseStepperValue('0')
+    const nextValue = this.clampValue(this.addValue(currentValue, step, delta), input)
 
-    input.value = this.formatValue(nextValue, step)
+    input.value = this.formatValue(nextValue, step.scale)
     input.dispatchEvent(new Event('input', { bubbles: true }))
     input.dispatchEvent(new Event('change', { bubbles: true }))
   }
 
   clampValue (value, input) {
-    const min = input.min === '' ? null : Number.parseFloat(input.min)
-    const max = input.max === '' ? null : Number.parseFloat(input.max)
+    const min = input.min === '' ? null : this.parseStepperValue(input.min)
+    const max = input.max === '' ? null : this.parseStepperValue(input.max)
 
-    if (min !== null && !Number.isNaN(min) && value < min) return min
-    if (max !== null && !Number.isNaN(max) && value > max) return max
+    if (min !== null && this.compareValues(value, min) < 0) return min
+    if (max !== null && this.compareValues(value, max) > 0) return max
 
     return value
   }
 
-  formatValue (value, step) {
-    if (Number.isInteger(step) && !this.hasDecimalPrecisionValue) {
-      return String(Math.round(value))
+  addValue (value, step, delta) {
+    const scale = Math.max(value.scale, step.scale)
+
+    return {
+      units: this.unitsAtScale(value, scale) + (this.unitsAtScale(step, scale) * BigInt(delta)),
+      scale
     }
-
-    const precision = this.hasDecimalPrecisionValue ? this.decimalPrecisionValue : this.decimalPrecision(step)
-    const multiplier = 10 ** precision
-    const roundedValue = Math.round((value + Number.EPSILON) * multiplier) / multiplier
-
-    if (precision > 0) {
-      return String(roundedValue).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
-    }
-
-    return String(Math.round(roundedValue))
   }
 
-  decimalPrecision (value) {
-    const valueText = String(value)
-    const decimalPart = valueText.split('.')[1]
+  compareValues (left, right) {
+    const scale = Math.max(left.scale, right.scale)
+    const leftUnits = this.unitsAtScale(left, scale)
+    const rightUnits = this.unitsAtScale(right, scale)
 
-    return decimalPart ? decimalPart.length : 0
+    if (leftUnits < rightUnits) return -1
+    if (leftUnits > rightUnits) return 1
+    return 0
+  }
+
+  unitsAtScale (value, scale) {
+    return value.units * (10n ** BigInt(scale - value.scale))
+  }
+
+  formatValue (value, stepScale) {
+    const precision = this.hasDecimalPrecisionValue ? this.decimalPrecisionValue : stepScale
+    const roundedUnits = this.roundUnits(value, precision)
+    const negative = roundedUnits < 0n
+    const digits = (negative ? -roundedUnits : roundedUnits).toString().padStart(precision + 1, '0')
+    const integerDigits = precision > 0 ? digits.slice(0, -precision) : digits
+    const fractionalDigits = precision > 0 ? digits.slice(-precision).replace(/0+$/, '') : ''
+    const formatted = fractionalDigits === '' ? integerDigits : `${integerDigits}.${fractionalDigits}`
+
+    return negative && formatted !== '0' ? `-${formatted}` : formatted
+  }
+
+  roundUnits (value, precision) {
+    if (value.scale <= precision) return this.unitsAtScale(value, precision)
+
+    const divisor = 10n ** BigInt(value.scale - precision)
+    const quotient = value.units / divisor
+    const remainder = value.units % divisor
+    if (remainder === 0n) return quotient
+
+    const absoluteRemainder = remainder < 0n ? -remainder : remainder
+    if (absoluteRemainder * 2n < divisor) return quotient
+
+    return quotient + (value.units < 0n ? -1n : 1n)
   }
 
   parseStepperValue (value) {
-    const text = String(value ?? '').trim()
-    if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return null
+    let text = String(value ?? '')
+      .trim()
+      .replace(/[０-９]/g, (character) => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
+      .replace(/－/g, '-')
+      .replace(/．/g, '.')
+      .replace(/，/g, ',')
+    if (text.length > 64) return null
 
-    const parsedValue = Number.parseFloat(text)
-    return Number.isFinite(parsedValue) ? parsedValue : null
+    const commaCount = (text.match(/,/g) || []).length
+    if (this.hasDecimalCommaValue && this.decimalCommaValue && !text.includes('.') && commaCount === 1) {
+      text = text.replace(',', '.')
+    }
+
+    const integerComponent = '(?:\\d+|\\d{1,3}(?:,\\d{3})+)'
+    if (!new RegExp(`^-?(?:${integerComponent}(?:\\.\\d*)?|\\.\\d+)$`).test(text)) return null
+
+    const negative = text.startsWith('-')
+    const unsignedText = (negative ? text.slice(1) : text).replace(/,/g, '')
+    const [integerDigits = '0', fractionalDigits = ''] = unsignedText.split('.')
+    const units = BigInt(`${integerDigits || '0'}${fractionalDigits}` || '0')
+
+    return {
+      units: negative ? -units : units,
+      scale: fractionalDigits.length
+    }
   }
 }

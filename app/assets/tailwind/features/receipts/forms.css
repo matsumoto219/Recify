@@ -9,6 +9,20 @@
   background: var(--bg-elevated);
 }
 
+.receipt-form-pricing-source-fields {
+  min-inline-size: 0;
+}
+
+.receipt-form-pricing-source-fields p,
+.receipt-form-pricing-source-summary {
+  overflow-wrap: anywhere;
+}
+
+.receipt-form-pricing-source-summary,
+.receipt-form-pricing-result {
+  font-variant-numeric: tabular-nums;
+}
+
 .receipt-form-adjustment-row:hover {
   border-color: var(--border-soft);
 }
@@ -72,6 +86,17 @@
     display: block;
     width: auto;
     margin-bottom: 0.5rem;
+  }
+}
+
+@media (width <= 390px) {
+  .receipt-form-pricing-source-fields,
+  .receipt-form-pricing-source-fields > div,
+  .receipt-form-pricing-source-fields .group,
+  .receipt-form-pricing-source-fields input,
+  .receipt-form-pricing-source-fields select {
+    min-width: 0;
+    max-width: 100%;
   }
 }
 

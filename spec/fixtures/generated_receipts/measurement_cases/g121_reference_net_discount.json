@@ -1,0 +1,88 @@
+{
+  "case_id": "g121_reference_net_discount",
+  "category": "measurement",
+  "intent": "A net reference source applies an item discount once before projecting tax to gross.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル液体D 税抜 ¥120/500ml 1.5L", "商品値引10% -¥36", "¥356"],
+        "purchased_quantity": "1.5",
+        "purchased_unit": "liter",
+        "reference_price_amount": "120",
+        "reference_quantity": "500",
+        "reference_unit": "milliliter",
+        "reference_price_tax_inclusion": "net",
+        "printed_line_total": 356,
+        "discount_rate": "0.1"
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル量売 税抜値引店",
+    "store_address": "サンプル県サンプル市基準町1-9",
+    "purchased_at": "2026-08-09T10:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル液体D",
+        "unit_price": 120,
+        "quantity": "1.5",
+        "quantity_unit_code": "liter",
+        "pricing_source_kind": null,
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 356,
+        "line_total": 356,
+        "tax_rate": 0.1,
+        "discount_amount": 36
+      }
+    ],
+    "measurement_projections": [
+      {
+        "item_index": 0,
+        "exact_reference_amount": {"numerator": "360", "denominator": "1"},
+        "projected_reference_line_total": 360,
+        "discount_amount": 36,
+        "discounted_source_line_total": 324,
+        "projected_gross_line_total": 356
+      }
+    ],
+    "reference_pricing_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "120",
+        "reference_quantity": "500",
+        "reference_unit_code": "milliliter",
+        "purchased_quantity": "1.5",
+        "purchased_unit_code": "liter",
+        "reference_price_tax_inclusion": "net",
+        "projected_line_total": 360,
+        "printed_line_total": "356",
+        "rounding_matches": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 324, "tax": 32, "gross": 356, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 324,
+    "tax": 32,
+    "total": 356,
+    "payments": [{"method": "cash", "label": "現金", "amount": 356}],
+    "payment_sum": 356,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "measurement_projections", "reference_pricing_candidates"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

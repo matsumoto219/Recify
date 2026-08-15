@@ -43,6 +43,30 @@ module Amounts
       end
     end
 
+    def trusted_reference_projection_fallback_rate(receipt_tax_rate:)
+      detail_rates = final_detected_tax_details.map { |detail| detail[:rate] }.uniq
+
+      if detail_rates.one?
+        detail_rates.first if purchase_amount_evidence_present?
+      elsif detail_rates.many?
+        nil
+      else
+        trusted_explicit_projection_rate(receipt_tax_rate)
+      end
+    end
+
+    def trusted_explicit_projection_rate(value)
+      raw = value.to_s.strip
+      raw = raw.delete_suffix("%").strip
+      return nil unless raw.match?(/\A[+-]?\d+(?:\.\d+)?\z/)
+
+      rate = BigDecimal(raw)
+      rate /= 100 if rate > 1
+      rate if rate.between?(0, 1)
+    rescue ArgumentError
+      nil
+    end
+
     def incomplete_source_tax_details
       @incomplete_source_tax_details ||= detected_tax_details.filter_map do |detail|
         next unless detail[:amount].to_i.positive?

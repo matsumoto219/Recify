@@ -29,6 +29,11 @@ module ReceiptAnalysisProfiles
       "cc" => "cubic_centimeter"
     }.freeze
 
+    REFERENCE_PRICE_TAX_BASIS_LABELS = {
+      "gross" => %w[税込 内税].freeze,
+      "net" => %w[税抜 外税].freeze
+    }.freeze
+
     FALLBACK_PAYMENT_METHOD_PATTERNS = {
       "debit_card" => [
         /デビット(?:カード)?/i,
@@ -637,8 +642,21 @@ module ReceiptAnalysisProfiles
         QUANTITY_UNIT_ALIASES
       end
 
-      def normalize_quantity_unit(value, default: ReceiptQuantityUnit.default_code)
-        ReceiptQuantityUnit.normalize(value, default: default, aliases: quantity_unit_aliases)
+      def resolve_quantity_unit(value)
+        ReceiptQuantityUnit.resolve(value, aliases: quantity_unit_aliases)
+      end
+
+      def reference_price_tax_basis_labels
+        REFERENCE_PRICE_TAX_BASIS_LABELS
+      end
+
+      def reference_price_tax_inclusion(reference_expression)
+        expression = reference_expression.to_s
+        matches = reference_price_tax_basis_labels.filter_map do |inclusion, labels|
+          inclusion if labels.any? { |label| expression.include?(label) }
+        end
+
+        matches.one? ? matches.first : "unknown"
       end
 
       def fallback_payment_method_patterns
