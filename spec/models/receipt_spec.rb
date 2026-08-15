@@ -44,7 +44,7 @@ RSpec.describe Receipt, type: :model do
       )
     end
 
-    it 'top-level profileを競合するlegacy selected basisより優先する' do
+    it 'top-level profileを競合するselected basis fallbackより優先する' do
       receipt = build_stubbed(
         :receipt,
         amount_calculation_profile: {
@@ -64,7 +64,7 @@ RSpec.describe Receipt, type: :model do
       )
     end
 
-    it 'profileがないlegacy tax-excluded candidateは保存済みgross sourceへ投影する' do
+    it 'profileがないtax-excluded candidateは保存済みgross sourceへ投影する' do
       receipt = build_stubbed(
         :receipt,
         amount_calculation_profile: {

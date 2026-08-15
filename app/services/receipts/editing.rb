@@ -10,6 +10,8 @@ module Receipts
       end
     end
 
+    class InvalidItemSourceError < ArgumentError; end
+
     class << self
       def create_manual(...)
         ManualCreator.call(...)

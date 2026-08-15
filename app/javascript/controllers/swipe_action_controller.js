@@ -11,6 +11,7 @@ const INTERACTIVE_SELECTOR = [
   'textarea',
   'select',
   'button',
+  'summary',
   'a',
   'label',
   '[contenteditable]',

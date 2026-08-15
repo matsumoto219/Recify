@@ -79,4 +79,28 @@ RSpec.describe 'shared/ui/form/_quantity_unit_number_field', type: :view do
       expect(select['class']).not_to include('quantity-unit-number-field-centered-select')
     end
   end
+
+  it '単位selectのoptional HTML attributesを既存class・data・a11yと統合する' do
+    document = render_quantity_unit_number_field(
+      unit_data: { action: 'change->test#change' },
+      unit_aria_label: '基準単位',
+      unit_html_options: {
+        disabled: true,
+        class: 'custom-unit-class',
+        data: { test_target: 'unit' },
+        aria: { describedby: 'unit-hint' }
+      }
+    )
+    select = document.at_css('select[name="quantity_unit_number_field_test_form[quantity_unit_code]"]')
+
+    aggregate_failures do
+      expect(select['disabled']).to eq('disabled')
+      expect(select['class']).to include('ui-touch-control')
+      expect(select['class']).to include('custom-unit-class')
+      expect(select['data-action']).to eq('change->test#change')
+      expect(select['data-test-target']).to eq('unit')
+      expect(select['aria-label']).to eq('基準単位')
+      expect(select['aria-describedby']).to eq('unit-hint')
+    end
+  end
 end

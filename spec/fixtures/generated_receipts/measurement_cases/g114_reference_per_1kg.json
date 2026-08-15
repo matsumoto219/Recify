@@ -1,0 +1,87 @@
+{
+  "case_id": "g114_reference_per_1kg",
+  "category": "measurement",
+  "intent": "A bare per-kilogram expression means an implicit reference quantity of one.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル量売B 税込 ¥980/kg 1.25kg", "¥1,225"],
+        "purchased_quantity": "1.25",
+        "purchased_unit": "kilogram",
+        "reference_price_amount": "980",
+        "reference_quantity": "1",
+        "reference_unit": "kilogram",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 1225
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル量売 キログラム店",
+    "store_address": "サンプル県サンプル市基準町1-2",
+    "purchased_at": "2026-08-02T10:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル量売B",
+        "unit_price": 980,
+        "quantity": "1.25",
+        "quantity_unit_code": "kilogram",
+        "pricing_source_kind": null,
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 1225,
+        "line_total": 1225,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "measurement_projections": [
+      {
+        "item_index": 0,
+        "exact_reference_amount": {"numerator": "1225", "denominator": "1"},
+        "projected_reference_line_total": 1225,
+        "discount_amount": 0,
+        "discounted_source_line_total": 1225,
+        "projected_gross_line_total": 1225
+      }
+    ],
+    "reference_pricing_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "980",
+        "reference_quantity": "1",
+        "reference_unit_code": "kilogram",
+        "purchased_quantity": "1.25",
+        "purchased_unit_code": "kilogram",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 1225,
+        "printed_line_total": "1225",
+        "rounding_matches": ["floor", "half_up", "ceil"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 1114, "tax": 111, "gross": 1225, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 1114,
+    "tax": 111,
+    "total": 1225,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1225}],
+    "payment_sum": 1225,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "measurement_projections", "reference_pricing_candidates"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

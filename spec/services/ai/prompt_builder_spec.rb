@@ -114,6 +114,61 @@ RSpec.describe Ai::PromptBuilder do
       end
     end
 
+    it 'unknown数量単位をeachへ変換せずAIのreference-only入力から除外する' do
+      result = described_class.build(
+        ocr_result.deep_merge(
+          candidates: {
+            items: [
+              {
+                raw_text: '量り売り商品',
+                price: 180,
+                quantity: 2,
+                quantity_unit_code: nil,
+                quantity_unit_status: 'unknown',
+                quantity_unit_raw: '杯',
+                line_total: nil
+              }
+            ]
+          }
+        )
+      )
+      item = result.fetch(:items).sole
+
+      aggregate_failures do
+        expect(item).not_to have_key(:quantity_unit_code)
+        expect(item).not_to have_key(:quantity_unit_status)
+        expect(item).not_to have_key(:quantity_unit_raw)
+      end
+    end
+
+    it 'reference pricing candidatesとcandidate IDをQ6のAI入力へ追加しない' do
+      result = described_class.build(
+        ocr_result.deep_merge(
+          candidates: {
+            reference_pricing_candidates: [
+              {
+                candidate_id: 'azure_items_0_reference_pricing',
+                item_index: 0,
+                validation_state: 'valid',
+                rejection_reasons: [],
+                reference_price: { amount: '498' },
+                reference_quantity: {
+                  amount: '100', unit_code: nil, unit_status: 'unknown', unit_raw: '杯'
+                }
+              }
+            ]
+          }
+        )
+      )
+
+      aggregate_failures do
+        expect(result).not_to have_key(:reference_pricing_candidates)
+        expect(result.fetch(:items)).to all(satisfy { |item| !item.key?(:reference_pricing_candidate_id) })
+        expect(result.to_json).not_to include('azure_items_0_reference_pricing')
+        expect(result.to_json).not_to include('unit_raw', '杯')
+      end
+    end
+
     it '明示的なunsupported countryではJapan profile hintsを入れない' do
       result = described_class.build(
         ocr_result.deep_merge(candidates: { country_region: 'USA' })

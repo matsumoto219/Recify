@@ -99,6 +99,110 @@ RSpec.describe Receipts::Editing::InputBuilder do
     end
   end
 
+  it 'reference formula rowのpartial入力へ保存済みsource metadataを重ねて変更を検出する' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '基準価格商品',
+      pricing_source_kind: 'reference_quantity_price',
+      reference_price_amount: BigDecimal('140'),
+      reference_quantity: BigDecimal('10'),
+      reference_quantity_unit_code: 'liter',
+      reference_price_tax_inclusion: 'gross',
+      quantity: BigDecimal('8.12'),
+      quantity_unit_code: 'liter',
+      original_line_total: 114,
+      line_total: 114
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => {
+            'id' => item.id.to_s,
+            'quantity' => BigDecimal('9.12'),
+            'reference_price_amount' => BigDecimal('140')
+          }
+        }
+      }
+    ).receipt_items.sole
+
+    expect(result).to include(
+      'pricing_source_kind' => 'reference_quantity_price',
+      'reference_price_amount' => BigDecimal('140'),
+      'reference_quantity' => BigDecimal('10'),
+      'reference_quantity_unit_code' => 'liter',
+      'reference_price_tax_inclusion' => 'gross',
+      'quantity' => BigDecimal('9.12'),
+      'quantity_unit_code' => 'liter',
+      'quantity_unit_raw' => nil,
+      'reference_quantity_unit_raw' => nil,
+      'amount_countable_source_changed' => true
+    )
+  end
+
+  it '未送信のreference formula rowもsource metadataを完全なままAmount入力へ残す' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '未送信基準価格商品',
+      pricing_source_kind: 'reference_quantity_price',
+      reference_price_amount: BigDecimal('120.5'),
+      reference_quantity: BigDecimal('500'),
+      reference_quantity_unit_code: 'milliliter',
+      reference_price_tax_inclusion: 'net',
+      quantity: BigDecimal('1.5'),
+      quantity_unit_code: 'liter',
+      original_line_total: 398,
+      line_total: 398
+    )
+
+    result = described_class.call(receipt: receipt, permitted: {}).receipt_items.sole
+
+    expect(result).to include(
+      'id' => item.id,
+      'pricing_source_kind' => 'reference_quantity_price',
+      'reference_price_amount' => BigDecimal('120.5'),
+      'reference_quantity' => BigDecimal('500'),
+      'reference_quantity_unit_code' => 'milliliter',
+      'reference_price_tax_inclusion' => 'net',
+      'quantity_unit_raw' => nil,
+      'reference_quantity_unit_raw' => nil,
+      'amount_countable_source_changed' => false
+    )
+  end
+
+  it 'authorityを持たないdiagnostic rowのunknown raw unit evidenceを保持する' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '未対応単位商品',
+      pricing_source_kind: nil,
+      reference_price_amount: BigDecimal('100'),
+      reference_quantity: BigDecimal('2'),
+      reference_quantity_unit_code: nil,
+      reference_quantity_unit_raw: 'bundle-size',
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'each',
+      quantity_unit_raw: 'bundle',
+      line_total: 100
+    )
+
+    result = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => { 'id' => item.id.to_s, 'confirmed_name' => '表示名だけ変更' }
+        }
+      }
+    ).receipt_items.sole
+
+    expect(result).to include(
+      'pricing_source_kind' => nil,
+      'reference_price_amount' => BigDecimal('100'),
+      'reference_quantity' => BigDecimal('2'),
+      'reference_quantity_unit_code' => nil,
+      'reference_quantity_unit_raw' => 'bundle-size',
+      'quantity_unit_raw' => 'bundle',
+      'amount_countable_source_changed' => false
+    )
+  end
+
   it '削除予定の既存行を除外し、新規行を保存後集合へ追加する' do
     deleted = receipt.receipt_payments.create!(method: '現金', amount: 100)
 

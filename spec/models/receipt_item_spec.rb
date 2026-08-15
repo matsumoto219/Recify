@@ -111,6 +111,9 @@ RSpec.describe ReceiptItem, type: :model do
   end
 
   describe 'quantity validation' do
+    countable_unit_codes = %w[each item piece bag sheet unit box set].freeze
+    measurement_unit_codes = %w[gram kilogram milligram liter milliliter cubic_centimeter].freeze
+
     def build_item(quantity:, quantity_unit_code:)
       build(:receipt).receipt_items.build(
         confirmed_name: '数量確認商品',
@@ -154,6 +157,41 @@ RSpec.describe ReceiptItem, type: :model do
       item = build_item(quantity: BigDecimal('0'), quantity_unit_code: 'each')
 
       expect(item).not_to be_valid
+    end
+
+    it '全14単位で9999から10000までの現行上限契約を維持する' do
+      quantity_expectations = {
+        '9999' => nil,
+        '9999.001' => :must_be_integer_for_unit,
+        '9999.999' => :must_be_integer_for_unit,
+        '10000' => :less_than_or_equal_to
+      }
+
+      aggregate_failures do
+        countable_unit_codes.each do |code|
+          quantity_expectations.each do |quantity, expected_error|
+            item = build_item(quantity: BigDecimal(quantity), quantity_unit_code: code)
+
+            if expected_error
+              expect(item).not_to be_valid, "#{code}: #{quantity}"
+              expect(item.errors.of_kind?(:quantity, expected_error)).to be(true), "#{code}: #{quantity}"
+            else
+              expect(item).to be_valid, "#{code}: #{quantity}"
+            end
+          end
+        end
+
+        measurement_unit_codes.each do |code|
+          %w[9999 9999.001 9999.999].each do |quantity|
+            expect(build_item(quantity: BigDecimal(quantity), quantity_unit_code: code)).to be_valid,
+              "#{code}: #{quantity}"
+          end
+
+          item = build_item(quantity: BigDecimal('10000'), quantity_unit_code: code)
+          expect(item).not_to be_valid, "#{code}: 10000"
+          expect(item.errors.of_kind?(:quantity, :less_than_or_equal_to)).to be(true), "#{code}: 10000"
+        end
+      end
     end
   end
 

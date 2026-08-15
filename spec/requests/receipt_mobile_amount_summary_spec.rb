@@ -30,6 +30,7 @@ RSpec.describe "Receipt mobile amount summary", type: :request do
     )
     toggle = summary.at_css("[data-mobile-amount-summary-target='toggle']")
     panel = summary.at_css("[data-mobile-amount-summary-target='details']")
+    panel_inner = panel.at_css(".receipt-amount-summary-details-inner")
     save_button = summary.at_css("button.receipt-amount-summary-save[type='submit']")
     title = summary.at_css(".receipt-amount-summary-title")
     decoration = summary.at_css(".receipt-amount-summary-decoration")
@@ -49,6 +50,7 @@ RSpec.describe "Receipt mobile amount summary", type: :request do
       expect(toggle.at_css("[aria-hidden='true']")).to be_present
       expect(panel["aria-hidden"]).to eq("false")
       expect(panel.key?("inert")).to be(false)
+      expect(panel_inner["class"].split).to include("token-scrollbar-brand")
       expect(title.text.strip).to eq(I18n.t("receipts.common.total_amount_title"))
       expect(summary["aria-labelledby"]).to eq(title["id"])
       expect(decoration["aria-hidden"]).to eq("true")

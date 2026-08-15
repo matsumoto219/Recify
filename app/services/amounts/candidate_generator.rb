@@ -85,6 +85,13 @@ module Amounts
       { discount_rounding_mode: discount_rounding_mode }.merge(attributes).compact
     end
 
+    def item_projection_calculation_profile(fallback_basis:, attributes: {})
+      bases = items.map { |item| item_projection_tax_basis(item, fallback_basis) }.uniq
+      return calculation_profile(attributes) unless items.any? { |item| fixed_item_tax_basis?(item) }
+
+      calculation_profile(attributes.merge(item_amount_basis: item_amount_basis_for_tax_bases(bases)))
+    end
+
     def signed_tax_from_net(signed, rate, rounding_mode)
       sign = signed.negative? ? -1 : 1
       sign * Amounts::Rounding.apply_rounding(BigDecimal(signed.abs.to_s) * rate, rounding_mode)
@@ -176,7 +183,7 @@ module Amounts
     end
 
     def indexed_items_by_rate
-      items.each_with_index.group_by { |item, _index| item_tax_rate(item) }
+      items.each_with_index.group_by { |item, _index| projection_tax_rate_for(item) }
     end
 
     def detected_tax_details
@@ -202,6 +209,172 @@ module Amounts
       end
 
       normalized
+    end
+
+    def item_amount_projection(item, line_total:, rate:, fallback_basis:, rounding_mode:)
+      basis = item_projection_tax_basis(item, fallback_basis)
+      amounts = amounts_for_tax_basis(line_total, rate, basis, rounding_mode)
+
+      amounts.merge(
+        basis: basis,
+        basis_source: item_projection_basis_source(item)
+      )
+    end
+
+    def reference_items_projected_to_gross(rounding_mode:)
+      items.map do |item|
+        next item unless reference_price_tax_basis(item) == :tax_excluded
+
+        rate = trusted_reference_projection_tax_rate(item)
+        return nil if rate.nil?
+
+        amounts = amounts_for_tax_basis(
+          item_line_total(item),
+          rate,
+          :tax_excluded,
+          rounding_mode
+        )
+        item_with_line_total(item, amounts[:gross_amount])
+      end
+    end
+
+    def grouped_item_amount_projection(item_amounts, rate:, rounding_mode:, rounding_scope:)
+      return sum_item_amount_projections(item_amounts) if rounding_scope == :per_item
+      return sum_item_amount_projections(item_amounts) if rate <= 0
+
+      item_amounts.group_by { |amounts| amounts.fetch(:basis) }.values
+        .map { |partition| rounded_basis_partition(partition, rate, rounding_mode) }
+        .then { |partitions| sum_item_amount_projections(partitions) }
+    end
+
+    def reference_quantity_price_item?(item)
+      indifferent_hash(item)[:pricing_source_kind].to_s == "reference_quantity_price"
+    end
+
+    def explicit_line_total_item?(item)
+      indifferent_hash(item)[:pricing_source_kind].to_s == "explicit_line_total"
+    end
+
+    def fixed_item_tax_basis?(item)
+      reference_quantity_price_item?(item) || explicit_line_total_item?(item)
+    end
+
+    def item_projection_tax_basis(item, fallback_basis)
+      reference_price_tax_basis(item) || (explicit_line_total_item?(item) ? :tax_included : fallback_basis)
+    end
+
+    def item_projection_basis_source(item)
+      return :reference_price if reference_quantity_price_item?(item)
+      return :explicit_line_total if explicit_line_total_item?(item)
+
+      :candidate
+    end
+
+    def tax_basis_inference_item?(item)
+      !fixed_item_tax_basis?(item)
+    end
+
+    def projection_tax_rate_for(item)
+      return item_tax_rate(item) unless reference_quantity_price_item?(item)
+      return item_tax_rate(item) unless reference_price_tax_basis(item) == :tax_excluded
+
+      trusted_reference_projection_tax_rate(item)
+    end
+
+    def reference_projection_tax_rate_missing?
+      items.any? do |item|
+        reference_quantity_price_item?(item) && projection_tax_rate_for(item).nil?
+      end
+    end
+
+    def normalize_price_for_tax_basis?(item, basis)
+      basis == :tax_excluded && !reference_quantity_price_item?(item)
+    end
+
+    def inferred_tax_excluded_assignment?(assignment)
+      assignment[:basis] == :tax_excluded && assignment[:basis_source] != :reference_price
+    end
+
+    def reference_price_tax_basis(item)
+      return nil unless reference_quantity_price_item?(item)
+
+      case indifferent_hash(item)[:reference_price_tax_inclusion].to_s
+      when "gross"
+        :tax_included
+      when "net"
+        :tax_excluded
+      else
+        raise Amounts::ReferenceItemExtension::InvalidSourceError,
+          "reference price authority requires an explicit gross or net tax basis"
+      end
+    end
+
+    def trusted_reference_projection_tax_rate(item)
+      item = indifferent_hash(item)
+      if value_present?(item[:tax_rate])
+        return tax_detail_evidence.trusted_explicit_projection_rate(item[:tax_rate])
+      end
+
+      trusted_reference_projection_fallback_tax_rate
+    end
+
+    def trusted_reference_projection_fallback_tax_rate
+      return @trusted_reference_projection_fallback_tax_rate if defined?(@trusted_reference_projection_fallback_tax_rate)
+
+      @trusted_reference_projection_fallback_tax_rate = tax_detail_evidence
+        .trusted_reference_projection_fallback_rate(receipt_tax_rate: receipt[:tax_rate])
+    end
+
+    def authoritative_reference_item_amount_basis
+      taxable_items = items.select do |item|
+        item_line_total(item).positive? && item_tax_rate(item).positive?
+      end
+      return nil if taxable_items.blank?
+      return nil unless taxable_items.all? { |item| reference_quantity_price_item?(item) }
+
+      item_amount_basis_for_tax_bases(taxable_items.map { |item| reference_price_tax_basis(item) }.uniq)
+    end
+
+    def item_amount_basis_for_tax_bases(bases)
+      return :line_total_as_recorded if bases == [ :tax_included ]
+      return :line_total_as_net if bases == [ :tax_excluded ]
+
+      :mixed_by_tax_rate_group
+    end
+
+    def amounts_for_tax_basis(line_total, rate, basis, rounding_mode)
+      if rate <= 0
+        return { gross_amount: line_total, net_amount: line_total, tax_amount: 0 }
+      end
+
+      if basis == :tax_excluded
+        tax = signed_tax_from_net(line_total, rate, rounding_mode)
+        { gross_amount: line_total + tax, net_amount: line_total, tax_amount: tax }
+      else
+        tax = signed_tax_from_gross(line_total, rate, rounding_mode)
+        { gross_amount: line_total, net_amount: line_total - tax, tax_amount: tax }
+      end
+    end
+
+    def rounded_basis_partition(partition, rate, rounding_mode)
+      basis = partition.first.fetch(:basis)
+      if basis == :tax_excluded
+        net = partition.sum { |amounts| amounts[:net_amount] }
+        tax = Amounts::Rounding.apply_rounding(BigDecimal(net.to_s) * rate, rounding_mode)
+        { gross_amount: net + tax, net_amount: net, tax_amount: tax }
+      else
+        gross = partition.sum { |amounts| amounts[:gross_amount] }
+        tax = rounded_tax_from_gross(gross, rate, rounding_mode)
+        { gross_amount: gross, net_amount: gross - tax, tax_amount: tax }
+      end
+    end
+
+    def sum_item_amount_projections(amounts)
+      {
+        gross_amount: amounts.sum { |amount| amount[:gross_amount] },
+        net_amount: amounts.sum { |amount| amount[:net_amount] },
+        tax_amount: amounts.sum { |amount| amount[:tax_amount] }
+      }
     end
 
     def normalized_unit_price_for(item, line_total)
@@ -243,6 +416,8 @@ module Amounts
     def item_data_present?
       items.any? do |item|
         normalized = indifferent_hash(item)
+        next false if unresolved_persisted_authority_free_diagnostic?(normalized)
+
         item_line_total(normalized).positive? ||
           explicit_zero_amount_item?(normalized) ||
           to_i(normalized[:original_line_total]).positive? ||
@@ -250,8 +425,25 @@ module Amounts
       end
     end
 
+    def unresolved_persisted_authority_free_diagnostic?(item)
+      return false if item[:pricing_source_kind].present?
+      return false unless item[:amount_persisted_item] == true
+      return false unless item[:amount_countable_source_changed] == false
+      return false unless item[:amount_line_total_changed] == false
+      return false unless item[:amount_persisted_line_total].nil?
+
+      %i[
+        quantity_unit_raw
+        reference_price_amount
+        reference_quantity
+        reference_quantity_unit_code
+        reference_quantity_unit_raw
+        reference_price_tax_inclusion
+      ].any? { |attribute| !item[attribute].nil? }
+    end
+
     def explicit_zero_amount_item?(item)
-      explicit_zero_line_total?(item) || explicit_zero_price_total?(item)
+      explicit_zero_line_total?(item) || explicit_zero_price_total?(item) || zero_reference_price_item?(item)
     end
 
     def explicit_zero_line_total?(item)
@@ -260,6 +452,10 @@ module Amounts
 
     def explicit_zero_price_total?(item)
       value_was_present?(item, :price) && to_i(item[:price]).zero?
+    end
+
+    def zero_reference_price_item?(item)
+      reference_quantity_price_item?(item) && present?(item[:line_total]) && to_i(item[:line_total]).zero?
     end
 
     def value_was_present?(item, key)

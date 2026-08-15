@@ -230,7 +230,7 @@
                     <%= adjustment.sign_label %>
                     <% if adjustment.tax_rate.present? %>
                       <span class="mx-2">/</span>
-                      <%= t("receipts.show.adjustment_tax_rate", rate: number_with_precision(adjustment.tax_rate * 100, precision: 1, strip_insignificant_zeros: true)) %>
+                      <%= t("receipts.show.adjustment_tax_rate", rate: receipt_rate_display(adjustment.tax_rate)) %>
                     <% end %>
                   </p>
                 </div>

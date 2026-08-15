@@ -5,6 +5,632 @@ RSpec.describe Amounts::ItemTotalAggregator do
     described_class.new(items: items, **options).call
   end
 
+  def reference_item(**overrides)
+    {
+      pricing_source_kind: 'reference_quantity_price',
+      reference_price_amount: BigDecimal('120'),
+      reference_quantity: BigDecimal('500'),
+      reference_quantity_unit_code: 'milliliter',
+      reference_quantity_unit_raw: nil,
+      reference_price_tax_inclusion: 'gross',
+      quantity: BigDecimal('1.5'),
+      quantity_unit_code: 'liter',
+      quantity_unit_raw: nil,
+      price: 999,
+      original_line_total: 998,
+      line_total: 997
+    }.merge(overrides)
+  end
+
+  describe 'reference quantity price authority' do
+    it '全14 canonical unitをreference formulaのAmount境界へ通す' do
+      all_unit_codes = %w[
+        each item piece bag sheet unit box set
+        gram kilogram milligram liter milliliter cubic_centimeter
+      ]
+
+      aggregate_failures do
+        all_unit_codes.each do |code|
+          result = aggregate(
+            [
+              reference_item(
+                reference_price_amount: '100',
+                reference_quantity: '2',
+                reference_quantity_unit_code: code,
+                quantity: '3',
+                quantity_unit_code: code
+              )
+            ],
+            context: :edit_save
+          )
+          normalized = result[:items].first
+
+          expect(result[:total]).to eq(150), code
+          expect(normalized).to include(
+            original_line_total: 150,
+            line_total: 150,
+            pricing_source_kind: 'reference_quantity_price',
+            reference_quantity_unit_code: code,
+            quantity_unit_code: code,
+            reference_price_tax_inclusion: 'gross'
+          ), code
+        end
+      end
+    end
+
+    it 'mass・volumeの異なるscaleを参照単位側へexact換算する' do
+      vectors = [
+        {
+          label: '1.8円/1g × 0.85kg',
+          reference_price_amount: '1.8',
+          reference_quantity: '1',
+          reference_unit_code: 'gram',
+          purchased_quantity: '0.85',
+          purchased_unit_code: 'kilogram',
+          expected: 1_530
+        },
+        {
+          label: '1800円/1kg × 850g',
+          reference_price_amount: '1800',
+          reference_quantity: '1',
+          reference_unit_code: 'kilogram',
+          purchased_quantity: '850',
+          purchased_unit_code: 'gram',
+          expected: 1_530
+        },
+        {
+          label: '0.9円/1mg × 1.2g',
+          reference_price_amount: '0.9',
+          reference_quantity: '1',
+          reference_unit_code: 'milligram',
+          purchased_quantity: '1.2',
+          purchased_unit_code: 'gram',
+          expected: 1_080
+        },
+        {
+          label: '120円/500ml × 1.5L',
+          reference_price_amount: '120',
+          reference_quantity: '500',
+          reference_unit_code: 'milliliter',
+          purchased_quantity: '1.5',
+          purchased_unit_code: 'liter',
+          expected: 360
+        },
+        {
+          label: '140円/1L × 8120ml',
+          reference_price_amount: '140',
+          reference_quantity: '1',
+          reference_unit_code: 'liter',
+          purchased_quantity: '8120',
+          purchased_unit_code: 'milliliter',
+          expected: 1_137
+        },
+        {
+          label: '140円/10L × 8120cc',
+          reference_price_amount: '140',
+          reference_quantity: '10',
+          reference_unit_code: 'liter',
+          purchased_quantity: '8120',
+          purchased_unit_code: 'cubic_centimeter',
+          expected: 114
+        },
+        {
+          label: '120円/500cc × 1500ml',
+          reference_price_amount: '120',
+          reference_quantity: '500',
+          reference_unit_code: 'cubic_centimeter',
+          purchased_quantity: '1500',
+          purchased_unit_code: 'milliliter',
+          expected: 360
+        }
+      ]
+
+      aggregate_failures do
+        vectors.each do |vector|
+          result = aggregate(
+            [
+              reference_item(
+                reference_price_amount: vector.fetch(:reference_price_amount),
+                reference_quantity: vector.fetch(:reference_quantity),
+                reference_quantity_unit_code: vector.fetch(:reference_unit_code),
+                quantity: vector.fetch(:purchased_quantity),
+                quantity_unit_code: vector.fetch(:purchased_unit_code)
+              )
+            ],
+            context: :edit_save
+          )
+
+          expect(result[:total]).to eq(vector.fetch(:expected)), vector.fetch(:label)
+          expect(result[:items].first[:original_line_total]).to eq(vector.fetch(:expected)), vector.fetch(:label)
+        end
+      end
+    end
+
+    it 'stale price・original_line_total・line_totalを無視してexact extensionを割引前金額にする' do
+      result = aggregate([ reference_item ], context: :edit_save)
+
+      expect(result).to include(total: 360)
+      expect(result[:items].first).to include(
+        price: 999,
+        original_line_total: 360,
+        discount_amount: nil,
+        line_total: 360,
+        reference_price_tax_inclusion: 'gross'
+      )
+    end
+
+    it 'projected extensionへ既存discount rateを1回だけ適用する' do
+      result = aggregate(
+        [
+          reference_item(
+            discount_rate: BigDecimal('0.1'),
+            discount_amount: 999,
+            amount_discount_amount_present: true
+          )
+        ],
+        context: :edit_save,
+        discount_rounding_mode: :round
+      )
+
+      expect(result).to include(total: 324)
+      expect(result[:items].first).to include(
+        original_line_total: 360,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 36,
+        line_total: 324
+      )
+    end
+
+    it 'gross/net metadataをtax projectionせずformula結果と一緒に保持する' do
+      items = %w[gross net].map do |tax_inclusion|
+        reference_item(reference_price_tax_inclusion: tax_inclusion)
+      end
+
+      result = aggregate(items, context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:total]).to eq(720)
+        expect(result[:items].map { |item| item[:line_total] }).to eq([ 360, 360 ])
+        expect(result[:items].map { |item| item[:reference_price_tax_inclusion] }).to eq(%w[gross net])
+      end
+    end
+
+    it 'manualはgrossのみ、edit_save・analysisはgross/netを受理する' do
+      manual_gross = aggregate(
+        [ reference_item(reference_price_tax_inclusion: 'gross') ],
+        context: :manual
+      )
+
+      aggregate_failures do
+        expect(manual_gross[:total]).to eq(360)
+        expect {
+          aggregate(
+            [ reference_item(reference_price_tax_inclusion: 'net') ],
+            context: :manual
+          )
+        }.to raise_error(Amounts::ItemPricingSource::InvalidContractError)
+
+        %i[edit_save analysis].product(%w[gross net]).each do |context, tax_inclusion|
+          result = aggregate(
+            [ reference_item(reference_price_tax_inclusion: tax_inclusion) ],
+            context: context
+          )
+
+          expect(result[:total]).to eq(360), "#{context}: #{tax_inclusion}"
+          expect(result[:items].first[:reference_price_tax_inclusion]).to eq(tax_inclusion),
+            "#{context}: #{tax_inclusion}"
+        end
+      end
+    end
+
+    it 'alias・raw fallback・unknown unitをcanonical formula sourceにしない' do
+      invalid_items = [
+        reference_item(quantity_unit_code: 'L'),
+        reference_item(reference_quantity_unit_code: 'ml'),
+        reference_item(quantity_unit_raw: ''),
+        reference_item(reference_quantity_unit_raw: ''),
+        reference_item(quantity_unit_code: 'each', quantity_unit_raw: 'fluid_ounce'),
+        reference_item(reference_quantity_unit_code: nil, reference_quantity_unit_raw: 'fluid_ounce'),
+        reference_item(quantity_unit_code: 'unknown')
+      ]
+
+      invalid_items.each do |item|
+        expect { aggregate([ item ], context: :edit_save) }
+          .to raise_error(Amounts::ItemQuantitySemantics::InvalidFormulaSourceError), item.inspect
+      end
+    end
+
+    it 'reference authority以外ではexplicit・legacy measurement・count formulaの現行契約を維持する' do
+      items = [
+        {
+          pricing_source_kind: 'explicit_line_total',
+          price: 120,
+          quantity: BigDecimal('1.5'),
+          quantity_unit_code: 'liter',
+          line_total: 777,
+          **reference_item.slice(
+            :reference_price_amount,
+            :reference_quantity,
+            :reference_quantity_unit_code,
+            :reference_price_tax_inclusion
+          )
+        },
+        {
+          pricing_source_kind: nil,
+          price: 120,
+          quantity: BigDecimal('1.5'),
+          quantity_unit_code: 'liter',
+          line_total: 778
+        },
+        {
+          pricing_source_kind: 'count_unit_price',
+          price: 120,
+          quantity: 2,
+          quantity_unit_code: 'each',
+          line_total: 779
+        },
+        {
+          pricing_source_kind: nil,
+          price: 120,
+          quantity: 2,
+          quantity_unit_code: 'each',
+          line_total: 780
+        }
+      ]
+
+      result = aggregate(items, context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:items].map { |item| item[:line_total] }).to eq([ 777, 778, 240, 240 ])
+        expect(result[:total]).to eq(2_035)
+      end
+    end
+
+    it 'authority-free raw diagnostic evidenceをlegacy count formulaへ昇格させない' do
+      item = {
+        pricing_source_kind: nil,
+        price: 100,
+        quantity: 2,
+        quantity_unit_code: 'each',
+        quantity_unit_raw: 'bundle',
+        reference_price_amount: BigDecimal('100'),
+        reference_quantity: BigDecimal('2'),
+        reference_quantity_unit_code: nil,
+        reference_quantity_unit_raw: 'bundle-size',
+        original_line_total: 100,
+        line_total: 100,
+        amount_countable_source_changed: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: 100,
+        amount_persisted_line_total: 100
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      expect(result[:items].sole).to include(
+        pricing_source_kind: nil,
+        quantity_unit_raw: 'bundle',
+        reference_quantity_unit_raw: 'bundle-size',
+        original_line_total: 100,
+        line_total: 100
+      )
+      expect(result[:total]).to eq(100)
+    end
+
+    it '金額未確定のauthority-free diagnostic evidenceを0円へ変換しない' do
+      item = {
+        pricing_source_kind: nil,
+        price: 100,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'each',
+        reference_price_amount: BigDecimal('100'),
+        reference_quantity: BigDecimal('2'),
+        reference_quantity_unit_code: 'each',
+        reference_price_tax_inclusion: 'gross',
+        original_line_total: nil,
+        line_total: nil,
+        amount_line_total_present: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: nil,
+        amount_persisted_line_total: nil
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:total]).to eq(0)
+        expect(result[:items].sole[:original_line_total]).to be_nil
+        expect(result[:items].sole[:line_total]).to be_nil
+      end
+    end
+
+    it 'source未変更のauthority-free diagnostic evidenceで片側nilの保存済み金額形状を維持する' do
+      cases = [
+        { original_line_total: nil, line_total: 100 },
+        { original_line_total: 100, line_total: nil }
+      ]
+
+      cases.each do |persisted_amounts|
+        item = {
+          pricing_source_kind: nil,
+          price: nil,
+          quantity: BigDecimal('2'),
+          quantity_unit_code: 'each',
+          reference_price_amount: BigDecimal('100'),
+          reference_quantity: BigDecimal('2'),
+          reference_quantity_unit_code: 'each',
+          reference_price_tax_inclusion: 'gross',
+          original_line_total: persisted_amounts[:original_line_total],
+          line_total: persisted_amounts[:line_total],
+          amount_countable_source_changed: false,
+          amount_line_total_changed: false,
+          amount_persisted_item: true,
+          amount_persisted_original_line_total: persisted_amounts[:original_line_total],
+          amount_persisted_discount_amount: nil,
+          amount_persisted_discount_rate: nil,
+          amount_persisted_line_total: persisted_amounts[:line_total]
+        }
+
+        result = aggregate([ item ], context: :edit_save)
+
+        aggregate_failures persisted_amounts.inspect do
+          expect(result[:items].sole).to include(persisted_amounts)
+          expect(result[:total]).to eq(persisted_amounts[:line_total].to_i)
+        end
+      end
+    end
+
+    it '明示totalを持つauthority-free diagnostic evidenceには既存discountを一度適用する' do
+      item = {
+        pricing_source_kind: nil,
+        price: 100,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'each',
+        reference_price_amount: BigDecimal('100'),
+        reference_quantity: BigDecimal('2'),
+        reference_quantity_unit_code: 'each',
+        reference_price_tax_inclusion: 'gross',
+        original_line_total: 100,
+        discount_rate: BigDecimal('0.1'),
+        line_total: 90
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      expect(result[:items].sole).to include(
+        original_line_total: 100,
+        discount_amount: 10,
+        discount_rate: BigDecimal('0.1'),
+        line_total: 90
+      )
+    end
+
+    it 'unit kindではなくexplicit/count authority kindで金額sourceを選ぶ' do
+      explicit_countable = {
+        pricing_source_kind: 'explicit_line_total',
+        price: 100,
+        quantity: 2,
+        quantity_unit_code: 'each',
+        original_line_total: 777,
+        line_total: 777
+      }
+      count_formula = {
+        pricing_source_kind: 'count_unit_price',
+        price: 100,
+        quantity: 2,
+        quantity_unit_code: 'each',
+        quantity_unit_raw: nil,
+        line_total: 777
+      }
+
+      result = aggregate([ explicit_countable, count_formula ], context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:items].map { |item| item[:line_total] }).to eq([ 777, 200 ])
+        expect(result[:total]).to eq(977)
+      end
+    end
+
+    it 'authority未送信のoriginal未記録positive-discount explicit rowを再割引せず保持する' do
+      item = {
+        pricing_source_kind: 'explicit_line_total',
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: nil,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 180,
+        amount_countable_source_changed: false,
+        amount_line_total_present: false,
+        amount_line_total_changed: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: nil,
+        amount_persisted_discount_rate: BigDecimal('0.1'),
+        amount_persisted_discount_amount: 18,
+        amount_persisted_line_total: 180
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:total]).to eq(180)
+        expect(result[:items].sole).to include(
+          original_line_total: nil,
+          discount_rate: BigDecimal('0.1'),
+          discount_amount: 18,
+          line_total: 180
+        )
+      end
+    end
+
+    it 'original未記録explicit rowのquantity変更でも保存済みamount shapeを保持する' do
+      item = {
+        pricing_source_kind: 'explicit_line_total',
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'each',
+        original_line_total: nil,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 180,
+        amount_countable_source_changed: true,
+        amount_line_total_present: false,
+        amount_line_total_changed: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: nil,
+        amount_persisted_discount_rate: BigDecimal('0.1'),
+        amount_persisted_discount_amount: 18,
+        amount_persisted_line_total: 180
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      expect(result[:items].sole).to include(
+        quantity: BigDecimal('2'),
+        original_line_total: nil,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 180
+      )
+    end
+
+    it 'explicitのnon-nil 0円authorityをpositive discount付きでも0円として計算する' do
+      item = {
+        pricing_source_kind: 'explicit_line_total',
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: 0,
+        discount_rate: BigDecimal('0.1'),
+        discount_amount: 18,
+        line_total: 500,
+        amount_line_total_present: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: 0,
+        amount_persisted_discount_rate: BigDecimal('0.1'),
+        amount_persisted_discount_amount: 18,
+        amount_persisted_line_total: 500
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:total]).to eq(0)
+        expect(result[:items].sole).to include(
+          original_line_total: 0,
+          discount_rate: BigDecimal('0.1'),
+          discount_amount: 0,
+          line_total: 0
+        )
+      end
+    end
+
+    it 'original未記録でzero-only discountのexplicit rowはline total fallbackを使う' do
+      item = {
+        pricing_source_kind: 'explicit_line_total',
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: nil,
+        discount_rate: BigDecimal('0'),
+        discount_amount: 0,
+        line_total: 180,
+        amount_countable_source_changed: false,
+        amount_line_total_present: false,
+        amount_persisted_item: true,
+        amount_persisted_original_line_total: nil,
+        amount_persisted_discount_rate: BigDecimal('0'),
+        amount_persisted_discount_amount: 0,
+        amount_persisted_line_total: 180
+      }
+
+      result = aggregate([ item ], context: :edit_save)
+
+      aggregate_failures do
+        expect(result[:total]).to eq(180)
+        expect(result[:items].sole).to include(
+          original_line_total: nil,
+          discount_rate: BigDecimal('0'),
+          discount_amount: 0,
+          line_total: 180
+        )
+      end
+    end
+
+    it 'count authorityをmeasurement unitやreference evidenceへ暗黙拡張しない' do
+      invalid_items = [
+        {
+          pricing_source_kind: 'count_unit_price',
+          price: 100,
+          quantity: BigDecimal('1.5'),
+          quantity_unit_code: 'liter',
+          quantity_unit_raw: nil,
+          line_total: 777
+        },
+        {
+          pricing_source_kind: 'count_unit_price',
+          price: 100,
+          quantity: 2,
+          quantity_unit_code: 'each',
+          quantity_unit_raw: nil,
+          reference_price_amount: 100,
+          reference_quantity: 1,
+          reference_quantity_unit_code: 'each',
+          reference_price_tax_inclusion: 'gross'
+        }
+      ]
+
+      invalid_items.each do |item|
+        expect { aggregate([ item ], context: :edit_save) }.to raise_error(ArgumentError), item.inspect
+      end
+    end
+  end
+
+  describe 'current quantity unit amount contract' do
+    countable_unit_codes = %w[each item piece bag sheet unit box set].freeze
+    measurement_unit_codes = %w[gram kilogram milligram liter milliliter cubic_centimeter].freeze
+
+    it '全countable単位ではmanual/edit_saveともpriceとquantityを正本にする' do
+      aggregate_failures do
+        %i[manual edit_save].product(countable_unit_codes).each do |context, code|
+          explicit_result = aggregate(
+            [ { price: 125, quantity: 2, quantity_unit_code: code, line_total: 777 } ],
+            context: context
+          )
+          missing_result = aggregate(
+            [ { price: 125, quantity: 2, quantity_unit_code: code, line_total: nil } ],
+            context: context
+          )
+
+          [ explicit_result, missing_result ].each do |result|
+            expect(result[:total]).to eq(250), "#{context}: #{code}"
+            expect(result[:items].first[:original_line_total]).to eq(250), "#{context}: #{code}"
+            expect(result[:items].first[:line_total]).to eq(250), "#{context}: #{code}"
+          end
+        end
+      end
+    end
+
+    it '全measurement単位ではmanual/edit_saveとも明示line_totalを正本にし欠損時は0にする' do
+      aggregate_failures do
+        %i[manual edit_save].product(measurement_unit_codes).each do |context, code|
+          explicit_result = aggregate(
+            [ { price: 125, quantity: BigDecimal('2.500'), quantity_unit_code: code, line_total: 777 } ],
+            context: context
+          )
+          missing_result = aggregate(
+            [ { price: 125, quantity: BigDecimal('2.500'), quantity_unit_code: code, line_total: nil } ],
+            context: context
+          )
+
+          expect(explicit_result[:total]).to eq(777), "#{context}: #{code}"
+          expect(explicit_result[:items].first[:original_line_total]).to eq(777), "#{context}: #{code}"
+          expect(explicit_result[:items].first[:line_total]).to eq(777), "#{context}: #{code}"
+          expect(missing_result[:total]).to eq(0), "#{context}: #{code}"
+          expect(missing_result[:items].first[:original_line_total]).to eq(0), "#{context}: #{code}"
+          expect(missing_result[:items].first[:line_total]).to eq(0), "#{context}: #{code}"
+        end
+      end
+    end
+  end
+
   it 'treats line_total as the authoritative row total when present' do
     result = aggregate([
       { price: 300, quantity: 2, line_total: 500 }

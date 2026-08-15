@@ -59,7 +59,10 @@ module GeneratedReceipts
         run: run.reload,
         ocr_result: ocr_result,
         ai_result: ai_result,
-        actual: Comparator.snapshot_from_receipt(receipt)
+        actual: Comparator.snapshot_from_receipt(
+          receipt,
+          reference_pricing_candidates: reference_pricing_candidates(ocr_result)
+        )
       }
     rescue StandardError
       cleanup_receipt(receipt) unless keep
@@ -80,6 +83,14 @@ module GeneratedReceipts
         )
         receipt.update!(processing_attributes)
       end
+    end
+
+    def reference_pricing_candidates(ocr_result)
+      return [] unless ocr_result.respond_to?(:dig)
+
+      ocr_result.dig(:candidates, :reference_pricing_candidates) ||
+        ocr_result.dig("candidates", "reference_pricing_candidates") ||
+        []
     end
 
     def processing_attributes
