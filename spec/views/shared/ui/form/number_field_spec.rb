@@ -79,4 +79,11 @@ RSpec.describe 'shared/ui/form/_number_field', type: :view do
 
     expect(input['data-action']).to eq('input->example#change')
   end
+
+  it 'decimal commaを使う入力だけcontrollerへ明示する' do
+    render_number_field(show_stepper_buttons: true, decimal_comma: true)
+
+    wrapper = Nokogiri::HTML.fragment(rendered).at_css('[data-controller~="number-field"]')
+    expect(wrapper['data-number-field-decimal-comma-value']).to eq('true')
+  end
 end

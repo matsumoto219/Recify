@@ -58,6 +58,8 @@ module Amounts
         tax = groups.values.sum { |group| group[:tax] }
         payment = payment_reconciliation(purchase_total, payment_adjustment_total)
         tax_detail_amount_basis = gross_basis ? :gross : :net
+        computed_items = reference_items_projected_to_gross(rounding_mode: rounding_mode)
+        return nil unless computed_items
 
         Amounts::Candidate.new(
           candidate_id: candidate_id,
@@ -82,7 +84,7 @@ module Amounts
               applied_purchase_adjustment_total: applied_purchase_adjustment_total
             }
           ],
-          computed_items: items,
+          computed_items: computed_items,
           calculation_profile: calculation_profile(
             receipt_tax_basis: gross_basis ? :total_includes_tax : :tax_added_to_subtotal,
             item_amount_basis: printed_tax_detail_item_amount_basis(basis, purchase_total),
@@ -107,6 +109,8 @@ module Amounts
 
         purchase_total = groups.values.sum { |group| group[:gross] }
         payment = payment_reconciliation(purchase_total, payment_adjustment_total)
+        computed_items = reference_items_projected_to_gross(rounding_mode: rounding_mode)
+        return nil unless computed_items
 
         Amounts::Candidate.new(
           candidate_id: "printed_tax_details_raw_sum/#{rounding_mode}",
@@ -124,7 +128,7 @@ module Amounts
           rounding_scope: :per_tax_rate_group,
           warnings: ([ :tax_detail_mismatch ] + payment_warnings(payment)).uniq,
           evidence: detected_tax_details.map { |detail| detail[:evidence] } + payment_evidence(payment),
-          computed_items: items,
+          computed_items: computed_items,
           calculation_profile: calculation_profile(
             receipt_tax_basis: :tax_added_to_subtotal,
             item_amount_basis: :line_total_as_net,

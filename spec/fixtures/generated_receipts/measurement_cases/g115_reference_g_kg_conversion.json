@@ -1,0 +1,87 @@
+{
+  "case_id": "g115_reference_g_kg_conversion",
+  "category": "measurement",
+  "intent": "A kilogram reference price converts a purchased gram quantity before one final HALF_UP projection.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル量売C 税込 ¥3,280/1kg 184g", "¥604"],
+        "purchased_quantity": "184",
+        "purchased_unit": "gram",
+        "reference_price_amount": "3280",
+        "reference_quantity": "1",
+        "reference_unit": "kilogram",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 604
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル量売 質量換算店",
+    "store_address": "サンプル県サンプル市基準町1-3",
+    "purchased_at": "2026-08-03T10:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル量売C",
+        "unit_price": 3280,
+        "quantity": "184",
+        "quantity_unit_code": "gram",
+        "pricing_source_kind": null,
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 604,
+        "line_total": 604,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "measurement_projections": [
+      {
+        "item_index": 0,
+        "exact_reference_amount": {"numerator": "15088", "denominator": "25"},
+        "projected_reference_line_total": 604,
+        "discount_amount": 0,
+        "discounted_source_line_total": 604,
+        "projected_gross_line_total": 604
+      }
+    ],
+    "reference_pricing_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "3280",
+        "reference_quantity": "1",
+        "reference_unit_code": "kilogram",
+        "purchased_quantity": "184",
+        "purchased_unit_code": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 604,
+        "printed_line_total": "604",
+        "rounding_matches": ["half_up", "ceil"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 550, "tax": 54, "gross": 604, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 550,
+    "tax": 54,
+    "total": 604,
+    "payments": [{"method": "cash", "label": "現金", "amount": 604}],
+    "payment_sum": 604,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "measurement_projections", "reference_pricing_candidates"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

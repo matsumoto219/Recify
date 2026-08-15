@@ -476,6 +476,40 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
+    it 'reference pricing candidatesをv1 additive snapshotへ決定順で100件まで保存する' do
+      run = described_class.start(receipt:, source: 'upload').run
+      candidates = Array.new(101) do |index|
+        {
+          candidate_id: "azure_items_#{index}_reference_pricing",
+          item_index: index,
+          validation_state: 'missing',
+          rejection_reasons: [ 'missing_reference_price' ]
+        }
+      end
+
+      described_class.record_ocr_snapshot(
+        run,
+        {
+          success: true,
+          candidates: { reference_pricing_candidates: candidates }
+        }
+      )
+      snapshot = run.reload.ocr_result_snapshot
+      stored_candidates = snapshot.dig('candidates', 'reference_pricing_candidates')
+
+      aggregate_failures do
+        expect(snapshot['schema_version']).to eq('receipt_analysis_run_ocr_result_v1')
+        expect(stored_candidates.size).to eq(100)
+        expect(stored_candidates.first['candidate_id']).to eq('azure_items_0_reference_pricing')
+        expect(stored_candidates.last['candidate_id']).to eq('azure_items_99_reference_pricing')
+        expect(snapshot.dig('candidate_counts', 'reference_pricing_candidates')).to eq(
+          'actual_count' => 101,
+          'snapshot_count' => 100
+        )
+        expect(snapshot.dig('truncated', 'reference_pricing_candidates')).to be(true)
+      end
+    end
+
     it 'snapshot上限の設定可能最大値はreceipt_items_per_receiptの最大override値と同期する' do
       max_receipt_items = UserLimits.definition_for('receipt_items_per_receipt').max
 

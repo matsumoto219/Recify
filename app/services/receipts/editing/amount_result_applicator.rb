@@ -37,7 +37,7 @@ class Receipts::Editing::AmountResultApplicator
     return [] if receipt_input_without_item_amounts?
 
     source_items = amount_result.dig(:computed, :source_items)
-    source_items.nil? ? candidate_items : source_items
+    source_items.nil? ? [] : source_items
   end
 
   def receipt_input_without_item_amounts?
@@ -53,7 +53,8 @@ class Receipts::Editing::AmountResultApplicator
     item_attributes.each_value.any? do |item|
       next false if ActiveModel::Type::Boolean.new.cast(item["_destroy"])
 
-      value_present?(item["price"]) ||
+      value_present?(item["pricing_source_kind"]) ||
+        value_present?(item["price"]) ||
         value_present?(item["line_total"]) ||
         positive_amount?(item["original_line_total"]) ||
         positive_amount?(item["discount_amount"])
@@ -63,7 +64,8 @@ class Receipts::Editing::AmountResultApplicator
   def normalized_source_item_amount_present?
     source_items = Array(fetch_value(fetch_value(amount_result, :computed), :source_items))
     source_items.any? do |item|
-      value_present?(fetch_value(item, :price)) ||
+      value_present?(fetch_value(item, :pricing_source_kind)) ||
+        value_present?(fetch_value(item, :price)) ||
         value_present?(fetch_value(item, :amount_persisted_line_total)) ||
         fetch_value(item, :amount_price_present) == true ||
         fetch_value(item, :amount_line_total_present) == true ||
@@ -106,12 +108,58 @@ class Receipts::Editing::AmountResultApplicator
       discount_rate = calculated_item_value(calculated_item, :discount_rate)
 
       item_attr["quantity"] = quantity if calculated_item_key?(calculated_item, :quantity) && !quantity.nil?
-      item_attr["price"] = price if calculated_item_key?(calculated_item, :price) && !price.nil?
+      apply_item_price!(item_attr, calculated_item, price)
       item_attr["line_total"] = line_total if calculated_item_key?(calculated_item, :line_total) && !line_total.nil?
       item_attr["original_line_total"] = original_line_total unless original_line_total.nil?
       item_attr["discount_amount"] = discount_amount if calculated_item_key?(calculated_item, :discount_amount)
-      item_attr["discount_rate"] = discount_rate if calculated_item_key?(calculated_item, :discount_rate)
+      if persist_calculated_discount_rate?(item_attr) && calculated_item_key?(calculated_item, :discount_rate)
+        item_attr["discount_rate"] = discount_rate
+      end
     end
+  end
+
+  def apply_item_price!(item_attributes, calculated_item, calculated_price)
+    if reference_formula_item?(item_attributes)
+      item_attributes["price"] = persisted_reference_price(item_attributes)
+      return
+    end
+
+    if calculated_item_key?(calculated_item, :price) && !calculated_price.nil?
+      item_attributes["price"] = calculated_price
+    end
+  end
+
+  def persist_calculated_discount_rate?(item_attributes)
+    context != :edit_save || item_attribute_key?(item_attributes, :discount_rate)
+  end
+
+  def reference_formula_item?(item_attributes)
+    source_kind = fetch_value(item_attributes, :pricing_source_kind)
+    unless item_attribute_key?(item_attributes, :pricing_source_kind)
+      source_kind = persisted_item(item_attributes)&.pricing_source_kind
+    end
+
+    source_kind.to_s == "reference_quantity_price"
+  end
+
+  def persisted_reference_price(item_attributes)
+    item = persisted_item(item_attributes)
+    return unless item&.pricing_source_kind == "reference_quantity_price"
+
+    item.price
+  end
+
+  def persisted_item(item_attributes)
+    id = fetch_value(item_attributes, :id).to_s.presence
+    persisted_items_by_id[id] if id
+  end
+
+  def persisted_items_by_id
+    @persisted_items_by_id ||= receipt.receipt_items.index_by { |item| item.id.to_s }
+  end
+
+  def item_attribute_key?(item_attributes, key)
+    item_attributes.key?(key) || item_attributes.key?(key.to_s)
   end
 
   def calculated_item_value(calculated_item, key)

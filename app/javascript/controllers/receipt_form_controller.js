@@ -1,15 +1,13 @@
 import { Controller } from '@hotwired/stimulus'
 import {
-  decimalFractionIsZero,
-  decimalSeparatorText,
-  hasDecimalSeparator,
-  integerQuantityText,
   normalizedOptionalDecimalInput,
   normalizeNumericInputText,
-  normalizeQuantityText,
   parseDecimalInput,
   parseDiscountRateInput,
+  parseGroupedDecimalInput,
   parseIntegerInput,
+  parseQuantityInput,
+  parseTaxRateInput,
   previewValueInRange,
   quantityUnitList
 } from 'receipts/numeric_input'
@@ -24,6 +22,7 @@ import {
   formatTaxRateSummary,
   internalTaxTotal,
   normalizeRoundingMode,
+  referenceItemExtension,
   roundLineAmount
 } from 'receipts/amount_preview'
 import {
@@ -68,6 +67,17 @@ export default class extends Controller {
     'quantityInput',
     'quantityUnitInput',
     'priceInput',
+    'pricingSourceModeInput',
+    'pricingModePanel',
+    'pricingSourceSummary',
+    'referencePriceAmountInput',
+    'referenceQuantityInput',
+    'referenceQuantityUnitInput',
+    'referencePriceTaxInclusionInput',
+    'explicitLineTotalInput',
+    'explicitLineTotalHelp',
+    'clearItemDiscountBeforeExplicitInput',
+    'invalidItemSourceSummary',
     'discountRateInput',
     'taxRateInput',
     'lineTotalDisplay',
@@ -106,6 +116,9 @@ export default class extends Controller {
     deleteConfirmTitle: { type: String, default: 'Delete?' },
     deleteConfirmLabel: { type: String, default: 'Delete' },
     deleteConfirmBackdrop: { type: String, default: 'plain' },
+    pricingSourceDiscountClearConfirmationMessage: { type: String, default: 'Clear the item discount and switch the pricing method?' },
+    pricingSourceDiscountClearConfirmTitle: { type: String, default: 'Change pricing method?' },
+    pricingSourceDiscountClearConfirmLabel: { type: String, default: 'Clear discount and change' },
     receiptTaxBasis: { type: String, default: 'internal' },
     subtotalLabel: { type: String, default: 'Subtotal' },
     unsetLabel: { type: String, default: 'Unset' },
@@ -125,6 +138,8 @@ export default class extends Controller {
     defaultQuantityUnit: { type: String, default: 'each' },
     integerQuantityStep: { type: String, default: '1' },
     decimalQuantityStep: { type: String, default: '0.001' },
+    referencePricingContract: Object,
+    referenceProjectionFallbackTaxRate: { type: String, default: '' },
     receiptTotalAmountMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
     receiptItemPriceMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
     receiptItemLineTotalMax: { type: Number, default: DEFAULT_AMOUNT_MAX },
@@ -143,9 +158,12 @@ export default class extends Controller {
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
     this.handleReviewTargetClick = this.handleReviewTargetClick.bind(this)
     this.handleHashChange = this.handleHashChange.bind(this)
+    this.handleInvalidItemField = this.handleInvalidItemField.bind(this)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     this.element.addEventListener('click', this.handleReviewTargetClick)
+    this.element.addEventListener('invalid', this.handleInvalidItemField, true)
     window.addEventListener('hashchange', this.handleHashChange)
+    this.syncPricingSourceModes()
     this.syncItemDetailsPanels()
     this.syncAdjustmentDetailsPanels()
     this.syncQuantityInputSteps()
@@ -153,14 +171,17 @@ export default class extends Controller {
     this.syncAdjustmentAbsenceConfirmation()
     this.captureInitialReceiptAmounts()
     this.captureInitialPurchaseInputFingerprint()
+    this.syncInitialPricingPreviews()
     this.syncPaymentSummaryLayout()
     this.expandItemDetailsFromHash()
     this.expandAdjustmentDetailsFromHash()
+    this.revealInvalidItemSourceRows()
   }
 
   disconnect () {
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     this.element.removeEventListener('click', this.handleReviewTargetClick)
+    this.element.removeEventListener('invalid', this.handleInvalidItemField, true)
     window.removeEventListener('hashchange', this.handleHashChange)
     this.clearReviewTargetScrollTimer()
     this.itemRowTargets.forEach((row) => this.clearLineTotalTooltipTimer(row))
@@ -178,6 +199,7 @@ export default class extends Controller {
 
     event.currentTarget.insertAdjacentHTML('beforebegin', html)
     this.nextIndexValue = index + 1
+    this.syncPricingSourceModes()
     this.syncItemDetailsPanels()
     this.syncQuantityInputSteps()
   }
@@ -320,9 +342,253 @@ export default class extends Controller {
   quantityUnitChanged (event) {
     const unitSelect = event.currentTarget
 
-    this.syncQuantityInputStepForUnitSelect(unitSelect)
-    this.clearFractionalQuantityForIntegerUnit(unitSelect)
+    this.syncQuantityInputStepForUnitSelect(unitSelect, 'quantityInput')
     this.recalculate()
+  }
+
+  referenceQuantityUnitChanged (event) {
+    const unitSelect = event.currentTarget
+
+    this.syncQuantityInputStepForUnitSelect(unitSelect, 'referenceQuantityInput')
+    this.recalculate()
+  }
+
+  async pricingSourceModeChanged (event) {
+    const input = event.currentTarget
+    const row = input.closest('[data-receipt-form-target="itemRow"]')
+    if (!row) return
+
+    const previousMode = this.activePricingSourceModeForRow(row)
+    const nextMode = this.pricingSourceModeFromValue(input.value)
+    if (this.formulaPricingSourceMode(previousMode) && nextMode === 'explicit_line_total' &&
+      this.itemDiscountClearConfirmationRequired(row)) {
+      const confirmed = await this.confirmPricingSourceDiscountClear(input)
+      if (!confirmed) {
+        input.value = previousMode === 'unclassified' ? '' : previousMode
+        this.syncPricingSourceModeForRow(row, previousMode)
+        return
+      }
+
+      const clearDiscountInput = row.querySelector(
+        '[data-receipt-form-target="clearItemDiscountBeforeExplicitInput"]'
+      )
+      const discountRateInput = row.querySelector('[data-receipt-form-target="discountRateInput"]')
+      if (discountRateInput) {
+        row.dataset.receiptFormFormulaDiscountDraft = discountRateInput.value
+        discountRateInput.value = ''
+      }
+      if (clearDiscountInput) clearDiscountInput.value = '1'
+    } else if (nextMode !== 'explicit_line_total') {
+      const clearDiscountInput = row.querySelector(
+        '[data-receipt-form-target="clearItemDiscountBeforeExplicitInput"]'
+      )
+      const discountRateInput = row.querySelector('[data-receipt-form-target="discountRateInput"]')
+      if (clearDiscountInput?.value === '1' && discountRateInput) {
+        if (Object.prototype.hasOwnProperty.call(row.dataset, 'receiptFormFormulaDiscountDraft')) {
+          discountRateInput.value = row.dataset.receiptFormFormulaDiscountDraft
+        } else if (Object.prototype.hasOwnProperty.call(row.dataset, 'receiptFormPersistedFormulaDiscountInput')) {
+          discountRateInput.value = row.dataset.receiptFormPersistedFormulaDiscountInput
+        }
+        delete row.dataset.receiptFormFormulaDiscountDraft
+      }
+      if (clearDiscountInput) clearDiscountInput.value = '0'
+    }
+
+    this.syncPricingSourceModeForRow(row, nextMode)
+    this.recalculate({ pricingSourceChangedRow: previousMode === nextMode ? null : row })
+  }
+
+  explicitLineTotalChanged () {
+    this.recalculate()
+  }
+
+  discountRateChanged (event) {
+    const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]')
+    if (row) this.syncPricingSourceSummaryForRow(row)
+    this.recalculate()
+  }
+
+  confirmPricingSourceDiscountClear (restoreFocusElement) {
+    const confirm = window.RecifyConfirm?.confirm
+    if (typeof confirm !== 'function') return Promise.resolve(false)
+
+    return confirm(this.pricingSourceDiscountClearConfirmationMessageValue, {
+      icon: 'sync_alt',
+      title: this.pricingSourceDiscountClearConfirmTitleValue,
+      confirmLabel: this.pricingSourceDiscountClearConfirmLabelValue,
+      backdrop: this.deleteConfirmBackdropValue,
+      restoreFocusElement
+    })
+  }
+
+  syncPricingSourceModes () {
+    Array.from(this.itemRowTargets || []).forEach((row) => {
+      this.syncPricingSourceModeForRow(row, this.pricingSourceModeForRow(row))
+    })
+  }
+
+  syncPricingSourceModeForRow (row, mode) {
+    const normalizedMode = this.pricingSourceModeFromValue(mode)
+    row.dataset.receiptFormActivePricingMode = normalizedMode
+
+    row.querySelectorAll('[data-receipt-form-target~="pricingModePanel"]').forEach((panel) => {
+      const active = this.pricingElementSupportsMode(panel, normalizedMode)
+      panel.hidden = !active
+      panel.toggleAttribute('inert', !active)
+      panel.setAttribute('aria-hidden', String(!active))
+      panel.querySelectorAll('input, select, textarea').forEach((input) => {
+        input.disabled = !active
+        if (input.dataset?.receiptFormRequiredWhenActive === 'true') input.required = active
+      })
+    })
+
+    row.querySelectorAll('[data-receipt-form-target~="pricingSourceSummary"]').forEach((summary) => {
+      summary.hidden = !this.pricingElementSupportsMode(summary, normalizedMode)
+    })
+    this.syncPricingSourceSummaryForRow(row, normalizedMode)
+  }
+
+  syncPricingSourceSummaryForRow (row, mode = this.pricingSourceModeForRow(row)) {
+    this.syncExplicitLineTotalSemantics(row)
+    const summary = Array.from(
+      row.querySelectorAll('[data-receipt-form-target~="pricingSourceSummary"]')
+    ).find((candidate) => this.pricingElementSupportsMode(candidate, mode))
+    if (!summary || mode === 'unclassified') return
+
+    const values = this.pricingSourceSummaryValues(row, mode)
+    const complete = Object.values(values).every((value) => String(value ?? '').trim() !== '')
+    const explicitTemplate = mode === 'explicit_line_total'
+      ? (this.itemDiscountSourcePresent(row)
+          ? summary.dataset.receiptFormSummaryTemplateWithDiscount
+          : summary.dataset.receiptFormSummaryTemplateWithoutDiscount)
+      : null
+    const explicitUnset = mode === 'explicit_line_total'
+      ? (this.itemDiscountSourcePresent(row)
+          ? summary.dataset.receiptFormSummaryUnsetWithDiscount
+          : summary.dataset.receiptFormSummaryUnsetWithoutDiscount)
+      : null
+    const template = complete
+      ? (explicitTemplate || summary.dataset.receiptFormSummaryTemplate)
+      : (explicitUnset || summary.dataset.receiptFormSummaryUnset)
+    if (typeof template !== 'string' || template === '') return
+
+    summary.textContent = template.replace(/%\{([a-z_]+)\}/g, (placeholder, key) => (
+      Object.prototype.hasOwnProperty.call(values, key) ? values[key] : placeholder
+    ))
+  }
+
+  pricingSourceSummaryValues (row, mode) {
+    const inputValue = (target) => String(
+      row.querySelector(`[data-receipt-form-target="${target}"]`)?.value ?? ''
+    ).trim()
+    const optionLabel = (target) => {
+      const select = row.querySelector(`[data-receipt-form-target="${target}"]`)
+      return String(select?.selectedOptions?.[0]?.textContent ?? select?.value ?? '').trim()
+    }
+
+    if (mode === 'count_unit_price') {
+      return {
+        price: inputValue('priceInput'),
+        quantity: inputValue('quantityInput'),
+        unit: optionLabel('quantityUnitInput')
+      }
+    }
+    if (mode === 'reference_quantity_price') {
+      return {
+        amount: inputValue('referencePriceAmountInput'),
+        quantity: inputValue('referenceQuantityInput'),
+        unit: optionLabel('referenceQuantityUnitInput'),
+        tax_inclusion: row.querySelector(
+          '[data-receipt-form-target="referencePriceTaxInclusionInput"]'
+        )?.dataset.receiptFormTaxInclusionLabel || ''
+      }
+    }
+
+    return { amount: inputValue('explicitLineTotalInput') }
+  }
+
+  syncExplicitLineTotalSemantics (row) {
+    const input = row.querySelector('[data-receipt-form-target="explicitLineTotalInput"]')
+    const help = row.querySelector('[data-receipt-form-target="explicitLineTotalHelp"]')
+    const discountSourcePresent = this.itemDiscountSourcePresent(row)
+
+    const label = discountSourcePresent
+      ? input?.dataset?.receiptFormLabelWithDiscount
+      : input?.dataset?.receiptFormLabelWithoutDiscount
+    if (typeof label === 'string' && label !== '') input?.setAttribute('aria-label', label)
+
+    const control = input?.closest?.('.receipt-form-explicit-line-total-control')
+    const decrementButton = control?.querySelector('[data-number-field-stepper-direction="decrement"]')
+    const incrementButton = control?.querySelector('[data-number-field-stepper-direction="increment"]')
+    const decrementLabel = discountSourcePresent
+      ? input?.dataset?.receiptFormDecrementLabelWithDiscount
+      : input?.dataset?.receiptFormDecrementLabelWithoutDiscount
+    const incrementLabel = discountSourcePresent
+      ? input?.dataset?.receiptFormIncrementLabelWithDiscount
+      : input?.dataset?.receiptFormIncrementLabelWithoutDiscount
+    if (typeof decrementLabel === 'string' && decrementLabel !== '') {
+      decrementButton?.setAttribute('aria-label', decrementLabel)
+    }
+    if (typeof incrementLabel === 'string' && incrementLabel !== '') {
+      incrementButton?.setAttribute('aria-label', incrementLabel)
+    }
+
+    const helpText = discountSourcePresent
+      ? help?.dataset?.receiptFormTextWithDiscount
+      : help?.dataset?.receiptFormTextWithoutDiscount
+    if (typeof helpText === 'string' && helpText !== '') help.textContent = helpText
+  }
+
+  pricingElementSupportsMode (element, mode) {
+    return String(element.dataset.receiptFormPricingModes ?? '')
+      .split(/\s+/)
+      .filter((value) => value !== '')
+      .includes(mode)
+  }
+
+  pricingSourceModeForRow (row) {
+    const input = row.querySelector('[data-receipt-form-target="pricingSourceModeInput"]')
+    return this.pricingSourceModeFromValue(input?.value)
+  }
+
+  activePricingSourceModeForRow (row) {
+    return this.pricingSourceModeFromValue(
+      row.dataset.receiptFormActivePricingMode ?? this.pricingSourceModeForRow(row)
+    )
+  }
+
+  pricingSourceModeFromValue (value) {
+    const mode = String(value ?? '').trim()
+    if (['count_unit_price', 'reference_quantity_price', 'explicit_line_total'].includes(mode)) return mode
+
+    return 'unclassified'
+  }
+
+  formulaPricingSourceMode (mode) {
+    return mode === 'count_unit_price' || mode === 'reference_quantity_price'
+  }
+
+  itemDiscountSourcePresent (row) {
+    const discountRateInput = row.querySelector('[data-receipt-form-target="discountRateInput"]')
+    if (String(discountRateInput?.value ?? '').trim() !== '') return true
+
+    const clearDiscountInput = row.querySelector(
+      '[data-receipt-form-target="clearItemDiscountBeforeExplicitInput"]'
+    )
+    if (clearDiscountInput?.value === '1') return false
+
+    return row.dataset?.receiptFormHasPersistedAbsoluteDiscountSource === 'true' ||
+      row.dataset?.receiptFormHasPersistedExplicitPositiveDiscountRateSource === 'true'
+  }
+
+  itemDiscountClearConfirmationRequired (row) {
+    const clearDiscountInput = row.querySelector(
+      '[data-receipt-form-target="clearItemDiscountBeforeExplicitInput"]'
+    )
+    if (clearDiscountInput?.value === '1') return false
+    if (this.itemDiscountSourcePresent(row)) return true
+
+    return Object.prototype.hasOwnProperty.call(row.dataset ?? {}, 'receiptFormPersistedFormulaDiscountInput')
   }
 
   async removeItem (event) {
@@ -664,6 +930,38 @@ export default class extends Controller {
     })
   }
 
+  revealInvalidItemSourceRows () {
+    if (!this.hasInvalidItemSourceSummaryTarget || this.invalidItemSourceSummaryTarget.hidden) return
+
+    this.itemRowTargets.forEach((row) => {
+      if (!this.reviewItemRowVisible(row)) return
+
+      const panel = row.querySelector('[data-receipt-form-target="itemDetailsPanel"]')
+      const toggles = row.querySelectorAll('[data-receipt-form-target="itemDetailsToggle"]')
+      const icons = row.querySelectorAll('[data-receipt-form-target="itemDetailsIcon"]')
+      this.setItemDetailsOpen({ row, panel, toggles, icons, open: true })
+    })
+
+    window.requestAnimationFrame(() => {
+      if (!this.invalidItemSourceSummaryTarget?.isConnected) return
+
+      this.invalidItemSourceSummaryTarget.focus({ preventScroll: true })
+      this.scrollReviewTargetIntoView(this.invalidItemSourceSummaryTarget, { block: 'start' })
+    })
+  }
+
+  handleInvalidItemField (event) {
+    const row = event.target?.closest?.('[data-receipt-form-target="itemRow"]')
+    if (!row) return
+
+    const panel = row.querySelector('[data-receipt-form-target="itemDetailsPanel"]')
+    if (!panel?.contains(event.target) || this.itemDetailsPanelOpen(panel)) return
+
+    const toggles = row.querySelectorAll('[data-receipt-form-target="itemDetailsToggle"]')
+    const icons = row.querySelectorAll('[data-receipt-form-target="itemDetailsIcon"]')
+    this.setItemDetailsOpen({ row, panel, toggles, icons, open: true })
+  }
+
   syncAdjustmentDetailsPanels () {
     this.adjustmentRowTargets.forEach((row) => {
       const panel = row.querySelector('[data-receipt-form-target="adjustmentDetailsPanel"]')
@@ -718,6 +1016,7 @@ export default class extends Controller {
   }
 
   handleBeforeCache () {
+    this.syncPricingSourceModes()
     this.syncItemDetailsPanels()
     this.syncAdjustmentDetailsPanels()
     this.syncAdjustmentSigns()
@@ -810,7 +1109,10 @@ export default class extends Controller {
     return row?.querySelector('[data-receipt-form-target="lineTotalTooltip"]')
   }
 
-  recalculate () {
+  recalculate ({ pricingSourceChangedRow } = {}) {
+    this.itemRowTargets.forEach((row) => {
+      this.syncPricingSourceSummaryForRow(row, this.pricingSourceModeForRow(row))
+    })
     if (!this.previewNumericInputsValid()) {
       this.renderUnavailablePreview()
       return
@@ -821,12 +1123,14 @@ export default class extends Controller {
     let total = 0
     let paymentAdjustmentTotal = 0
     const taxRates = new Set()
-    const taxGroups = new Map()
+    const sourceAwareTaxGroups = new Map()
     const externalTax = this.usesExternalTax()
     const amountBearingItemTaxRates = new Set()
     let amountBearingItemCount = 0
     let hasItemAmountSource = false
     let allAmountBearingItemsHaveTaxRate = true
+    let itemPreviewUnavailable = false
+    const purchaseInputsChanged = this.purchaseInputsChangedForPreview()
 
     this.itemRowTargets.forEach((row) => {
       if (this.previewRowExcluded(row, 'destroyField')) return
@@ -845,50 +1149,87 @@ export default class extends Controller {
       const priceInputPresent = String(priceInput?.value ?? '').trim() !== ''
       const price = this.clampNumber(this.parseIntegerInput(priceInput?.value), 0, this.receiptItemPriceMaxValue)
       const discountRatePercent = this.parseDiscountRateInput(discountRateInput?.value)
-      const taxRatePercent = this.clampNumber(this.parseDecimalInput(taxRateInput?.value), 0, 100)
+      const itemTaxRateInputPresent = String(taxRateInput?.value ?? '').trim() !== ''
+      let taxRatePercent = this.clampNumber(this.parseTaxRateInput(taxRateInput?.value), 0, 100)
       const quantityUnit = quantityUnitInput?.value
-      const itemAmountSourcePresent = this.itemAmountSourcePresentFor({
-        lineTotalInput,
-        priceInputPresent,
-        quantityUnit
-      })
-      hasItemAmountSource ||= itemAmountSourcePresent
-
-      if (taxRatePercent > 0) {
-        taxRates.add(taxRatePercent)
-      }
-
-      // 税込単価前提（浮動小数点誤差回避のため整数計算）
-      const originalLineTotal = this.originalLineTotalFor({
+      const pricingSourceMode = this.pricingSourceModeForRow(row)
+      const itemSource = this.itemPreviewSourceFor({
+        row,
+        pricingSourceMode,
         quantity,
+        quantityInput,
+        quantityUnit,
         price,
         priceInputPresent,
-        quantityUnit,
         lineTotalInput
       })
-      let lineTotal = itemAmountSourcePresent
-        ? this.lineTotalFor({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput })
+      if (itemSource.invalid) {
+        itemPreviewUnavailable = true
+        return
+      }
+      const itemAmountSourcePresent = itemSource.present
+      hasItemAmountSource ||= itemAmountSourcePresent
+
+      const originalLineTotal = itemSource.originalLineTotal
+      if (originalLineTotal < 0 || originalLineTotal > this.receiptItemLineTotalMaxValue) {
+        itemPreviewUnavailable = true
+        return
+      }
+      const lineTotal = itemAmountSourcePresent
+        ? this.lineTotalFor({
+          originalLineTotal,
+          discountRatePercent,
+          discountRateInput,
+          lineTotalInput,
+          sourceModeChanged: pricingSourceChangedRow === row
+        })
         : 0
-      lineTotal = this.clampNumber(lineTotal, 0, this.receiptItemLineTotalMaxValue)
+      if (lineTotal < 0 || lineTotal > this.receiptItemLineTotalMaxValue) {
+        itemPreviewUnavailable = true
+        return
+      }
+      const itemTaxBasis = this.itemPreviewTaxBasis({ row, pricingSourceMode })
+      let itemTaxRateAvailable = itemTaxRateInputPresent
+      if (pricingSourceMode === 'reference_quantity_price' && itemTaxBasis === 'net' &&
+        !itemTaxRateInputPresent && !purchaseInputsChanged) {
+        const fallbackTaxRate = String(this.referenceProjectionFallbackTaxRateValue ?? '').trim()
+        itemTaxRateAvailable = fallbackTaxRate !== ''
+        taxRatePercent = this.clampNumber(this.parseTaxRateInput(fallbackTaxRate), 0, 100)
+      }
+      if (itemTaxBasis === 'unavailable' || (
+        pricingSourceMode === 'reference_quantity_price' && itemTaxBasis === 'net' && !itemTaxRateAvailable
+      )) {
+        itemPreviewUnavailable = true
+        return
+      }
+      if (taxRatePercent > 0) taxRates.add(taxRatePercent)
+      const projectedLineTotal = this.projectedItemLineTotal({
+        lineTotal,
+        taxRatePercent,
+        taxBasis: itemTaxBasis
+      })
+      if (projectedLineTotal < 0) {
+        itemPreviewUnavailable = true
+        return
+      }
       if (lineTotal > 0) {
         amountBearingItemCount += 1
-        if (String(taxRateInput?.value ?? '').trim() === '') {
+        if (!itemTaxRateAvailable) {
           allAmountBearingItemsHaveTaxRate = false
         } else {
           amountBearingItemTaxRates.add(taxRatePercent)
         }
       }
-      if (taxRatePercent > 0) {
-        taxGroups.set(taxRatePercent, (taxGroups.get(taxRatePercent) || 0) + lineTotal)
-      }
-
-      subtotalSum += lineTotal
-      total += lineTotal
+      this.addSourceAwareTaxAmount(sourceAwareTaxGroups, {
+        amount: lineTotal,
+        taxRatePercent,
+        taxBasis: itemTaxBasis
+      })
 
       // 表示更新（PCツールチップ / スマホ小計など、同一行内の複数表示に対応）
       lineTotalDisplays.forEach((lineTotalDisplay) => {
         const withLabel = Boolean(lineTotalDisplay.closest('[data-receipt-form-target="lineTotalTooltip"]'))
-        this.animateLineTotal(lineTotalDisplay, lineTotal, { withLabel })
+        this.animateLineTotal(lineTotalDisplay, projectedLineTotal, { withLabel })
       })
 
       this.syncLineTotalState({
@@ -897,16 +1238,22 @@ export default class extends Controller {
         itemAmountSourcePresent,
         priceInputPresent,
         quantityUnit,
+        pricingSourceMode,
         originalLineTotal,
         lineTotal
       })
     })
 
+    if (itemPreviewUnavailable) {
+      this.renderUnavailablePreview()
+      return
+    }
+
     const inheritedAdjustmentTaxRate = this.inheritedAdjustmentTaxRate({
       amountBearingItemCount,
       allAmountBearingItemsHaveTaxRate,
       amountBearingItemTaxRates,
-      purchaseInputsChanged: this.purchaseInputsChangedForPreview()
+      purchaseInputsChanged
     })
 
     this.adjustmentRowTargets.forEach((row) => {
@@ -920,7 +1267,7 @@ export default class extends Controller {
       const sign = this.adjustmentSignForRow(row)
       const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, this.receiptAdjustmentAmountMaxValue)
       const explicitTaxRate = String(taxRateInput?.value ?? '').trim() !== ''
-      const submittedTaxRatePercent = this.clampNumber(this.parseDecimalInput(taxRateInput?.value), 0, 100)
+      const submittedTaxRatePercent = this.clampNumber(this.parseTaxRateInput(taxRateInput?.value), 0, 100)
       const taxRatePercent = explicitTaxRate ? submittedTaxRatePercent : inheritedAdjustmentTaxRate
       if (amount <= 0) return
 
@@ -934,21 +1281,17 @@ export default class extends Controller {
         return
       }
 
-      if (taxRatePercent > 0) {
-        taxGroups.set(taxRatePercent, (taxGroups.get(taxRatePercent) || 0) + signedAmount)
-      }
-
-      subtotalSum += signedAmount
-      total += signedAmount
+      this.addSourceAwareTaxAmount(sourceAwareTaxGroups, {
+        amount: signedAmount,
+        taxRatePercent,
+        taxBasis: externalTax ? 'net' : 'gross'
+      })
     })
 
-    if (externalTax) {
-      taxSum = this.externalTaxTotal(taxGroups)
-      total = subtotalSum + taxSum
-    } else {
-      taxSum = this.internalTaxTotal(taxGroups)
-      subtotalSum = total - taxSum
-    }
+    const sourceAwareProjection = this.projectSourceAwareTaxGroups(sourceAwareTaxGroups)
+    subtotalSum = sourceAwareProjection.subtotal
+    taxSum = sourceAwareProjection.tax
+    total = sourceAwareProjection.total
 
     const preserveInitialReceiptAmounts = this.preserveInitialReceiptAmountsForPreview({ hasItemAmountSource })
     if (preserveInitialReceiptAmounts) {
@@ -962,10 +1305,15 @@ export default class extends Controller {
       subtotalSum = 0
       taxSum = 0
       total = 0
+    } else if (total > this.receiptTotalAmountMaxValue ||
+      subtotalSum > this.receiptTotalAmountMaxValue ||
+      taxSum > this.receiptTaxAmountMaxValue) {
+      this.renderUnavailablePreview()
+      return
     } else {
-      total = this.clampNumber(total, 0, this.receiptTotalAmountMaxValue)
-      subtotalSum = this.clampNumber(subtotalSum, 0, this.receiptTotalAmountMaxValue)
-      taxSum = this.clampNumber(taxSum, 0, this.receiptTaxAmountMaxValue)
+      total = Math.floor(total)
+      subtotalSum = Math.floor(subtotalSum)
+      taxSum = Math.floor(taxSum)
     }
     const finalPaymentTotal = rawPurchaseTotal + paymentAdjustmentTotal
     this.lastFinalPaymentTotal = finalPaymentTotal
@@ -1090,21 +1438,42 @@ export default class extends Controller {
         const lineTotalInput = row.querySelector('[data-receipt-form-target="lineTotalInput"]')
         const price = inputValue('priceInput')
         const quantityUnit = inputValue('quantityUnitInput')
-        const sourcePresent = this.itemAmountSourcePresentFor({
-          lineTotalInput,
-          priceInputPresent: String(price ?? '').trim() !== '',
-          quantityUnit
-        })
+        const mode = this.pricingSourceModeForRow(row)
+        const sourcePresent = mode === 'reference_quantity_price'
+          ? [inputValue('referencePriceAmountInput'), inputValue('referenceQuantityInput')]
+              .some((value) => String(value ?? '').trim() !== '')
+          : mode === 'explicit_line_total'
+            ? String(inputValue('explicitLineTotalInput') ?? '').trim() !== ''
+            : this.itemAmountSourcePresentFor({
+              lineTotalInput,
+              priceInputPresent: String(price ?? '').trim() !== '',
+              quantityUnit
+            })
         if (!sourcePresent) return null
 
-        return [
+        const common = [
+          mode,
           this.normalizedOptionalDecimalInput(inputValue('quantityInput')),
           String(quantityUnit ?? '').trim(),
-          this.normalizedOptionalIntegerInput(price),
           this.normalizedOptionalDecimalInput(inputValue('discountRateInput')),
-          this.normalizedOptionalDecimalInput(inputValue('taxRateInput')),
-          this.normalizedOptionalIntegerInput(inputValue('lineTotalInput'))
+          this.normalizedOptionalDecimalInput(inputValue('taxRateInput'))
         ]
+        if (mode === 'reference_quantity_price') {
+          return common.concat([
+            this.normalizedOptionalGroupedDecimalInput(inputValue('referencePriceAmountInput')),
+            this.normalizedOptionalDecimalInput(inputValue('referenceQuantityInput')),
+            String(inputValue('referenceQuantityUnitInput') ?? '').trim(),
+            String(inputValue('referencePriceTaxInclusionInput') ?? '').trim()
+          ])
+        }
+        if (mode === 'explicit_line_total') {
+          return common.concat([this.normalizedOptionalIntegerInput(inputValue('explicitLineTotalInput'))])
+        }
+
+        return common.concat([
+          this.normalizedOptionalIntegerInput(price),
+          this.normalizedOptionalIntegerInput(inputValue('lineTotalInput'))
+        ])
       })
       .filter((item) => item !== null)
     const adjustments = this.adjustmentRowTargets
@@ -1134,10 +1503,18 @@ export default class extends Controller {
   }
 
   normalizedOptionalIntegerInput (value) {
-    const rawValue = String(value ?? '').trim()
+    const rawValue = this.normalizeNumericInputText(value)
     if (rawValue === '') return ''
 
     const parsedValue = this.parseIntegerInput(rawValue)
+    return Number.isFinite(parsedValue) ? String(parsedValue) : rawValue
+  }
+
+  normalizedOptionalGroupedDecimalInput (value) {
+    const rawValue = this.normalizeNumericInputText(value)
+    if (rawValue === '') return ''
+
+    const parsedValue = this.parseGroupedDecimalInput(rawValue)
     return Number.isFinite(parsedValue) ? String(parsedValue) : rawValue
   }
 
@@ -1464,12 +1841,147 @@ export default class extends Controller {
     return this.workingOriginalLineTotalInputValue(lineTotalInput)
   }
 
+  itemPreviewSourceFor ({
+    row,
+    pricingSourceMode,
+    quantity,
+    quantityInput,
+    quantityUnit,
+    price,
+    priceInputPresent,
+    lineTotalInput
+  }) {
+    if (pricingSourceMode === 'reference_quantity_price') {
+      const referencePriceAmount = row.querySelector(
+        '[data-receipt-form-target="referencePriceAmountInput"]'
+      )?.value
+      const referenceQuantity = row.querySelector(
+        '[data-receipt-form-target="referenceQuantityInput"]'
+      )?.value
+      const sourceStarted = [referencePriceAmount, referenceQuantity]
+        .some((value) => String(value ?? '').trim() !== '')
+      if (!sourceStarted) return { present: false, originalLineTotal: 0 }
+
+      const extension = referenceItemExtension({
+        referencePricingContract: this.referencePricingContractValue,
+        referencePriceAmount,
+        referenceQuantity,
+        referenceUnitCode: row.querySelector('[data-receipt-form-target="referenceQuantityUnitInput"]')?.value,
+        purchasedQuantity: quantityInput?.value,
+        purchasedUnitCode: quantityUnit
+      })
+
+      return extension && extension.projectedAmount <= this.receiptItemLineTotalMaxValue
+        ? { present: true, originalLineTotal: extension.projectedAmount }
+        : { present: false, originalLineTotal: 0, invalid: true }
+    }
+
+    if (pricingSourceMode === 'explicit_line_total') {
+      const explicitInput = row.querySelector('[data-receipt-form-target="explicitLineTotalInput"]')
+      const present = String(explicitInput?.value ?? '').trim() !== ''
+      return {
+        present,
+        originalLineTotal: present ? this.parseIntegerInput(explicitInput.value) : 0,
+        invalid: !present || !Number.isFinite(this.parseIntegerInput(explicitInput?.value))
+      }
+    }
+
+    if (pricingSourceMode === 'count_unit_price') {
+      if (!priceInputPresent) return { present: false, originalLineTotal: 0 }
+      if (!this.recalculatesQuantityUnit(quantityUnit) || !Number.isInteger(quantity)) {
+        return { present: false, originalLineTotal: 0, invalid: true }
+      }
+
+      const originalLineTotal = this.roundLineAmount(quantity * price)
+      return originalLineTotal <= this.receiptItemLineTotalMaxValue
+        ? { present: true, originalLineTotal }
+        : { present: false, originalLineTotal: 0, invalid: true }
+    }
+
+    const present = this.itemAmountSourcePresentFor({
+      lineTotalInput,
+      priceInputPresent,
+      quantityUnit
+    })
+    return {
+      present,
+      originalLineTotal: this.originalLineTotalFor({
+        quantity,
+        price,
+        priceInputPresent,
+        quantityUnit,
+        lineTotalInput
+      })
+    }
+  }
+
+  itemPreviewTaxBasis ({ row, pricingSourceMode }) {
+    if (pricingSourceMode === 'reference_quantity_price') {
+      const taxInclusion = row.querySelector(
+        '[data-receipt-form-target="referencePriceTaxInclusionInput"]'
+      )?.value
+      if (taxInclusion === 'net') return 'net'
+      if (taxInclusion === 'gross') return 'gross'
+
+      return 'unavailable'
+    }
+    if (pricingSourceMode === 'explicit_line_total') return 'gross'
+
+    return this.usesExternalTax() ? 'net' : 'gross'
+  }
+
+  projectedItemLineTotal ({ lineTotal, taxRatePercent, taxBasis }) {
+    if (taxBasis !== 'net' || taxRatePercent <= 0) return lineTotal
+
+    return lineTotal + this.externalTaxTotal(new Map([[taxRatePercent, lineTotal]]))
+  }
+
+  addSourceAwareTaxAmount (groups, { amount, taxRatePercent, taxBasis }) {
+    const key = `${taxRatePercent}:${taxBasis}`
+    const group = groups.get(key) || { amount: 0, taxRatePercent, taxBasis }
+    group.amount += amount
+    groups.set(key, group)
+  }
+
+  projectSourceAwareTaxGroups (groups) {
+    let subtotal = 0
+    let tax = 0
+    let total = 0
+
+    groups.forEach((group) => {
+      const rateGroups = new Map([[group.taxRatePercent, group.amount]])
+      if (group.taxBasis === 'net') {
+        const groupTax = this.externalTaxTotal(rateGroups)
+        subtotal += group.amount
+        tax += groupTax
+        total += group.amount + groupTax
+      } else {
+        const groupTax = this.internalTaxTotal(rateGroups)
+        subtotal += group.amount - groupTax
+        tax += groupTax
+        total += group.amount
+      }
+    })
+
+    return { subtotal, tax, total }
+  }
+
   discountedLineTotalFor (originalLineTotal, discountRatePercent) {
     return discountedLineTotal(originalLineTotal, discountRatePercent, this.discountRoundingModeValue)
   }
 
-  lineTotalFor ({ originalLineTotal, discountRatePercent, discountRateInput, lineTotalInput }) {
-    if (this.shouldPreserveExistingLineTotal({ originalLineTotal, discountRateInput, lineTotalInput })) {
+  lineTotalFor ({
+    originalLineTotal,
+    discountRatePercent,
+    discountRateInput,
+    lineTotalInput,
+    sourceModeChanged = false
+  }) {
+    if (!sourceModeChanged && this.shouldPreserveExistingLineTotal({
+      originalLineTotal,
+      discountRateInput,
+      lineTotalInput
+    })) {
       return this.preservedLineTotalInputValue(lineTotalInput)
     }
 
@@ -1541,6 +2053,7 @@ export default class extends Controller {
     itemAmountSourcePresent,
     priceInputPresent,
     quantityUnit,
+    pricingSourceMode,
     originalLineTotal,
     lineTotal
   }) {
@@ -1555,7 +2068,9 @@ export default class extends Controller {
     lineTotalInput.value = lineTotal
     if (originalLineTotalInput) originalLineTotalInput.value = originalLineTotal
 
-    if (this.recalculatesQuantityUnit(quantityUnit)) {
+    if (pricingSourceMode === 'reference_quantity_price' || pricingSourceMode === 'explicit_line_total') {
+      lineTotalInput.dataset.workingOriginalLineTotal = String(originalLineTotal)
+    } else if (this.recalculatesQuantityUnit(quantityUnit)) {
       if (priceInputPresent) {
         lineTotalInput.dataset.workingOriginalLineTotal = String(originalLineTotal)
       } else {
@@ -1572,57 +2087,45 @@ export default class extends Controller {
     return this.quantityUnitList(this.countableQuantityUnitsValue)
   }
 
+  syncInitialPricingPreviews () {
+    const activeRows = this.itemRowTargets.filter((row) => !this.previewRowExcluded(row, 'destroyField'))
+    const missingExplicitSourceRows = activeRows.filter((row) => this.explicitLineTotalSourceMissingForRow(row))
+    if (missingExplicitSourceRows.length > 0) {
+      this.renderUnavailablePreview()
+      return
+    }
+    if (!activeRows.some((row) => this.pricingSourceModeForRow(row) === 'reference_quantity_price')) return
+
+    this.recalculate()
+  }
+
+  explicitLineTotalSourceMissingForRow (row) {
+    if (row?.dataset?.receiptFormExplicitLineTotalSourceMissing !== 'true') return false
+    if (this.pricingSourceModeForRow(row) !== 'explicit_line_total') return false
+
+    const input = row.querySelector('[data-receipt-form-target="explicitLineTotalInput"]')
+    return String(input?.value ?? '').trim() === ''
+  }
+
   syncQuantityInputSteps () {
     this.quantityUnitInputTargets.forEach((unitSelect) => {
-      this.syncQuantityInputStepForUnitSelect(unitSelect)
+      this.syncQuantityInputStepForUnitSelect(unitSelect, 'quantityInput')
+    })
+    this.referenceQuantityUnitInputTargets.forEach((unitSelect) => {
+      this.syncQuantityInputStepForUnitSelect(unitSelect, 'referenceQuantityInput')
     })
   }
 
-  syncQuantityInputStepForUnitSelect (unitSelect) {
+  syncQuantityInputStepForUnitSelect (unitSelect, quantityTarget = 'quantityInput') {
     const row = unitSelect.closest('[data-receipt-form-target="itemRow"]')
     if (!row) return
 
-    const quantityInput = row.querySelector('[data-receipt-form-target="quantityInput"]')
+    const quantityInput = row.querySelector(`[data-receipt-form-target="${quantityTarget}"]`)
     if (!quantityInput) return
 
     const decimalAllowed = this.decimalQuantityUnit(unitSelect.value)
     quantityInput.step = decimalAllowed ? this.decimalQuantityStepValue : this.integerQuantityStepValue
     quantityInput.inputMode = decimalAllowed ? 'decimal' : 'numeric'
-  }
-
-  clearFractionalQuantityForIntegerUnit (unitSelect) {
-    if (this.decimalQuantityUnit(unitSelect.value)) return
-
-    const quantityInput = this.quantityInputForUnitSelect(unitSelect)
-    if (!quantityInput) return
-
-    const quantityText = String(quantityInput.value ?? '')
-    if (!this.hasDecimalSeparator(quantityText)) return
-
-    if (this.decimalFractionIsZero(quantityText)) {
-      quantityInput.value = this.integerQuantityText(quantityText)
-    } else {
-      quantityInput.value = ''
-    }
-  }
-
-  quantityInputForUnitSelect (unitSelect) {
-    const row = unitSelect.closest('[data-receipt-form-target="itemRow"]')
-    if (!row) return null
-
-    return row.querySelector('[data-receipt-form-target="quantityInput"]')
-  }
-
-  quantityUnitSelectForInput (input) {
-    const row = input.closest('[data-receipt-form-target="itemRow"]')
-    if (!row) return null
-
-    return row.querySelector('[data-receipt-form-target="quantityUnitInput"]')
-  }
-
-  integerQuantityInput (input) {
-    const unitSelect = this.quantityUnitSelectForInput(input)
-    return !this.decimalQuantityUnit(unitSelect?.value)
   }
 
   decimalQuantityUnit (unit) {
@@ -1635,26 +2138,6 @@ export default class extends Controller {
 
   quantityUnitList (value) {
     return quantityUnitList(value)
-  }
-
-  decimalSeparatorText (value) {
-    return decimalSeparatorText(value)
-  }
-
-  hasDecimalSeparator (value) {
-    return hasDecimalSeparator(value)
-  }
-
-  decimalFractionIsZero (value) {
-    return decimalFractionIsZero(value)
-  }
-
-  integerQuantityText (value) {
-    return integerQuantityText(value)
-  }
-
-  normalizeQuantityText (value) {
-    return normalizeQuantityText(value)
   }
 
   formatNumber (num) {
@@ -1673,12 +2156,24 @@ export default class extends Controller {
     return parseDecimalInput(value)
   }
 
+  parseGroupedDecimalInput (value) {
+    return parseGroupedDecimalInput(value)
+  }
+
+  parseQuantityInput (value) {
+    return parseQuantityInput(value)
+  }
+
   normalizeNumericInputText (value) {
     return normalizeNumericInputText(value)
   }
 
   parseDiscountRateInput (value) {
     return parseDiscountRateInput(value)
+  }
+
+  parseTaxRateInput (value) {
+    return parseTaxRateInput(value)
   }
 
   previewNumericInputsValid () {
@@ -1690,14 +2185,45 @@ export default class extends Controller {
       const priceInput = row.querySelector('[data-receipt-form-target="priceInput"]')
       const discountRateInput = row.querySelector('[data-receipt-form-target="discountRateInput"]')
       const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
-      const quantity = this.previewInputValue(quantityInput, 'decimal')
+      const pricingSourceMode = this.pricingSourceModeForRow(row)
+      const quantity = this.previewInputValue(quantityInput, 'quantity')
+      const referencePriceAmountInput = row.querySelector(
+        '[data-receipt-form-target="referencePriceAmountInput"]'
+      )
+      const referenceQuantityInput = row.querySelector(
+        '[data-receipt-form-target="referenceQuantityInput"]'
+      )
+      const explicitLineTotalInput = row.querySelector(
+        '[data-receipt-form-target="explicitLineTotalInput"]'
+      )
+      const modeSourceValid = this.pricingSourceModeValid(pricingSourceMode, {
+        count: () => this.previewInputInRange(
+          priceInput,
+          'integer',
+          { minimum: 0, maximum: this.receiptItemPriceMaxValue }
+        ),
+        reference: () => this.previewInputInRange(
+          referencePriceAmountInput,
+          'groupedDecimal',
+          { minimum: 0, maximum: 999999999999 }
+        ) && this.previewInputInRange(
+          referenceQuantityInput,
+          'decimal',
+          { minimum: 0, maximum: 9999.999, exclusiveMinimum: true }
+        ),
+        explicit: () => this.previewInputInRange(
+          explicitLineTotalInput,
+          'integer',
+          { minimum: 0, maximum: this.receiptItemLineTotalMaxValue }
+        )
+      })
 
       return quantity !== null &&
         this.previewValueInRange(quantity, { minimum: 0, maximum: 9999.999, exclusiveMinimum: true }) &&
         (this.decimalQuantityUnit(quantityUnitInput?.value) || !Number.isFinite(quantity) || Number.isInteger(quantity)) &&
-        this.previewInputInRange(priceInput, 'integer', { minimum: 0, maximum: this.receiptItemPriceMaxValue }) &&
-        this.previewInputInRange(discountRateInput, 'decimal', { minimum: 0, maximum: 100 }) &&
-        this.previewInputInRange(taxRateInput, 'decimal', { minimum: 0, maximum: 100 })
+        modeSourceValid &&
+        this.previewInputInRange(discountRateInput, 'discountPercentage', { minimum: 0, maximum: 100 }) &&
+        this.previewInputInRange(taxRateInput, 'taxPercentage', { minimum: 0, maximum: 100 })
     })
 
     if (!itemsValid) return false
@@ -1712,7 +2238,7 @@ export default class extends Controller {
         amountInput,
         'integer',
         { minimum: 0, maximum: this.receiptAdjustmentAmountMaxValue }
-      ) && this.previewInputInRange(taxRateInput, 'decimal', { minimum: 0, maximum: 100 })
+      ) && this.previewInputInRange(taxRateInput, 'taxPercentage', { minimum: 0, maximum: 100 })
     })
 
     if (!adjustmentsValid) return false
@@ -1736,17 +2262,28 @@ export default class extends Controller {
     return String(destroyField?.value ?? '') === '1'
   }
 
+  pricingSourceModeValid (mode, { count, reference, explicit }) {
+    if (mode === 'reference_quantity_price') return reference()
+    if (mode === 'explicit_line_total') return explicit()
+
+    return count()
+  }
+
   previewInputInRange (input, parser, range) {
     return this.previewValueInRange(this.previewInputValue(input, parser), range)
   }
 
   previewInputValue (input, parser) {
-    const rawValue = String(input?.value ?? '').trim()
+    const rawValue = this.normalizeNumericInputText(input?.value)
     if (rawValue === '') return null
 
-    return parser === 'integer'
-      ? this.parseIntegerInput(rawValue)
-      : this.parseDecimalInput(rawValue)
+    if (parser === 'integer') return this.parseIntegerInput(rawValue)
+    if (parser === 'groupedDecimal') return this.parseGroupedDecimalInput(rawValue)
+    if (parser === 'quantity') return this.parseQuantityInput(rawValue)
+    if (parser === 'discountPercentage') return this.parseDiscountRateInput(rawValue)
+    if (parser === 'taxPercentage') return this.parseTaxRateInput(rawValue)
+
+    return this.parseDecimalInput(rawValue)
   }
 
   previewValueInRange (value, { minimum, maximum, exclusiveMinimum = false }) {
@@ -1755,7 +2292,16 @@ export default class extends Controller {
 
   renderUnavailablePreview () {
     this.lastFinalPaymentTotal = null
-    this.previewAmountTargets().forEach((target) => this.renderUnavailableAmount(target))
+    const preservedLineTotalTargets = new Set(
+      Array.from(this.itemRowTargets || [])
+        .filter((row) => this.explicitLineTotalSourceMissingForRow(row))
+        .flatMap((row) => (
+          Array.from(row?.querySelectorAll?.('[data-receipt-form-target="lineTotalDisplay"]') || [])
+        ))
+    )
+    this.previewAmountTargets().forEach((target) => {
+      if (!preservedLineTotalTargets.has(target)) this.renderUnavailableAmount(target)
+    })
 
     if (this.hasTaxRateSummaryTarget) {
       this.taxRateSummaryTarget.textContent = this.unsetLabelValue

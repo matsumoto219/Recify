@@ -1,5 +1,5 @@
 export function normalizedOptionalDecimalInput (value) {
-  const rawValue = String(value ?? '').trim()
+  const rawValue = trimNumericInputText(value)
   if (rawValue === '') return ''
 
   return String(parseDecimalInput(rawValue))
@@ -53,10 +53,26 @@ export function parseIntegerInput (value) {
 }
 
 export function parseDecimalInput (value) {
+  return parseDecimalInputWithOptions(value, { decimalComma: true })
+}
+
+export function parseGroupedDecimalInput (value) {
+  return parseDecimalInputWithOptions(value, { decimalComma: false })
+}
+
+export function parseQuantityInput (value) {
+  const parsedValue = parseDecimalInput(value)
+  const scale = decimalInputScale(value, { decimalComma: true })
+  if (!Number.isFinite(parsedValue) || scale === null || scale > 3) return Number.NaN
+
+  return parsedValue
+}
+
+function parseDecimalInputWithOptions (value, { decimalComma }) {
   let normalized = normalizeNumericInputText(value)
 
   const commaCount = (normalized.match(/,/g) || []).length
-  if (!normalized.includes('.') && commaCount === 1) {
+  if (decimalComma && !normalized.includes('.') && commaCount === 1) {
     normalized = normalized.replace(',', '.')
   }
 
@@ -69,8 +85,7 @@ export function parseDecimalInput (value) {
 }
 
 export function normalizeNumericInputText (value) {
-  return String(value ?? '')
-    .trim()
+  return trimNumericInputText(value)
     .replace(/[０-９]/g, (character) => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
     .replace(/＋/g, '+')
     .replace(/－/g, '-')
@@ -78,11 +93,74 @@ export function normalizeNumericInputText (value) {
     .replace(/，/g, ',')
 }
 
-export function parseDiscountRateInput (value) {
-  const rawValue = String(value ?? '').trim()
+export function trimNumericInputText (value) {
+  const text = String(value ?? '')
+  let start = 0
+  let finish = text.length
+  while (start < finish && rubyStripCodePoint(text.charCodeAt(start))) start += 1
+  while (finish > start && rubyStripCodePoint(text.charCodeAt(finish - 1))) finish -= 1
+
+  return text.slice(start, finish)
+}
+
+function rubyStripCodePoint (codePoint) {
+  return codePoint === 0 || codePoint === 32 || (codePoint >= 9 && codePoint <= 13)
+}
+
+function decimalInputScale (value, { decimalComma }) {
+  let normalized = normalizeNumericInputText(value)
+  const commaCount = (normalized.match(/,/g) || []).length
+  if (decimalComma && !normalized.includes('.') && commaCount === 1) {
+    normalized = normalized.replace(',', '.')
+  }
+
+  const integerComponent = '(?:\\d+|\\d{1,3}(?:,\\d{3})+)'
+  const match = normalized.match(new RegExp(`^(?:${integerComponent})?(?:\\.(\\d*))?$`))
+  if (!match || (!normalized.includes('.') && normalized === '')) return null
+
+  return String(match[1] || '').replace(/0+$/, '').length
+}
+
+const TAX_RATE_MAX_SCALE = 4
+const DISCOUNT_RATE_MAX_SCALE = 3
+
+function percentageRateScale (value) {
+  let normalized = normalizeNumericInputText(value)
+  const commaCount = (normalized.match(/,/g) || []).length
+  if (!normalized.includes('.') && commaCount === 1) normalized = normalized.replace(',', '.')
+
+  const integerComponent = '(?:\\d+|\\d{1,3}(?:,\\d{3})+)'
+  const match = normalized.match(new RegExp(`^(${integerComponent})?(?:\\.(\\d*))?$`))
+  if (!match || (!match[1] && !match[2])) return null
+
+  const integerDigits = String(match[1] || '0').replace(/,/g, '')
+  const fractionalDigits = String(match[2] || '')
+  const digits = `${integerDigits}${fractionalDigits}`
+  if (/^0+$/.test(digits)) return 0
+
+  const trailingZeroCount = digits.match(/0+$/)?.[0].length || 0
+  return Math.max(fractionalDigits.length + 2 - trailingZeroCount, 0)
+}
+
+function parsePercentageInput (value, maximumRateScale) {
+  const rawValue = trimNumericInputText(value)
   if (rawValue === '') return null
 
-  return parseDecimalInput(rawValue)
+  const parsedValue = parseDecimalInput(rawValue)
+  const rateScale = percentageRateScale(rawValue)
+  if (!Number.isFinite(parsedValue) || parsedValue > 100 || rateScale === null || rateScale > maximumRateScale) {
+    return Number.NaN
+  }
+
+  return parsedValue
+}
+
+export function parseTaxRateInput (value) {
+  return parsePercentageInput(value, TAX_RATE_MAX_SCALE)
+}
+
+export function parseDiscountRateInput (value) {
+  return parsePercentageInput(value, DISCOUNT_RATE_MAX_SCALE)
 }
 
 export function previewValueInRange (value, { minimum, maximum, exclusiveMinimum = false }) {

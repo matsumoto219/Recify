@@ -2,15 +2,14 @@ require "rails_helper"
 require_relative "../support/service_layer_boundary_scanner"
 
 RSpec.describe "Service layer child implementation boundary" do
-  def self.registry_entry(directory, namespace, facade: nil, public_constants: [], legacy_exceptions: [])
+  def self.registry_entry(directory, namespace, facade: nil, public_constants: [])
     private_root = "app/services/#{directory}"
     {
       namespace: namespace,
       private_root: private_root,
       internal_reference_roots: [ private_root ],
       public_facades: Array(facade),
-      public_constants: public_constants,
-      legacy_exceptions: legacy_exceptions
+      public_constants: public_constants
     }.freeze
   end
 
@@ -71,6 +70,7 @@ RSpec.describe "Service layer child implementation boundary" do
       public_constants: %w[
         Receipts::Editing
         Receipts::Editing::ConflictError
+        Receipts::Editing::InvalidItemSourceError
         Receipts::Processing
         Receipts::Uploads
         Receipts::Uploads::Result
@@ -161,13 +161,5 @@ RSpec.describe "Service layer child implementation boundary" do
 
   it "facadeと同一private root以外からchild実装を直接参照しない" do
     expect(scanner.violations).to be_empty, scanner.format_violations
-  end
-
-  it "legacy exceptionを残さない" do
-    exceptions = SERVICE_NAMESPACE_REGISTRY.values.flat_map { |entry| entry.fetch(:legacy_exceptions) }
-    unused = scanner.unused_legacy_exceptions
-
-    expect(exceptions).to be_empty
-    expect(unused).to be_empty, "Unused legacy exceptions:\n#{scanner.format_legacy_exceptions(unused)}"
   end
 end

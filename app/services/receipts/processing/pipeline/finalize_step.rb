@@ -409,18 +409,29 @@ class Receipts::Processing::Pipeline
         calculated_item = calculated_items[index]
         next item_attributes if calculated_item.blank?
 
-        calculated_tax_rate = normalize_tax_rate(calculated_item[:tax_rate] || calculated_item["tax_rate"])
+        source_item = normalized_hash(item_attributes)
+        normalized_calculated_item = normalized_hash(calculated_item)
+        calculated_tax_rate = normalize_tax_rate(normalized_calculated_item[:tax_rate])
+        preserve_missing_amount = preserve_missing_ocr_item_amount?(source_item, normalized_calculated_item)
 
         item_attributes.merge(
-          price: safe_calculated_amount(calculated_item[:price] || calculated_item["price"]) || item_attributes[:price],
-          quantity: calculated_item[:quantity] || calculated_item["quantity"],
+          price: safe_calculated_amount(normalized_calculated_item[:price]) || item_attributes[:price],
+          quantity: normalized_calculated_item[:quantity],
           tax_rate: calculated_tax_rate.nil? ? item_attributes[:tax_rate] : calculated_tax_rate,
-          original_line_total: safe_calculated_amount(calculated_item[:original_line_total] || calculated_item["original_line_total"]) || item_attributes[:original_line_total],
-          line_total: safe_calculated_amount(calculated_item[:line_total] || calculated_item["line_total"]) || item_attributes[:line_total],
-          discount_amount: safe_calculated_amount(calculated_item[:discount_amount] || calculated_item["discount_amount"]) || item_attributes[:discount_amount],
-          discount_rate: calculated_item[:discount_rate] || calculated_item["discount_rate"]
+          original_line_total: preserve_missing_amount ? item_attributes[:original_line_total] : safe_calculated_amount(normalized_calculated_item[:original_line_total]) || item_attributes[:original_line_total],
+          line_total: preserve_missing_amount ? item_attributes[:line_total] : safe_calculated_amount(normalized_calculated_item[:line_total]) || item_attributes[:line_total],
+          discount_amount: safe_calculated_amount(normalized_calculated_item[:discount_amount]) || item_attributes[:discount_amount],
+          discount_rate: normalized_calculated_item[:discount_rate]
         )
       end
+    end
+
+    def preserve_missing_ocr_item_amount?(source_item, calculated_item)
+      return false unless source_item[:original_line_total].nil? && source_item[:line_total].nil?
+      return false unless calculated_item[:amount_line_total_present] == false
+
+      source_item[:quantity_unit_status] == "unknown" ||
+        !ReceiptQuantityUnit.countable?(source_item[:quantity_unit_code])
     end
 
     def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil, build_review_reasons: [], ocr_review_reasons: [], detail_needs_review: nil, ocr_low_quality: nil)
@@ -505,6 +516,9 @@ class Receipts::Processing::Pipeline
     def receipt_amount_attributes_for(params, amount_result)
       settlement_attributes = settlement_restored_receipt_amount_attributes(params, amount_result)
       return settlement_attributes if settlement_attributes.present?
+      if preserve_ocr_receipt_amounts_for_missing_item?(params, amount_result)
+        return source_receipt_amount_attributes(params[:receipt_attributes])
+      end
 
       resolved = normalized_hash(amount_result[:resolved])
       {
@@ -512,6 +526,29 @@ class Receipts::Processing::Pipeline
         subtotal_amount: resolved[:subtotal],
         tax_amount: resolved[:tax],
         tax_rate: resolved[:tax_rate]
+      }
+    end
+
+    def preserve_ocr_receipt_amounts_for_missing_item?(params, amount_result)
+      source_items = Array(params[:receipt_items_attributes])
+      calculated_items = Array(amount_result.dig(:computed, :items))
+
+      source_items.each_with_index.any? do |source_item, index|
+        calculated_item = calculated_items[index]
+        next false if calculated_item.blank?
+
+        preserve_missing_ocr_item_amount?(normalized_hash(source_item), normalized_hash(calculated_item))
+      end
+    end
+
+    def source_receipt_amount_attributes(value)
+      attributes = normalized_hash(value)
+
+      {
+        total_amount: normalize_amount(attributes[:total_amount]),
+        subtotal_amount: normalize_amount(attributes[:subtotal_amount]),
+        tax_amount: normalize_amount(attributes[:tax_amount]),
+        tax_rate: normalize_tax_rate(attributes[:tax_rate])
       }
     end
 

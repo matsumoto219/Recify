@@ -255,5 +255,27 @@ RSpec.describe Ai::PromptTemplate do
         expect(user_prompt).to include('For non-receipts, follow the system-defined empty output shape.')
       end
     end
+
+    it 'reference pricingの数値・根拠・candidate選択をAI outputへ追加しない' do
+      item_output_section = system_prompt.split("Allowed items keys:", 2).last.split("Allowed receipt_adjustments keys:", 2).first
+
+      aggregate_failures do
+        expect(system_prompt).to include('- add fields not explicitly allowed')
+        expect(system_prompt).to include('Do NOT output or change them')
+        %w[
+          candidate_id
+          reference_price
+          reference_quantity
+          reference_unit
+          printed_line_total
+          source_text
+          evidence
+          corroboration
+        ].each do |prohibited_key|
+          expect(item_output_section).not_to include(prohibited_key)
+        end
+        expect(system_prompt).not_to include('selected_reference_pricing_candidate')
+      end
+    end
   end
 end

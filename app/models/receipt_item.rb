@@ -11,6 +11,18 @@ class ReceiptItem < ApplicationRecord
     other
   ].freeze
 
+  PRICING_SOURCE_KINDS = %w[
+    count_unit_price
+    explicit_line_total
+    reference_quantity_price
+  ].freeze
+  REFERENCE_PRICE_TAX_INCLUSIONS = %w[gross net].freeze
+  REFERENCE_PRICE_AMOUNT_MAX = BigDecimal("999999999999")
+  REFERENCE_PRICE_AMOUNT_MAX_SCALE = 6
+  REFERENCE_QUANTITY_MAX = BigDecimal("9999.999")
+  REFERENCE_QUANTITY_MAX_SCALE = 3
+  RAW_UNIT_MAX_LENGTH = 64
+
   belongs_to :receipt
 
   attribute :quantity_unit_code, :string, default: -> { ReceiptQuantityUnit.default_code }
@@ -66,6 +78,15 @@ class ReceiptItem < ApplicationRecord
   validates :quantity_unit_code,
             presence: true,
             inclusion: { in: ->(_item) { ReceiptQuantityUnit.allowed_codes } }
+  validates :pricing_source_kind,
+            inclusion: { in: PRICING_SOURCE_KINDS },
+            allow_nil: true
+  validates :reference_quantity_unit_code,
+            inclusion: { in: ->(_item) { ReceiptQuantityUnit.allowed_codes } },
+            allow_nil: true
+  validates :reference_price_tax_inclusion,
+            inclusion: { in: REFERENCE_PRICE_TAX_INCLUSIONS },
+            allow_nil: true
   validates :product_code, length: { maximum: 100 }, allow_blank: true    # 商品コード(MAX100文字)
 
   # AI関連(信頼度 0.0~1.0)
@@ -73,6 +94,7 @@ class ReceiptItem < ApplicationRecord
             numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 },
             allow_blank: true
   validate :items_per_receipt_within_limit, on: :create
+  validate :measurement_pricing_source_contract
 
   def review_required?
     needs_review?
@@ -159,6 +181,182 @@ class ReceiptItem < ApplicationRecord
   end
 
   private
+
+  def measurement_pricing_source_contract
+    validate_exact_reference_numeric(
+      :reference_price_amount,
+      minimum: BigDecimal("0"),
+      maximum: REFERENCE_PRICE_AMOUNT_MAX,
+      maximum_scale: REFERENCE_PRICE_AMOUNT_MAX_SCALE,
+      minimum_inclusive: true
+    )
+    validate_exact_reference_numeric(
+      :reference_quantity,
+      minimum: BigDecimal("0"),
+      maximum: REFERENCE_QUANTITY_MAX,
+      maximum_scale: REFERENCE_QUANTITY_MAX_SCALE,
+      minimum_inclusive: false
+    )
+    validate_reference_quantity_granularity
+    validate_raw_unit_token(:quantity_unit_raw)
+    validate_raw_unit_token(:reference_quantity_unit_raw)
+    validate_reference_evidence_shape
+    validate_pricing_source_integrity
+  end
+
+  def validate_exact_reference_numeric(attribute, minimum:, maximum:, maximum_scale:, minimum_inclusive:)
+    raw_value = source_value_before_type_cast(attribute)
+    return if raw_value.nil?
+
+    exact_value = exact_decimal_rational(raw_value)
+    valid_minimum = if exact_value
+      minimum_inclusive ? exact_value >= minimum.to_r : exact_value > minimum.to_r
+    end
+    valid = exact_value &&
+      valid_minimum &&
+      exact_value <= maximum.to_r &&
+      finite_decimal_scale(exact_value)&.<=(maximum_scale)
+
+    errors.add(attribute, :invalid) unless valid
+  end
+
+  def validate_reference_quantity_granularity
+    raw_quantity = source_value_before_type_cast(:reference_quantity)
+    unit = ReceiptQuantityUnit.unit_for(reference_quantity_unit_code)
+    return if raw_quantity.nil? || unit.nil?
+
+    exact_quantity = exact_decimal_rational(raw_quantity)
+    valid = exact_quantity&.positive? &&
+      (exact_quantity / unit.input_granularity).denominator == 1
+    errors.add(:reference_quantity, :invalid) unless valid
+  end
+
+  def validate_raw_unit_token(attribute)
+    raw_value = source_value_before_type_cast(attribute)
+    return if raw_value.nil?
+
+    valid = raw_value.is_a?(String) &&
+      raw_value.valid_encoding? &&
+      raw_value.length.between?(1, RAW_UNIT_MAX_LENGTH) &&
+      raw_value == raw_value.strip &&
+      !raw_value.match?(/\p{Cc}/)
+
+    errors.add(attribute, :invalid) unless valid
+  end
+
+  def validate_reference_evidence_shape
+    return if reference_evidence_absent? || reference_evidence_canonical? || reference_evidence_raw?
+
+    errors.add(:reference_price_amount, :invalid)
+  end
+
+  def validate_pricing_source_integrity
+    valid = case pricing_source_kind
+    when nil
+      diagnostic_reference_tax_inclusion_valid?
+    when "count_unit_price"
+      count_unit_price_source_valid?
+    when "explicit_line_total"
+      !line_total.nil? && diagnostic_reference_tax_inclusion_valid?
+    when "reference_quantity_price"
+      reference_quantity_price_source_valid?
+    else
+      return
+    end
+
+    errors.add(:pricing_source_kind, :invalid) unless valid
+  end
+
+  def count_unit_price_source_valid?
+    unit = ReceiptQuantityUnit.unit_for(quantity_unit_code)
+
+    !price.nil? &&
+      !quantity.nil? &&
+      unit&.kind == :countable &&
+      reference_evidence_absent? &&
+      reference_price_tax_inclusion.nil? &&
+      quantity_unit_raw.nil? &&
+      reference_quantity_unit_raw.nil?
+  end
+
+  def reference_quantity_price_source_valid?
+    purchased_unit = ReceiptQuantityUnit.unit_for(quantity_unit_code)
+    reference_unit = ReceiptQuantityUnit.unit_for(reference_quantity_unit_code)
+
+    !quantity.nil? &&
+      !purchased_unit.nil? &&
+      !reference_unit.nil? &&
+      reference_evidence_canonical? &&
+      REFERENCE_PRICE_TAX_INCLUSIONS.include?(reference_price_tax_inclusion) &&
+      quantity_unit_raw.nil? &&
+      reference_quantity_unit_raw.nil? &&
+      ReceiptQuantityUnit.convertible?(from: purchased_unit.code, to: reference_unit.code)
+  end
+
+  def diagnostic_reference_tax_inclusion_valid?
+    reference_price_tax_inclusion.nil? || reference_evidence_complete?
+  end
+
+  def reference_evidence_complete?
+    reference_evidence_canonical? || reference_evidence_raw?
+  end
+
+  def reference_evidence_absent?
+    reference_evidence_presence == [ false, false, false, false ]
+  end
+
+  def reference_evidence_canonical?
+    reference_evidence_presence == [ true, true, true, false ]
+  end
+
+  def reference_evidence_raw?
+    reference_evidence_presence == [ true, true, false, true ]
+  end
+
+  def reference_evidence_presence
+    %i[
+      reference_price_amount
+      reference_quantity
+      reference_quantity_unit_code
+      reference_quantity_unit_raw
+    ].map { |attribute| !source_value_before_type_cast(attribute).nil? }
+  end
+
+  def source_value_before_type_cast(attribute)
+    read_attribute_before_type_cast(attribute)
+  end
+
+  def exact_decimal_rational(value)
+    case value
+    when Integer, Rational
+      value.to_r
+    when BigDecimal
+      value.to_r if value.finite?
+    when String
+      Rational(value) if value.match?(/\A[+-]?\d+(?:\.\d+)?\z/)
+    end
+  rescue ArgumentError, TypeError, FloatDomainError, ZeroDivisionError
+    nil
+  end
+
+  def finite_decimal_scale(value)
+    denominator = value.denominator
+    powers_of_two = factor_count(denominator, 2)
+    denominator /= 2**powers_of_two
+    powers_of_five = factor_count(denominator, 5)
+    denominator /= 5**powers_of_five
+
+    [ powers_of_two, powers_of_five ].max if denominator == 1
+  end
+
+  def factor_count(value, factor)
+    count = 0
+    while (value % factor).zero?
+      count += 1
+      value /= factor
+    end
+    count
+  end
 
   def quantity_must_be_integer_for_integer_unit
     return if quantity.blank?

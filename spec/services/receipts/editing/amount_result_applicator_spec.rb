@@ -2,7 +2,8 @@ require 'rails_helper'
 
 RSpec.describe Receipts::Editing::AmountResultApplicator do
   let(:tax_detail) { instance_double(ReceiptTaxDetail, id: 7) }
-  let(:receipt) { instance_double(Receipt, receipt_tax_details: [ tax_detail ]) }
+  let(:receipt_items) { [] }
+  let(:receipt) { instance_double(Receipt, receipt_tax_details: [ tax_detail ], receipt_items: receipt_items) }
   let(:profile_snapshot) { { 'schema_version' => 'amount_profile_v1' } }
   let(:amount_result) do
     {
@@ -157,6 +158,253 @@ RSpec.describe Receipts::Editing::AmountResultApplicator do
       'price' => '128',
       'line_total' => '128'
     )
+  end
+
+  it 'does not fall back to candidate-derived items when edit-save source items are absent' do
+    attributes = {
+      'receipt_items_attributes' => {
+        '0' => { 'quantity' => '1', 'price' => '128', 'line_total' => '128' }
+      }
+    }
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      amount_result: amount_result,
+      context: :edit_save,
+      change_set: nil,
+      tax_details_recalculated: false
+    )
+
+    expect(attributes.dig('receipt_items_attributes', '0')).to eq(
+      'quantity' => '1',
+      'price' => '128',
+      'line_total' => '128'
+    )
+  end
+
+  it 'does not replace submitted pricing source metadata with computed item metadata' do
+    source_metadata = {
+      'pricing_source_kind' => 'reference_quantity_price',
+      'reference_price_amount' => BigDecimal('140'),
+      'reference_quantity' => BigDecimal('1'),
+      'reference_quantity_unit_code' => 'liter',
+      'quantity_unit_raw' => nil,
+      'reference_quantity_unit_raw' => nil,
+      'reference_price_tax_inclusion' => 'net'
+    }
+    attributes = {
+      'receipt_items_attributes' => {
+        '0' => source_metadata.merge(
+          'quantity' => BigDecimal('8.12'),
+          'quantity_unit_code' => 'liter',
+          'line_total' => 1_137
+        )
+      }
+    }
+    amount_result[:computed][:source_items] = [
+      {
+        quantity: BigDecimal('8.12'),
+        line_total: 1_137,
+        pricing_source_kind: 'explicit_line_total',
+        reference_price_amount: BigDecimal('999'),
+        reference_quantity: BigDecimal('10'),
+        reference_quantity_unit_code: 'milliliter',
+        quantity_unit_raw: 'computed-purchased-unit',
+        reference_quantity_unit_raw: 'computed-reference-unit',
+        reference_price_tax_inclusion: 'gross'
+      }
+    ]
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      amount_result: amount_result,
+      context: :edit_save,
+      change_set: nil,
+      tax_details_recalculated: false
+    )
+
+    expect(attributes.dig('receipt_items_attributes', '0')).to include(source_metadata)
+  end
+
+  it 'new reference formula itemではsubmitted・computed priceを保存しない' do
+    attributes = {
+      'receipt_items_attributes' => {
+        '0' => {
+          'pricing_source_kind' => 'reference_quantity_price',
+          'price' => '999',
+          'quantity' => BigDecimal('1'),
+          'quantity_unit_code' => 'liter'
+        }
+      }
+    }
+    amount_result[:computed][:items] = [
+      {
+        pricing_source_kind: 'reference_quantity_price',
+        price: 100,
+        quantity: BigDecimal('1'),
+        original_line_total: 100,
+        line_total: 100
+      }
+    ]
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      amount_result: amount_result,
+      context: :manual,
+      change_set: nil,
+      tax_details_recalculated: false
+    )
+
+    expect(attributes.dig('receipt_items_attributes', '0')).to include(
+      'pricing_source_kind' => 'reference_quantity_price',
+      'price' => nil,
+      'line_total' => 100
+    )
+  end
+
+  it 'existing reference formula itemではDBのlegacy priceを維持する' do
+    existing_item = instance_double(
+      ReceiptItem,
+      id: 42,
+      pricing_source_kind: 'reference_quantity_price',
+      price: 777
+    )
+    receipt_items << existing_item
+    attributes = {
+      'receipt_items_attributes' => {
+        '0' => {
+          'id' => '42',
+          'pricing_source_kind' => 'reference_quantity_price',
+          'price' => '999',
+          'quantity' => BigDecimal('1'),
+          'quantity_unit_code' => 'liter'
+        }
+      }
+    }
+    amount_result[:computed][:source_items] = [
+      {
+        pricing_source_kind: 'reference_quantity_price',
+        price: 100,
+        quantity: BigDecimal('1'),
+        original_line_total: 100,
+        line_total: 100
+      }
+    ]
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      amount_result: amount_result,
+      context: :edit_save,
+      change_set: nil,
+      tax_details_recalculated: false
+    )
+
+    expect(attributes.dig('receipt_items_attributes', '0')).to include(
+      'pricing_source_kind' => 'reference_quantity_price',
+      'price' => 777,
+      'line_total' => 100
+    )
+  end
+
+  it 'count・explicit・legacy itemのprice投影を変更しない' do
+    %w[count_unit_price explicit_line_total].append(nil).each do |pricing_source_kind|
+      attributes = {
+        'receipt_items_attributes' => {
+          '0' => {
+            'pricing_source_kind' => pricing_source_kind,
+            'price' => '90',
+            'quantity' => BigDecimal('1')
+          }
+        }
+      }
+      amount_result[:computed][:items] = [
+        {
+          pricing_source_kind: pricing_source_kind,
+          price: 100,
+          quantity: BigDecimal('1'),
+          original_line_total: 100,
+          line_total: 100
+        }
+      ]
+
+      described_class.call(
+        receipt: receipt,
+        attributes: attributes,
+        amount_result: amount_result,
+        context: :manual,
+        change_set: nil,
+        tax_details_recalculated: false
+      )
+
+      expect(attributes.dig('receipt_items_attributes', '0', 'price')).to eq(100)
+    end
+  end
+
+  it 'source未送信時はcalculationから導出したdiscount_rateを永続sourceへ昇格しない' do
+    attributes = {
+      'receipt_items_attributes' => {
+        '0' => {
+          'id' => '42',
+          'confirmed_name' => '名称だけ変更'
+        }
+      }
+    }
+    amount_result[:computed][:source_items] = [
+      {
+        original_line_total: 100,
+        discount_amount: 10,
+        discount_rate: BigDecimal('0.1'),
+        line_total: 90
+      }
+    ]
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      amount_result: amount_result,
+      context: :edit_save,
+      change_set: nil,
+      tax_details_recalculated: false
+    )
+
+    expect(attributes.dig('receipt_items_attributes', '0')).to include(
+      'discount_amount' => 10,
+      'line_total' => 90
+    )
+    expect(attributes.dig('receipt_items_attributes', '0')).not_to have_key('discount_rate')
+  end
+
+  it '明示送信されたdiscount_rateは計算結果をsourceへ反映する' do
+    attributes = {
+      'receipt_items_attributes' => {
+        '0' => {
+          'discount_rate' => BigDecimal('0.1')
+        }
+      }
+    }
+    amount_result[:computed][:items] = [
+      {
+        original_line_total: 100,
+        discount_amount: 10,
+        discount_rate: BigDecimal('0.1'),
+        line_total: 90
+      }
+    ]
+
+    described_class.call(
+      receipt: receipt,
+      attributes: attributes,
+      amount_result: amount_result,
+      context: :manual,
+      change_set: nil,
+      tax_details_recalculated: false
+    )
+
+    expect(attributes.dig('receipt_items_attributes', '0', 'discount_rate')).to eq(BigDecimal('0.1'))
   end
 
   it 'receipt input候補でもitem金額sourceがあればnormalized source itemsを投影する' do

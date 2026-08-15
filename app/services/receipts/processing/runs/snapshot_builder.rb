@@ -33,6 +33,46 @@ module Receipts::Processing::Runs
     MAX_PAYMENT_CANDIDATES = 10
     MAX_TAX_DETAILS = 10
     MAX_REVIEW_REASONS = 20
+    MAX_REFERENCE_PRICING_CANDIDATES = 100
+    MAX_REFERENCE_PRICING_ITEM_INDEX = MAX_REFERENCE_PRICING_CANDIDATES - 1
+    MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET = 10_000_000
+    MAX_REFERENCE_PRICING_PROJECTED_AMOUNT = 999_999_999
+    QUANTITY_UNIT_RAW_MAX_BYTES = 64
+    QUANTITY_UNIT_STATUSES = %w[known blank unknown].freeze
+    REFERENCE_PRICING_VALIDATION_STATES = %w[valid missing ambiguous unsupported].freeze
+    MAX_REFERENCE_PRICING_REJECTION_REASONS = 8
+    REFERENCE_PRICING_REJECTION_REASONS = %w[
+      ambiguous_reference_expression
+      ambiguous_purchased_quantity
+      ambiguous_tax_inclusion
+      evidence_outside_item
+      incompatible_unit_dimension
+      insufficient_component_evidence
+      invalid_purchased_quantity
+      invalid_reference_price
+      invalid_reference_quantity
+      missing_purchased_quantity
+      missing_purchased_unit
+      missing_reference_price
+      missing_reference_quantity
+      missing_reference_unit
+      purchased_quantity_out_of_bounds
+      reference_price_out_of_bounds
+      reference_quantity_out_of_bounds
+      unsupported_purchased_unit
+      unsupported_reference_unit
+    ].freeze
+    REFERENCE_PRICING_UNIT_STATUSES = %w[known blank unknown].freeze
+    REFERENCE_PRICING_UNIT_RAW_MAX_BYTES = 64
+    REFERENCE_PRICING_ORIGINS = %w[explicit implicit_per_unit].freeze
+    REFERENCE_PRICE_TAX_INCLUSIONS = %w[gross net unknown].freeze
+    REFERENCE_PRICING_ROUNDING_MATCHES = %w[floor half_up ceil].freeze
+    REFERENCE_PRICING_CANDIDATE_ID_MAX_BYTES = 128
+    REFERENCE_PRICING_EXACT_NUMBER_MAX_BYTES = 64
+    REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES = 256
+    REFERENCE_PRICING_SOURCE_PROVIDERS = %w[azure_structured].freeze
+    REFERENCE_PRICING_SOURCE_FIELD_PATH_PATTERN = /\Adocuments\[\d+\]\.fields\.Items\[\d+\](?:\.[A-Za-z][A-Za-z0-9]*)?\z/
+    SNAPSHOT_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/.freeze
     OWNERSHIP_CONTRACT_KEYS = %i[
       schema_version
       duplicate_source_owner_count
@@ -225,6 +265,9 @@ module Receipts::Processing::Runs
           receipt_payments_count: Array(params[:receipt_payments_attributes]).size,
           receipt_tax_details_count: Array(params[:receipt_tax_details_attributes]).size,
           receipt_adjustments_count: Array(params[:receipt_adjustments_attributes]).size,
+          reference_pricing_candidates: build_params_reference_pricing_candidates_summary(
+            params[:reference_pricing_candidates]
+          ),
           ownership_contract: ownership_contract_snapshot(params[:ownership_contract]),
           corrections: build_params_corrections_snapshot(params[:corrections], params[:tax_rate_correction]),
           review_reasons: limited_strings(params[:review_reasons], snapshot_review_reasons_limit)
@@ -288,7 +331,8 @@ module Receipts::Processing::Runs
             items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
             payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
             tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,
-            adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit
+            adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit,
+            reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).size > MAX_REFERENCE_PRICING_CANDIDATES
           }
         }.compact
       )
@@ -481,6 +525,31 @@ module Receipts::Processing::Runs
       sanitize_hash(normalized)
     end
 
+    def build_params_reference_pricing_candidates_summary(value)
+      candidates = Array(value).first(MAX_REFERENCE_PRICING_CANDIDATES)
+      return nil if candidates.empty?
+
+      state_counts = Hash.new(0)
+      reason_counts = Hash.new(0)
+
+      candidates.each do |candidate|
+        normalized = normalized_hash(candidate)
+        state = normalized[:validation_state].to_s
+        state_counts[state] += 1 if REFERENCE_PRICING_VALIDATION_STATES.include?(state)
+
+        reference_pricing_rejection_reasons(normalized[:rejection_reasons]).each do |reason|
+          reason = reason.to_s
+          reason_counts[reason] += 1
+        end
+      end
+
+      {
+        candidate_count: candidates.size,
+        validation_state_counts: state_counts.sort.to_h,
+        reason_counts: reason_counts.sort.to_h
+      }
+    end
+
     def ocr_candidates_snapshot(candidates)
       purchase_candidates_limit = snapshot_purchase_candidates_limit
       payment_candidates_limit = snapshot_payment_candidates_limit
@@ -506,6 +575,7 @@ module Receipts::Processing::Runs
         payments: limited_ocr_payments(candidates[:payments]),
         tax_details: limited_ocr_tax_details(candidates[:tax_details]),
         adjustment_candidates: limited_hashes(candidates[:adjustment_candidates], receipt_adjustments_snapshot_limit),
+        reference_pricing_candidates: limited_reference_pricing_candidates(candidates[:reference_pricing_candidates]),
         items: limited_ocr_items(candidates[:items]),
         review_reasons: limited_strings(candidates[:review_reasons], snapshot_review_reasons_limit),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
@@ -517,8 +587,169 @@ module Receipts::Processing::Runs
         items: count_metadata(candidates[:items], snapshot[:items]),
         payments: count_metadata(candidates[:payments], snapshot[:payments]),
         tax_details: count_metadata(candidates[:tax_details], snapshot[:tax_details]),
-        adjustment_candidates: count_metadata(candidates[:adjustment_candidates], snapshot[:adjustment_candidates])
+        adjustment_candidates: count_metadata(candidates[:adjustment_candidates], snapshot[:adjustment_candidates]),
+        reference_pricing_candidates: count_metadata(
+          candidates[:reference_pricing_candidates],
+          snapshot[:reference_pricing_candidates]
+        )
       }
+    end
+
+    def limited_reference_pricing_candidates(value)
+      Array(value).first(MAX_REFERENCE_PRICING_CANDIDATES).filter_map do |candidate|
+        reference_pricing_candidate_snapshot(candidate)
+      end
+    end
+
+    def reference_pricing_candidate_snapshot(value)
+      candidate = normalized_hash(value)
+      return nil if candidate.blank?
+
+      {
+        candidate_id: bounded_string(
+          candidate[:candidate_id],
+          max_bytes: REFERENCE_PRICING_CANDIDATE_ID_MAX_BYTES,
+          pattern: /\Aazure_items_\d+_reference_pricing\z/
+        ),
+        item_index: bounded_non_negative_integer(
+          candidate[:item_index],
+          maximum: MAX_REFERENCE_PRICING_ITEM_INDEX
+        ),
+        validation_state: enum_string(candidate[:validation_state], REFERENCE_PRICING_VALIDATION_STATES),
+        rejection_reasons: reference_pricing_rejection_reasons(candidate[:rejection_reasons]),
+        reference_price: reference_price_snapshot(candidate[:reference_price]).presence,
+        reference_quantity: reference_quantity_snapshot(candidate[:reference_quantity]).presence,
+        purchased_quantity: purchased_quantity_snapshot(candidate[:purchased_quantity]).presence,
+        reference_price_tax_inclusion: enum_string(
+          candidate[:reference_price_tax_inclusion],
+          REFERENCE_PRICE_TAX_INCLUSIONS
+        ),
+        tax_inclusion_evidence: reference_pricing_evidence_snapshot(candidate[:tax_inclusion_evidence]).presence,
+        printed_line_total: printed_line_total_snapshot(candidate[:printed_line_total]).presence,
+        corroboration: reference_pricing_corroboration_snapshot(candidate[:corroboration]).presence
+      }.compact
+    end
+
+    def reference_price_snapshot(value)
+      component = normalized_hash(value)
+      return {} if component.blank?
+
+      {
+        amount: exact_decimal_string(component[:amount]),
+        evidence: reference_pricing_evidence_snapshot(component[:evidence]).presence
+      }.compact
+    end
+
+    def reference_quantity_snapshot(value)
+      component = normalized_hash(value)
+      return {} if component.blank?
+      unit_status = enum_string(component[:unit_status], REFERENCE_PRICING_UNIT_STATUSES)
+
+      {
+        amount: exact_decimal_string(component[:amount]),
+        unit_code: enum_string(component[:unit_code], ReceiptQuantityUnit.allowed_codes),
+        unit_status: unit_status,
+        unit_raw: reference_pricing_unit_raw(component[:unit_raw], status: unit_status),
+        origin: enum_string(component[:origin], REFERENCE_PRICING_ORIGINS),
+        evidence: reference_pricing_evidence_snapshot(component[:evidence]).presence
+      }.compact
+    end
+
+    def purchased_quantity_snapshot(value)
+      component = normalized_hash(value)
+      return {} if component.blank?
+      unit_status = enum_string(component[:unit_status], REFERENCE_PRICING_UNIT_STATUSES)
+
+      {
+        amount: exact_decimal_string(component[:amount]),
+        unit_code: enum_string(component[:unit_code], ReceiptQuantityUnit.allowed_codes),
+        unit_status: unit_status,
+        unit_raw: reference_pricing_unit_raw(component[:unit_raw], status: unit_status),
+        evidence: reference_pricing_evidence_snapshot(component[:evidence]).presence
+      }.compact
+    end
+
+    def reference_pricing_unit_raw(value, status:)
+      return nil unless status == "unknown"
+      return nil unless safe_utf8_string?(value)
+
+      truncate_string(value, max_bytes: REFERENCE_PRICING_UNIT_RAW_MAX_BYTES).presence
+    end
+
+    def printed_line_total_snapshot(value)
+      component = normalized_hash(value)
+      return {} if component.blank?
+
+      {
+        amount: exact_decimal_string(component[:amount]),
+        evidence: reference_pricing_evidence_snapshot(component[:evidence]).presence
+      }.compact
+    end
+
+    def reference_pricing_evidence_snapshot(value)
+      evidence = normalized_hash(value)
+      return {} if evidence.blank?
+
+      span_start = bounded_non_negative_integer(
+        evidence[:provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        evidence[:provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      valid_span = span_start && span_end && span_end >= span_start
+
+      {
+        source_provider: enum_string(evidence[:source_provider], REFERENCE_PRICING_SOURCE_PROVIDERS),
+        source_field_path: bounded_string(
+          evidence[:source_field_path],
+          max_bytes: REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES,
+          pattern: REFERENCE_PRICING_SOURCE_FIELD_PATH_PATTERN
+        ),
+        item_index: bounded_non_negative_integer(
+          evidence[:item_index],
+          maximum: MAX_REFERENCE_PRICING_ITEM_INDEX
+        ),
+        provider_span_start: valid_span ? span_start : nil,
+        provider_span_end: valid_span ? span_end : nil
+      }.compact
+    end
+
+    def reference_pricing_corroboration_snapshot(value)
+      corroboration = normalized_hash(value)
+      return {} if corroboration.blank?
+
+      {
+        exact_amount: reference_pricing_exact_fraction_snapshot(corroboration[:exact_amount]).presence,
+        projected_amount: bounded_non_negative_integer(
+          corroboration[:projected_amount],
+          maximum: MAX_REFERENCE_PRICING_PROJECTED_AMOUNT
+        ),
+        printed_line_total: exact_decimal_string(corroboration[:printed_line_total]),
+        rounding_matches: Array(corroboration[:rounding_matches]).filter_map do |rounding_match|
+          enum_string(rounding_match, REFERENCE_PRICING_ROUNDING_MATCHES)
+        end.uniq.first(REFERENCE_PRICING_ROUNDING_MATCHES.size)
+      }.compact
+    end
+
+    def reference_pricing_exact_fraction_snapshot(value)
+      fraction = normalized_hash(value)
+      return {} if fraction.blank?
+
+      denominator = exact_integer_string(fraction[:denominator])
+      denominator = nil if denominator&.match?(/\A0+\z/)
+
+      {
+        numerator: exact_integer_string(fraction[:numerator]),
+        denominator: denominator
+      }.compact
+    end
+
+    def reference_pricing_rejection_reasons(value)
+      Array(value).filter_map do |reason|
+        enum_string(reason, REFERENCE_PRICING_REJECTION_REASONS)
+      end.uniq.first(MAX_REFERENCE_PRICING_REJECTION_REASONS)
     end
 
     def ai_normalized_attribute_counts(result, receipt_items_snapshot:, receipt_adjustments_snapshot:)
@@ -552,12 +783,15 @@ module Receipts::Processing::Runs
       Array(items).first(ocr_items_snapshot_limit).filter_map do |item|
         item = normalized_hash(item)
         next if item.blank?
+        quantity_unit_status = safe_quantity_unit_status(item[:quantity_unit_status])
 
         {
           raw_text: safe_string(item[:raw_text]),
           price: safe_value(item[:price]),
           quantity: safe_value(item[:quantity]),
           quantity_unit_code: safe_string(item[:quantity_unit_code]),
+          quantity_unit_status: quantity_unit_status,
+          quantity_unit_raw: safe_quantity_unit_raw(item[:quantity_unit_raw], status: quantity_unit_status),
           product_code: safe_string(item[:product_code]),
           line_total: safe_value(item[:line_total]),
           original_line_total: safe_value(item[:original_line_total]),
@@ -567,6 +801,18 @@ module Receipts::Processing::Runs
           confidence: safe_value(item[:confidence])
         }.compact
       end
+    end
+
+    def safe_quantity_unit_status(value)
+      normalized = value.to_s
+      safe_string(normalized) if QUANTITY_UNIT_STATUSES.include?(normalized)
+    end
+
+    def safe_quantity_unit_raw(value, status:)
+      return nil unless status == "unknown"
+      return nil unless safe_utf8_string?(value)
+
+      truncate_string(value, max_bytes: QUANTITY_UNIT_RAW_MAX_BYTES).presence
     end
 
     def limited_ocr_payments(payments)
@@ -1006,6 +1252,50 @@ module Receipts::Processing::Runs
 
         safe_string(value)
       end
+    end
+
+    def enum_string(value, allowed_values)
+      return nil unless value.is_a?(String) || value.is_a?(Symbol)
+
+      normalized = value.to_s
+      normalized if allowed_values.include?(normalized)
+    end
+
+    def bounded_string(value, max_bytes:, pattern: nil)
+      return nil unless safe_utf8_string?(value)
+      return nil if value.empty? || value.bytesize > max_bytes
+      return nil if pattern && !value.match?(pattern)
+
+      value
+    end
+
+    def safe_utf8_string?(value)
+      return false unless value.is_a?(String) && value.valid_encoding?
+      return false unless value.encoding == Encoding::UTF_8 || value.ascii_only?
+
+      !value.match?(SNAPSHOT_CONTROL_CHARACTER_PATTERN)
+    rescue ArgumentError, Encoding::CompatibilityError
+      false
+    end
+
+    def exact_decimal_string(value)
+      bounded_string(
+        value,
+        max_bytes: REFERENCE_PRICING_EXACT_NUMBER_MAX_BYTES,
+        pattern: /\A(?:0|[1-9]\d*)(?:\.\d+)?\z/
+      )
+    end
+
+    def exact_integer_string(value)
+      bounded_string(
+        value,
+        max_bytes: REFERENCE_PRICING_EXACT_NUMBER_MAX_BYTES,
+        pattern: /\A(?:0|[1-9]\d*)\z/
+      )
+    end
+
+    def bounded_non_negative_integer(value, maximum:)
+      value if value.is_a?(Integer) && value.between?(0, maximum)
     end
 
     def safe_string(value)

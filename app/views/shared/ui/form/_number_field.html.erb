@@ -13,6 +13,7 @@
     - max: max属性
     - step: step属性
     - decimal_precision: ステッパー操作時の小数表示桁数（例: 1）
+    - decimal_comma: ステッパー操作時に単一commaを小数点として扱うか
     - inputmode: inputmode属性（default: :decimal）
     - autofocus: true/false
     - required: true/false
@@ -40,6 +41,7 @@
   max = local_assigns[:max]
   step = local_assigns[:step]
   decimal_precision = local_assigns[:decimal_precision]
+  decimal_comma = local_assigns[:decimal_comma]
   inputmode = local_assigns.fetch(:inputmode, :decimal)
   autofocus = local_assigns.fetch(:autofocus, false)
   required = local_assigns.fetch(:required, false)
@@ -138,7 +140,8 @@
 
   number_field_data = {
     controller: "number-field",
-    number_field_decimal_precision_value: decimal_precision
+    number_field_decimal_precision_value: decimal_precision,
+    number_field_decimal_comma_value: decimal_comma
   }.compact
 %>
 
@@ -152,6 +155,7 @@
       <button type="button"
               class="<%= stepper_button_classes %>"
               aria-label="<%= t("shared.number_field.decrement_aria", label: label) %>"
+              data-number-field-stepper-direction="decrement"
               data-action="pointerdown->number-field#startDecrementing pointerup->number-field#stopChanging pointerleave->number-field#stopChanging pointercancel->number-field#stopChanging">
         <span class="material-symbols-outlined text-base" aria-hidden="true">remove</span>
       </button>
@@ -181,6 +185,7 @@
       <button type="button"
               class="<%= stepper_button_classes %>"
               aria-label="<%= t("shared.number_field.increment_aria", label: label) %>"
+              data-number-field-stepper-direction="increment"
               data-action="pointerdown->number-field#startIncrementing pointerup->number-field#stopChanging pointerleave->number-field#stopChanging pointercancel->number-field#stopChanging">
         <span class="material-symbols-outlined text-base" aria-hidden="true">add</span>
       </button>
