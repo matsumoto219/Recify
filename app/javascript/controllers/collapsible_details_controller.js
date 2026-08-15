@@ -10,6 +10,7 @@ export default class extends Controller {
   connect () {
     this.summary = this.element.querySelector('summary')
     this.handleSummaryClick = this.handleSummaryClick.bind(this)
+    this.handleInvalid = this.handleInvalid.bind(this)
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
     this.closeTimer = null
     this.openFrame = null
@@ -18,11 +19,13 @@ export default class extends Controller {
     this.syncOpenState(this.element.open)
     this.syncContentAvailability(this.element.open)
     this.summary?.addEventListener('click', this.handleSummaryClick)
+    this.element.addEventListener('invalid', this.handleInvalid, true)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
   }
 
   disconnect () {
     this.summary?.removeEventListener('click', this.handleSummaryClick)
+    this.element.removeEventListener('invalid', this.handleInvalid, true)
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     this.clearCloseTimer()
     this.cancelOpenFrame()
@@ -36,6 +39,12 @@ export default class extends Controller {
     } else {
       this.open()
     }
+  }
+
+  handleInvalid (event) {
+    if (!this.hasContentTarget || !this.contentTarget.contains(event.target) || this.isOpen()) return
+
+    this.open()
   }
 
   open () {

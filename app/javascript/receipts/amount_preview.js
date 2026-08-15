@@ -17,6 +17,192 @@ export function roundLineAmount (value) {
   return Math.round(value)
 }
 
+function greatestCommonDivisor (left, right) {
+  let a = left < 0n ? -left : left
+  let b = right < 0n ? -right : right
+
+  while (b !== 0n) {
+    const remainder = a % b
+    a = b
+    b = remainder
+  }
+
+  return a
+}
+
+function reducedRatio (numerator, denominator) {
+  if (denominator <= 0n) return null
+
+  const divisor = greatestCommonDivisor(numerator, denominator)
+  return {
+    numerator: numerator / divisor,
+    denominator: denominator / divisor
+  }
+}
+
+function trimNumericInputText (value) {
+  const text = String(value ?? '')
+  let start = 0
+  let finish = text.length
+  while (start < finish && rubyStripCodePoint(text.charCodeAt(start))) start += 1
+  while (finish > start && rubyStripCodePoint(text.charCodeAt(finish - 1))) finish -= 1
+
+  return text.slice(start, finish)
+}
+
+function rubyStripCodePoint (codePoint) {
+  return codePoint === 0 || codePoint === 32 || (codePoint >= 9 && codePoint <= 13)
+}
+
+function exactUnsignedDecimalRatio (value, { decimalComma = true } = {}) {
+  let text = trimNumericInputText(value)
+    .replace(/[０-９]/g, (character) => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
+    .replace(/＋/g, '+')
+    .replace(/－/g, '-')
+    .replace(/．/g, '.')
+    .replace(/，/g, ',')
+  if (text === '') return null
+
+  const commaCount = (text.match(/,/g) || []).length
+  if (decimalComma && !text.includes('.') && commaCount === 1) text = text.replace(',', '.')
+
+  const integerComponent = '(?:\\d+|\\d{1,3}(?:,\\d{3})+)'
+  const match = text.match(new RegExp(`^(${integerComponent})?(?:\\.(\\d*))?$`))
+  if (!match || (!match[1] && !match[2])) return null
+
+  const integerDigits = String(match[1] || '0').replace(/,/g, '')
+  const fractionalDigits = String(match[2] || '').replace(/0+$/, '')
+  const denominator = 10n ** BigInt(fractionalDigits.length)
+  const numerator = BigInt(`${integerDigits}${fractionalDigits}` || '0')
+
+  return {
+    ...reducedRatio(numerator, denominator),
+    scale: fractionalDigits.length
+  }
+}
+
+function exactQuantityRatio (value, unit, { maximum, maximumScale }) {
+  const ratio = exactUnsignedDecimalRatio(value, { decimalComma: true })
+  if (!ratio || ratio.numerator <= 0n || ratio.scale > maximumScale) return null
+  if (ratio.numerator * maximum.denominator > maximum.numerator * ratio.denominator) return null
+  if ((ratio.numerator * unit.granularityDenominator) %
+      (ratio.denominator * unit.granularityNumerator) !== 0n) return null
+
+  return ratio
+}
+
+function exactPositiveInteger (value) {
+  const text = String(value ?? '')
+  if (!/^\d+$/.test(text)) return null
+
+  const integer = BigInt(text)
+  return integer > 0n ? integer : null
+}
+
+function boundedScale (value) {
+  return Number.isInteger(value) && value >= 0 && value <= 18 ? value : null
+}
+
+function referencePricingSemantics (contract) {
+  if (!contract || typeof contract !== 'object' || !contract.units || typeof contract.units !== 'object') return null
+
+  const priceMaximum = exactUnsignedDecimalRatio(contract.price_amount_max)
+  const quantityMaximum = exactUnsignedDecimalRatio(contract.quantity_max)
+  const priceMaximumScale = boundedScale(contract.price_amount_max_scale)
+  const quantityMaximumScale = boundedScale(contract.quantity_max_scale)
+  if (!priceMaximum || !quantityMaximum || priceMaximumScale === null || quantityMaximumScale === null) return null
+
+  const units = Object.fromEntries(Object.entries(contract.units).map(([code, metadata]) => {
+    const conversionGroup = typeof metadata?.conversion_group === 'string'
+      ? metadata.conversion_group.trim()
+      : ''
+    const scaleNumerator = exactPositiveInteger(metadata?.scale_numerator)
+    const scaleDenominator = exactPositiveInteger(metadata?.scale_denominator)
+    const granularityNumerator = exactPositiveInteger(metadata?.granularity_numerator)
+    const granularityDenominator = exactPositiveInteger(metadata?.granularity_denominator)
+    const allowedPricingRoles = Array.isArray(metadata?.allowed_pricing_roles)
+      ? new Set(metadata.allowed_pricing_roles.filter((role) => role === 'purchased' || role === 'reference'))
+      : new Set()
+    if (!conversionGroup || !scaleNumerator || !scaleDenominator ||
+      !granularityNumerator || !granularityDenominator || allowedPricingRoles.size === 0) return [code, null]
+
+    return [code, {
+      conversionGroup,
+      scaleNumerator,
+      scaleDenominator,
+      granularityNumerator,
+      granularityDenominator,
+      allowedPricingRoles
+    }]
+  }))
+
+  return {
+    priceMaximum,
+    priceMaximumScale,
+    quantityMaximum,
+    quantityMaximumScale,
+    units
+  }
+}
+
+function halfUpNonnegativeRatio (numerator, denominator) {
+  const quotient = numerator / denominator
+  const remainder = numerator % denominator
+
+  return quotient + (remainder * 2n >= denominator ? 1n : 0n)
+}
+
+// Mirrors Amounts::ReferenceItemExtension without converting exact source
+// decimals to binary floating point. Invalid or incomplete source returns null.
+export function referenceItemExtension ({
+  referencePricingContract,
+  referencePriceAmount,
+  referenceQuantity,
+  referenceUnitCode,
+  purchasedQuantity,
+  purchasedUnitCode
+}) {
+  const semantics = referencePricingSemantics(referencePricingContract)
+  if (!semantics) return null
+
+  const referenceUnit = semantics.units[String(referenceUnitCode ?? '')]
+  const purchasedUnit = semantics.units[String(purchasedUnitCode ?? '')]
+  if (!referenceUnit || !purchasedUnit) return null
+  if (!referenceUnit.allowedPricingRoles.has('reference') ||
+    !purchasedUnit.allowedPricingRoles.has('purchased')) return null
+  if (referenceUnit.conversionGroup !== purchasedUnit.conversionGroup) return null
+
+  const price = exactUnsignedDecimalRatio(referencePriceAmount, { decimalComma: false })
+  if (!price || price.scale > semantics.priceMaximumScale) return null
+  if (price.numerator * semantics.priceMaximum.denominator >
+    semantics.priceMaximum.numerator * price.denominator) return null
+
+  const quantityContract = {
+    maximum: semantics.quantityMaximum,
+    maximumScale: semantics.quantityMaximumScale
+  }
+  const reference = exactQuantityRatio(referenceQuantity, referenceUnit, quantityContract)
+  const purchased = exactQuantityRatio(purchasedQuantity, purchasedUnit, quantityContract)
+  if (!reference || !purchased) return null
+
+  const exact = reducedRatio(
+    price.numerator * purchased.numerator * purchasedUnit.scaleNumerator *
+      referenceUnit.scaleDenominator * reference.denominator,
+    price.denominator * purchased.denominator * purchasedUnit.scaleDenominator *
+      reference.numerator * referenceUnit.scaleNumerator
+  )
+  if (!exact) return null
+
+  const projectedAmount = halfUpNonnegativeRatio(exact.numerator, exact.denominator)
+  if (projectedAmount > BigInt(Number.MAX_SAFE_INTEGER)) return null
+
+  return Object.freeze({
+    exactNumerator: exact.numerator.toString(),
+    exactDenominator: exact.denominator.toString(),
+    projectedAmount: Number(projectedAmount)
+  })
+}
+
 export function clampNumber (value, min, max) {
   if (!Number.isFinite(value)) return min
   return Math.min(Math.max(value, min), max)

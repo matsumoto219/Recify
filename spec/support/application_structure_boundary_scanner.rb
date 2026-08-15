@@ -179,17 +179,13 @@ module ApplicationStructureBoundary
       external_methods
       declared_singleton_methods
       declared_instance_methods
+      public_nested_errors
       constructible
-      remove_in_loop
     ].freeze
     ALLOWED_ROLES = %i[
       public_facade
       platform_contract
       domain_policy
-      legacy_workflow
-      legacy_query
-      legacy_form
-      legacy_policy
     ].freeze
 
     attr_reader :root, :registry
@@ -299,9 +295,11 @@ module ApplicationStructureBoundary
 
     def metadata_issues(file, metadata)
       missing = REQUIRED_ROOT_KEYS - metadata.keys
+      unexpected = metadata.keys - REQUIRED_ROOT_KEYS
       return [ "#{file}: missing metadata keys: #{missing.join(", ")}" ] if missing.any?
 
       issues = []
+      issues << "#{file}: unexpected metadata keys: #{unexpected.join(", ")}" if unexpected.any?
       role = metadata.fetch(:role)
       issues << "#{file}: unknown role #{role.inspect}" unless ALLOWED_ROLES.include?(role)
 
@@ -310,15 +308,6 @@ module ApplicationStructureBoundary
         issues << "#{file}: expected Zeitwerk constant #{expected_constant}, registered #{metadata.fetch(:constant)}"
       end
       issues << "#{file}: owner is required" if metadata.fetch(:owner).blank?
-
-      removal_loop = metadata.fetch(:remove_in_loop)
-      if role.to_s.start_with?("legacy_")
-        unless removal_loop.is_a?(Integer) && removal_loop.between?(4, 22)
-          issues << "#{file}: legacy root requires remove_in_loop 4..22"
-        end
-      elsif removal_loop.present?
-        issues << "#{file}: non-legacy root must not set remove_in_loop"
-      end
       issues
     end
 

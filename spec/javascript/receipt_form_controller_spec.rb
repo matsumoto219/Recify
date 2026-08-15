@@ -6,6 +6,9 @@ require "rails_helper"
 
 RSpec.describe "Receipt form Stimulus controller" do
   let(:source) { Rails.root.join("app/javascript/controllers/receipt_form_controller.js").read }
+  let(:reference_pricing_contract) do
+    ReceiptFormPresenter.new(receipt: build(:receipt)).reference_pricing_contract_value
+  end
 
   def run_controller_script(script)
     module_source = %w[numeric_input amount_preview review_targets].map do |name|
@@ -14,6 +17,7 @@ RSpec.describe "Receipt form Stimulus controller" do
     controller_source = source.gsub(%r!import \{[^}]*\} from 'receipts/(?:numeric_input|amount_preview|review_targets)'\n!m, "")
     encoded_module_source = Base64.strict_encode64(module_source)
     encoded_source = Base64.strict_encode64(controller_source)
+    encoded_reference_pricing_contract = Base64.strict_encode64(reference_pricing_contract.to_json)
     harness = <<~JAVASCRIPT
       const moduleSource = Buffer.from(#{encoded_module_source.inspect}, 'base64').toString('utf8')
       const source = Buffer.from(#{encoded_source.inspect}, 'base64').toString('utf8')
@@ -21,10 +25,17 @@ RSpec.describe "Receipt form Stimulus controller" do
         .replace('export default class extends Controller', 'class ReceiptFormController extends Controller')
 
       eval(`${moduleSource}\n${source}\nglobalThis.ReceiptFormController = ReceiptFormController`)
+      const referencePricingContract = JSON.parse(
+        Buffer.from(#{encoded_reference_pricing_contract.inspect}, 'base64').toString('utf8')
+      )
+      Object.defineProperty(ReceiptFormController.prototype, 'referencePricingContractValue', {
+        configurable: true,
+        get: () => referencePricingContract
+      })
       #{script}
     JAVASCRIPT
 
-    stdout, stderr, status = Open3.capture3("node", "-e", harness)
+    stdout, stderr, status = Open3.capture3("node", stdin_data: harness)
     raise stderr unless status.success?
 
     JSON.parse(stdout)
@@ -259,8 +270,14 @@ RSpec.describe "Receipt form Stimulus controller" do
     changed_first_tax_rate: nil,
     changed_discount_rate: nil,
     changed_price: nil,
+    changed_reference_price: nil,
     changed_price_before_discount: nil,
-    changed_quantity_unit: nil
+    changed_quantity_unit: nil,
+    reference_projection_fallback_tax_rate: '',
+    item_line_total_max: 999_999_999,
+    receipt_total_max: 999_999_999,
+    receipt_tax_max: 999_999_999,
+    capture_preview_unavailable: false
   )
     run_controller_script(<<~JAVASCRIPT)
       const itemDefinitions = #{items.to_json}
@@ -269,13 +286,24 @@ RSpec.describe "Receipt form Stimulus controller" do
       const rows = itemDefinitions.map((definition) => {
         const inputs = {
           quantityInput: { value: String(definition.quantity ?? 1) },
-          quantityUnitInput: { value: 'each' },
+          quantityUnitInput: { value: String(definition.quantityUnit ?? 'each') },
           priceInput: { value: definition.price === null ? '' : String(definition.price) },
+          pricingSourceModeInput: { value: String(definition.pricingSourceKind ?? '') },
+          referencePriceAmountInput: { value: String(definition.referencePriceAmount ?? '') },
+          referenceQuantityInput: { value: String(definition.referenceQuantity ?? '') },
+          referenceQuantityUnitInput: { value: String(definition.referenceQuantityUnit ?? '') },
+          referencePriceTaxInclusionInput: {
+            value: String(definition.referencePriceTaxInclusion ?? ''),
+            dataset: { receiptFormTaxInclusionLabel: String(definition.referencePriceTaxInclusion ?? '') }
+          },
+          explicitLineTotalInput: { value: String(definition.explicitLineTotal ?? '') },
           discountRateInput: {
             value: String(definition.discountRate ?? ''),
             dataset: { originalDiscountRate: String(definition.discountRate ?? '') }
           },
-          taxRateInput: { value: String(definition.taxRate) },
+          taxRateInput: {
+            value: definition.taxRate === null || definition.taxRate === undefined ? '' : String(definition.taxRate)
+          },
           lineTotalInput: {
             value: definition.lineTotal === null || definition.lineTotal === undefined ? '' : String(definition.lineTotal),
             dataset: {
@@ -293,6 +321,10 @@ RSpec.describe "Receipt form Stimulus controller" do
         }
 
         return {
+          dataset: {
+            receiptFormActivePricingMode: String(definition.pricingSourceKind ?? 'unclassified'),
+            receiptFormHasPersistedAbsoluteDiscountSource: String(definition.hasAbsoluteDiscountSource ?? false)
+          },
           inputs,
           querySelector (selector) {
             const match = selector.match(/receipt-form-target="([^"]+)"/)
@@ -337,11 +369,12 @@ RSpec.describe "Receipt form Stimulus controller" do
         discountRoundingModeValue: { value: 'round' },
         countableQuantityUnitsValue: { value: 'each,piece,item,bottle,bag,box' },
         receiptItemPriceMaxValue: { value: 999999999 },
-        receiptItemLineTotalMaxValue: { value: 999999999 },
+        receiptItemLineTotalMaxValue: { value: #{item_line_total_max} },
+        referenceProjectionFallbackTaxRateValue: { value: #{reference_projection_fallback_tax_rate.to_json} },
         receiptAdjustmentAmountMaxValue: { value: 999999999 },
         receiptPaymentAmountMaxValue: { value: 999999999 },
-        receiptTotalAmountMaxValue: { value: 999999999 },
-        receiptTaxAmountMaxValue: { value: 999999999 },
+        receiptTotalAmountMaxValue: { value: #{receipt_total_max} },
+        receiptTaxAmountMaxValue: { value: #{receipt_tax_max} },
         hasTotalAmountTarget: { value: true },
         totalAmountTarget: { value: total },
         hasSubtotalAmountTarget: { value: true },
@@ -356,6 +389,10 @@ RSpec.describe "Receipt form Stimulus controller" do
       controller.previewRowExcluded = () => false
       controller.animateAmount = (target, value) => { target.value = value }
       controller.animateLineTotal = () => {}
+      let previewUnavailable = false
+      if (#{capture_preview_unavailable.to_json}) {
+        controller.renderUnavailablePreview = () => { previewUnavailable = true }
+      }
       controller.syncAdjustmentSignForRow = () => {}
       controller.adjustmentEffectForRow = (row) => row.definition.effect
       controller.adjustmentSignForRow = (row) => row.definition.sign
@@ -394,6 +431,7 @@ RSpec.describe "Receipt form Stimulus controller" do
         if (#{(!initial_tax_rate_summary.nil?).to_json}) {
           amounts.taxRateSummary = taxRateSummary.textContent
         }
+        if (#{capture_preview_unavailable.to_json}) amounts.previewUnavailable = previewUnavailable
 
         return amounts
       }
@@ -402,6 +440,7 @@ RSpec.describe "Receipt form Stimulus controller" do
       const initial = snapshot()
       const changedDiscountRate = #{changed_discount_rate.to_json}
       const changedPrice = #{changed_price.to_json}
+      const changedReferencePrice = #{changed_reference_price.to_json}
       const changedPriceBeforeDiscount = #{changed_price_before_discount.to_json}
       const changedQuantityUnit = #{changed_quantity_unit.to_json}
       let doubled
@@ -431,6 +470,10 @@ RSpec.describe "Receipt form Stimulus controller" do
         rows[0].inputs.quantityUnitInput.value = initialQuantityUnit
         controller.recalculate()
         restored = snapshot()
+      } else if (changedReferencePrice !== null) {
+        rows[0].inputs.referencePriceAmountInput.value = String(changedReferencePrice)
+        controller.recalculate()
+        doubled = snapshot()
       } else if (changedPrice !== null) {
         const initialPrice = rows[0].inputs.priceInput.value
         rows[0].inputs.priceInput.value = String(changedPrice)
@@ -644,6 +687,80 @@ RSpec.describe "Receipt form Stimulus controller" do
     )
   end
 
+  it "opens every visible item and focuses the persistent summary after an invalid source response" do
+    result = run_review_target_script(<<~JAVASCRIPT)
+      const first = makeRow({ id: 'receipt-item-1', type: 'item' })
+      const second = makeRow({ id: 'receipt-item-2', type: 'item' })
+      const destroyed = makeRow({ id: 'receipt-item-3', type: 'item', destroyed: true })
+      const hidden = makeRow({ id: 'receipt-item-4', type: 'item', hidden: true })
+      const summary = {
+        hidden: false,
+        isConnected: true,
+        focusCount: 0,
+        focusOptions: [],
+        scrollCount: 0,
+        focus (options) {
+          this.focusCount += 1
+          this.focusOptions.push(options)
+          document.activeElement = this
+        },
+        scrollIntoView () { this.scrollCount += 1 }
+      }
+      const controller = makeController()
+      Object.defineProperties(controller, {
+        hasInvalidItemSourceSummaryTarget: { value: true },
+        invalidItemSourceSummaryTarget: { value: summary }
+      })
+
+      controller.revealInvalidItemSourceRows()
+
+      process.stdout.write(JSON.stringify({
+        firstOpen: first.panel.classList.contains('is-open'),
+        secondOpen: second.panel.classList.contains('is-open'),
+        destroyedOpen: destroyed.panel.classList.contains('is-open'),
+        hiddenOpen: hidden.panel.classList.contains('is-open'),
+        focusCount: summary.focusCount,
+        focusPreventScroll: summary.focusOptions[0]?.preventScroll,
+        scrollCount: summary.scrollCount
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "firstOpen" => true,
+      "secondOpen" => true,
+      "destroyedOpen" => false,
+      "hiddenOpen" => false,
+      "focusCount" => 1,
+      "focusPreventScroll" => true,
+      "scrollCount" => 1
+    )
+  end
+
+  it "opens a collapsed item before the browser focuses an invalid detail field" do
+    result = run_review_target_script(<<~JAVASCRIPT)
+      const row = makeRow({ id: 'receipt-item-1', type: 'item' })
+      const invalidInput = { closest: () => row }
+      row.panel.contains = (candidate) => candidate === invalidInput
+      const controller = makeController()
+
+      controller.handleInvalidItemField({ target: invalidInput })
+
+      process.stdout.write(JSON.stringify({
+        panelOpen: row.panel.classList.contains('is-open'),
+        panelInert: row.panel.inert,
+        ariaHidden: row.panel.getAttribute('aria-hidden'),
+        expanded: row.toggles.map((toggle) => toggle.getAttribute('aria-expanded'))
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "panelOpen" => true,
+      "panelInert" => false,
+      "ariaHidden" => "false",
+      "expanded" => [ "true", "true" ]
+    )
+  end
+
   it "restores adjustment targets idempotently across Turbo cache and Stimulus reconnects" do
     result = run_review_target_script(<<~JAVASCRIPT)
       const target = makeRow({ id: 'receipt-adjustment-42', type: 'adjustment' })
@@ -774,6 +891,828 @@ RSpec.describe "Receipt form Stimulus controller" do
     aggregate_failures do
       expect(source).not_to include("sanitizeQuantityInput")
       expect(source).not_to include("preventIntegerQuantityDecimalInput")
+      expect(source).not_to include("clearFractionalQuantityForIntegerUnit")
+      expect(source).not_to include("quantityUnitSelectForInput")
+      expect(source).not_to include("integerQuantityInput")
+    end
+  end
+
+  it "keeps inactive pricing drafts in the DOM but omits them from submission" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      ;(async () => {
+      const input = (value) => ({ value, disabled: false })
+      const modeInput = input('reference_quantity_price')
+      const price = input('125')
+      const referencePrice = input('120')
+      const referenceQuantity = input('500')
+      const referenceUnit = input('milliliter')
+      const referenceTax = input('gross')
+      const explicitTotal = input('360')
+      const originalTotal = input('360')
+      const clearDiscount = input('0')
+      const panels = []
+      const panel = (modes, inputs) => {
+        const attributes = new Map()
+        const element = {
+          dataset: { receiptFormPricingModes: modes },
+          hidden: false,
+          inert: false,
+          inputs,
+          toggleAttribute (name, force) { if (name === 'inert') this.inert = force },
+          setAttribute (name, value) { attributes.set(name, String(value)) },
+          querySelectorAll () { return this.inputs }
+        }
+        panels.push(element)
+        return element
+      }
+      const countPanel = panel('count_unit_price unclassified', [price, originalTotal])
+      const referencePanel = panel('reference_quantity_price', [referencePrice, referenceQuantity, referenceUnit, referenceTax])
+      const explicitPanel = panel('explicit_line_total', [explicitTotal])
+      const targets = {
+        pricingSourceModeInput: modeInput,
+        priceInput: price,
+        referencePriceAmountInput: referencePrice,
+        referenceQuantityInput: referenceQuantity,
+        referenceQuantityUnitInput: referenceUnit,
+        referencePriceTaxInclusionInput: referenceTax,
+        explicitLineTotalInput: explicitTotal,
+        clearItemDiscountBeforeExplicitInput: clearDiscount
+      }
+      const row = {
+        dataset: { receiptFormActivePricingMode: 'reference_quantity_price', receiptFormHasPersistedAbsoluteDiscountSource: 'false' },
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? targets[match[1]] ?? null : null
+        },
+        querySelectorAll (selector) {
+          if (selector.includes('pricingModePanel')) return panels
+          return []
+        }
+      }
+      modeInput.closest = () => row
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperty(controller, 'itemRowTargets', { value: [row] })
+      let recalculations = 0
+      controller.recalculate = () => { recalculations += 1 }
+      const snapshot = () => ({
+        active: row.dataset.receiptFormActivePricingMode,
+        count: { hidden: countPanel.hidden, disabled: price.disabled, value: price.value },
+        reference: { hidden: referencePanel.hidden, disabled: referencePrice.disabled, value: referencePrice.value },
+        explicit: { hidden: explicitPanel.hidden, disabled: explicitTotal.disabled, value: explicitTotal.value }
+      })
+
+      controller.syncPricingSourceModes()
+      const reference = snapshot()
+      modeInput.value = 'explicit_line_total'
+      await controller.pricingSourceModeChanged({ currentTarget: modeInput })
+      const explicit = snapshot()
+      modeInput.value = 'reference_quantity_price'
+      await controller.pricingSourceModeChanged({ currentTarget: modeInput })
+      controller.syncPricingSourceModes()
+      const restored = snapshot()
+
+      process.stdout.write(JSON.stringify({ reference, explicit, restored, recalculations }))
+      })()
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "reference" => {
+        "active" => "reference_quantity_price",
+        "count" => { "hidden" => true, "disabled" => true, "value" => "125" },
+        "reference" => { "hidden" => false, "disabled" => false, "value" => "120" },
+        "explicit" => { "hidden" => true, "disabled" => true, "value" => "360" }
+      },
+      "explicit" => {
+        "active" => "explicit_line_total",
+        "count" => { "hidden" => true, "disabled" => true, "value" => "125" },
+        "reference" => { "hidden" => true, "disabled" => true, "value" => "120" },
+        "explicit" => { "hidden" => false, "disabled" => false, "value" => "360" }
+      },
+      "restored" => {
+        "active" => "reference_quantity_price",
+        "count" => { "hidden" => true, "disabled" => true, "value" => "125" },
+        "reference" => { "hidden" => false, "disabled" => false, "value" => "120" },
+        "explicit" => { "hidden" => true, "disabled" => true, "value" => "360" }
+      },
+      "recalculations" => 2
+    )
+  end
+
+  it "cancels or atomically confirms a discounted formula transition to explicit total" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      ;(async () => {
+      const mode = { value: 'explicit_line_total' }
+      const discount = { value: '10' }
+      const clearIntent = { value: '0' }
+      const targets = {
+        pricingSourceModeInput: mode,
+        discountRateInput: discount,
+        clearItemDiscountBeforeExplicitInput: clearIntent
+      }
+      const row = {
+        dataset: { receiptFormActivePricingMode: 'reference_quantity_price', receiptFormHasPersistedAbsoluteDiscountSource: 'false' },
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? targets[match[1]] ?? null : null
+        },
+        querySelectorAll () { return [] }
+      }
+      mode.closest = () => row
+      discount.closest = () => row
+      const controller = Object.create(ReceiptFormController.prototype)
+      const answers = [false, true]
+      controller.confirmPricingSourceDiscountClear = () => Promise.resolve(answers.shift())
+      controller.recalculate = () => {}
+
+      await controller.pricingSourceModeChanged({ currentTarget: mode })
+      const cancelled = {
+        mode: mode.value,
+        active: row.dataset.receiptFormActivePricingMode,
+        discount: discount.value,
+        clearIntent: clearIntent.value
+      }
+
+      mode.value = 'explicit_line_total'
+      await controller.pricingSourceModeChanged({ currentTarget: mode })
+      const confirmed = {
+        mode: mode.value,
+        active: row.dataset.receiptFormActivePricingMode,
+        discount: discount.value,
+        clearIntent: clearIntent.value
+      }
+
+      mode.value = 'reference_quantity_price'
+      await controller.pricingSourceModeChanged({ currentTarget: mode })
+      const restored = {
+        mode: mode.value,
+        active: row.dataset.receiptFormActivePricingMode,
+        discount: discount.value,
+        clearIntent: clearIntent.value
+      }
+
+      process.stdout.write(JSON.stringify({ cancelled, confirmed, restored }))
+      })()
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "cancelled" => {
+        "mode" => "reference_quantity_price",
+        "active" => "reference_quantity_price",
+        "discount" => "10",
+        "clearIntent" => "0"
+      },
+      "confirmed" => {
+        "mode" => "explicit_line_total",
+        "active" => "explicit_line_total",
+        "discount" => "",
+        "clearIntent" => "1"
+      },
+      "restored" => {
+        "mode" => "reference_quantity_price",
+        "active" => "reference_quantity_price",
+        "discount" => "10",
+        "clearIntent" => "0"
+      }
+    )
+  end
+
+  it "requires confirmation when a saved formula discount rate was cleared in the current draft" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      ;(async () => {
+      const mode = { value: 'explicit_line_total' }
+      const discount = { value: '' }
+      const clearIntent = { value: '0' }
+      const targets = {
+        pricingSourceModeInput: mode,
+        discountRateInput: discount,
+        clearItemDiscountBeforeExplicitInput: clearIntent
+      }
+      const row = {
+        dataset: {
+          receiptFormActivePricingMode: 'count_unit_price',
+          receiptFormHasPersistedAbsoluteDiscountSource: 'false',
+          receiptFormPersistedFormulaDiscountInput: '10'
+        },
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? targets[match[1]] ?? null : null
+        },
+        querySelectorAll () { return [] }
+      }
+      mode.closest = () => row
+      const controller = Object.create(ReceiptFormController.prototype)
+      const answers = [false, true]
+      let confirmationCount = 0
+      controller.confirmPricingSourceDiscountClear = () => {
+        confirmationCount += 1
+        return Promise.resolve(answers.shift())
+      }
+      controller.recalculate = () => {}
+
+      await controller.pricingSourceModeChanged({ currentTarget: mode })
+      const cancelled = { mode: mode.value, discount: discount.value, intent: clearIntent.value }
+      mode.value = 'explicit_line_total'
+      await controller.pricingSourceModeChanged({ currentTarget: mode })
+      const confirmed = { mode: mode.value, discount: discount.value, intent: clearIntent.value }
+
+      process.stdout.write(JSON.stringify({ confirmationCount, cancelled, confirmed }))
+      })()
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "confirmationCount" => 2,
+      "cancelled" => { "mode" => "count_unit_price", "discount" => "", "intent" => "0" },
+      "confirmed" => { "mode" => "explicit_line_total", "discount" => "", "intent" => "1" }
+    )
+  end
+
+  it "does not rewrite source values or the pricing mode when a purchased unit changes" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const quantity = { value: '1.5', step: '', inputMode: '' }
+      const unit = { value: 'kilogram' }
+      const mode = { value: 'reference_quantity_price' }
+      const referencePrice = { value: '498' }
+      const referenceQuantity = { value: '100' }
+      const referenceUnit = { value: 'gram' }
+      const row = {
+        querySelector (selector) {
+          if (selector.includes('quantityInput')) return quantity
+          if (selector.includes('pricingSourceModeInput')) return mode
+          if (selector.includes('referencePriceAmountInput')) return referencePrice
+          if (selector.includes('referenceQuantityInput')) return referenceQuantity
+          if (selector.includes('referenceQuantityUnitInput')) return referenceUnit
+          return null
+        }
+      }
+      unit.closest = () => row
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        decimalQuantityUnitsValue: { value: 'gram,kilogram,milligram,liter,milliliter,cubic_centimeter' },
+        decimalQuantityStepValue: { value: '0.001' },
+        integerQuantityStepValue: { value: '1' }
+      })
+      let recalculated = false
+      controller.recalculate = () => { recalculated = true }
+
+      controller.quantityUnitChanged({ currentTarget: unit })
+
+      process.stdout.write(JSON.stringify({
+        quantity: quantity.value,
+        step: quantity.step,
+        inputMode: quantity.inputMode,
+        mode: mode.value,
+        referencePrice: referencePrice.value,
+        referenceQuantity: referenceQuantity.value,
+        referenceUnit: referenceUnit.value,
+        recalculated
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "quantity" => "1.5",
+      "step" => "0.001",
+      "inputMode" => "decimal",
+      "mode" => "reference_quantity_price",
+      "referencePrice" => "498",
+      "referenceQuantity" => "100",
+      "referenceUnit" => "gram",
+      "recalculated" => true
+    )
+  end
+
+  it "updates only reference quantity input attributes when its unit changes" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const purchasedQuantity = { value: '2', step: '1', inputMode: 'numeric' }
+      const referenceQuantity = { value: '1.5', step: '0.001', inputMode: 'decimal' }
+      const referenceUnit = { value: 'each' }
+      const row = {
+        querySelector (selector) {
+          if (selector.includes('referenceQuantityInput')) return referenceQuantity
+          if (selector.includes('quantityInput')) return purchasedQuantity
+          return null
+        }
+      }
+      referenceUnit.closest = () => row
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        decimalQuantityUnitsValue: { value: 'gram,kilogram,milligram,liter,milliliter,cubic_centimeter' },
+        decimalQuantityStepValue: { value: '0.001' },
+        integerQuantityStepValue: { value: '1' }
+      })
+      let recalculations = 0
+      controller.recalculate = () => { recalculations += 1 }
+
+      controller.referenceQuantityUnitChanged({ currentTarget: referenceUnit })
+
+      process.stdout.write(JSON.stringify({
+        reference: {
+          value: referenceQuantity.value,
+          step: referenceQuantity.step,
+          inputMode: referenceQuantity.inputMode
+        },
+        purchased: {
+          value: purchasedQuantity.value,
+          step: purchasedQuantity.step,
+          inputMode: purchasedQuantity.inputMode
+        },
+        recalculations
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "reference" => { "value" => "1.5", "step" => "1", "inputMode" => "numeric" },
+      "purchased" => { "value" => "2", "step" => "1", "inputMode" => "numeric" },
+      "recalculations" => 1
+    )
+  end
+
+  it "synchronizes required with the selected pricing authority" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const requiredInput = {
+        disabled: false,
+        required: false,
+        dataset: { receiptFormRequiredWhenActive: 'true' }
+      }
+      const panel = {
+        dataset: { receiptFormPricingModes: 'reference_quantity_price' },
+        hidden: false,
+        toggleAttribute () {},
+        setAttribute () {},
+        querySelectorAll () { return [requiredInput] }
+      }
+      const modeInput = { value: 'reference_quantity_price' }
+      const row = {
+        dataset: {},
+        querySelector: () => modeInput,
+        querySelectorAll (selector) { return selector.includes('pricingModePanel') ? [panel] : [] }
+      }
+      const controller = Object.create(ReceiptFormController.prototype)
+
+      controller.syncPricingSourceModeForRow(row, 'reference_quantity_price')
+      const active = { disabled: requiredInput.disabled, required: requiredInput.required }
+      controller.syncPricingSourceModeForRow(row, 'explicit_line_total')
+      const inactive = { disabled: requiredInput.disabled, required: requiredInput.required }
+
+      process.stdout.write(JSON.stringify({ active, inactive }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "active" => { "disabled" => false, "required" => true },
+      "inactive" => { "disabled" => true, "required" => false }
+    )
+  end
+
+  it "fingerprints only the selected pricing source across Turbo reconnects" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const inputs = {
+        pricingSourceModeInput: { value: 'reference_quantity_price' },
+        quantityInput: { value: '1.5' },
+        quantityUnitInput: { value: 'liter' },
+        priceInput: { value: '999' },
+        referencePriceAmountInput: { value: '120' },
+        referenceQuantityInput: { value: '500' },
+        referenceQuantityUnitInput: { value: 'milliliter' },
+        referencePriceTaxInclusionInput: { value: 'gross' },
+        explicitLineTotalInput: { value: '360' },
+        discountRateInput: { value: '' },
+        taxRateInput: { value: '10' },
+        lineTotalInput: { value: '360', dataset: { originalLineTotal: '360', originalSavedLineTotal: '360' } }
+      }
+      const row = {
+        style: { display: '' },
+        dataset: { receiptFormActivePricingMode: 'reference_quantity_price' },
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? inputs[match[1]] ?? null : null
+        }
+      }
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        itemRowTargets: { value: [row] },
+        adjustmentRowTargets: { value: [] },
+        countableQuantityUnitsValue: { value: 'each,item,piece,bag,sheet,unit,box,set' }
+      })
+
+      const reference = controller.purchaseInputFingerprint()
+      inputs.priceInput.value = '1'
+      const inactiveDraftChanged = controller.purchaseInputFingerprint()
+      inputs.referencePriceAmountInput.value = '121'
+      const referenceChanged = controller.purchaseInputFingerprint()
+      inputs.referencePriceAmountInput.value = '120'
+      inputs.pricingSourceModeInput.value = 'explicit_line_total'
+      row.dataset.receiptFormActivePricingMode = 'explicit_line_total'
+      const explicit = controller.purchaseInputFingerprint()
+
+      process.stdout.write(JSON.stringify({ reference, inactiveDraftChanged, referenceChanged, explicit }))
+    JAVASCRIPT
+
+    aggregate_failures do
+      expect(result["inactiveDraftChanged"]).to eq(result["reference"])
+      expect(result["referenceChanged"]).not_to eq(result["reference"])
+      expect(result["explicit"]).not_to eq(result["reference"])
+      expect(JSON.parse(result["reference"])["items"].first.first).to eq("reference_quantity_price")
+      expect(JSON.parse(result["explicit"])["items"].first.first).to eq("explicit_line_total")
+    end
+  end
+
+  it "updates the selected pricing authority summary without exposing inactive drafts" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const amount = { value: '120' }
+      const quantity = { value: '500' }
+      const unit = { value: 'milliliter', selectedOptions: [{ textContent: 'ml' }] }
+      const tax = { value: 'gross', dataset: { receiptFormTaxInclusionLabel: '税込' } }
+      const summary = {
+        textContent: '',
+        dataset: {
+          receiptFormPricingModes: 'reference_quantity_price',
+          receiptFormSummaryTemplate: '%{amount}円 / %{quantity}%{unit}（%{tax_inclusion}）',
+          receiptFormSummaryUnset: '基準価格と基準数量'
+        }
+      }
+      const targets = {
+        referencePriceAmountInput: amount,
+        referenceQuantityInput: quantity,
+        referenceQuantityUnitInput: unit,
+        referencePriceTaxInclusionInput: tax
+      }
+      const row = {
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? targets[match[1]] ?? null : null
+        },
+        querySelectorAll (selector) {
+          return selector.includes('pricingSourceSummary') ? [summary] : []
+        }
+      }
+      const controller = Object.create(ReceiptFormController.prototype)
+
+      controller.syncPricingSourceSummaryForRow(row, 'reference_quantity_price')
+      const complete = summary.textContent
+      amount.value = ''
+      controller.syncPricingSourceSummaryForRow(row, 'reference_quantity_price')
+
+      process.stdout.write(JSON.stringify({ complete, incomplete: summary.textContent }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "complete" => "120円 / 500ml（税込）",
+      "incomplete" => "基準価格と基準数量"
+    )
+  end
+
+  it "keeps a stored derived explicit total through initial and later unavailable preview rendering" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const modeInput = { value: 'explicit_line_total' }
+      const explicitInput = { value: '' }
+      const lineTotalInput = { value: '180', dataset: { originalLineTotal: '', originalSavedLineTotal: '180' } }
+      const originalLineTotalInput = { value: '' }
+      const storedLineDisplay = { textContent: '¥180', title: '¥180', dataset: {} }
+      const receiptTotalDisplay = { textContent: '¥180', title: '¥180', dataset: {} }
+      const inputs = {
+        pricingSourceModeInput: modeInput,
+        explicitLineTotalInput: explicitInput,
+        lineTotalInput,
+        originalLineTotalInput
+      }
+      const row = {
+        dataset: { receiptFormExplicitLineTotalSourceMissing: 'true' },
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? inputs[match[1]] ?? null : null
+        },
+        querySelectorAll (selector) {
+          return selector.includes('lineTotalDisplay') ? [storedLineDisplay] : []
+        }
+      }
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        itemRowTargets: { value: [row] },
+        hasTaxRateSummaryTarget: { value: false },
+        paymentMismatchWarningTargets: { value: [] },
+        syncPaymentAmountButtonTargets: { value: [] }
+      })
+      controller.previewRowExcluded = () => false
+      controller.previewAmountTargets = () => [storedLineDisplay, receiptTotalDisplay]
+      controller.renderUnavailableAmount = (target) => { target.textContent = '—' }
+      controller.syncPaymentSummaryLayout = () => {}
+      let recalculateCount = 0
+      controller.recalculate = () => { recalculateCount += 1 }
+
+      controller.syncInitialPricingPreviews()
+      storedLineDisplay.textContent = '¥180'
+      receiptTotalDisplay.textContent = '¥180'
+      controller.renderUnavailablePreview()
+
+      process.stdout.write(JSON.stringify({
+        recalculateCount,
+        explicitValue: explicitInput.value,
+        lineTotalValue: lineTotalInput.value,
+        originalLineTotalValue: originalLineTotalInput.value,
+        storedLineDisplay: storedLineDisplay.textContent,
+        receiptTotalDisplay: receiptTotalDisplay.textContent
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      'recalculateCount' => 0,
+      'explicitValue' => '',
+      'lineTotalValue' => '180',
+      'originalLineTotalValue' => '',
+      'storedLineDisplay' => '¥180',
+      'receiptTotalDisplay' => '—'
+    )
+  end
+
+  it "keeps a persisted positive explicit rate through blank and zero 422 inputs until clear intent" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const discount = { value: '' }
+      const clearIntent = { value: '0' }
+      const targets = {
+        discountRateInput: discount,
+        clearItemDiscountBeforeExplicitInput: clearIntent
+      }
+      const row = {
+        dataset: {
+          receiptFormHasPersistedAbsoluteDiscountSource: 'false',
+          receiptFormHasPersistedExplicitPositiveDiscountRateSource: 'true'
+        },
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? targets[match[1]] ?? null : null
+        }
+      }
+      const controller = Object.create(ReceiptFormController.prototype)
+      const blank = controller.itemDiscountSourcePresent(row)
+      discount.value = '0'
+      const zero = controller.itemDiscountSourcePresent(row)
+      discount.value = ''
+      clearIntent.value = '1'
+      const cleared = controller.itemDiscountSourcePresent(row)
+      discount.value = '5'
+      const replaced = controller.itemDiscountSourcePresent(row)
+
+      process.stdout.write(JSON.stringify({ blank, zero, cleared, replaced }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      'blank' => true,
+      'zero' => true,
+      'cleared' => false,
+      'replaced' => true
+    )
+  end
+
+  it "updates explicit total wording only after a discount clear is confirmed" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      ;(async () => {
+      const mode = { value: 'explicit_line_total' }
+      const discount = { value: '10', dataset: { originalDiscountRate: '10' } }
+      const clearIntent = { value: '0' }
+      const lineTotal = {
+        value: '324',
+        dataset: { originalLineTotal: '360', originalSavedLineTotal: '324' }
+      }
+      const explicit = {
+        value: '900',
+        dataset: {
+          receiptFormLabelWithDiscount: '割引前明細金額',
+          receiptFormLabelWithoutDiscount: '明細金額',
+          receiptFormDecrementLabelWithDiscount: '割引前明細金額を減らす',
+          receiptFormDecrementLabelWithoutDiscount: '明細金額を減らす',
+          receiptFormIncrementLabelWithDiscount: '割引前明細金額を増やす',
+          receiptFormIncrementLabelWithoutDiscount: '明細金額を増やす'
+        },
+        label: '',
+        setAttribute (name, value) { if (name === 'aria-label') this.label = value },
+        closest () { return explicitControl }
+      }
+      const decrementButton = {
+        label: '',
+        setAttribute (name, value) { if (name === 'aria-label') this.label = value }
+      }
+      const incrementButton = {
+        label: '',
+        setAttribute (name, value) { if (name === 'aria-label') this.label = value }
+      }
+      const explicitControl = {
+        querySelector (selector) {
+          if (selector.includes('decrement')) return decrementButton
+          if (selector.includes('increment')) return incrementButton
+          return null
+        }
+      }
+      const help = {
+        textContent: '',
+        dataset: {
+          receiptFormTextWithDiscount: '入力値に明細割引を1回適用',
+          receiptFormTextWithoutDiscount: '印字された明細金額'
+        }
+      }
+      const summary = {
+        hidden: true,
+        textContent: '',
+        dataset: {
+          receiptFormPricingModes: 'explicit_line_total',
+          receiptFormSummaryTemplate: '割引前 %{amount}円',
+          receiptFormSummaryUnset: '割引前明細金額',
+          receiptFormSummaryTemplateWithDiscount: '割引前 %{amount}円',
+          receiptFormSummaryTemplateWithoutDiscount: '明細金額 %{amount}円',
+          receiptFormSummaryUnsetWithDiscount: '割引前明細金額',
+          receiptFormSummaryUnsetWithoutDiscount: '明細金額'
+        }
+      }
+      const targets = {
+        pricingSourceModeInput: mode,
+        discountRateInput: discount,
+        clearItemDiscountBeforeExplicitInput: clearIntent,
+        explicitLineTotalInput: explicit,
+        explicitLineTotalHelp: help,
+        lineTotalInput: lineTotal
+      }
+      const row = {
+        dataset: { receiptFormActivePricingMode: 'reference_quantity_price', receiptFormHasPersistedAbsoluteDiscountSource: 'false' },
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? targets[match[1]] ?? null : null
+        },
+        querySelectorAll (selector) {
+          if (selector.includes('pricingSourceSummary')) return [summary]
+          return []
+        }
+      }
+      mode.closest = () => row
+      discount.closest = () => row
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperty(controller, 'discountRoundingModeValue', { value: 'round' })
+      const answers = [false, true]
+      controller.confirmPricingSourceDiscountClear = () => Promise.resolve(answers.shift())
+      controller.recalculate = ({ pricingSourceChangedRow } = {}) => {
+        const activeMode = controller.pricingSourceModeForRow(row)
+        const originalLineTotal = activeMode === 'explicit_line_total' ? Number(explicit.value) : 360
+        lineTotal.value = controller.lineTotalFor({
+          originalLineTotal,
+          discountRatePercent: controller.parseDiscountRateInput(discount.value),
+          discountRateInput: discount,
+          lineTotalInput: lineTotal,
+          sourceModeChanged: pricingSourceChangedRow === row
+        })
+        controller.syncPricingSourceSummaryForRow(row, activeMode)
+      }
+
+      controller.syncExplicitLineTotalSemantics(row)
+      const before = explicit.label
+      await controller.pricingSourceModeChanged({ currentTarget: mode })
+      const cancelled = {
+        label: explicit.label, help: help.textContent, discount: discount.value, lineTotal: lineTotal.value
+      }
+      mode.value = 'explicit_line_total'
+      await controller.pricingSourceModeChanged({ currentTarget: mode })
+      const confirmed = {
+        label: explicit.label,
+        decrementLabel: decrementButton.label,
+        incrementLabel: incrementButton.label,
+        help: help.textContent,
+        summary: summary.textContent,
+        discount: discount.value,
+        lineTotal: lineTotal.value
+      }
+      discount.value = '0'
+      controller.discountRateChanged({ currentTarget: discount })
+      const explicitZeroDiscount = {
+        label: explicit.label,
+        decrementLabel: decrementButton.label,
+        incrementLabel: incrementButton.label,
+        help: help.textContent,
+        summary: summary.textContent,
+        discount: discount.value,
+        clearIntent: clearIntent.value,
+        lineTotal: lineTotal.value
+      }
+      mode.value = 'reference_quantity_price'
+      await controller.pricingSourceModeChanged({ currentTarget: mode })
+      const restored = {
+        label: explicit.label, help: help.textContent, discount: discount.value, lineTotal: lineTotal.value
+      }
+
+      process.stdout.write(JSON.stringify({ before, cancelled, confirmed, explicitZeroDiscount, restored }))
+      })()
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "before" => "割引前明細金額",
+      "cancelled" => {
+        "label" => "割引前明細金額", "help" => "入力値に明細割引を1回適用",
+        "discount" => "10", "lineTotal" => "324"
+      },
+      "confirmed" => {
+        "label" => "明細金額", "decrementLabel" => "明細金額を減らす",
+        "incrementLabel" => "明細金額を増やす", "help" => "印字された明細金額",
+        "summary" => "明細金額 900円",
+        "discount" => "", "lineTotal" => 900
+      },
+      "explicitZeroDiscount" => {
+        "label" => "割引前明細金額",
+        "decrementLabel" => "割引前明細金額を減らす",
+        "incrementLabel" => "割引前明細金額を増やす",
+        "help" => "入力値に明細割引を1回適用",
+        "summary" => "割引前 900円",
+        "discount" => "0",
+        "clearIntent" => "1",
+        "lineTotal" => 900
+      },
+      "restored" => {
+        "label" => "割引前明細金額", "help" => "入力値に明細割引を1回適用",
+        "discount" => "10", "lineTotal" => 324
+      }
+    )
+  end
+
+  it "stops an incompatible pricing preview without changing its source" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const runCase = (definition) => {
+        const inputs = {
+          pricingSourceModeInput: { value: definition.mode },
+          quantityInput: { value: definition.quantity },
+          quantityUnitInput: { value: definition.unit },
+          priceInput: { value: definition.price },
+          referencePriceAmountInput: { value: definition.referencePrice },
+          referenceQuantityInput: { value: definition.referenceQuantity },
+          referenceQuantityUnitInput: { value: definition.referenceUnit },
+          referencePriceTaxInclusionInput: { value: 'gross' },
+          discountRateInput: { value: '', dataset: { originalDiscountRate: '' } },
+          taxRateInput: { value: '10' },
+          lineTotalInput: { value: '777', dataset: { originalLineTotal: '777', originalSavedLineTotal: '777' } },
+          originalLineTotalInput: { value: '777' }
+        }
+        const row = {
+          dataset: { receiptFormActivePricingMode: definition.mode },
+          querySelector (selector) {
+            const match = selector.match(/receipt-form-target="([^"]+)"/)
+            return match ? inputs[match[1]] ?? null : null
+          },
+          querySelectorAll () { return [] }
+        }
+        const controller = Object.create(ReceiptFormController.prototype)
+        Object.defineProperties(controller, {
+          itemRowTargets: { value: [row] },
+          countableQuantityUnitsValue: { value: 'each,item,piece,bag,sheet,unit,box,set' },
+          receiptItemPriceMaxValue: { value: 999999999 },
+          receiptItemLineTotalMaxValue: { value: 999999999 },
+          discountRoundingModeValue: { value: 'round' }
+        })
+        let unavailable = false
+        controller.previewNumericInputsValid = () => true
+        controller.previewRowExcluded = () => false
+        controller.renderUnavailablePreview = () => { unavailable = true }
+        controller.recalculate()
+
+        return {
+          unavailable,
+          mode: inputs.pricingSourceModeInput.value,
+          quantity: inputs.quantityInput.value,
+          unit: inputs.quantityUnitInput.value,
+          price: inputs.priceInput.value,
+          referencePrice: inputs.referencePriceAmountInput.value,
+          referenceQuantity: inputs.referenceQuantityInput.value,
+          referenceUnit: inputs.referenceQuantityUnitInput.value,
+          lineTotal: inputs.lineTotalInput.value
+        }
+      }
+
+      process.stdout.write(JSON.stringify({
+        countDimensionMismatch: runCase({
+          mode: 'count_unit_price', quantity: '1.5', unit: 'kilogram', price: '100',
+          referencePrice: '', referenceQuantity: '', referenceUnit: ''
+        }),
+        referenceDimensionMismatch: runCase({
+          mode: 'reference_quantity_price', quantity: '1.5', unit: 'liter', price: '',
+          referencePrice: '498', referenceQuantity: '100', referenceUnit: 'gram'
+        }),
+        referenceLineLimitExceeded: runCase({
+          mode: 'reference_quantity_price', quantity: '2', unit: 'gram', price: '',
+          referencePrice: '999999999', referenceQuantity: '1', referenceUnit: 'gram'
+        })
+      }))
+    JAVASCRIPT
+
+    aggregate_failures do
+      expect(result.dig("countDimensionMismatch", "unavailable")).to be(true)
+      expect(result.dig("referenceDimensionMismatch", "unavailable")).to be(true)
+      expect(result.dig("referenceLineLimitExceeded", "unavailable")).to be(true)
+      expect(result["countDimensionMismatch"]).to include(
+        "mode" => "count_unit_price", "quantity" => "1.5", "unit" => "kilogram", "price" => "100",
+        "lineTotal" => "777"
+      )
+      expect(result["referenceDimensionMismatch"]).to include(
+        "mode" => "reference_quantity_price", "quantity" => "1.5", "unit" => "liter",
+        "referencePrice" => "498", "referenceQuantity" => "100", "referenceUnit" => "gram",
+        "lineTotal" => "777"
+      )
+      expect(result["referenceLineLimitExceeded"]).to include(
+        "mode" => "reference_quantity_price", "quantity" => "2", "unit" => "gram",
+        "referencePrice" => "999999999", "referenceQuantity" => "1", "referenceUnit" => "gram",
+        "lineTotal" => "777"
+      )
     end
   end
 
@@ -829,6 +1768,246 @@ RSpec.describe "Receipt form Stimulus controller" do
       "zeroDifference" => "¥0",
       "noTaxRate" => "Unset",
       "multipleTaxRates" => "Multiple tax rates"
+    )
+  end
+
+  it "matches the Amount Engine for gross and net reference price previews" do
+    gross_item = {
+      pricingSourceKind: "reference_quantity_price",
+      referencePriceAmount: "120",
+      referenceQuantity: "500",
+      referenceQuantityUnit: "milliliter",
+      referencePriceTaxInclusion: "gross",
+      quantity: "1.5",
+      quantityUnit: "liter",
+      price: nil,
+      originalLineTotal: 998,
+      lineTotal: 997,
+      taxRate: 10,
+      discountRate: 10
+    }
+    net_item = gross_item.merge(referencePriceTaxInclusion: "net")
+
+    gross = run_amount_round_trip(basis: "external", items: [ gross_item ])
+    net = run_amount_round_trip(basis: "internal", items: [ net_item ])
+
+    aggregate_failures do
+      expect(gross["initial"]).to include(
+        "subtotal" => 295,
+        "tax" => 29,
+        "total" => 324,
+        "firstLineTotal" => 324
+      )
+      expect(net["initial"]).to include(
+        "subtotal" => 324,
+        "tax" => 32,
+        "total" => 356,
+        "firstLineTotal" => 324
+      )
+    end
+  end
+
+  it "projects mixed gross and net reference sources by item basis" do
+    common = {
+      pricingSourceKind: "reference_quantity_price",
+      referencePriceAmount: "120",
+      referenceQuantity: "500",
+      referenceQuantityUnit: "milliliter",
+      quantity: "1.5",
+      quantityUnit: "liter",
+      price: nil,
+      originalLineTotal: nil,
+      lineTotal: nil,
+      taxRate: 10
+    }
+    items = [
+      common.merge(referencePriceTaxInclusion: "gross"),
+      common.merge(referencePriceTaxInclusion: "net")
+    ]
+
+    result = run_amount_round_trip(basis: "internal", items:)
+
+    expect(result["initial"]).to include(
+      "subtotal" => 688,
+      "tax" => 68,
+      "total" => 756,
+      "firstLineTotal" => 360
+    )
+  end
+
+  it "rejects source item and receipt aggregate values above configured limits without clamping" do
+    count_over_limit = run_amount_round_trip(
+      basis: "internal",
+      items: [
+        {
+          pricingSourceKind: "count_unit_price",
+          quantity: 2,
+          quantityUnit: "each",
+          price: 100,
+          lineTotal: 100,
+          originalLineTotal: 200,
+          taxRate: 0,
+          discountRate: 50
+        }
+      ],
+      item_line_total_max: 100,
+      receipt_total_max: 200,
+      capture_preview_unavailable: true
+    )
+    projected_net_within_receipt_limit = run_amount_round_trip(
+      basis: "external",
+      items: [
+        {
+          pricingSourceKind: "reference_quantity_price",
+          referencePriceAmount: 100,
+          referenceQuantity: 1,
+          referenceQuantityUnit: "each",
+          referencePriceTaxInclusion: "net",
+          quantity: 1,
+          quantityUnit: "each",
+          price: nil,
+          lineTotal: 100,
+          originalLineTotal: 100,
+          taxRate: 10
+        }
+      ],
+      item_line_total_max: 100,
+      receipt_total_max: 200,
+      capture_preview_unavailable: true
+    )
+    aggregate_over_limit = run_amount_round_trip(
+      basis: "internal",
+      items: [
+        { pricingSourceKind: "count_unit_price", quantity: 1, quantityUnit: "each", price: 60, lineTotal: 60, taxRate: 0 },
+        { pricingSourceKind: "count_unit_price", quantity: 1, quantityUnit: "each", price: 60, lineTotal: 60, taxRate: 0 }
+      ],
+      item_line_total_max: 100,
+      receipt_total_max: 100,
+      capture_preview_unavailable: true
+    )
+    exact_limits = run_amount_round_trip(
+      basis: "internal",
+      items: [
+        { pricingSourceKind: "count_unit_price", quantity: 1, quantityUnit: "each", price: 100, lineTotal: 100, taxRate: 0 }
+      ],
+      item_line_total_max: 100,
+      receipt_total_max: 100,
+      capture_preview_unavailable: true
+    )
+
+    aggregate_failures do
+      expect(count_over_limit.dig("initial", "previewUnavailable")).to be(true)
+      expect(projected_net_within_receipt_limit["initial"]).to include(
+        "subtotal" => 100,
+        "tax" => 10,
+        "total" => 110,
+        "previewUnavailable" => false
+      )
+      expect(aggregate_over_limit.dig("initial", "previewUnavailable")).to be(true)
+      expect(exact_limits["initial"]).to include(
+        "subtotal" => 100,
+        "tax" => 0,
+        "total" => 100,
+        "previewUnavailable" => false
+      )
+    end
+  end
+
+  it "uses the trusted form fallback only for reference net rows with a blank item tax rate" do
+    reference_item = {
+      pricingSourceKind: "reference_quantity_price",
+      referencePriceAmount: 100,
+      referenceQuantity: 1,
+      referenceQuantityUnit: "each",
+      referencePriceTaxInclusion: "net",
+      quantity: 1,
+      quantityUnit: "each",
+      price: nil,
+      lineTotal: 100,
+      originalLineTotal: 100,
+      taxRate: nil
+    }
+    trusted_fallback = run_amount_round_trip(
+      basis: "internal",
+      items: [ reference_item ],
+      reference_projection_fallback_tax_rate: "10",
+      capture_preview_unavailable: true
+    )
+    no_fallback = run_amount_round_trip(
+      basis: "internal",
+      items: [ reference_item ],
+      capture_preview_unavailable: true
+    )
+    explicit_zero = run_amount_round_trip(
+      basis: "internal",
+      items: [ reference_item.merge(taxRate: 0) ],
+      reference_projection_fallback_tax_rate: "10",
+      capture_preview_unavailable: true
+    )
+    source_changed = run_amount_round_trip(
+      basis: "internal",
+      items: [ reference_item ],
+      reference_projection_fallback_tax_rate: "10",
+      changed_reference_price: 110,
+      capture_preview_unavailable: true
+    )
+    explicit_rate_after_source_change = run_amount_round_trip(
+      basis: "internal",
+      items: [ reference_item.merge(taxRate: 0) ],
+      reference_projection_fallback_tax_rate: "10",
+      changed_reference_price: 110,
+      capture_preview_unavailable: true
+    )
+
+    aggregate_failures do
+      expect(trusted_fallback["initial"]).to include(
+        "subtotal" => 100,
+        "tax" => 10,
+        "total" => 110,
+        "previewUnavailable" => false
+      )
+      expect(no_fallback.dig("initial", "previewUnavailable")).to be(true)
+      expect(explicit_zero["initial"]).to include(
+        "subtotal" => 100,
+        "tax" => 0,
+        "total" => 100,
+        "previewUnavailable" => false
+      )
+      expect(source_changed.dig("doubled", "previewUnavailable")).to be(true)
+      expect(explicit_rate_after_source_change["doubled"]).to include(
+        "subtotal" => 110,
+        "tax" => 0,
+        "total" => 110,
+        "previewUnavailable" => false
+      )
+    end
+  end
+
+  it "treats an explicit total as the gross pre-discount authority" do
+    result = run_amount_round_trip(
+      basis: "external",
+      items: [
+        {
+          pricingSourceKind: "explicit_line_total",
+          explicitLineTotal: "1000",
+          quantity: "1.5",
+          quantityUnit: "liter",
+          price: nil,
+          originalLineTotal: 360,
+          lineTotal: 324,
+          taxRate: 10,
+          discountRate: 10,
+          captureOriginalLineTotal: true
+        }
+      ]
+    )
+
+    expect(result["initial"]).to include(
+      "sourceOriginalLineTotal" => 1_000,
+      "firstLineTotal" => 900,
+      "subtotal" => 819,
+      "tax" => 81,
+      "total" => 900
     )
   end
 
@@ -1573,6 +2752,301 @@ RSpec.describe "Receipt form Stimulus controller" do
       "valid" => true,
       "validValue" => "100"
     )
+  end
+
+  it "enforces Ruby whitespace and scale 3 for typed item quantity without rewriting the draft" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const quantity = { value: '1.234' }
+      const inputs = {
+        quantityInput: quantity,
+        quantityUnitInput: { value: 'kilogram' },
+        explicitLineTotalInput: { value: '250' },
+        discountRateInput: { value: '' },
+        taxRateInput: { value: '0' }
+      }
+      const row = {
+        style: { display: '' },
+        querySelector: (selector) => {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? inputs[match[1]] ?? null : null
+        }
+      }
+      Object.defineProperties(controller, {
+        itemRowTargets: { value: [row] },
+        adjustmentRowTargets: { value: [] },
+        paymentRowTargets: { value: [] },
+        decimalQuantityUnitsValue: { value: 'gram,kilogram,milligram,liter,milliliter,cubic_centimeter' },
+        receiptItemPriceMaxValue: { value: 999999999 },
+        receiptItemLineTotalMaxValue: { value: 999999999 },
+        receiptAdjustmentAmountMaxValue: { value: 999999999 },
+        receiptPaymentAmountMaxValue: { value: 999999999 }
+      })
+      controller.pricingSourceModeForRow = () => 'explicit_line_total'
+
+      const evaluate = (value) => {
+        quantity.value = value
+        const valid = controller.previewNumericInputsValid()
+        return { valid, value: quantity.value }
+      }
+      const asciiQuantity = ' ' + String.fromCharCode(9) + '1.234' + String.fromCharCode(13, 10)
+      const nbspQuantity = String.fromCharCode(160) + '1.234' + String.fromCharCode(160)
+      process.stdout.write(JSON.stringify({
+        scale3: evaluate('1.234'),
+        trailingZeros: evaluate('1.2300'),
+        scale4: evaluate('1.2345'),
+        ascii: evaluate(asciiQuantity),
+        ideographic: evaluate('　1.234　'),
+        nbsp: evaluate(nbspQuantity),
+        ambiguousComma: evaluate('1,000')
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "scale3" => { "valid" => true, "value" => "1.234" },
+      "trailingZeros" => { "valid" => true, "value" => "1.2300" },
+      "scale4" => { "valid" => false, "value" => "1.2345" },
+      "ascii" => { "valid" => true, "value" => " \t1.234\r\n" },
+      "ideographic" => { "valid" => false, "value" => "　1.234　" },
+      "nbsp" => { "valid" => false, "value" => "\u00a01.234\u00a0" },
+      "ambiguousComma" => { "valid" => true, "value" => "1,000" }
+    )
+  end
+
+  it "suspends preview for tax and discount percentages that persistence would round" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const itemInputs = {
+        quantityInput: { value: '1' },
+        quantityUnitInput: { value: 'each' },
+        priceInput: { value: '52' },
+        discountRateInput: { value: '10.5' },
+        taxRateInput: { value: '10.55' }
+      }
+      const adjustmentInputs = {
+        adjustmentAmountInput: { value: '10' },
+        adjustmentTaxRateInput: { value: '10.55' }
+      }
+      const buildRow = (inputs) => ({
+        style: { display: '' },
+        querySelector: (selector) => {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? inputs[match[1]] ?? null : null
+        }
+      })
+      Object.defineProperties(controller, {
+        itemRowTargets: { value: [buildRow(itemInputs)] },
+        adjustmentRowTargets: { value: [buildRow(adjustmentInputs)] },
+        paymentRowTargets: { value: [] },
+        decimalQuantityUnitsValue: { value: 'gram,kilogram' },
+        receiptItemPriceMaxValue: { value: 999999999 },
+        receiptAdjustmentAmountMaxValue: { value: 999999999 },
+        receiptPaymentAmountMaxValue: { value: 999999999 }
+      })
+
+      const boundaryValid = controller.previewNumericInputsValid()
+      itemInputs.discountRateInput.value = '10.55'
+      const discountTooPrecise = controller.previewNumericInputsValid()
+      itemInputs.discountRateInput.value = '10.5'
+      itemInputs.taxRateInput.value = '10.555'
+      const itemTaxTooPrecise = controller.previewNumericInputsValid()
+      itemInputs.taxRateInput.value = '10.55'
+      adjustmentInputs.adjustmentTaxRateInput.value = '10.555'
+      const adjustmentTaxTooPrecise = controller.previewNumericInputsValid()
+      adjustmentInputs.adjustmentTaxRateInput.value = '10.55'
+      itemInputs.discountRateInput.value = '10.5000000000000000000000001'
+      const longDiscountTooPrecise = controller.previewNumericInputsValid()
+      itemInputs.discountRateInput.value = '10.5'
+      itemInputs.taxRateInput.value = '10.5500000000000000000000001'
+      const longTaxTooPrecise = controller.previewNumericInputsValid()
+
+      process.stdout.write(JSON.stringify({
+        boundaryValid,
+        discountTooPrecise,
+        itemTaxTooPrecise,
+        adjustmentTaxTooPrecise,
+        longDiscountTooPrecise,
+        longTaxTooPrecise,
+        rawValues: {
+          discount: itemInputs.discountRateInput.value,
+          itemTax: itemInputs.taxRateInput.value,
+          adjustmentTax: adjustmentInputs.adjustmentTaxRateInput.value
+        }
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "boundaryValid" => true,
+      "discountTooPrecise" => false,
+      "itemTaxTooPrecise" => false,
+      "adjustmentTaxTooPrecise" => false,
+      "longDiscountTooPrecise" => false,
+      "longTaxTooPrecise" => false,
+      "rawValues" => {
+        "discount" => "10.5",
+        "itemTax" => "10.5500000000000000000000001",
+        "adjustmentTax" => "10.55"
+      }
+    )
+  end
+
+  it "characterizes the current amount and quantity limit contract for all 14 units" do
+    countable_unit_codes = %w[each item piece bag sheet unit box set]
+    measurement_unit_codes = %w[gram kilogram milligram liter milliliter cubic_centimeter]
+    boundary_quantities = %w[9999 9999.001 9999.999 10000]
+
+    result = run_controller_script(<<~JAVASCRIPT)
+      const countableUnitCodes = #{countable_unit_codes.to_json}
+      const measurementUnitCodes = #{measurement_unit_codes.to_json}
+      const boundaryQuantities = #{boundary_quantities.to_json}
+      const allUnitCodes = [...countableUnitCodes, ...measurementUnitCodes]
+
+      const buildInputs = ({ unitCode, quantity = '2', lineTotal = null }) => ({
+        quantityInput: { value: String(quantity) },
+        quantityUnitInput: { value: unitCode },
+        priceInput: { value: '125' },
+        discountRateInput: { value: '', dataset: { originalDiscountRate: '' } },
+        taxRateInput: { value: '' },
+        lineTotalInput: {
+          value: lineTotal === null ? '' : String(lineTotal),
+          dataset: {
+            originalLineTotal: lineTotal === null ? '' : String(lineTotal),
+            originalSavedLineTotal: lineTotal === null ? '' : String(lineTotal)
+          }
+        },
+        originalLineTotalInput: { value: lineTotal === null ? '' : String(lineTotal) }
+      })
+
+      const buildRow = (inputs) => ({
+        style: { display: '' },
+        querySelector (selector) {
+          const match = selector.match(/receipt-form-target="([^"]+)"/)
+          return match ? inputs[match[1]] ?? null : null
+        },
+        querySelectorAll () { return [] }
+      })
+
+      const buildController = (row = null) => {
+        const controller = Object.create(ReceiptFormController.prototype)
+        Object.defineProperties(controller, {
+          itemRowTargets: { value: row ? [row] : [] },
+          adjustmentRowTargets: { value: [] },
+          paymentRowTargets: { value: [] },
+          countableQuantityUnitsValue: { value: countableUnitCodes.join(',') },
+          decimalQuantityUnitsValue: { value: measurementUnitCodes.join(',') },
+          receiptTaxBasisValue: { value: 'internal' },
+          receiptItemPriceMaxValue: { value: 999999999 },
+          receiptItemLineTotalMaxValue: { value: 999999999 },
+          receiptAdjustmentAmountMaxValue: { value: 999999999 },
+          receiptPaymentAmountMaxValue: { value: 999999999 },
+          receiptTotalAmountMaxValue: { value: 999999999 },
+          receiptTaxAmountMaxValue: { value: 999999999 },
+          hasTotalAmountTarget: { value: false },
+          hasSubtotalAmountTarget: { value: false },
+          hasTaxAmountTarget: { value: false },
+          hasTaxRateSummaryTarget: { value: false }
+        })
+        return controller
+      }
+
+      const calculatedAmount = (unitCode, lineTotal) => {
+        const controller = buildController()
+        const inputs = buildInputs({ unitCode, lineTotal })
+        const originalLineTotal = controller.originalLineTotalFor({
+          quantity: 2,
+          price: 125,
+          priceInputPresent: true,
+          quantityUnit: unitCode,
+          lineTotalInput: inputs.lineTotalInput
+        })
+        const calculatedLineTotal = controller.lineTotalFor({
+          originalLineTotal,
+          discountRatePercent: null,
+          discountRateInput: inputs.discountRateInput,
+          lineTotalInput: inputs.lineTotalInput
+        })
+        return controller.clampNumber(calculatedLineTotal, 0, controller.receiptItemLineTotalMaxValue)
+      }
+
+      const acceptedByPreviewValidation = (unitCode, quantity) => {
+        const inputs = buildInputs({ unitCode, quantity })
+        const controller = buildController(buildRow(inputs))
+        return controller.previewNumericInputsValid()
+      }
+
+      const recalculationState = (unitCode, quantity) => {
+        const inputs = buildInputs({ unitCode, quantity })
+        const controller = buildController(buildRow(inputs))
+        let internalQuantity = null
+        let previewUnavailable = false
+
+        controller.renderUnavailablePreview = () => { previewUnavailable = true }
+        controller.animateLineTotal = () => {}
+        controller.itemAmountSourcePresentFor = () => true
+        controller.originalLineTotalFor = ({ quantity: value }) => {
+          internalQuantity = value
+          return 0
+        }
+        controller.lineTotalFor = () => 0
+        controller.syncLineTotalState = () => {}
+        controller.inheritedAdjustmentTaxRate = () => null
+        controller.purchaseInputsChangedForPreview = () => false
+        controller.internalTaxTotal = () => 0
+        controller.preserveInitialReceiptAmountsForPreview = () => false
+        controller.syncPaymentAdjustmentSummary = () => {}
+        controller.syncPaymentReconciliationSummary = () => {}
+        controller.paymentAmountSum = () => 0
+
+        controller.recalculate()
+        return { internalQuantity, previewUnavailable }
+      }
+
+      const result = Object.fromEntries(allUnitCodes.map((unitCode) => [
+        unitCode,
+        {
+          amounts: {
+            explicit: calculatedAmount(unitCode, 777),
+            missing: calculatedAmount(unitCode, null)
+          },
+          boundaries: Object.fromEntries(boundaryQuantities.map((quantity) => [
+            quantity,
+            {
+              accepted: acceptedByPreviewValidation(unitCode, quantity),
+              recalculation: recalculationState(unitCode, quantity)
+            }
+          ]))
+        }
+      ]))
+
+      process.stdout.write(JSON.stringify(result))
+    JAVASCRIPT
+
+    expected = (countable_unit_codes + measurement_unit_codes).to_h do |code|
+      measurement = measurement_unit_codes.include?(code)
+      boundaries = boundary_quantities.to_h do |quantity|
+        accepted = quantity != '10000' && (measurement || quantity == '9999')
+        recalculation =
+          if accepted
+            { "internalQuantity" => 9999, "previewUnavailable" => false }
+          else
+            { "internalQuantity" => nil, "previewUnavailable" => true }
+          end
+        [ quantity, { "accepted" => accepted, "recalculation" => recalculation } ]
+      end
+
+      [
+        code,
+        {
+          "amounts" => {
+            "explicit" => measurement ? 777 : 250,
+            "missing" => measurement ? 0 : 250
+          },
+          "boundaries" => boundaries
+        }
+      ]
+    end
+
+    expect(result).to eq(expected)
   end
 
   it "marks a new child row hidden before recalculating its removal" do

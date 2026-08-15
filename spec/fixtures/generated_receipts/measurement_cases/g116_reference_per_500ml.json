@@ -1,0 +1,87 @@
+{
+  "case_id": "g116_reference_per_500ml",
+  "category": "measurement",
+  "intent": "A price per 500 milliliters converts a purchased liter quantity exactly.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル液体A 税込 ¥120/500ml 1.5L", "¥360"],
+        "purchased_quantity": "1.5",
+        "purchased_unit": "liter",
+        "reference_price_amount": "120",
+        "reference_quantity": "500",
+        "reference_unit": "milliliter",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 360
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル量売 容量換算店",
+    "store_address": "サンプル県サンプル市基準町1-4",
+    "purchased_at": "2026-08-04T10:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル液体A",
+        "unit_price": 120,
+        "quantity": "1.5",
+        "quantity_unit_code": "liter",
+        "pricing_source_kind": null,
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 360,
+        "line_total": 360,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "measurement_projections": [
+      {
+        "item_index": 0,
+        "exact_reference_amount": {"numerator": "360", "denominator": "1"},
+        "projected_reference_line_total": 360,
+        "discount_amount": 0,
+        "discounted_source_line_total": 360,
+        "projected_gross_line_total": 360
+      }
+    ],
+    "reference_pricing_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "120",
+        "reference_quantity": "500",
+        "reference_unit_code": "milliliter",
+        "purchased_quantity": "1.5",
+        "purchased_unit_code": "liter",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 360,
+        "printed_line_total": "360",
+        "rounding_matches": ["floor", "half_up", "ceil"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 328, "tax": 32, "gross": 360, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 328,
+    "tax": 32,
+    "total": 360,
+    "payments": [{"method": "cash", "label": "現金", "amount": 360}],
+    "payment_sum": 360,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "measurement_projections", "reference_pricing_candidates"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

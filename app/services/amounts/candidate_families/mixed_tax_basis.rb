@@ -5,6 +5,7 @@ module Amounts
     class MixedTaxBasis < Base
       def call
         return [] unless final_detected_tax_details.present?
+        return [] if reference_projection_tax_rate_missing?
 
         tax_rounding_modes.map do |rounding_mode|
           mixed_candidate(rounding_mode)
@@ -59,7 +60,9 @@ module Amounts
           assignment = item_level_assignment_for(indexed_items, assignment_target, rate, rounding_mode)
           unless assignment[:status] == :exact
             exact = false
-            warnings << :price_tax_inclusion_uncertain
+            if indexed_items.any? { |item, _index| tax_basis_inference_item?(item) }
+              warnings << :price_tax_inclusion_uncertain
+            end
             warnings << :mixed_basis_search_truncated if assignment[:status] == :search_limited
             indexed_items.each { |item, index| computed_items[index] = item_with_line_total(item, item_line_total(item)) }
             groups[rate] = target.slice(:rate, :gross, :net, :tax)
@@ -76,7 +79,7 @@ module Amounts
             computed_items[entry[:index]] = item_with_line_total(
               items[entry[:index]],
               entry[:gross_amount],
-              normalize_price: entry[:basis] == :tax_excluded,
+              normalize_price: normalize_price_for_tax_basis?(items[entry[:index]], entry[:basis]),
               tax_rate: entry[:rate]
             )
             profile_assignments << {
@@ -87,7 +90,7 @@ module Amounts
               gross_amount: entry[:gross_amount]
             }
           end
-          mixed_basis_used ||= assignment[:assignments].any? { |entry| entry[:basis] == :tax_excluded }
+          mixed_basis_used ||= assignment[:assignments].any? { |entry| inferred_tax_excluded_assignment?(entry) }
           evidence.concat(assignment[:assignments].map { |entry| entry.slice(:source, :index, :basis, :rate, :net_amount, :tax_amount, :gross_amount) })
         end
 
@@ -128,7 +131,9 @@ module Amounts
       end
 
       def alternative_rate_mixed_candidate(rounding_mode, targets)
-        return { status: :not_applicable } unless tax_excluded_price_conversion_enabled?
+        if !tax_excluded_price_conversion_enabled? && taxable_basis_inference_required?
+          return { status: :not_applicable }
+        end
         return { status: :not_applicable } unless targets.keys.many?
 
         purchase_adjustment_groups = purchase_adjustment_groups_by_rate(rounding_mode)
@@ -145,7 +150,7 @@ module Amounts
           computed_items[entry[:index]] = item_with_line_total(
             items[entry[:index]],
             entry[:gross_amount],
-            normalize_price: entry[:basis] == :tax_excluded,
+            normalize_price: normalize_price_for_tax_basis?(items[entry[:index]], entry[:basis]),
             tax_rate: entry[:rate]
           )
           profile_assignments << {
@@ -171,7 +176,7 @@ module Amounts
           unapplied_purchase_adjustment_total(purchase_adjustment_groups, groups.keys)
         tax = groups.values.sum { |group| group[:tax] }
         warnings = adjustment_warnings.dup
-        mixed_basis_used = assignment[:assignments].any? { |entry| entry[:basis] == :tax_excluded }
+        mixed_basis_used = assignment[:assignments].any? { |entry| inferred_tax_excluded_assignment?(entry) }
         warnings << :price_tax_inclusion_uncertain if mixed_price_tax_inclusion_uncertain?(purchase_total, tax, mixed_basis_used)
         payment = payment_reconciliation(purchase_total, payment_adjustment_total)
         warnings += payment_warnings(payment)
@@ -356,6 +361,14 @@ module Amounts
           item_tax_rate(item).zero?
       end
 
+      def taxable_basis_inference_required?
+        items.any? do |item|
+          item_line_total(item).positive? &&
+            !zero_rate_item_for_mixed_assignment?(item) &&
+            tax_basis_inference_item?(item)
+        end
+      end
+
       def mixed_assignment_zero_key(rates)
         Array.new(rates.size * 3, 0)
       end
@@ -389,31 +402,30 @@ module Amounts
       def item_level_basis_candidates(item, index, rate, rounding_mode)
         line_total = item_line_total(item)
         return [] unless line_total.positive?
+        if reference_quantity_price_item?(item)
+          source_rate = projection_tax_rate_for(item)
+          return [] if source_rate.nil? || source_rate != rate
+        end
 
-        included_tax = rounded_tax_from_gross(line_total, rate, rounding_mode)
         candidates = [
-          {
-            source: "receipt_items",
-            index: index,
+          item_amount_projection(
+            item,
+            line_total: line_total,
             rate: rate,
-            basis: :tax_included,
-            net_amount: line_total - included_tax,
-            tax_amount: included_tax,
-            gross_amount: line_total
-          }
+            fallback_basis: :tax_included,
+            rounding_mode: rounding_mode
+          ).merge(source: "receipt_items", index: index, rate: rate)
         ]
+        return candidates if fixed_item_tax_basis?(item)
         return candidates unless tax_excluded_price_conversion_enabled?
 
-        excluded_tax = Amounts::Rounding.apply_rounding(BigDecimal(line_total.to_s) * rate, rounding_mode)
-        candidates << {
-          source: "receipt_items",
-          index: index,
+        candidates << item_amount_projection(
+          item,
+          line_total: line_total,
           rate: rate,
-          basis: :tax_excluded,
-          net_amount: line_total,
-          tax_amount: excluded_tax,
-          gross_amount: line_total + excluded_tax
-        }
+          fallback_basis: :tax_excluded,
+          rounding_mode: rounding_mode
+        ).merge(source: "receipt_items", index: index, rate: rate)
         candidates
       end
 
@@ -461,6 +473,14 @@ module Amounts
           rate = assignment[:tax_rate]
           rate if rate.respond_to?(:positive?) && rate.positive?
         end.uniq
+        reference_basis = authoritative_reference_item_amount_basis
+        if reference_basis
+          return calculation_profile(
+            receipt_tax_basis: :total_includes_tax,
+            item_amount_basis: reference_basis,
+            tax_detail_amount_basis: :gross
+          )
+        end
         return calculation_profile(receipt_tax_basis: :total_includes_tax, item_amount_basis: :line_total_as_recorded, tax_detail_amount_basis: :gross) unless positive_rates.many? || bases.include?(:non_taxable)
         return calculation_profile(receipt_tax_basis: :total_includes_tax, item_amount_basis: :line_total_as_recorded, tax_detail_amount_basis: :gross) unless bases.many? && (bases & %i[tax_included tax_excluded]).any?
 

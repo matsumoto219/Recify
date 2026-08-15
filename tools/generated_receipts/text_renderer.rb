@@ -53,9 +53,21 @@ module GeneratedReceipts
     end
 
     def item_lines
+      return measurement_item_lines if measurement_source_items.any?
+
       expected.fetch("items").map do |item|
         "#{item['name']} #{money(item['line_total'])}"
       end
+    end
+
+    def measurement_item_lines
+      measurement_source_items
+        .sort_by { |item| item.fetch("item_index") }
+        .flat_map { |item| item.fetch("printed_lines") }
+    end
+
+    def measurement_source_items
+      @measurement_source_items ||= Array(case_data.dig("source", "items"))
     end
 
     def adjustment_lines

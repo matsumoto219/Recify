@@ -135,7 +135,11 @@ module Analysis
           amount_hints: amount_hints,
           tax_rate_correction: tax_rate_correction,
           ownership_contract: ownership_contract,
-          corrections: corrections
+          corrections: corrections,
+          # OCRで検証したbounded candidateは診断専用。ReceiptItem authorityへは書き込まない。
+          reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).map do |candidate|
+            candidate.respond_to?(:deep_symbolize_keys) ? candidate.deep_symbolize_keys : candidate
+          end
         }
       end
 
@@ -322,12 +326,26 @@ module Analysis
           raw_text = normalized_item[:raw_text].to_s
           quantity = normalize_quantity(normalized_item[:quantity])
           quantity_unit_code = normalize_quantity_unit_code(normalized_item[:quantity_unit_code])
+          quantity_unit_status = normalize_quantity_unit_status(normalized_item[:quantity_unit_status])
           quantity_fraction_invalid = integer_quantity_fraction?(quantity, quantity_unit_code)
           quantity = BigDecimal("1") if quantity_fraction_invalid
           discount_amount = normalize_amount(normalized_item[:discount_amount])
           explicit_original_line_total = normalize_amount(normalized_item[:original_line_total])
           raw_line_total = normalize_amount(normalized_item[:line_total])
-          fallback_line_total = raw_line_total || extract_item_line_total(raw_text, price: normalize_amount(normalized_item[:price]), quantity:)
+          normalized_price = normalize_amount(normalized_item[:price])
+          fallback_line_total = raw_line_total || extract_item_line_total(
+            raw_text,
+            price: normalized_price,
+            quantity: quantity,
+            quantity_unit_code: quantity_unit_code,
+            quantity_unit_status: quantity_unit_status
+          )
+          quantity_source_uncertain = quantity_unit_status == "unknown" || (
+            normalized_price.present? &&
+              explicit_original_line_total.nil? &&
+              raw_line_total.nil? &&
+              fallback_line_total.nil?
+          )
           original_line_total = explicit_original_line_total || fallback_line_total
           line_total = effective_line_total(
             original_line_total: explicit_original_line_total,
@@ -370,7 +388,7 @@ module Analysis
             normalized_item,
             tax_rate_confidence:,
             category_uncertain:,
-            quantity_fraction_invalid:
+            quantity_fraction_invalid: quantity_fraction_invalid || quantity_source_uncertain
           )
 
           {
@@ -387,6 +405,8 @@ module Analysis
             discount_rate: normalize_rate(normalized_item[:discount_rate]),
             # Azure Items[].QuantityUnit -> receipt_items.quantity_unit_code
             quantity_unit_code: quantity_unit_code,
+            # OCR unitのknown / blank / unknownはanalysis中だけ保持し、永続sourceへは書かない。
+            quantity_unit_status: quantity_unit_status,
             # Azure Items[].ProductCode -> receipt_items.product_code
             product_code: normalized_item[:product_code],
             # Azure TaxDetails[].Rate / item補完値 -> receipt_items.tax_rate（0.08 / 0.1 形式）
@@ -399,7 +419,7 @@ module Analysis
               tax_rate_confidence: tax_rate_confidence,
               review_reasons: review_reasons,
               category_uncertain: category_uncertain,
-              quantity_fraction_invalid: quantity_fraction_invalid
+              quantity_fraction_invalid: quantity_fraction_invalid || quantity_source_uncertain
             ),
             review_reasons: review_reasons,
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
@@ -2588,6 +2608,11 @@ module Analysis
         ReceiptQuantityUnit.normalize(value)
       end
 
+      def normalize_quantity_unit_status(value)
+        status = value.to_s
+        %w[known blank unknown].include?(status) ? status : nil
+      end
+
       def merged_quantity_unit_code(primary_item, fallback_item)
         primary = primary_item[:quantity_unit_code]
         fallback = fallback_item[:quantity_unit_code]
@@ -2634,8 +2659,16 @@ module Analysis
         name.to_s.sub(/[¥￥]\s*\z/, "").strip
       end
 
-      def extract_item_line_total(_line, price:, quantity:)
+      def extract_item_line_total(
+        _line,
+        price:,
+        quantity:,
+        quantity_unit_code: ReceiptQuantityUnit.default_code,
+        quantity_unit_status: nil
+      )
         return nil unless price
+        return nil if quantity_unit_status == "unknown"
+        return nil unless ReceiptQuantityUnit.countable?(quantity_unit_code)
 
         (BigDecimal(price.to_s) * normalize_quantity(quantity)).round(0).to_i
       end

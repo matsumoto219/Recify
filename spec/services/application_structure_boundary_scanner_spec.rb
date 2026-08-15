@@ -12,8 +12,8 @@ RSpec.describe ApplicationStructureBoundary::Scanner do
       external_methods: external_methods,
       declared_singleton_methods: [],
       declared_instance_methods: [],
-      constructible: false,
-      remove_in_loop: nil
+      public_nested_errors: {},
+      constructible: false
     }
   end
 
@@ -38,6 +38,19 @@ RSpec.describe ApplicationStructureBoundary::Scanner do
       }
     ) do |scanner|
       expect(scanner.registry_issues).to include("unregistered root service: unregistered.rb")
+    end
+  end
+
+  it "root registryの未定義keyを許可機構として使えない" do
+    registry = { "analysis.rb" => registry_entry.merge(removal_schedule: nil) }
+
+    with_scanner(
+      registry: registry,
+      files: { "app/services/analysis.rb" => "module Analysis; end\n" }
+    ) do |scanner|
+      expect(scanner.registry_issues).to include(
+        "analysis.rb: unexpected metadata keys: removal_schedule"
+      )
     end
   end
 

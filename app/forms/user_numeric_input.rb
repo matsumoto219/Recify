@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class UserNumericInput
+  MAX_INPUT_BYTES = 128
+  MAX_INTEGER_BITS = MAX_INPUT_BYTES * 4
+  private_constant :MAX_INTEGER_BITS
+
   class InvalidValue < StandardError
     def initialize
       super("Invalid user numeric input")
@@ -40,15 +44,46 @@ class UserNumericInput
     end
 
     def normalize(value)
-      text = value.is_a?(BigDecimal) ? value.to_s("F") : value.to_s
+      text = bounded_scalar_text(value)
 
-      text
+      normalized = text
         .strip
         .tr("０-９", "0-9")
         .gsub("＋", "+")
         .gsub("－", "-")
         .gsub("．", ".")
         .gsub("，", ",")
+      raise InvalidValue if normalized.bytesize > MAX_INPUT_BYTES
+
+      normalized
+    rescue EncodingError
+      raise InvalidValue
+    end
+
+    def bounded_scalar_text(value)
+      case value
+      when String
+        raise InvalidValue if value.bytesize > MAX_INPUT_BYTES
+        raise InvalidValue unless value.valid_encoding?
+
+        value
+      when Integer
+        raise InvalidValue if value.bit_length > MAX_INTEGER_BITS
+
+        value.to_s
+      when BigDecimal
+        raise InvalidValue unless value.finite?
+        raise InvalidValue if value.precision > MAX_INPUT_BYTES
+        raise InvalidValue if value.exponent.abs > MAX_INPUT_BYTES
+
+        value.to_s("F")
+      when Float
+        raise InvalidValue unless value.finite?
+
+        value.to_s
+      else
+        raise InvalidValue
+      end
     end
   end
 end

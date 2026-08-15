@@ -23,10 +23,30 @@ module Amounts
 
     def normalized_items
       @items.map do |item|
-        persisted_item = persisted_countable_item(item)
-        next persisted_item if persisted_item
+        pricing_source_kind = pricing_source_kind_for(item)
+        if persisted_authority_free_diagnostic_item?(item)
+          next persisted_authority_free_diagnostic_item(item)
+        elsif pricing_source_kind.nil? && persisted_missing_manual_amount?(item)
+          next item_to_hash(item).merge(quantity: normalized_quantity_for(item))
+        elsif pricing_source_kind == "reference_quantity_price"
+          original_line_total = reference_item_extension_for(item).projected_amount
+        elsif pricing_source_kind == "explicit_line_total"
+          preserved_item = persisted_unsubmitted_explicit_item(item)
+          next preserved_item if preserved_item
 
-        original_line_total = original_line_total_for(item)
+          original_line_total = explicit_line_total_for(item)
+        elsif pricing_source_kind == "count_unit_price"
+          validate_count_unit_price_source!(item)
+          persisted_item = persisted_countable_item(item)
+          next persisted_item if persisted_item
+
+          original_line_total = countable_unit_line_total(item)
+        else
+          persisted_item = persisted_countable_item(item)
+          next persisted_item if persisted_item
+
+          original_line_total = original_line_total_for(item)
+        end
         submitted_discount_rate = normalize_discount_rate(fetch_value(item, :discount_rate))
         discount_amount = discount_amount_for(item, original_line_total, submitted_discount_rate)
         discount_rate = discount_rate_for(original_line_total, discount_amount, submitted_discount_rate)
@@ -41,6 +61,115 @@ module Amounts
           line_total: adjusted_line_total
         )
       end
+    end
+
+    def reference_item_extension_for(item)
+      validate_reference_tax_inclusion_for_context!(item)
+
+      Amounts::ReferenceItemExtension.call(
+        reference_price_amount: fetch_value(item, :reference_price_amount),
+        reference_quantity: fetch_value(item, :reference_quantity),
+        reference_unit_code: canonical_reference_unit_code!(
+          item,
+          code_attribute: :reference_quantity_unit_code,
+          raw_attribute: :reference_quantity_unit_raw
+        ),
+        purchased_quantity: fetch_value(item, :quantity),
+        purchased_unit_code: canonical_reference_unit_code!(
+          item,
+          code_attribute: :quantity_unit_code,
+          raw_attribute: :quantity_unit_raw
+        ),
+        reference_price_tax_inclusion: fetch_value(item, :reference_price_tax_inclusion)
+      )
+    end
+
+    def canonical_reference_unit_code!(item, code_attribute:, raw_attribute:)
+      code = fetch_value(item, code_attribute)
+      unit = ReceiptQuantityUnit.unit_for(code)
+      raw = fetch_value(item, raw_attribute)
+      return code if code.is_a?(String) && unit&.code == code && raw.nil?
+
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "reference formula requires canonical unit codes without raw unit evidence"
+    end
+
+    def validate_reference_tax_inclusion_for_context!(item)
+      return unless @context == :manual
+
+      tax_inclusion = fetch_value(item, :reference_price_tax_inclusion)
+      return if tax_inclusion == :gross || tax_inclusion == "gross"
+
+      raise Amounts::ItemPricingSource::InvalidContractError,
+        "manual reference formula requires gross tax inclusion"
+    end
+
+    def reference_quantity_price_source?(item)
+      pricing_source_kind_for(item) == "reference_quantity_price"
+    end
+
+    def pricing_source_kind_for(item)
+      value = fetch_value(item, :pricing_source_kind)
+      return nil if value.nil? || value == ""
+
+      kind = value.to_s
+      return kind if ReceiptItem::PRICING_SOURCE_KINDS.include?(kind)
+
+      raise Amounts::ItemPricingSource::InvalidContractError, "unknown item pricing authority kind"
+    end
+
+    def explicit_line_total_for(item)
+      line_total = fetch_value(item, :line_total)
+      unless value_present?(line_total)
+        raise Amounts::ItemPricingSource::InvalidContractError,
+          "explicit line total authority requires a line total"
+      end
+
+      original_line_total = fetch_value(item, :original_line_total)
+      return to_i(original_line_total) if value_present?(original_line_total)
+
+      to_i(line_total)
+    end
+
+    def persisted_unsubmitted_explicit_item(item)
+      return unless manual_input_context?
+      return unless fetch_value(item, :amount_persisted_item) == true
+      return unless fetch_value(item, :amount_persisted_original_line_total).nil?
+      return unless fetch_value(item, :original_line_total).nil?
+
+      item_to_hash(item).merge(
+        original_line_total: nil,
+        discount_amount: to_i_or_nil(fetch_value(item, :amount_persisted_discount_amount)),
+        discount_rate: normalize_discount_rate(fetch_value(item, :amount_persisted_discount_rate)),
+        line_total: to_i_or_nil(fetch_value(item, :amount_persisted_line_total))
+      )
+    end
+
+    def validate_count_unit_price_source!(item)
+      unit_code = canonical_reference_unit_code!(
+        item,
+        code_attribute: :quantity_unit_code,
+        raw_attribute: :quantity_unit_raw
+      )
+      price = fetch_value(item, :price)
+      reference_fields_absent = %i[
+        reference_price_amount
+        reference_quantity
+        reference_quantity_unit_code
+        reference_quantity_unit_raw
+        reference_price_tax_inclusion
+      ].all? { |attribute| fetch_value(item, attribute).nil? }
+      semantics = Amounts::ItemQuantitySemantics.new(
+        purchased_quantity: fetch_value(item, :quantity),
+        purchased_unit_code: unit_code
+      )
+
+      unless price.is_a?(Integer) && price >= 0 && reference_fields_absent
+        raise Amounts::ItemPricingSource::InvalidContractError,
+          "count unit price authority requires an integer price without reference evidence"
+      end
+
+      semantics.validate_count_formula!
     end
 
     def original_line_total_for(item)
@@ -231,8 +360,49 @@ module Amounts
 
     def manual_countable_unit_price_input?(item)
       manual_input_context? &&
+        !authority_free_diagnostic_evidence?(item) &&
         countable_quantity_unit_for_item?(item) &&
         value_present?(fetch_value(item, :price))
+    end
+
+    def authority_free_diagnostic_evidence?(item)
+      return false unless pricing_source_kind_for(item).nil?
+
+      %i[
+        quantity_unit_raw
+        reference_price_amount
+        reference_quantity
+        reference_quantity_unit_code
+        reference_quantity_unit_raw
+        reference_price_tax_inclusion
+      ].any? { |attribute| !fetch_value(item, attribute).nil? }
+    end
+
+    def persisted_authority_free_diagnostic_item?(item)
+      manual_input_context? &&
+        authority_free_diagnostic_evidence?(item) &&
+        fetch_value(item, :amount_persisted_item) == true &&
+        fetch_value(item, :amount_countable_source_changed) == false &&
+        fetch_value(item, :amount_line_total_changed) == false
+    end
+
+    def persisted_authority_free_diagnostic_item(item)
+      item_to_hash(item).merge(
+        quantity: normalized_quantity_for(item),
+        original_line_total: to_i_or_nil(fetch_value(item, :amount_persisted_original_line_total)),
+        discount_amount: to_i_or_nil(fetch_value(item, :amount_persisted_discount_amount)),
+        discount_rate: normalize_discount_rate(fetch_value(item, :amount_persisted_discount_rate)),
+        line_total: to_i_or_nil(fetch_value(item, :amount_persisted_line_total))
+      )
+    end
+
+    def persisted_missing_manual_amount?(item)
+      manual_input_context? &&
+        fetch_value(item, :amount_persisted_item) == true &&
+        fetch_value(item, :amount_line_total_present) == false &&
+        fetch_value(item, :amount_persisted_original_line_total).nil? &&
+        fetch_value(item, :amount_persisted_line_total).nil? &&
+        !manual_countable_unit_price_input?(item)
     end
 
     def normalize_context(value)

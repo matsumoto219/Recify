@@ -15,6 +15,13 @@ class Receipts::Editing::InputBuilder
     price
     quantity
     quantity_unit_code
+    pricing_source_kind
+    reference_price_amount
+    reference_quantity
+    reference_quantity_unit_code
+    quantity_unit_raw
+    reference_quantity_unit_raw
+    reference_price_tax_inclusion
     product_code
     tax_rate
     discount_rate
@@ -54,7 +61,20 @@ class Receipts::Editing::InputBuilder
     source_span_start
     source_span_end
   ].freeze
-  ITEM_SOURCE_FIELDS = %w[price quantity quantity_unit_code discount_rate discount_amount].freeze
+  ITEM_SOURCE_FIELDS = %w[
+    pricing_source_kind
+    price
+    quantity
+    quantity_unit_code
+    quantity_unit_raw
+    reference_price_amount
+    reference_quantity
+    reference_quantity_unit_code
+    reference_quantity_unit_raw
+    reference_price_tax_inclusion
+    discount_rate
+    discount_amount
+  ].freeze
 
   def self.call(receipt:, permitted:)
     new(receipt: receipt, permitted: permitted).call
@@ -167,15 +187,17 @@ class Receipts::Editing::InputBuilder
     case field
     when "price", "line_total", "discount_amount"
       value.blank? ? nil : value.to_i
-    when "quantity"
+    when "quantity", "reference_price_amount", "reference_quantity"
       value.blank? ? nil : BigDecimal(value.to_s)
     when "discount_rate"
       return nil if value.blank?
 
       rate = BigDecimal(value.to_s.delete("%"))
       rate > 1 ? rate / 100 : rate
-    when "quantity_unit_code"
+    when "quantity_unit_code", "reference_quantity_unit_code"
       value.to_s
+    else
+      value
     end
   rescue ArgumentError
     value
