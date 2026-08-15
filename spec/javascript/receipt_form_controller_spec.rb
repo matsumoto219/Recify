@@ -35,7 +35,7 @@ RSpec.describe "Receipt form Stimulus controller" do
       #{script}
     JAVASCRIPT
 
-    stdout, stderr, status = Open3.capture3("node", "-e", harness)
+    stdout, stderr, status = Open3.capture3("node", stdin_data: harness)
     raise stderr unless status.success?
 
     JSON.parse(stdout)
