@@ -1,0 +1,87 @@
+{
+  "case_id": "g117_reference_per_10l",
+  "category": "measurement",
+  "intent": "A price per 10 liters preserves the explicit reference quantity instead of normalizing it to one.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル液体B 税込 ¥1,200/10L 0.75L", "¥90"],
+        "purchased_quantity": "0.75",
+        "purchased_unit": "liter",
+        "reference_price_amount": "1200",
+        "reference_quantity": "10",
+        "reference_unit": "liter",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 90
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル量売 十リットル店",
+    "store_address": "サンプル県サンプル市基準町1-5",
+    "purchased_at": "2026-08-05T10:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル液体B",
+        "unit_price": 1200,
+        "quantity": "0.75",
+        "quantity_unit_code": "liter",
+        "pricing_source_kind": null,
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 90,
+        "line_total": 90,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "measurement_projections": [
+      {
+        "item_index": 0,
+        "exact_reference_amount": {"numerator": "90", "denominator": "1"},
+        "projected_reference_line_total": 90,
+        "discount_amount": 0,
+        "discounted_source_line_total": 90,
+        "projected_gross_line_total": 90
+      }
+    ],
+    "reference_pricing_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "1200",
+        "reference_quantity": "10",
+        "reference_unit_code": "liter",
+        "purchased_quantity": "0.75",
+        "purchased_unit_code": "liter",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 90,
+        "printed_line_total": "90",
+        "rounding_matches": ["floor", "half_up", "ceil"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 82, "tax": 8, "gross": 90, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 82,
+    "tax": 8,
+    "total": 90,
+    "payments": [{"method": "cash", "label": "現金", "amount": 90}],
+    "payment_sum": 90,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "measurement_projections", "reference_pricing_candidates"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

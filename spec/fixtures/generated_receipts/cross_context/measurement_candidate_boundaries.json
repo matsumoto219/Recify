@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "candidate_states": ["valid", "ambiguous", "unsupported", "missing", "none"],
+  "scenarios": [
+    {
+      "scenario_id": "package_only_markers",
+      "intent": "Package capacity, count, and composition do not become reference-pricing candidates.",
+      "source_items": [
+        {"item_index": 0, "printed_lines": ["サンプル飲料 500ml入り", "¥198"]},
+        {"item_index": 1, "printed_lines": ["サンプル食品 10個入", "¥238"]},
+        {"item_index": 2, "printed_lines": ["サンプル乾物 2袋 x 100g", "¥398"]}
+      ],
+      "expected_candidates": [
+        {"item_index": 0, "validation_state": "none", "rejection_reasons": []},
+        {"item_index": 1, "validation_state": "none", "rejection_reasons": []},
+        {"item_index": 2, "validation_state": "none", "rejection_reasons": []}
+      ],
+      "expected_persisted_authority": "none"
+    },
+    {
+      "scenario_id": "approximate_purchased_quantity",
+      "intent": "An approximate quantity after a reference expression remains incomplete evidence.",
+      "source_items": [
+        {
+          "item_index": 0,
+          "printed_lines": ["サンプル量売 税込 ¥10/1g 約100g", "¥1,000"],
+          "reference_price_amount": "10",
+          "reference_quantity": "1",
+          "reference_unit": "gram",
+          "reference_price_tax_inclusion": "gross",
+          "printed_line_total": 1000
+        }
+      ],
+      "expected_candidates": [
+        {
+          "item_index": 0,
+          "validation_state": "missing",
+          "rejection_reasons": ["missing_purchased_quantity", "missing_purchased_unit"]
+        }
+      ],
+      "expected_persisted_authority": "none"
+    },
+    {
+      "scenario_id": "ranged_purchased_quantity",
+      "intent": "Range endpoints after a reference expression are not selected as purchased quantity.",
+      "source_items": [
+        {
+          "item_index": 0,
+          "printed_lines": ["サンプル量売 税込 ¥10/1g 100-120g", "¥1,100"],
+          "reference_price_amount": "10",
+          "reference_quantity": "1",
+          "reference_unit": "gram",
+          "reference_price_tax_inclusion": "gross",
+          "printed_line_total": 1100
+        }
+      ],
+      "expected_candidates": [
+        {
+          "item_index": 0,
+          "validation_state": "missing",
+          "rejection_reasons": ["missing_purchased_quantity", "missing_purchased_unit"]
+        }
+      ],
+      "expected_persisted_authority": "none"
+    },
+    {
+      "scenario_id": "adjacent_item_basis_overlap",
+      "intent": "Overlapping evidence owned by an adjacent item cannot establish same-item pricing.",
+      "source_items": [
+        {"item_index": 0, "printed_lines": ["サンプル商品A 税込 ¥120/100g 342g", "¥410"]},
+        {"item_index": 1, "printed_lines": ["サンプル商品B 342g", "¥500"]}
+      ],
+      "association": {"kind": "overlapping_item_span", "candidate_item_index": 0, "adjacent_item_index": 1},
+      "expected_candidates": [
+        {
+          "item_index": 0,
+          "validation_state": "ambiguous",
+          "rejection_reasons": ["ambiguous_reference_expression"]
+        }
+      ],
+      "expected_persisted_authority": "none"
+    },
+    {
+      "scenario_id": "conflicting_reference_basis",
+      "intent": "Multiple reference expressions for one item remain ambiguous and retain both basis and quantity conflict reasons.",
+      "source_items": [
+        {
+          "item_index": 0,
+          "printed_lines": ["サンプル商品 税抜 ¥498/100g または ¥996/200g", "342g", "¥1,703"]
+        }
+      ],
+      "expected_candidates": [
+        {
+          "item_index": 0,
+          "validation_state": "ambiguous",
+          "rejection_reasons": ["ambiguous_reference_expression", "ambiguous_purchased_quantity"]
+        }
+      ],
+      "expected_persisted_authority": "none"
+    },
+    {
+      "scenario_id": "incomplete_reference_components",
+      "intent": "Malformed, unitless, and priceless reference expressions are never completed by inference.",
+      "source_items": [
+        {"item_index": 0, "printed_lines": ["サンプル商品A 税込 ¥498/ 342g", "¥1,703"]},
+        {"item_index": 1, "printed_lines": ["サンプル商品B 税込 ¥498/100 342g", "¥1,703"]},
+        {"item_index": 2, "printed_lines": ["サンプル商品C 100g 342g", "¥1,703"]}
+      ],
+      "expected_candidates": [
+        {
+          "item_index": 0,
+          "validation_state": "missing",
+          "rejection_reasons": ["missing_purchased_quantity", "missing_purchased_unit"]
+        },
+        {
+          "item_index": 1,
+          "validation_state": "missing",
+          "rejection_reasons": ["missing_reference_unit"]
+        },
+        {"item_index": 2, "validation_state": "none", "rejection_reasons": []}
+      ],
+      "expected_persisted_authority": "none",
+      "contract_note": "A bare /kg expression is a valid implicit quantity of one and is covered by g114, not by this negative case."
+    },
+    {
+      "scenario_id": "unknown_profile_unit",
+      "intent": "An unknown Japanese unit remains bounded unsupported evidence and never falls back to each.",
+      "source_items": [
+        {
+          "item_index": 0,
+          "printed_lines": ["サンプル商品 税抜 ¥498/100杯 342g", "¥1,703"],
+          "purchased_quantity": "342",
+          "purchased_unit": "gram",
+          "reference_price_amount": "498",
+          "reference_quantity": "100",
+          "reference_unit": "杯",
+          "reference_price_tax_inclusion": "net",
+          "printed_line_total": 1703
+        }
+      ],
+      "expected_candidates": [
+        {
+          "item_index": 0,
+          "validation_state": "unsupported",
+          "rejection_reasons": ["unsupported_reference_unit"]
+        }
+      ],
+      "expected_persisted_authority": "none"
+    },
+    {
+      "scenario_id": "dimension_mismatch",
+      "intent": "Mass reference evidence cannot project a purchased volume quantity.",
+      "source_items": [
+        {
+          "item_index": 0,
+          "printed_lines": ["サンプル商品 税抜 ¥498/100g 1L", "¥498"],
+          "purchased_quantity": "1",
+          "purchased_unit": "liter",
+          "reference_price_amount": "498",
+          "reference_quantity": "100",
+          "reference_unit": "gram",
+          "reference_price_tax_inclusion": "net",
+          "printed_line_total": 498
+        }
+      ],
+      "expected_candidates": [
+        {
+          "item_index": 0,
+          "validation_state": "unsupported",
+          "rejection_reasons": ["incompatible_unit_dimension"]
+        }
+      ],
+      "expected_persisted_authority": "none"
+    },
+    {
+      "scenario_id": "unsupported_foreign_unit",
+      "intent": "A foreign unit outside the Japan profile stays unsupported rather than being generalized in Q7.",
+      "source_items": [
+        {
+          "item_index": 0,
+          "printed_lines": ["サンプル商品 税抜 ¥498/1lb 2lb", "¥996"],
+          "purchased_quantity": "2",
+          "purchased_unit": "lb",
+          "reference_price_amount": "498",
+          "reference_quantity": "1",
+          "reference_unit": "lb",
+          "reference_price_tax_inclusion": "net",
+          "printed_line_total": 996
+        }
+      ],
+      "expected_candidates": [
+        {
+          "item_index": 0,
+          "validation_state": "unsupported",
+          "rejection_reasons": ["unsupported_reference_unit", "unsupported_purchased_unit"]
+        }
+      ],
+      "expected_persisted_authority": "none"
+    },
+    {
+      "scenario_id": "formula_without_printed_item_total",
+      "intent": "Complete reference evidence without a printed item total remains only a candidate in analysis.",
+      "contexts": ["manual_formula", "analysis"],
+      "source_items": [
+        {
+          "item_index": 0,
+          "printed_lines": ["サンプル液体 税込 ¥120/500ml 1.5L"],
+          "purchased_quantity": "1.5",
+          "purchased_unit": "liter",
+          "reference_price_amount": "120",
+          "reference_quantity": "500",
+          "reference_unit": "milliliter",
+          "reference_price_tax_inclusion": "gross"
+        }
+      ],
+      "expected_projection": {
+        "exact_reference_amount": {"numerator": "360", "denominator": "1"},
+        "projected_reference_line_total": 360,
+        "discount_amount": 0,
+        "discounted_source_line_total": 360,
+        "projected_gross_line_total": 360
+      },
+      "expected_candidates": [
+        {
+          "item_index": 0,
+          "validation_state": "valid",
+          "rejection_reasons": [],
+          "reference_price_amount": "120",
+          "reference_quantity": "500",
+          "reference_unit_code": "milliliter",
+          "purchased_quantity": "1.5",
+          "purchased_unit_code": "liter",
+          "reference_price_tax_inclusion": "gross",
+          "projected_line_total": 360,
+          "printed_line_total": null,
+          "rounding_matches": []
+        }
+      ],
+      "expected_contexts": {
+        "manual_formula": {
+          "pricing_source_kind": "reference_quantity_price",
+          "line_total": 360,
+          "reference_source_preserved": true
+        },
+        "analysis": {
+          "pricing_source_kind": null,
+          "line_total": null,
+          "reference_source_persisted": false
+        }
+      },
+      "expected_persisted_authority": "none_in_analysis",
+      "automatic_adoption": false
+    }
+  ]
+}

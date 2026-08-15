@@ -39,7 +39,7 @@ module GeneratedReceipts
 
       def expected_snapshot(case_data)
         expected = case_data.fetch("expected")
-        {
+        snapshot = {
           "store_name" => expected["store_name"],
           "subtotal" => expected["subtotal"],
           "tax" => expected["tax"],
@@ -54,6 +54,12 @@ module GeneratedReceipts
           "review_reasons" => expected["review_reasons"],
           "processing_error_code" => expected["processing_error_code"]
         }
+        if expected.key?("reference_pricing_candidates")
+          snapshot["reference_pricing_candidates"] = Array(expected["reference_pricing_candidates"]).reject do |candidate|
+            candidate["validation_state"] == "none"
+          end
+        end
+        snapshot
       end
     end
 

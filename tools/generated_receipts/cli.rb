@@ -19,7 +19,7 @@ module GeneratedReceipts
       DuplicateFiles.verify_repository!(root: File.expand_path("../..", __dir__))
       write_text = argv.include?("--write-text")
       write_images = argv.include?("--write-images")
-      case_paths = Dir[File.join(CASES_DIR, "*.json")].sort
+      case_paths = GeneratedReceipts.case_paths
       abort "No generated receipt cases found in #{CASES_DIR}" if case_paths.empty?
 
       failures = []
@@ -38,6 +38,8 @@ module GeneratedReceipts
       end
 
       abort "#{failures.size} generated receipt case(s) failed validation" if failures.any?
+      puts "#{GeneratedReceipts.legacy_case_paths.size} existing generated receipt case(s) passed"
+      puts "#{GeneratedReceipts.measurement_case_paths.size} Measurement generated receipt case(s) passed"
       puts "#{case_paths.size} generated receipt case(s) passed"
     rescue DuplicateFiles::Error => error
       abort error.message

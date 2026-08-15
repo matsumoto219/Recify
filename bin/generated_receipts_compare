@@ -30,7 +30,7 @@ end
 require_relative "../config/environment"
 require_relative "../tools/generated_receipts"
 
-case_paths = Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort
+case_paths = GeneratedReceipts.case_paths
 case_paths.select! { |path| File.basename(path, ".json") == options[:case_id] } if options[:case_id]
 abort "No generated receipt cases matched" if case_paths.empty?
 

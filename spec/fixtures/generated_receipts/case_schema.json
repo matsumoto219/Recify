@@ -48,7 +48,7 @@
   ],
   "properties": {
     "case_id": { "type": "string" },
-    "category": { "enum": ["normal", "payment", "discount_adjustment", "tax_rounding", "ocr_anomaly", "non_receipt", "conflict"] },
+    "category": { "enum": ["normal", "payment", "discount_adjustment", "tax_rounding", "ocr_anomaly", "non_receipt", "conflict", "measurement"] },
     "intent": { "type": "string" },
     "receipt_kind": { "enum": ["receipt", "non_receipt"] },
     "expected": {
@@ -71,7 +71,30 @@
             "scope": { "type": "string" }
           }
         },
-        "items": { "type": "array" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "unit_price", "quantity", "line_total", "tax_rate", "discount_amount"],
+            "properties": {
+              "name": { "type": "string" },
+              "unit_price": { "type": ["number", "null"] },
+              "quantity": { "type": ["number", "string", "null"] },
+              "quantity_unit_code": { "type": ["string", "null"] },
+              "pricing_source_kind": { "enum": ["count_unit_price", "reference_quantity_price", "explicit_line_total", null] },
+              "reference_price_amount": { "type": ["number", "string", "null"] },
+              "reference_quantity": { "type": ["number", "string", "null"] },
+              "reference_quantity_unit_code": { "type": ["string", "null"] },
+              "reference_price_tax_inclusion": { "enum": ["gross", "net", null] },
+              "original_line_total": { "type": ["integer", "null"] },
+              "line_total": { "type": ["integer", "null"] },
+              "tax_rate": { "type": ["number", "null"] },
+              "discount_amount": { "type": ["integer", "null"] },
+              "tax_inclusion": { "enum": ["gross", "net"] }
+            }
+          }
+        },
         "receipt_adjustments": { "type": "array" },
         "tax_details": { "type": "array" },
         "subtotal": { "type": "integer" },
@@ -83,7 +106,114 @@
         "settlement": { "type": "object" },
         "status": { "type": "string" },
         "review_reasons": { "type": "array" },
-        "processing_error_code": { "type": ["string", "null"] }
+        "processing_error_code": { "type": ["string", "null"] },
+        "measurement_projections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "item_index",
+              "exact_reference_amount",
+              "projected_reference_line_total",
+              "discount_amount",
+              "discounted_source_line_total",
+              "projected_gross_line_total"
+            ],
+            "properties": {
+              "item_index": { "type": "integer", "minimum": 0 },
+              "exact_reference_amount": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["numerator", "denominator"],
+                "properties": {
+                  "numerator": { "type": "string" },
+                  "denominator": { "type": "string" }
+                }
+              },
+              "projected_reference_line_total": { "type": ["integer", "null"] },
+              "discount_amount": { "type": ["integer", "null"] },
+              "discounted_source_line_total": { "type": ["integer", "null"] },
+              "projected_gross_line_total": { "type": ["integer", "null"] }
+            }
+          }
+        },
+        "reference_pricing_candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["item_index", "validation_state", "rejection_reasons"],
+            "properties": {
+              "item_index": { "type": "integer", "minimum": 0 },
+              "validation_state": { "enum": ["valid", "missing", "ambiguous", "unsupported", "none"] },
+              "rejection_reasons": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "missing_reference_price",
+                    "missing_reference_quantity",
+                    "missing_reference_unit",
+                    "missing_purchased_quantity",
+                    "missing_purchased_unit",
+                    "ambiguous_reference_expression",
+                    "ambiguous_purchased_quantity",
+                    "ambiguous_tax_inclusion",
+                    "unsupported_reference_unit",
+                    "unsupported_purchased_unit",
+                    "incompatible_unit_dimension",
+                    "invalid_reference_price",
+                    "invalid_reference_quantity",
+                    "invalid_purchased_quantity",
+                    "reference_price_out_of_bounds",
+                    "reference_quantity_out_of_bounds",
+                    "purchased_quantity_out_of_bounds",
+                    "evidence_outside_item",
+                    "insufficient_component_evidence"
+                  ]
+                }
+              },
+              "reference_price_amount": { "type": ["string", "null"] },
+              "reference_quantity": { "type": ["string", "null"] },
+              "reference_unit_code": { "type": ["string", "null"] },
+              "purchased_quantity": { "type": ["string", "null"] },
+              "purchased_unit_code": { "type": ["string", "null"] },
+              "reference_price_tax_inclusion": { "enum": ["gross", "net", "unknown", null] },
+              "projected_line_total": { "type": ["integer", "null"] },
+              "printed_line_total": { "type": ["string", "null"] },
+              "rounding_matches": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context", "items"],
+      "properties": {
+        "context": { "enum": ["analysis", "manual", "edit_save"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["item_index", "printed_lines", "purchased_quantity", "purchased_unit"],
+            "properties": {
+              "item_index": { "type": "integer", "minimum": 0 },
+              "printed_lines": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "purchased_quantity": { "type": ["string", "null"] },
+              "purchased_unit": { "type": ["string", "null"] },
+              "reference_price_amount": { "type": ["string", "null"] },
+              "reference_quantity": { "type": ["string", "null"] },
+              "reference_unit": { "type": ["string", "null"] },
+              "reference_price_tax_inclusion": { "enum": ["gross", "net", "unknown", null] },
+              "printed_line_total": { "type": ["integer", "null"] },
+              "discount_rate": { "type": ["string", "null"] },
+              "discount_amount": { "type": ["integer", "null"] }
+            }
+          }
+        }
       }
     },
     "render": { "type": "object" },

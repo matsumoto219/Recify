@@ -4,11 +4,23 @@ require_relative "../../../tools/generated_receipts"
 
 RSpec.describe GeneratedReceipts::TextRenderer do
   def load_case(name)
-    GeneratedReceipts::Validator.load_file(File.join(GeneratedReceipts::CASES_DIR, "#{name}.json"))
+    path = [
+      GeneratedReceipts::CASES_DIR,
+      GeneratedReceipts::MEASUREMENT_CASES_DIR
+    ].map { |directory| File.join(directory, "#{name}.json") }
+      .find { |candidate| File.file?(candidate) }
+
+    GeneratedReceipts::Validator.load_file(path)
   end
 
   it "renders text that matches generated fixture text files" do
-    Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort.each do |path|
+    aggregate_failures do
+      expect(GeneratedReceipts.legacy_case_paths.size).to eq(112)
+      expect(GeneratedReceipts.measurement_case_paths.size).to eq(10)
+      expect(GeneratedReceipts.case_paths.size).to eq(122)
+    end
+
+    GeneratedReceipts.case_paths.each do |path|
       case_data = GeneratedReceipts::Validator.load_file(path)
       text_path = File.join(GeneratedReceipts::TEXT_DIR, "#{case_data.fetch('case_id')}.txt")
 
@@ -68,5 +80,38 @@ RSpec.describe GeneratedReceipts::TextRenderer do
       expect(text).not_to include("領収書")
       expect(text).not_to include("合計")
     end
+  end
+
+  it "renders measurement item source lines without deriving them from expected amounts" do
+    case_data = load_case("g001_normal_included_10_cash")
+    case_data["source"] = {
+      "items" => [
+        {
+          "item_index" => 2,
+          "printed_lines" => [ "税込 ¥120/500ml", "1500ml", "¥360" ]
+        },
+        {
+          "item_index" => 0,
+          "printed_lines" => [ "税込 ¥1,480/100g", "342g", "¥5,061" ]
+        }
+      ]
+    }
+
+    text = described_class.call(case_data)
+
+    aggregate_failures do
+      expect(text).to include("税込 ¥1,480/100g\n342g\n¥5,061\n税込 ¥120/500ml\n1500ml\n¥360")
+      expect(text).not_to include("サンプル弁当A ¥550")
+      expect(text).not_to include("サンプル雑貨C ¥110")
+      expect(text).to include("合計 ¥880")
+    end
+  end
+
+  it "keeps legacy item rendering unchanged when measurement source is absent" do
+    case_data = load_case("g001_normal_included_10_cash")
+
+    expect(described_class.call(case_data)).to include(
+      "サンプル弁当A ¥550\nサンプル飲料B ¥220\nサンプル雑貨C ¥110"
+    )
   end
 end

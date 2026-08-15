@@ -159,6 +159,205 @@ RSpec.describe GeneratedReceipts::Comparator do
     end
   end
 
+  it "compares persisted measurement source fields only when the fixture declares them" do
+    case_data = deep_dup(load_case("g001_normal_included_10_cash"))
+    expected_item = case_data.fetch("expected").fetch("items").first
+    expected_item.merge!(
+      "quantity_unit_code" => "kilogram",
+      "pricing_source_kind" => "reference_quantity_price",
+      "reference_price_amount" => "3280.5",
+      "reference_quantity" => "1.000",
+      "reference_quantity_unit_code" => "kilogram",
+      "reference_price_tax_inclusion" => "gross",
+      "original_line_total" => 4_101
+    )
+    matching_actual = GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data)
+    optional_keys = %w[
+      quantity_unit_code
+      pricing_source_kind
+      reference_price_amount
+      reference_quantity
+      reference_quantity_unit_code
+      reference_price_tax_inclusion
+      original_line_total
+    ]
+
+    aggregate_failures do
+      expect(described_class.call(case_data, matching_actual).status).to eq("PASS")
+
+      optional_keys.each do |key|
+        actual = deep_dup(matching_actual)
+        actual.fetch("items").first[key] = key == "original_line_total" ? 4_102 : "different"
+
+        result = described_class.call(case_data, actual)
+
+        expect(result.status).to eq("FAIL"), key
+        expect(result.diffs).to include(hash_including(path: "item_amounts", severity: "FAIL")), key
+      end
+    end
+  end
+
+  it "ignores undeclared measurement source fields for legacy cases" do
+    case_data = load_case("g001_normal_included_10_cash")
+    actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
+    actual.fetch("items").first.merge!(
+      "quantity_unit_code" => "kilogram",
+      "pricing_source_kind" => "reference_quantity_price",
+      "reference_price_amount" => "999",
+      "reference_quantity" => "100",
+      "reference_quantity_unit_code" => "gram",
+      "reference_price_tax_inclusion" => "gross",
+      "original_line_total" => 999
+    )
+
+    expect(described_class.call(case_data, actual).status).to eq("PASS")
+  end
+
+  it "snapshots persisted measurement source decimals without losing precision" do
+    item = double(
+      confirmed_name: "サンプル量売商品",
+      suggested_name: nil,
+      raw_text: "サンプル量売商品",
+      price: nil,
+      quantity: BigDecimal("1.250"),
+      quantity_unit_code: "kilogram",
+      line_total: 4_101,
+      original_line_total: 4_100,
+      tax_rate: BigDecimal("0.08"),
+      discount_amount: nil,
+      pricing_source_kind: "reference_quantity_price",
+      reference_price_amount: BigDecimal("3280.500000"),
+      reference_quantity: BigDecimal("1.000"),
+      reference_quantity_unit_code: "kilogram",
+      reference_price_tax_inclusion: "gross"
+    )
+    empty_relation = double(order: [])
+    receipt = double(
+      store_name: "サンプルストア",
+      subtotal_amount: 3_797,
+      tax_amount: 304,
+      total_amount: 4_101,
+      tax_rate: BigDecimal("0.08"),
+      receipt_tax_details: empty_relation,
+      receipt_items: double(order: [ item ]),
+      receipt_adjustments: empty_relation,
+      payment_method: "cash",
+      receipt_payments: empty_relation,
+      status: "completed",
+      review_reasons: [],
+      processing_error_code: nil
+    )
+
+    snapshot = described_class.snapshot_from_receipt(receipt)
+
+    expect(snapshot.fetch("items").sole).to include(
+      "quantity_unit_code" => "kilogram",
+      "pricing_source_kind" => "reference_quantity_price",
+      "reference_price_amount" => "3280.5",
+      "reference_quantity" => "1",
+      "reference_quantity_unit_code" => "kilogram",
+      "reference_price_tax_inclusion" => "gross",
+      "original_line_total" => 4_100
+    )
+  end
+
+  it "compares OCR reference candidates separately from persisted item authority" do
+    case_data = deep_dup(load_case("g001_normal_included_10_cash"))
+    case_data.fetch("expected")["reference_pricing_candidates"] = [
+      {
+        "item_index" => 0,
+        "validation_state" => "valid",
+        "rejection_reasons" => [],
+        "reference_price_amount" => "1480",
+        "reference_quantity" => "100",
+        "reference_unit_code" => "gram",
+        "purchased_quantity" => "342",
+        "purchased_unit_code" => "gram",
+        "reference_price_tax_inclusion" => "gross",
+        "projected_line_total" => 5_062,
+        "printed_line_total" => 5_061,
+        "rounding_matches" => [ "floor" ]
+      }
+    ]
+    actual = GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data)
+
+    aggregate_failures do
+      expect(case_data.dig("expected", "items", 0)).not_to have_key("pricing_source_kind")
+      expect(described_class.call(case_data, actual).status).to eq("PASS")
+
+      drifted = deep_dup(actual)
+      drifted.dig("reference_pricing_candidates", 0)["validation_state"] = "ambiguous"
+      result = described_class.call(case_data, drifted)
+
+      expect(result.status).to eq("FAIL")
+      expect(result.diffs).to include(hash_including(path: "reference_pricing_candidates", severity: "FAIL"))
+    end
+  end
+
+  it "treats none as candidate absence and fails unexpected candidates" do
+    case_data = deep_dup(load_case("g001_normal_included_10_cash"))
+    case_data.fetch("expected")["reference_pricing_candidates"] = [
+      { "item_index" => 0, "validation_state" => "none", "rejection_reasons" => [] }
+    ]
+    no_candidates = GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data)
+
+    unexpected = deep_dup(no_candidates)
+    unexpected["reference_pricing_candidates"] = [
+      {
+        "item_index" => 0,
+        "validation_state" => "unsupported",
+        "rejection_reasons" => [ "unsupported_reference_unit" ]
+      }
+    ]
+
+    aggregate_failures do
+      expect(no_candidates["reference_pricing_candidates"]).to eq([])
+      expect(described_class.call(case_data, no_candidates).status).to eq("PASS")
+
+      result = described_class.call(case_data, unexpected)
+      expect(result.status).to eq("FAIL")
+      expect(result.diffs).to include(hash_including(path: "reference_pricing_candidates", severity: "FAIL"))
+    end
+  end
+
+  it "bounds reference candidate summaries without retaining raw evidence" do
+    candidates = Array.new(101) do |index|
+      {
+        item_index: index,
+        validation_state: "unsupported",
+        rejection_reasons: Array.new(10) { |reason_index| "reason_#{reason_index}" },
+        reference_price: {
+          amount: "1.800000",
+          evidence: { source_field_path: "documents[0].fields.Items[#{index}].Price" }
+        },
+        reference_quantity: {
+          amount: "1",
+          unit_code: "gram",
+          unit_raw: "g"
+        },
+        purchased_quantity: {
+          amount: "850",
+          unit_code: "gram",
+          unit_raw: "g"
+        }
+      }
+    end
+    candidates.first[:item_index] = 100
+    candidates.first[:printed_line_total] = { amount: "1000000000" }
+    candidates.first[:corroboration] = { projected_amount: 1_000_000_000 }
+
+    summaries = described_class.reference_pricing_candidates_summary(candidates)
+    serialized = JSON.generate(summaries)
+
+    aggregate_failures do
+      expect(summaries.size).to eq(100)
+      expect(summaries).to all(include("reference_price_amount" => "1.8"))
+      expect(summaries).to all(satisfy { |candidate| candidate.fetch("rejection_reasons").size == 8 })
+      expect(summaries.first).not_to include("item_index", "printed_line_total", "projected_line_total")
+      expect(serialized).not_to include("evidence", "source_field_path", "unit_raw")
+    end
+  end
+
   it "summarizes comparison runs with WARN when no run failed" do
     result = GeneratedReceipts::ComparisonRunner::Result.new(
       case_id: "sample",
