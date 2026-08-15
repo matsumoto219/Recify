@@ -444,9 +444,14 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingCandidateExtractor do
         projection: ReceiptAmountService.method(:reference_item_extension_projection)
       )
       build_calls = 0
+      line_break_scan_calls = 0
       allow(extractor).to receive(:build_reference_match).and_wrap_original do |original, *arguments, **keywords|
         build_calls += 1
         original.call(*arguments, **keywords)
+      end
+      allow(extractor).to receive(:provider_line_break_offsets).and_wrap_original do |original, *arguments|
+        line_break_scan_calls += 1
+        original.call(*arguments)
       end
       candidates = nil
 
@@ -455,6 +460,7 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingCandidateExtractor do
       aggregate_failures do
         expect(dense_content.bytesize).to eq(described_class::MAX_ITEM_CONTENT_BYTES)
         expect(build_calls).to be <= described_class::MAX_ITEMS * described_class::MAX_COMPONENT_SPANS
+        expect(line_break_scan_calls).to eq(described_class::MAX_ITEMS)
         expect(candidates.size).to eq(described_class::MAX_ITEMS)
         expect(candidates).to all(include(
           validation_state: 'ambiguous',

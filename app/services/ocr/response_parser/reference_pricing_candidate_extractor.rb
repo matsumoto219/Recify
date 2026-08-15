@@ -536,6 +536,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     raw_match_budget:
   )
     matches = []
+    line_break_offsets = nil
     text.scan(PURCHASED_QUANTITY_PATTERN) do
       if raw_match_budget[:remaining].zero?
         raw_match_budget[:exceeded] = true
@@ -562,9 +563,10 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         global_start,
         global_end
       )
-      next if enforce_after_reference &&
-        path == "documents[0].fields.Items[#{item_index}]" &&
-        line_break_between_provider_offsets?(text, base_offset, reference_end, global_start)
+      if enforce_after_reference && path == "documents[0].fields.Items[#{item_index}]"
+        line_break_offsets ||= provider_line_break_offsets(text, base_offset)
+        next if line_break_between_provider_offsets?(line_break_offsets, reference_end, global_start)
+      end
 
       matches << {
         quantity_text: match_data[:quantity],
@@ -628,13 +630,21 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     normalized
   end
 
-  def line_break_between_provider_offsets?(text, base_offset, start_offset, end_offset)
-    text.each_char.with_index.any? do |character, character_index|
-      next false unless character.match?(LINE_BREAK_PATTERN)
+  def provider_line_break_offsets(text, base_offset)
+    offsets = []
+    provider_position = base_offset
 
-      line_break_offset = provider_offset(text, base_offset, character_index)
-      line_break_offset >= start_offset && line_break_offset < end_offset
+    text.each_char do |character|
+      offsets << provider_position if character.match?(LINE_BREAK_PATTERN)
+      provider_position += (character.ord > 0xFFFF ? 2 : 1)
     end
+
+    offsets
+  end
+
+  def line_break_between_provider_offsets?(line_break_offsets, start_offset, end_offset)
+    line_break_offset = line_break_offsets.bsearch { |offset| offset >= start_offset }
+    !line_break_offset.nil? && line_break_offset < end_offset
   end
 
   def deduplicate_purchased_matches(matches)
