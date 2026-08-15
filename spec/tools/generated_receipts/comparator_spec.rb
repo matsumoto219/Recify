@@ -250,15 +250,18 @@ RSpec.describe GeneratedReceipts::Comparator do
 
     snapshot = described_class.snapshot_from_receipt(receipt)
 
-    expect(snapshot.fetch("items").sole).to include(
-      "quantity_unit_code" => "kilogram",
-      "pricing_source_kind" => "reference_quantity_price",
-      "reference_price_amount" => "3280.5",
-      "reference_quantity" => "1",
-      "reference_quantity_unit_code" => "kilogram",
-      "reference_price_tax_inclusion" => "gross",
-      "original_line_total" => 4_100
-    )
+    aggregate_failures do
+      expect(snapshot.fetch("items").size).to eq(1)
+      expect(snapshot.fetch("items").first).to include(
+        "quantity_unit_code" => "kilogram",
+        "pricing_source_kind" => "reference_quantity_price",
+        "reference_price_amount" => "3280.5",
+        "reference_quantity" => "1",
+        "reference_quantity_unit_code" => "kilogram",
+        "reference_price_tax_inclusion" => "gross",
+        "original_line_total" => 4_100
+      )
+    end
   end
 
   it "compares OCR reference candidates separately from persisted item authority" do
@@ -275,7 +278,7 @@ RSpec.describe GeneratedReceipts::Comparator do
         "purchased_unit_code" => "gram",
         "reference_price_tax_inclusion" => "gross",
         "projected_line_total" => 5_062,
-        "printed_line_total" => 5_061,
+        "printed_line_total" => "5061",
         "rounding_matches" => [ "floor" ]
       }
     ]
@@ -320,12 +323,12 @@ RSpec.describe GeneratedReceipts::Comparator do
     end
   end
 
-  it "bounds reference candidate summaries without retaining raw evidence" do
-    candidates = Array.new(101) do |index|
+  it "bounds candidate summaries and rejects nested count overflow without retaining raw evidence" do
+    candidates = Array.new(100) do |index|
       {
         item_index: index,
         validation_state: "unsupported",
-        rejection_reasons: Array.new(10) { |reason_index| "reason_#{reason_index}" },
+        rejection_reasons: Array.new(8) { |reason_index| "reason_#{reason_index}" },
         reference_price: {
           amount: "1.800000",
           evidence: { source_field_path: "documents[0].fields.Items[#{index}].Price" }
@@ -347,23 +350,41 @@ RSpec.describe GeneratedReceipts::Comparator do
     candidates.first[:corroboration] = { projected_amount: 1_000_000_000 }
 
     summaries = described_class.reference_pricing_candidates_summary(candidates)
+    nested_over_limit = described_class.reference_pricing_candidates_summary([
+      candidates.fetch(1).merge(
+        rejection_reasons: Array.new(9) { |reason_index| "reason_#{reason_index}" }
+      )
+    ])
+    candidate_count_over_limit = described_class.reference_pricing_candidates_summary(
+      candidates + [ candidates.last ]
+    )
     serialized = JSON.generate(summaries)
 
     aggregate_failures do
       expect(summaries.size).to eq(100)
-      expect(summaries).to all(include("reference_price_amount" => "1.8"))
-      expect(summaries).to all(satisfy { |candidate| candidate.fetch("rejection_reasons").size == 8 })
-      expect(summaries.first).not_to include("item_index", "printed_line_total", "projected_line_total")
+      expect(summaries.first).to eq(described_class::MALFORMED_CANDIDATE_SUMMARY)
+      expect(summaries.drop(1)).to all(include("reference_price_amount" => "1.8"))
+      expect(summaries.drop(1)).to all(
+        satisfy { |candidate| candidate.fetch("rejection_reasons").size == 8 }
+      )
+      expect(nested_over_limit).to eq([ described_class::MALFORMED_CANDIDATE_SUMMARY ])
+      expect(candidate_count_over_limit).to eq([ described_class::MALFORMED_CANDIDATE_SUMMARY ])
       expect(serialized).not_to include("evidence", "source_field_path", "unit_raw")
     end
   end
 
   it "summarizes comparison runs with WARN when no run failed" do
     result = GeneratedReceipts::ComparisonRunner::Result.new(
-      case_id: "sample",
+      case_id: "g000_sample",
       run_results: [
-        { comparison: described_class::Result.new(case_id: "sample", status: "PASS", diffs: []) },
-        { comparison: described_class::Result.new(case_id: "sample", status: "WARN", diffs: [ { path: "status" } ]) }
+        { comparison: described_class::Result.new(case_id: "g000_sample", status: "PASS", diffs: []) },
+        {
+          comparison: described_class::Result.new(
+            case_id: "g000_sample",
+            status: "WARN",
+            diffs: [ { path: "status", expected: "completed", actual: "review_needed", severity: "WARN" } ]
+          )
+        }
       ]
     )
 
@@ -372,15 +393,15 @@ RSpec.describe GeneratedReceipts::Comparator do
 
   it "treats runs with the same normalized comparison result as stable" do
     result = GeneratedReceipts::ComparisonRunner::Result.new(
-      case_id: "sample",
+      case_id: "g000_sample",
       run_results: [
         {
           actual: { "tax_rate" => "0.10" },
-          comparison: described_class::Result.new(case_id: "sample", status: "PASS", diffs: [])
+          comparison: described_class::Result.new(case_id: "g000_sample", status: "PASS", diffs: [])
         },
         {
           actual: { "tax_rate" => "0.1" },
-          comparison: described_class::Result.new(case_id: "sample", status: "PASS", diffs: [])
+          comparison: described_class::Result.new(case_id: "g000_sample", status: "PASS", diffs: [])
         }
       ]
     )
@@ -390,18 +411,18 @@ RSpec.describe GeneratedReceipts::Comparator do
 
   it "keeps runs unstable when normalized comparison diffs differ" do
     result = GeneratedReceipts::ComparisonRunner::Result.new(
-      case_id: "sample",
+      case_id: "g000_sample",
       run_results: [
         {
           comparison: described_class::Result.new(
-            case_id: "sample",
+            case_id: "g000_sample",
             status: "WARN",
             diffs: [ { path: "store_name", expected: "A", actual: "B", severity: "WARN" } ]
           )
         },
         {
           comparison: described_class::Result.new(
-            case_id: "sample",
+            case_id: "g000_sample",
             status: "WARN",
             diffs: [ { path: "store_name", expected: "A", actual: "C", severity: "WARN" } ]
           )
@@ -416,19 +437,43 @@ RSpec.describe GeneratedReceipts::Comparator do
     aggregate_failures do
       expect(
         GeneratedReceipts::ComparisonRunner::Result.new(
-          case_id: "sample",
+          case_id: "g000_sample",
           run_results: [
-            { status: "ENV_BLOCKED", comparison: described_class::Result.new(case_id: "sample", status: "FAIL", diffs: []) }
+            {
+              status: "ENV_BLOCKED",
+              diffs: [ { path: "processing_error_code", expected: nil, actual: "ocr_timeout", severity: "ENV_BLOCKED" } ],
+              comparison: described_class::Result.new(
+                case_id: "g000_sample",
+                status: "FAIL",
+                diffs: [ { path: "total", expected: 100, actual: 99, severity: "FAIL" } ]
+              )
+            }
           ]
         ).status
       ).to eq("ENV_BLOCKED")
 
       expect(
         GeneratedReceipts::ComparisonRunner::Result.new(
-          case_id: "sample",
+          case_id: "g000_sample",
           run_results: [
-            { status: "ENV_BLOCKED", comparison: described_class::Result.new(case_id: "sample", status: "FAIL", diffs: []) },
-            { status: "FAIL", comparison: described_class::Result.new(case_id: "sample", status: "FAIL", diffs: []) }
+            {
+              status: "ENV_BLOCKED",
+              diffs: [ { path: "processing_error_code", expected: nil, actual: "ocr_timeout", severity: "ENV_BLOCKED" } ],
+              comparison: described_class::Result.new(
+                case_id: "g000_sample",
+                status: "FAIL",
+                diffs: [ { path: "total", expected: 100, actual: 99, severity: "FAIL" } ]
+              )
+            },
+            {
+              status: "FAIL",
+              diffs: [ { path: "total", expected: 100, actual: 99, severity: "FAIL" } ],
+              comparison: described_class::Result.new(
+                case_id: "g000_sample",
+                status: "FAIL",
+                diffs: [ { path: "total", expected: 100, actual: 99, severity: "FAIL" } ]
+              )
+            }
           ]
         ).status
       ).to eq("FAIL")

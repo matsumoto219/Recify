@@ -707,44 +707,13 @@ module Amounts
     end
 
     def exact_bounded_decimal_for_diagnostic?(value, minimum:, maximum:, maximum_scale:, minimum_inclusive:)
-      exact = exact_decimal_for_diagnostic(value)
-      return false unless exact
-      return false if minimum_inclusive ? exact < minimum : exact <= minimum
-      return false if exact > maximum
-
-      decimal_scale_for_diagnostic(exact)&.<=(maximum_scale)
-    end
-
-    def exact_decimal_for_diagnostic(value)
-      case value
-      when Integer, Rational
-        value.to_r
-      when BigDecimal
-        value.to_r if value.finite?
-      when String
-        Rational(value) if value.match?(/\A[+-]?\d+(?:\.\d+)?\z/)
-      end
-    rescue ArgumentError, TypeError, FloatDomainError, ZeroDivisionError
-      nil
-    end
-
-    def decimal_scale_for_diagnostic(value)
-      denominator = value.denominator
-      powers_of_two = factor_count_for_diagnostic(denominator, 2)
-      denominator /= 2**powers_of_two
-      powers_of_five = factor_count_for_diagnostic(denominator, 5)
-      denominator /= 5**powers_of_five
-
-      [ powers_of_two, powers_of_five ].max if denominator == 1
-    end
-
-    def factor_count_for_diagnostic(value, factor)
-      count = 0
-      while (value % factor).zero?
-        count += 1
-        value /= factor
-      end
-      count
+      Amounts::ExactBoundedDecimal.call(
+        value,
+        minimum: minimum,
+        maximum: maximum,
+        maximum_scale: maximum_scale,
+        minimum_inclusive: minimum_inclusive
+      ).present?
     end
 
     def canonical_reference_unit_code?(code)

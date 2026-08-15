@@ -47,7 +47,7 @@
     }
   ],
   "properties": {
-    "case_id": { "type": "string" },
+    "case_id": { "type": "string", "maxLength": 64, "pattern": "^g[0-9]{3}_[a-z0-9_]+$" },
     "category": { "enum": ["normal", "payment", "discount_adjustment", "tax_rounding", "ocr_anomaly", "non_receipt", "conflict", "measurement"] },
     "intent": { "type": "string" },
     "receipt_kind": { "enum": ["receipt", "non_receipt"] },
@@ -73,6 +73,7 @@
         },
         "items": {
           "type": "array",
+          "maxItems": 100,
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -80,14 +81,14 @@
             "properties": {
               "name": { "type": "string" },
               "unit_price": { "type": ["number", "null"] },
-              "quantity": { "type": ["number", "string", "null"] },
-              "quantity_unit_code": { "type": ["string", "null"] },
+              "quantity": { "type": ["number", "string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "quantity_unit_code": { "type": ["string", "null"], "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
               "pricing_source_kind": { "enum": ["count_unit_price", "reference_quantity_price", "explicit_line_total", null] },
-              "reference_price_amount": { "type": ["number", "string", "null"] },
-              "reference_quantity": { "type": ["number", "string", "null"] },
-              "reference_quantity_unit_code": { "type": ["string", "null"] },
+              "reference_price_amount": { "type": ["number", "string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "reference_quantity": { "type": ["number", "string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "reference_quantity_unit_code": { "type": ["string", "null"], "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
               "reference_price_tax_inclusion": { "enum": ["gross", "net", null] },
-              "original_line_total": { "type": ["integer", "null"] },
+              "original_line_total": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999999 },
               "line_total": { "type": ["integer", "null"] },
               "tax_rate": { "type": ["number", "null"] },
               "discount_amount": { "type": ["integer", "null"] },
@@ -95,20 +96,21 @@
             }
           }
         },
-        "receipt_adjustments": { "type": "array" },
-        "tax_details": { "type": "array" },
+        "receipt_adjustments": { "type": "array", "maxItems": 100 },
+        "tax_details": { "type": "array", "maxItems": 100 },
         "subtotal": { "type": "integer" },
         "tax": { "type": "integer" },
         "total": { "type": "integer" },
-        "payments": { "type": "array" },
+        "payments": { "type": "array", "maxItems": 100 },
         "payment_sum": { "type": "integer" },
         "payment_method": { "type": "string" },
         "settlement": { "type": "object" },
         "status": { "type": "string" },
-        "review_reasons": { "type": "array" },
+        "review_reasons": { "type": "array", "maxItems": 100 },
         "processing_error_code": { "type": ["string", "null"] },
         "measurement_projections": {
           "type": "array",
+          "maxItems": 100,
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -121,34 +123,37 @@
               "projected_gross_line_total"
             ],
             "properties": {
-              "item_index": { "type": "integer", "minimum": 0 },
+              "item_index": { "type": "integer", "minimum": 0, "maximum": 99 },
               "exact_reference_amount": {
                 "type": ["object", "null"],
                 "additionalProperties": false,
                 "required": ["numerator", "denominator"],
                 "properties": {
-                  "numerator": { "type": "string" },
-                  "denominator": { "type": "string" }
+                  "numerator": { "type": "string", "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)$" },
+                  "denominator": { "type": "string", "maxLength": 64, "pattern": "^[1-9]\\d*$" }
                 }
               },
-              "projected_reference_line_total": { "type": ["integer", "null"] },
-              "discount_amount": { "type": ["integer", "null"] },
-              "discounted_source_line_total": { "type": ["integer", "null"] },
-              "projected_gross_line_total": { "type": ["integer", "null"] }
+              "projected_reference_line_total": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999999 },
+              "discount_amount": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999999 },
+              "discounted_source_line_total": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999999 },
+              "projected_gross_line_total": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999999 }
             }
           }
         },
         "reference_pricing_candidates": {
           "type": "array",
+          "maxItems": 100,
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": ["item_index", "validation_state", "rejection_reasons"],
             "properties": {
-              "item_index": { "type": "integer", "minimum": 0 },
+              "item_index": { "type": "integer", "minimum": 0, "maximum": 99 },
               "validation_state": { "enum": ["valid", "missing", "ambiguous", "unsupported", "none"] },
               "rejection_reasons": {
                 "type": "array",
+                "maxItems": 8,
+                "uniqueItems": true,
                 "items": {
                   "enum": [
                     "missing_reference_price",
@@ -173,15 +178,15 @@
                   ]
                 }
               },
-              "reference_price_amount": { "type": ["string", "null"] },
-              "reference_quantity": { "type": ["string", "null"] },
-              "reference_unit_code": { "type": ["string", "null"] },
-              "purchased_quantity": { "type": ["string", "null"] },
-              "purchased_unit_code": { "type": ["string", "null"] },
+              "reference_price_amount": { "type": ["string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "reference_quantity": { "type": ["string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "reference_unit_code": { "type": ["string", "null"], "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
+              "purchased_quantity": { "type": ["string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "purchased_unit_code": { "type": ["string", "null"], "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
               "reference_price_tax_inclusion": { "enum": ["gross", "net", "unknown", null] },
-              "projected_line_total": { "type": ["integer", "null"] },
-              "printed_line_total": { "type": ["string", "null"] },
-              "rounding_matches": { "type": "array", "items": { "type": "string" } }
+              "projected_line_total": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999999 },
+              "printed_line_total": { "type": ["string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)$" },
+              "rounding_matches": { "type": "array", "maxItems": 3, "uniqueItems": true, "items": { "enum": ["floor", "half_up", "ceil"] } }
             }
           }
         }
@@ -195,22 +200,23 @@
         "context": { "enum": ["analysis", "manual", "edit_save"] },
         "items": {
           "type": "array",
+          "maxItems": 100,
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": ["item_index", "printed_lines", "purchased_quantity", "purchased_unit"],
             "properties": {
-              "item_index": { "type": "integer", "minimum": 0 },
-              "printed_lines": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-              "purchased_quantity": { "type": ["string", "null"] },
-              "purchased_unit": { "type": ["string", "null"] },
-              "reference_price_amount": { "type": ["string", "null"] },
-              "reference_quantity": { "type": ["string", "null"] },
-              "reference_unit": { "type": ["string", "null"] },
+              "item_index": { "type": "integer", "minimum": 0, "maximum": 99 },
+              "printed_lines": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" } },
+              "purchased_quantity": { "type": ["string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "purchased_unit": { "type": ["string", "null"], "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
+              "reference_price_amount": { "type": ["string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "reference_quantity": { "type": ["string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "reference_unit": { "type": ["string", "null"], "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
               "reference_price_tax_inclusion": { "enum": ["gross", "net", "unknown", null] },
-              "printed_line_total": { "type": ["integer", "null"] },
-              "discount_rate": { "type": ["string", "null"] },
-              "discount_amount": { "type": ["integer", "null"] }
+              "printed_line_total": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999999 },
+              "discount_rate": { "type": ["string", "null"], "maxLength": 64, "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" },
+              "discount_amount": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999999 }
             }
           }
         }

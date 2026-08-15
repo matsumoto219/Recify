@@ -496,7 +496,7 @@ RSpec.describe GeneratedReceipts::Validator do
 
     result = described_class.call(data)
 
-    expect(result.errors).to include("expected.unexpected_amount: is not allowed")
+    expect(result.errors).to include("expected.invalid_key: is not allowed")
   end
 
   it "rejects item line total drift" do

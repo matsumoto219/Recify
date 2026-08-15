@@ -24,16 +24,22 @@ module GeneratedReceipts
 
       failures = []
       case_paths.each do |path|
-        case_data = Validator.load_file(path)
-        result = Validator.call(case_data)
-        if result.valid?
-          puts "PASS #{File.basename(path)}"
-          write_text_file(case_data) if write_text
-          write_image_file(case_data) if write_images
-        else
-          failures << [ path, result.errors ]
-          puts "FAIL #{File.basename(path)}"
-          result.errors.each { |error| puts "  - #{error}" }
+        begin
+          case_data = Validator.load_file(path)
+          result = Validator.call(case_data)
+          if result.valid?
+            write_text_file(case_data) if write_text
+            write_image_file(case_data) if write_images
+            puts "PASS #{File.basename(path)}"
+          else
+            failures << [ path, result.errors ]
+            puts "FAIL #{File.basename(path)}"
+            result.errors.each { |error| puts "  - #{error}" }
+          end
+        rescue Validator::FixtureLoadError => error
+          failures << [ path, [ error.message ] ]
+          puts "FAIL generated receipt fixture"
+          puts "  - #{error.message}"
         end
       end
 
@@ -51,13 +57,21 @@ module GeneratedReceipts
 
     def write_text_file(case_data)
       FileUtils.mkdir_p(TEXT_DIR)
-      path = File.join(TEXT_DIR, "#{case_data.fetch('case_id')}.txt")
+      path = Validator.artifact_path(
+        root: TEXT_DIR,
+        case_id: case_data.fetch("case_id"),
+        extension: "txt"
+      )
       File.write(path, TextRenderer.call(case_data))
     end
 
     def write_image_file(case_data)
       FileUtils.mkdir_p(IMAGES_DIR)
-      path = File.join(IMAGES_DIR, "#{case_data.fetch('case_id')}.png")
+      path = Validator.artifact_path(
+        root: IMAGES_DIR,
+        case_id: case_data.fetch("case_id"),
+        extension: "png"
+      )
       PngRenderer.call(case_data, output_path: path)
     end
   end

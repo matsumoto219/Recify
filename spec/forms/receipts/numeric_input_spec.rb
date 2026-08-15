@@ -18,6 +18,18 @@ RSpec.describe Receipts::NumericInput do
           .to raise_error(Receipts::NumericInput::InvalidValue), value
       end
     end
+
+    it 'rejects oversized integers before blank normalization stringifies them' do
+      oversized = 2**10_000
+      to_s_calls = 0
+      trace = TracePoint.new(:call, :c_call) do |event|
+        to_s_calls += 1 if event.self.equal?(oversized) && event.method_id == :to_s
+      end
+
+      expect { trace.enable { described_class.integer(oversized) } }
+        .to raise_error(Receipts::NumericInput::InvalidValue, 'Invalid user numeric input')
+      expect(to_s_calls).to eq(0)
+    end
   end
 
   describe '.decimal' do
@@ -35,6 +47,44 @@ RSpec.describe Receipts::NumericInput do
       %w[1e2 1.2.3 12abc -0.5].each do |value|
         expect { described_class.decimal(value) }
           .to raise_error(Receipts::NumericInput::InvalidValue), value
+      end
+    end
+
+    it 'rejects oversized and non-scalar values before blank normalization stringifies them' do
+      oversized_decimal = BigDecimal('1E100000')
+      to_s_calls = 0
+      trace = TracePoint.new(:call, :c_call) do |event|
+        to_s_calls += 1 if event.self.equal?(oversized_decimal) && event.method_id == :to_s
+      end
+
+      aggregate_failures do
+        expect { trace.enable { described_class.decimal(oversized_decimal) } }
+          .to raise_error(Receipts::NumericInput::InvalidValue, 'Invalid user numeric input')
+        expect(to_s_calls).to eq(0)
+        expect { described_class.decimal(' ' * 100_000) }
+          .to raise_error(Receipts::NumericInput::InvalidValue, 'Invalid user numeric input')
+
+        [ [], {} ].each do |value|
+          expect(value).not_to receive(:to_s)
+          expect { described_class.decimal(value) }
+            .to raise_error(Receipts::NumericInput::InvalidValue, 'Invalid user numeric input')
+        end
+      end
+    end
+
+    it 'does not retain rejected raw input in the typed exception' do
+      oversized = '9' * 100_000
+
+      error = begin
+        described_class.decimal(oversized)
+      rescue Receipts::NumericInput::InvalidValue => exception
+        exception
+      end
+
+      aggregate_failures do
+        expect(error.message).to eq('Invalid user numeric input')
+        expect(error.instance_variables).to be_empty
+        expect(error).not_to respond_to(:value)
       end
     end
   end

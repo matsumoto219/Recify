@@ -5,6 +5,8 @@ require "json"
 
 module GeneratedReceipts
   class Validator
+    class FixtureLoadError < StandardError; end
+
     Result = Struct.new(:case_id, :errors, keyword_init: true) do
       def valid?
         errors.empty?
@@ -196,6 +198,31 @@ module GeneratedReceipts
     ADJUSTMENT_EFFECTS = %w[purchase payment].freeze
     ADJUSTMENT_SIGNS = %w[surcharge discount].freeze
     ROUNDING_MODES = %w[floor round ceil].freeze
+    ROUNDING_MATCHES = %w[floor half_up ceil].freeze
+    MAX_ITEM_COUNT = 100
+    MAX_ITEM_INDEX = MAX_ITEM_COUNT - 1
+    MAX_COLLECTION_ITEMS = 100
+    MAX_PRINTED_LINES = 100
+    MAX_REJECTION_REASONS = 8
+    MAX_ROUNDING_MATCHES = ROUNDING_MATCHES.size
+    MAX_SOURCE_LINE_BYTES = 512
+    MAX_SOURCE_ITEM_BYTES = 4_096
+    MAX_EXACT_TOKEN_BYTES = 64
+    MAX_OBJECT_KEYS = 100
+    MAX_ERRORS = 1_000
+    MAX_CASE_FILE_BYTES = 4 * 1024 * 1024
+    MAX_JSON_NESTING = 16
+    MAX_CASE_ID_BYTES = 64
+    MAX_ARTIFACT_EXTENSION_BYTES = 16
+    MAX_FIXTURE_TEXT_BYTES = 512
+    MAX_NUMERIC_BITS = 128
+    FIXTURE_LOAD_ERROR_MESSAGE = "generated receipt fixture could not be loaded safely"
+    CASE_ID_PATTERN = /\Ag\d{3}_[a-z0-9_]+\z/.freeze
+    ARTIFACT_EXTENSION_PATTERN = /\A[a-z0-9]+\z/.freeze
+    EXACT_DECIMAL_PATTERN = /\A(?:0|[1-9]\d*)(?:\.\d+)?\z/.freeze
+    EXACT_INTEGER_PATTERN = /\A(?:0|[1-9]\d*)\z/.freeze
+    CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F-\u009F]/.freeze
+    FIXTURE_TEXT_CONTROL_PATTERN = /[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F-\u009F]/.freeze
 
     class << self
       def call(value)
@@ -203,7 +230,98 @@ module GeneratedReceipts
       end
 
       def load_file(path)
-        JSON.parse(File.read(path))
+        fixture_path = safe_fixture_path(path)
+        payload = read_bounded_fixture(fixture_path)
+        value = JSON.parse(payload, max_nesting: MAX_JSON_NESTING)
+        validate_loaded_case_identity!(value, fixture_path)
+        value
+      rescue FixtureLoadError
+        raise
+      rescue JSON::ParserError, EncodingError, SystemCallError, ArgumentError, TypeError
+        raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+      end
+
+      def valid_case_id?(value)
+        value.is_a?(String) && value.bytesize.between?(1, MAX_CASE_ID_BYTES) &&
+          value.valid_encoding? && value.ascii_only? &&
+          value.match?(CASE_ID_PATTERN)
+      rescue EncodingError
+        false
+      end
+
+      def artifact_path(root:, case_id:, extension:, must_exist: false)
+        raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE unless valid_case_id?(case_id)
+        unless extension.is_a?(String) &&
+            extension.bytesize.between?(1, MAX_ARTIFACT_EXTENSION_BYTES) &&
+            extension.valid_encoding? && extension.ascii_only? &&
+            extension.match?(ARTIFACT_EXTENSION_PATTERN)
+          raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+        end
+
+        root_path = File.expand_path(File.path(root))
+        root_real_path = File.realpath(root_path)
+        candidate = File.expand_path("#{case_id}.#{extension}", root_path)
+        unless path_within_root?(candidate, root_path)
+          raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+        end
+
+        exists = File.exist?(candidate) || File.symlink?(candidate)
+        if exists
+          unless File.lstat(candidate).file?
+            raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+          end
+          unless path_within_root?(File.realpath(candidate), root_real_path)
+            raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+          end
+        elsif must_exist
+          raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+        end
+
+        candidate
+      rescue FixtureLoadError
+        raise
+      rescue EncodingError, SystemCallError, ArgumentError, TypeError
+        raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+      end
+
+      private
+
+      def safe_fixture_path(path)
+        candidate = File.expand_path(File.path(path))
+        unless File.extname(candidate) == ".json" && File.lstat(candidate).file?
+          raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+        end
+
+        resolved = File.realpath(candidate)
+        approved = [ GeneratedReceipts::CASES_DIR, GeneratedReceipts::MEASUREMENT_CASES_DIR ].any? do |root|
+          path_within_root?(resolved, File.realpath(root))
+        end
+        raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE unless approved
+
+        resolved
+      end
+
+      def read_bounded_fixture(path)
+        payload = File.open(path, "rb") { |file| file.read(MAX_CASE_FILE_BYTES + 1) }
+        if payload.nil? || payload.bytesize > MAX_CASE_FILE_BYTES
+          raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+        end
+
+        payload.force_encoding(Encoding::UTF_8)
+        raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE unless payload.valid_encoding?
+
+        payload
+      end
+
+      def validate_loaded_case_identity!(value, path)
+        unless value.is_a?(Hash) && valid_case_id?(value["case_id"]) &&
+            value["case_id"] == File.basename(path, ".json")
+          raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE
+        end
+      end
+
+      def path_within_root?(path, root)
+        path == root || path.start_with?("#{root}#{File::SEPARATOR}")
       end
     end
 
@@ -216,7 +334,8 @@ module GeneratedReceipts
       validate_schema
       validate_amounts if errors.empty? && receipt_case?
 
-      Result.new(case_id: case_data["case_id"], errors: errors)
+      case_id = case_data["case_id"] if case_data.is_a?(Hash)
+      Result.new(case_id: case_id, errors: errors)
     end
 
     private
@@ -225,25 +344,38 @@ module GeneratedReceipts
 
     def validate_schema
       validate_hash("case", case_data, required: TOP_LEVEL_REQUIRED_KEYS, allowed: TOP_LEVEL_KEYS)
-      return if errors.any?
+      return unless case_data.is_a?(Hash)
 
+      validate_case_id
       validate_inclusion("category", case_data["category"], CATEGORIES)
       validate_inclusion("receipt_kind", case_data["receipt_kind"], RECEIPT_KINDS)
+      validate_bounded_text("intent", case_data["intent"])
       validate_hash("expected", expected, required: expected_required_keys, allowed: EXPECTED_KEYS)
       validate_hash("render", case_data["render"], required: [], allowed: RENDER_KEYS)
       validate_hash("degradation", case_data["degradation"], required: DEGRADATION_KEYS, allowed: DEGRADATION_KEYS)
       validate_hash("assertions", case_data["assertions"], required: [], allowed: ASSERTION_KEYS)
+      validate_render_values
+      validate_assertion_values
       validate_source
       validate_degradation
       validate_non_receipt_schema unless receipt_case?
       return unless receipt_case?
+      return unless expected.is_a?(Hash)
 
-      validate_hash("expected.rounding", expected["rounding"], required: ROUNDING_KEYS, allowed: ROUNDING_KEYS)
+      validate_receipt_expected_values
+      rounding = expected["rounding"]
+      validate_hash("expected.rounding", rounding, required: ROUNDING_KEYS, allowed: ROUNDING_KEYS)
       validate_optional_hash("expected.settlement", expected["settlement"], allowed: SETTLEMENT_KEYS)
       validate_inclusion("expected.amount_basis", expected["amount_basis"], AMOUNT_BASES)
-      validate_inclusion("expected.rounding.tax", expected.dig("rounding", "tax"), ROUNDING_MODES)
+      if rounding.is_a?(Hash)
+        validate_inclusion("expected.rounding.tax", rounding["tax"], ROUNDING_MODES)
+        validate_inclusion("expected.rounding.discount", rounding["discount"], ROUNDING_MODES)
+        validate_bounded_text("expected.rounding.scope", rounding["scope"])
+      end
       validate_array("expected.items", expected["items"]) do |item, index|
         validate_hash("expected.items[#{index}]", item, required: ITEM_REQUIRED_KEYS, allowed: ITEM_KEYS)
+        next unless item.is_a?(Hash)
+
         validate_optional_inclusion("expected.items[#{index}].tax_inclusion", item["tax_inclusion"], TAX_INCLUSIONS)
         validate_optional_inclusion(
           "expected.items[#{index}].pricing_source_kind",
@@ -256,22 +388,80 @@ module GeneratedReceipts
           TAX_INCLUSIONS
         )
         validate_mixed_tax_inclusion("expected.items[#{index}].tax_inclusion", item["tax_inclusion"])
+        validate_bounded_text("expected.items[#{index}].name", item["name"], allow_line_breaks: true)
+        validate_optional_number("expected.items[#{index}].unit_price", item["unit_price"])
+        validate_bounded_decimal_token(
+          "expected.items[#{index}].quantity",
+          item["quantity"],
+          allow_numeric: true
+        )
+        validate_optional_integer("expected.items[#{index}].line_total", item["line_total"])
+        validate_optional_number("expected.items[#{index}].tax_rate", item["tax_rate"])
+        validate_optional_integer("expected.items[#{index}].discount_amount", item["discount_amount"])
+        validate_bounded_token("expected.items[#{index}].quantity_unit_code", item["quantity_unit_code"])
+        validate_bounded_token(
+          "expected.items[#{index}].reference_quantity_unit_code",
+          item["reference_quantity_unit_code"]
+        )
+        validate_optional_integer(
+          "expected.items[#{index}].original_line_total",
+          item["original_line_total"],
+          maximum: MeasurementContract::MAX_LINE_TOTAL
+        )
+        validate_bounded_decimal_token(
+          "expected.items[#{index}].reference_price_amount",
+          item["reference_price_amount"],
+          allow_numeric: true
+        )
+        validate_bounded_decimal_token(
+          "expected.items[#{index}].reference_quantity",
+          item["reference_quantity"],
+          allow_numeric: true
+        )
       end
       validate_measurement_projections
       validate_reference_pricing_candidates
       validate_array("expected.receipt_adjustments", expected["receipt_adjustments"]) do |adjustment, index|
         validate_hash("expected.receipt_adjustments[#{index}]", adjustment, required: ADJUSTMENT_REQUIRED_KEYS, allowed: ADJUSTMENT_KEYS)
+        next unless adjustment.is_a?(Hash)
+
         validate_inclusion("expected.receipt_adjustments[#{index}].effect", adjustment["effect"], ADJUSTMENT_EFFECTS)
         validate_inclusion("expected.receipt_adjustments[#{index}].sign", adjustment["sign"], ADJUSTMENT_SIGNS)
+        validate_bounded_text("expected.receipt_adjustments[#{index}].kind", adjustment["kind"])
+        validate_bounded_text("expected.receipt_adjustments[#{index}].label", adjustment["label"], allow_line_breaks: true)
+        validate_integer("expected.receipt_adjustments[#{index}].amount", adjustment["amount"])
+        validate_optional_number("expected.receipt_adjustments[#{index}].tax_rate", adjustment["tax_rate"])
+        if adjustment.key?("review_reasons")
+          validate_bounded_text_array(
+            "expected.receipt_adjustments[#{index}].review_reasons",
+            adjustment["review_reasons"]
+          )
+        end
         validate_optional_inclusion("expected.receipt_adjustments[#{index}].tax_inclusion", adjustment["tax_inclusion"], TAX_INCLUSIONS)
         validate_mixed_tax_inclusion("expected.receipt_adjustments[#{index}].tax_inclusion", adjustment["tax_inclusion"]) if adjustment["effect"] == "purchase"
       end
       validate_array("expected.tax_details", expected["tax_details"]) do |tax_detail, index|
         validate_hash("expected.tax_details[#{index}]", tax_detail, required: TAX_DETAIL_REQUIRED_KEYS, allowed: TAX_DETAIL_KEYS)
+        next unless tax_detail.is_a?(Hash)
+
         validate_inclusion("expected.tax_details[#{index}].basis", tax_detail["basis"], TAX_INCLUSIONS)
+        validate_number("expected.tax_details[#{index}].rate", tax_detail["rate"])
+        %w[net tax gross].each do |field|
+          validate_integer("expected.tax_details[#{index}].#{field}", tax_detail[field])
+        end
+        validate_optional_bounded_text(
+          "expected.tax_details[#{index}].label",
+          tax_detail["label"],
+          allow_line_breaks: true
+        )
       end
       validate_array("expected.payments", expected["payments"]) do |payment, index|
         validate_hash("expected.payments[#{index}]", payment, required: PAYMENT_REQUIRED_KEYS, allowed: PAYMENT_KEYS)
+        next unless payment.is_a?(Hash)
+
+        validate_bounded_text("expected.payments[#{index}].method", payment["method"])
+        validate_bounded_text("expected.payments[#{index}].label", payment["label"], allow_line_breaks: true)
+        validate_integer("expected.payments[#{index}].amount", payment["amount"])
       end
     end
 
@@ -293,16 +483,44 @@ module GeneratedReceipts
           required: SOURCE_ITEM_REQUIRED_KEYS,
           allowed: SOURCE_ITEM_KEYS
         )
-        validate_array("source.items[#{index}].printed_lines", item["printed_lines"])
-        printed_lines = item["printed_lines"]
-        if printed_lines.is_a?(Array) && (
-          printed_lines.empty? || printed_lines.any? { |line| !line.is_a?(String) || line.empty? }
+        next unless item.is_a?(Hash)
+
+        validate_item_index("source.items[#{index}].item_index", item["item_index"])
+        validate_array(
+          "source.items[#{index}].printed_lines",
+          item["printed_lines"],
+          maximum: MAX_PRINTED_LINES
         )
-          add_error(
-            "source.items[#{index}].printed_lines",
-            "must contain at least one non-empty string"
-          )
-        end
+        printed_lines = item["printed_lines"]
+        validate_printed_lines("source.items[#{index}].printed_lines", printed_lines)
+        validate_bounded_decimal_token(
+          "source.items[#{index}].purchased_quantity",
+          item["purchased_quantity"]
+        )
+        validate_bounded_token("source.items[#{index}].purchased_unit", item["purchased_unit"])
+        validate_bounded_decimal_token(
+          "source.items[#{index}].reference_price_amount",
+          item["reference_price_amount"]
+        )
+        validate_bounded_decimal_token(
+          "source.items[#{index}].reference_quantity",
+          item["reference_quantity"]
+        )
+        validate_bounded_token("source.items[#{index}].reference_unit", item["reference_unit"])
+        validate_bounded_decimal_token(
+          "source.items[#{index}].discount_rate",
+          item["discount_rate"]
+        )
+        validate_bounded_non_negative_integer(
+          "source.items[#{index}].printed_line_total",
+          item["printed_line_total"],
+          maximum: MeasurementContract::MAX_LINE_TOTAL
+        )
+        validate_bounded_non_negative_integer(
+          "source.items[#{index}].discount_amount",
+          item["discount_amount"],
+          maximum: MeasurementContract::MAX_LINE_TOTAL
+        )
         validate_optional_inclusion(
           "source.items[#{index}].reference_price_tax_inclusion",
           item["reference_price_tax_inclusion"],
@@ -323,17 +541,42 @@ module GeneratedReceipts
           required: MEASUREMENT_PROJECTION_REQUIRED_KEYS,
           allowed: MEASUREMENT_PROJECTION_KEYS
         )
+        next unless projection.is_a?(Hash)
+
+        validate_item_index(
+          "expected.measurement_projections[#{index}].item_index",
+          projection["item_index"]
+        )
         exact_amount = projection["exact_reference_amount"]
         validate_optional_hash(
           "expected.measurement_projections[#{index}].exact_reference_amount",
           exact_amount,
           allowed: EXACT_AMOUNT_KEYS
         )
+        (MEASUREMENT_PROJECTION_KEYS - %w[item_index exact_reference_amount]).each do |key|
+          validate_bounded_non_negative_integer(
+            "expected.measurement_projections[#{index}].#{key}",
+            projection[key],
+            maximum: MeasurementContract::MAX_LINE_TOTAL
+          )
+        end
         next if exact_amount.nil? || !exact_amount.is_a?(Hash)
 
         missing = EXACT_AMOUNT_KEYS - exact_amount.keys
         missing.each do |key|
           add_error("expected.measurement_projections[#{index}].exact_reference_amount.#{key}", "is required")
+        end
+        EXACT_AMOUNT_KEYS.each do |key|
+          validate_bounded_integer_token(
+            "expected.measurement_projections[#{index}].exact_reference_amount.#{key}",
+            exact_amount[key]
+          )
+        end
+        if exact_amount["denominator"] == "0"
+          add_error(
+            "expected.measurement_projections[#{index}].exact_reference_amount.denominator",
+            "must be positive"
+          )
         end
       end
     end
@@ -349,6 +592,12 @@ module GeneratedReceipts
           required: REFERENCE_CANDIDATE_REQUIRED_KEYS,
           allowed: REFERENCE_CANDIDATE_KEYS
         )
+        next unless candidate.is_a?(Hash)
+
+        validate_item_index(
+          "expected.reference_pricing_candidates[#{index}].item_index",
+          candidate["item_index"]
+        )
         validate_inclusion(
           "expected.reference_pricing_candidates[#{index}].validation_state",
           candidate["validation_state"],
@@ -356,7 +605,8 @@ module GeneratedReceipts
         )
         validate_array(
           "expected.reference_pricing_candidates[#{index}].rejection_reasons",
-          candidate["rejection_reasons"]
+          candidate["rejection_reasons"],
+          maximum: MAX_REJECTION_REASONS
         ) do |reason, reason_index|
           validate_inclusion(
             "expected.reference_pricing_candidates[#{index}].rejection_reasons[#{reason_index}]",
@@ -364,20 +614,147 @@ module GeneratedReceipts
             REFERENCE_CANDIDATE_REJECTION_REASONS
           )
         end
+        validate_unique_array(
+          "expected.reference_pricing_candidates[#{index}].rejection_reasons",
+          candidate["rejection_reasons"]
+        )
         validate_array(
           "expected.reference_pricing_candidates[#{index}].rounding_matches",
+          candidate["rounding_matches"],
+          maximum: MAX_ROUNDING_MATCHES
+        ) do |rounding_match, rounding_index|
+          validate_inclusion(
+            "expected.reference_pricing_candidates[#{index}].rounding_matches[#{rounding_index}]",
+            rounding_match,
+            ROUNDING_MATCHES
+          )
+        end unless candidate["rounding_matches"].nil?
+        validate_unique_array(
+          "expected.reference_pricing_candidates[#{index}].rounding_matches",
           candidate["rounding_matches"]
-        ) unless candidate["rounding_matches"].nil?
+        )
+        %w[reference_price_amount reference_quantity purchased_quantity].each do |field|
+          validate_bounded_decimal_token(
+            "expected.reference_pricing_candidates[#{index}].#{field}",
+            candidate[field]
+          )
+        end
+        %w[reference_unit_code purchased_unit_code].each do |field|
+          validate_bounded_token(
+            "expected.reference_pricing_candidates[#{index}].#{field}",
+            candidate[field]
+          )
+        end
+        validate_bounded_non_negative_integer(
+          "expected.reference_pricing_candidates[#{index}].projected_line_total",
+          candidate["projected_line_total"],
+          maximum: MeasurementContract::MAX_LINE_TOTAL
+        )
+        validate_bounded_integer_token(
+          "expected.reference_pricing_candidates[#{index}].printed_line_total",
+          candidate["printed_line_total"],
+          maximum: MeasurementContract::MAX_LINE_TOTAL
+        )
+        validate_optional_inclusion(
+          "expected.reference_pricing_candidates[#{index}].reference_price_tax_inclusion",
+          candidate["reference_price_tax_inclusion"],
+          TAX_INCLUSIONS + [ "unknown" ]
+        )
       end
     end
 
     def validate_non_receipt_schema
-      validate_array("expected.review_reasons", expected["review_reasons"])
+      return unless expected.is_a?(Hash)
+
+      validate_bounded_text("expected.status", expected["status"])
+      validate_bounded_text_array("expected.review_reasons", expected["review_reasons"])
+      validate_optional_bounded_text(
+        "expected.processing_error_code",
+        expected["processing_error_code"]
+      )
+    end
+
+    def validate_receipt_expected_values
+      %w[store_name store_address].each do |field|
+        validate_bounded_text("expected.#{field}", expected[field], allow_line_breaks: true)
+      end
+      %w[purchased_at currency payment_method status].each do |field|
+        validate_bounded_text("expected.#{field}", expected[field])
+      end
+      validate_optional_bounded_text(
+        "expected.processing_error_code",
+        expected["processing_error_code"]
+      )
+      validate_optional_number("expected.tax_rate", expected["tax_rate"])
+      %w[subtotal tax total payment_sum].each do |field|
+        validate_integer("expected.#{field}", expected[field])
+      end
+      validate_bounded_text_array("expected.review_reasons", expected["review_reasons"])
+
+      settlement = expected["settlement"]
+      return unless settlement.is_a?(Hash)
+
+      validate_optional_integer("expected.settlement.tendered", settlement["tendered"])
+      validate_optional_integer("expected.settlement.change", settlement["change"])
+      validate_optional_bounded_text(
+        "expected.settlement.payment_label",
+        settlement["payment_label"],
+        allow_line_breaks: true
+      )
+    end
+
+    def validate_render_values
+      render = case_data["render"]
+      return unless render.is_a?(Hash)
+
+      %w[locale paper_width font].each do |field|
+        validate_optional_bounded_text("render.#{field}", render[field])
+      end
+      %w[include_tax_detail_lines omit_subtotal_line include_payment_heading].each do |field|
+        validate_optional_boolean("render.#{field}", render[field])
+      end
+      %w[noise_lines custom_lines].each do |field|
+        next unless render.key?(field)
+
+        validate_bounded_text_array("render.#{field}", render[field])
+      end
+    end
+
+    def validate_assertion_values
+      assertions = case_data["assertions"]
+      return unless assertions.is_a?(Hash)
+
+      critical_exact = assertions["critical_exact"]
+      if critical_exact.is_a?(Array)
+        validate_bounded_text_array("assertions.critical_exact", critical_exact)
+      elsif !critical_exact.nil? && critical_exact != true && critical_exact != false
+        add_error("assertions.critical_exact", "must be a boolean or an array of bounded strings")
+      end
+      if assertions.key?("allow_review_reasons")
+        validate_bounded_text_array(
+          "assertions.allow_review_reasons",
+          assertions["allow_review_reasons"]
+        )
+      end
+      validate_optional_boolean(
+        "assertions.allow_item_name_minor_diff",
+        assertions["allow_item_name_minor_diff"]
+      )
+      validate_optional_number(
+        "assertions.simulated_ai_item_tax_rate",
+        assertions["simulated_ai_item_tax_rate"]
+      )
+      validate_optional_number(
+        "assertions.expected_item_tax_rate_after_save",
+        assertions["expected_item_tax_rate_after_save"]
+      )
     end
 
     def validate_degradation
       degradation = case_data["degradation"]
       return unless degradation.is_a?(Hash)
+
+      validate_boolean("degradation.enabled", degradation["enabled"])
       return if degradation["profile"].nil?
 
       validate_inclusion("degradation.profile", degradation["profile"], DegradationProfiles.names)
@@ -551,7 +928,7 @@ module GeneratedReceipts
 
     def equivalent_source_value?(candidate_field, candidate_value, source_value)
       if %w[reference_price_amount reference_quantity purchased_quantity].include?(candidate_field)
-        normalize_exact_decimal(candidate_value) == normalize_exact_decimal(source_value)
+        equivalent_exact_decimal?(candidate_value, source_value)
       else
         candidate_value == source_value
       end
@@ -708,18 +1085,29 @@ module GeneratedReceipts
 
     def equivalent_persisted_source_value?(item_field, item_value, source_value)
       if %w[reference_price_amount reference_quantity quantity].include?(item_field)
-        normalize_exact_decimal(item_value) == normalize_exact_decimal(source_value)
+        equivalent_exact_decimal?(item_value, source_value)
       else
         item_value == source_value
       end
     end
 
+    def equivalent_exact_decimal?(left_value, right_value)
+      left = normalize_exact_decimal(left_value)
+      right = normalize_exact_decimal(right_value)
+      return false if left == :invalid_exact_decimal || right == :invalid_exact_decimal
+
+      left == right
+    end
+
     def normalize_exact_decimal(value)
       return nil if value.nil?
 
-      BigDecimal(value.to_s).to_s("F")
-    rescue ArgumentError, TypeError
-      value
+      token = bounded_numeric_token(value)
+      return :invalid_exact_decimal unless token&.match?(EXACT_DECIMAL_PATTERN)
+
+      BigDecimal(token).to_s("F")
+    rescue ArgumentError, TypeError, FloatDomainError, EncodingError
+      :invalid_exact_decimal
     end
 
     def validate_analysis_candidate_persistence(item, item_index)
@@ -1022,10 +1410,21 @@ module GeneratedReceipts
         return
       end
 
-      missing = required - value.keys
-      missing.each { |key| add_error("#{path}.#{key}", "is required") }
-      extra = value.keys - allowed
-      extra.each { |key| add_error("#{path}.#{key}", "is not allowed") }
+      required.each do |key|
+        add_error("#{path}.#{key}", "is required") unless value.key?(key)
+      end
+      add_error(path, "has more than #{MAX_OBJECT_KEYS} keys") if value.size > MAX_OBJECT_KEYS
+      value.each_key.first(MAX_OBJECT_KEYS).each do |key|
+        next if allowed.include?(key)
+
+        add_error("#{path}.#{safe_error_segment(key)}", "is not allowed")
+      end
+    end
+
+    def validate_case_id
+      return if self.class.valid_case_id?(case_data["case_id"])
+
+      add_error("case_id", "must be a path-safe generated receipt identifier")
     end
 
     def validate_optional_hash(path, value, allowed:)
@@ -1034,19 +1433,27 @@ module GeneratedReceipts
       validate_hash(path, value, required: [], allowed: allowed)
     end
 
-    def validate_array(path, value)
+    def validate_array(path, value, maximum: MAX_COLLECTION_ITEMS)
       unless value.is_a?(Array)
         add_error(path, "must be an array")
         return
       end
 
+      add_error(path, "has more than #{maximum} entries") if value.size > maximum
       return unless block_given?
 
-      value.each_with_index { |entry, index| yield entry, index }
+      value.first(maximum).each_with_index { |entry, index| yield entry, index }
     end
 
     def validate_inclusion(path, value, allowed)
       add_error(path, "must be one of #{allowed.join(', ')}") unless allowed.include?(value)
+    end
+
+    def validate_unique_array(path, value)
+      return unless value.is_a?(Array)
+      return if value.first(MAX_COLLECTION_ITEMS).uniq.size == value.first(MAX_COLLECTION_ITEMS).size
+
+      add_error(path, "must contain unique values")
     end
 
     def validate_optional_inclusion(path, value, allowed)
@@ -1056,13 +1463,19 @@ module GeneratedReceipts
     end
 
     def add_error(path, message)
+      return if errors.size >= MAX_ERRORS
+
       errors << "#{path}: #{message}"
     end
 
     def decimal(value)
-      BigDecimal(value.to_s)
-    rescue ArgumentError, TypeError
-      add_error("amount", "invalid decimal #{value.inspect}")
+      token = bounded_numeric_token(value)
+      return BigDecimal(token) if token&.match?(EXACT_DECIMAL_PATTERN)
+
+      add_error("amount", "invalid or oversized decimal value")
+      BigDecimal("0")
+    rescue ArgumentError, TypeError, FloatDomainError, EncodingError
+      add_error("amount", "invalid or oversized decimal value")
       BigDecimal("0")
     end
 
@@ -1085,7 +1498,209 @@ module GeneratedReceipts
     end
 
     def decimal_from_rate_key(value)
-      BigDecimal(value.to_s)
+      decimal(value)
+    end
+
+    def validate_item_index(path, value)
+      return if value.is_a?(Integer) && value.between?(0, MAX_ITEM_INDEX)
+
+      add_error(path, "must be an integer between 0 and #{MAX_ITEM_INDEX}")
+    end
+
+    def validate_printed_lines(path, value)
+      return unless value.is_a?(Array)
+
+      bounded_lines = value.first(MAX_PRINTED_LINES)
+      if bounded_lines.empty?
+        add_error(path, "must contain at least one non-empty string")
+        return
+      end
+
+      unless bounded_lines.all? { |line| safe_source_line?(line) }
+        add_error(
+          path,
+          "must contain bounded UTF-8 strings without control characters"
+        )
+      end
+      total_bytes = bounded_lines.sum { |line| line.is_a?(String) ? line.bytesize : 0 }
+      if total_bytes > MAX_SOURCE_ITEM_BYTES
+        add_error(path, "must contain at most #{MAX_SOURCE_ITEM_BYTES} bytes per item")
+      end
+    end
+
+    def safe_source_line?(value)
+      return false unless value.is_a?(String)
+      return false if value.empty? || value.bytesize > MAX_SOURCE_LINE_BYTES
+      return false unless safe_string?(value)
+
+      true
+    end
+
+    def validate_bounded_token(path, value)
+      return if value.nil?
+      if value.is_a?(String) && !value.empty? && value.bytesize <= MAX_EXACT_TOKEN_BYTES && safe_string?(value)
+        return
+      end
+
+      add_error(path, "must be a bounded string without control characters")
+    end
+
+    def validate_bounded_decimal_token(path, value, allow_numeric: false)
+      return if value.nil?
+
+      token = bounded_exact_token(value, allow_numeric: allow_numeric)
+      return if token && token.match?(EXACT_DECIMAL_PATTERN)
+
+      add_error(path, "must be an exact decimal within the approved bounds")
+    end
+
+    def validate_bounded_integer_token(path, value, maximum: nil)
+      return if value.nil?
+
+      token = bounded_exact_token(value, allow_numeric: false)
+      valid = token&.match?(EXACT_INTEGER_PATTERN)
+      valid &&= Integer(token, 10) <= maximum if valid && maximum
+      return if valid
+
+      add_error(path, "must be a bounded non-negative integer string")
+    rescue ArgumentError
+      add_error(path, "must be a bounded non-negative integer string")
+    end
+
+    def validate_bounded_non_negative_integer(path, value, maximum:)
+      return if value.nil?
+      return if value.is_a?(Integer) && value.between?(0, maximum)
+
+      add_error(path, "must be an integer between 0 and #{maximum}")
+    end
+
+    def validate_bounded_text(path, value, allow_line_breaks: false)
+      return if bounded_fixture_text?(value, allow_line_breaks: allow_line_breaks)
+
+      add_error(path, "must be a bounded UTF-8 string")
+    end
+
+    def validate_optional_bounded_text(path, value, allow_line_breaks: false)
+      return if value.nil?
+
+      validate_bounded_text(path, value, allow_line_breaks: allow_line_breaks)
+    end
+
+    def validate_bounded_text_array(path, value)
+      validate_array(path, value) do |entry, index|
+        validate_bounded_text("#{path}[#{index}]", entry)
+      end
+    end
+
+    def validate_boolean(path, value)
+      return if value == true || value == false
+
+      add_error(path, "must be a boolean")
+    end
+
+    def validate_optional_boolean(path, value)
+      return if value.nil?
+
+      validate_boolean(path, value)
+    end
+
+    def validate_number(path, value)
+      valid = case value
+      when Integer
+        value.bit_length <= MAX_NUMERIC_BITS
+      when Float
+        value.finite?
+      else
+        false
+      end
+      return if valid
+
+      add_error(path, "must be a bounded finite JSON number")
+    end
+
+    def validate_optional_number(path, value)
+      return if value.nil?
+
+      validate_number(path, value)
+    end
+
+    def validate_integer(path, value, maximum: nil)
+      valid = value.is_a?(Integer) && value.bit_length <= MAX_NUMERIC_BITS
+      valid &&= value.between?(0, maximum) if valid && maximum
+      return if valid
+
+      message = maximum ? "must be an integer between 0 and #{maximum}" : "must be a bounded integer"
+      add_error(path, message)
+    end
+
+    def validate_optional_integer(path, value, maximum: nil)
+      return if value.nil?
+
+      validate_integer(path, value, maximum: maximum)
+    end
+
+    def bounded_exact_token(value, allow_numeric:)
+      case value
+      when String
+        value if value.bytesize <= MAX_EXACT_TOKEN_BYTES && safe_string?(value) && value.ascii_only?
+      when Integer
+        return nil unless allow_numeric && value.bit_length <= MeasurementContract::MAX_INTEGER_BITS
+
+        value.to_s
+      when Float
+        return nil unless allow_numeric && value.finite?
+
+        value.to_s
+      end
+    end
+
+    def bounded_numeric_token(value)
+      case value
+      when String
+        return nil if value.empty? || value.bytesize > MAX_EXACT_TOKEN_BYTES
+        return nil unless safe_string?(value) && value.ascii_only?
+
+        value
+      when Integer
+        return nil if value.bit_length > MeasurementContract::MAX_EXACT_BITS
+
+        value.to_s
+      when Float
+        return nil unless value.finite?
+
+        value.to_s
+      when BigDecimal
+        return nil unless value.finite?
+        return nil if value.precision > MAX_EXACT_TOKEN_BYTES || value.scale > MAX_EXACT_TOKEN_BYTES
+        return nil if value.exponent.abs > MAX_EXACT_TOKEN_BYTES
+
+        value.to_s("F")
+      end
+    end
+
+    def safe_string?(value)
+      return false unless value.is_a?(String) && value.valid_encoding?
+      return false unless value.encoding == Encoding::UTF_8 || value.ascii_only?
+
+      !value.match?(CONTROL_CHARACTER_PATTERN)
+    rescue ArgumentError, EncodingError
+      false
+    end
+
+    def bounded_fixture_text?(value, allow_line_breaks:)
+      return false unless value.is_a?(String)
+      return false if value.bytesize > MAX_FIXTURE_TEXT_BYTES
+      return false unless value.valid_encoding?
+      return false unless value.encoding == Encoding::UTF_8 || value.ascii_only?
+
+      pattern = allow_line_breaks ? FIXTURE_TEXT_CONTROL_PATTERN : CONTROL_CHARACTER_PATTERN
+      !value.match?(pattern)
+    rescue ArgumentError, EncodingError
+      false
+    end
+
+    def safe_error_segment(_value)
+      "invalid_key"
     end
   end
 end

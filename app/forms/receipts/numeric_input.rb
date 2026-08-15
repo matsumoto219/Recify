@@ -8,45 +8,42 @@ class Receipts::NumericInput
   DISCOUNT_RATE_MAX_SCALE = 3
 
   class InvalidValue < StandardError
-    attr_reader :value
-
-    def initialize(value)
-      @value = value
+    def initialize
       super("Invalid user numeric input")
     end
   end
 
   class << self
     def integer(value)
-      return nil if value.to_s.strip.empty?
+      return nil if blank_input?(value)
 
       UserNumericInput.integer(value, signed: false)
     rescue UserNumericInput::InvalidValue
-      raise InvalidValue, value
+      raise InvalidValue
     end
 
     def decimal(value)
-      return nil if value.to_s.strip.empty?
+      return nil if blank_input?(value)
 
       UserNumericInput.decimal(value, signed: false, decimal_comma: true)
     rescue UserNumericInput::InvalidValue
-      raise InvalidValue, value
+      raise InvalidValue
     end
 
     def grouped_decimal(value)
-      return nil if value.to_s.strip.empty?
+      return nil if blank_input?(value)
 
       UserNumericInput.decimal(value, signed: false, decimal_comma: false)
     rescue UserNumericInput::InvalidValue
-      raise InvalidValue, value
+      raise InvalidValue
     end
 
     def percentage(value, maximum_rate_scale: nil)
       parsed = decimal(value)
-      raise InvalidValue, value if parsed && parsed > MAX_PERCENTAGE
+      raise InvalidValue if parsed && parsed > MAX_PERCENTAGE
 
       rate = parsed && parsed / MAX_PERCENTAGE
-      validate_rate_scale!(rate, value, maximum_rate_scale)
+      validate_rate_scale!(rate, maximum_rate_scale)
       rate
     end
 
@@ -64,16 +61,27 @@ class Receipts::NumericInput
     def receipt_tax_rate(value)
       parsed = decimal(value)
       persisted_rate = parsed && (parsed > 1 ? parsed / MAX_PERCENTAGE : parsed)
-      validate_rate_scale!(persisted_rate, value, TAX_RATE_MAX_SCALE)
+      validate_rate_scale!(persisted_rate, TAX_RATE_MAX_SCALE)
       parsed
     end
 
     private
 
-    def validate_rate_scale!(rate, raw_value, maximum_rate_scale)
+    def blank_input?(value)
+      return true if value.nil?
+      return false unless value.is_a?(String)
+      return false if value.bytesize > UserNumericInput::MAX_INPUT_BYTES
+      return false unless value.valid_encoding?
+
+      value.strip.empty?
+    rescue EncodingError
+      false
+    end
+
+    def validate_rate_scale!(rate, maximum_rate_scale)
       return if rate.nil? || maximum_rate_scale.nil? || rate.scale <= maximum_rate_scale
 
-      raise InvalidValue, raw_value
+      raise InvalidValue
     end
   end
 end

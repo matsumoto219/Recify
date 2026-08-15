@@ -2,6 +2,9 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   MAX_ITEMS = 100
   MAX_ITEM_CONTENT_BYTES = 4_096
   MAX_FIELD_CONTENT_BYTES = 512
+  MAX_COMPONENT_SPANS = 16
+  MAX_REFERENCE_EXPRESSION_MATCHES = MAX_COMPONENT_SPANS
+  MAX_PURCHASED_QUANTITY_MATCHES = MAX_COMPONENT_SPANS
   MAX_REJECTION_REASONS = 8
   MAX_PROVIDER_SPAN_VALUE = 10_000_000
   MAX_PRICE_AMOUNT = BigDecimal("999999999999")
@@ -66,7 +69,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   ).freeze
   PURCHASED_QUANTITY_PATTERN = /(?<![0-9０-９])(?<quantity>#{DECIMAL_SOURCE})[ \t]*(?<unit>#{UNIT_SOURCE})/u
   PRINTED_AMOUNT_PATTERN = /[¥￥]?[ \t]*(?<amount>#{DECIMAL_SOURCE})(?:[ \t]*円)?/u
-  CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.freeze
+  CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u0084\u0086-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
+  LINE_BREAK_PATTERN = /[\n\r\u0085\u2028\u2029]/.freeze
 
   def self.call(items:, profile:, projection: nil)
     new(items:, profile:, projection:).call
@@ -183,9 +187,10 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   def reference_matches(item, value_object, item_content, parent_span, item_index)
     matches = []
     evidence_errors = []
+    raw_match_budget = { remaining: MAX_REFERENCE_EXPRESSION_MATCHES, exceeded: false }
     price_field = value_object["Price"]
 
-    if price_field.is_a?(Hash) && price_field["content"].present?
+    if price_field.is_a?(Hash) && content_supplied?(price_field["content"])
       field_content = normalized_mappable_text(price_field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
       field_span = single_span(price_field)
 
@@ -199,7 +204,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
           source_field_path: "documents[0].fields.Items[#{item_index}].Price",
           item_index: item_index,
           parent_span: parent_span,
-          priority: 0
+          priority: 0,
+          raw_match_budget: raw_match_budget
         ))
       end
     end
@@ -210,8 +216,11 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       source_field_path: "documents[0].fields.Items[#{item_index}]",
       item_index: item_index,
       parent_span: parent_span,
-      priority: 1
+      priority: 1,
+      raw_match_budget: raw_match_budget
     ))
+
+    evidence_errors << "ambiguous_reference_expression" if raw_match_budget[:exceeded]
 
     if matches.empty?
       incomplete = scan_incomplete_reference_expression(
@@ -230,7 +239,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     field_content = price_field.is_a?(Hash) ?
       normalized_mappable_text(price_field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES) : nil
     field_span = price_field.is_a?(Hash) ? single_span(price_field) : nil
-    if field_content.present? && field_span && span_within?(field_span, parent_span)
+    if field_content && !field_content.empty? && field_span && span_within?(field_span, parent_span)
       match_data = field_content.match(INCOMPLETE_REFERENCE_PATTERN)
       return build_incomplete_reference_match(
         match_data,
@@ -261,7 +270,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     local_window = local_expression_line(text, match_data.begin(0), match_data.end(0))
     matched_tax = tax_basis_labels.values.flatten.find { |label| local_window.include?(label) }
     tax_local_start = matched_tax ? local_window.index(matched_tax) : nil
-    line_start = text.rindex("\n", match_data.begin(0) - 1)
+    line_start = previous_line_break_index(text, match_data.begin(0))
     tax_start = tax_local_start ? (line_start ? line_start + 1 : 0) + tax_local_start : nil
 
     {
@@ -296,8 +305,23 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     }
   end
 
-  def scan_reference_expressions(text, base_offset:, source_field_path:, item_index:, parent_span:, priority:)
-    text.to_enum(:scan, reference_expression_pattern).filter_map do
+  def scan_reference_expressions(
+    text,
+    base_offset:,
+    source_field_path:,
+    item_index:,
+    parent_span:,
+    priority:,
+    raw_match_budget:
+  )
+    matches = []
+    text.scan(reference_expression_pattern) do
+      if raw_match_budget[:remaining].zero?
+        raw_match_budget[:exceeded] = true
+        break
+      end
+
+      raw_match_budget[:remaining] -= 1
       match_data = Regexp.last_match
       match = build_reference_match(
         match_data,
@@ -308,8 +332,10 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         priority:
       )
 
-      match if range_within_parent?(match[:expression_start], match[:expression_end], parent_span)
+      matches << match if range_within_parent?(match[:expression_start], match[:expression_end], parent_span)
     end
+
+    matches
   end
 
   def reference_expression_pattern
@@ -444,9 +470,10 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   def purchased_quantity_matches(value_object, item_content, parent_span, item_index, reference_match)
     matches = []
     evidence_errors = []
+    raw_match_budget = { remaining: MAX_PURCHASED_QUANTITY_MATCHES, exceeded: false }
     quantity_field = value_object["Quantity"]
 
-    if quantity_field.is_a?(Hash) && quantity_field["content"].present?
+    if quantity_field.is_a?(Hash) && content_supplied?(quantity_field["content"])
       quantity_content = normalized_mappable_text(quantity_field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
       quantity_span = single_span(quantity_field)
 
@@ -462,7 +489,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
           parent_span:,
           reference_end: reference_match[:expression_end],
           enforce_after_reference: false,
-          priority: 0
+          priority: 0,
+          raw_match_budget: raw_match_budget
         )
         if structured_matches.empty?
           numeric_only = quantity_content.match(/\A[ \t]*(?<quantity>#{DECIMAL_SOURCE})[ \t]*\z/u)
@@ -486,8 +514,11 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       reference_end: reference_match[:expression_end],
       enforce_after_reference: true,
       priority: 1,
-      value_object: value_object
+      value_object: value_object,
+      raw_match_budget: raw_match_budget
     ))
+
+    evidence_errors << "ambiguous_purchased_quantity" if raw_match_budget[:exceeded]
 
     [ deduplicate_purchased_matches(matches), evidence_errors ]
   end
@@ -501,9 +532,17 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     reference_end:,
     enforce_after_reference:,
     priority:,
-    value_object: nil
+    value_object: nil,
+    raw_match_budget:
   )
-    text.to_enum(:scan, PURCHASED_QUANTITY_PATTERN).filter_map do
+    matches = []
+    text.scan(PURCHASED_QUANTITY_PATTERN) do
+      if raw_match_budget[:remaining].zero?
+        raw_match_budget[:exceeded] = true
+        break
+      end
+
+      raw_match_budget[:remaining] -= 1
       match_data = Regexp.last_match
       global_start = provider_offset(text, base_offset, match_data.begin(:quantity))
       global_end = provider_offset(text, base_offset, match_data.end(:unit))
@@ -517,6 +556,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         global_end,
         item_index
       )
+      next if path.nil?
       next if path.end_with?(".Description") && !quantity_only_component_span?(
         value_object["Description"],
         global_start,
@@ -524,9 +564,9 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       )
       next if enforce_after_reference &&
         path == "documents[0].fields.Items[#{item_index}]" &&
-        newline_between_provider_offsets?(text, base_offset, reference_end, global_start)
+        line_break_between_provider_offsets?(text, base_offset, reference_end, global_start)
 
-      {
+      matches << {
         quantity_text: match_data[:quantity],
         unit_text: match_data[:unit],
         evidence: evidence(
@@ -538,6 +578,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         priority: priority
       }
     end
+
+    matches
   end
 
   def package_quantity_context?(text, match_data)
@@ -551,12 +593,11 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   def quantity_only_component_span?(field, start_offset, end_offset)
     return false unless field.is_a?(Hash)
 
-    spans = field["spans"]
-    return false unless spans.is_a?(Array) && spans.many?
+    spans = bounded_component_spans(field)
+    return false unless spans&.many?
 
-    spans.drop(1).any? do |span|
-      normalized_span = bounded_span(span)
-      normalized_span && span_offset(normalized_span) == start_offset && span_end(normalized_span) >= end_offset
+    spans.each_with_index.any? do |span, index|
+      index.positive? && span_offset(span) == start_offset && span_end(span) >= end_offset
     end
   end
 
@@ -565,8 +606,9 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       field = value_object[field_name]
       next unless field.is_a?(Hash)
 
-      spans = field["spans"]
-      next unless spans.is_a?(Array)
+      spans = bounded_component_spans(field)
+      return if spans.nil?
+      return if field_name == "Description" && content_supplied?(field["content"]) && spans.empty?
       next unless spans.any? { |span| range_within_parent?(start_offset, end_offset, span) }
 
       return "documents[0].fields.Items[#{item_index}].#{field_name}"
@@ -575,12 +617,23 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     "documents[0].fields.Items[#{item_index}]"
   end
 
-  def newline_between_provider_offsets?(text, base_offset, start_offset, end_offset)
-    text.each_char.with_index.any? do |character, character_index|
-      next false unless character == "\n"
+  def bounded_component_spans(field)
+    spans = field["spans"]
+    return [] if spans.nil?
+    return unless spans.is_a?(Array) && spans.size <= MAX_COMPONENT_SPANS
 
-      newline_offset = provider_offset(text, base_offset, character_index)
-      newline_offset >= start_offset && newline_offset < end_offset
+    normalized = spans.map { |span| bounded_span(span) }
+    return if normalized.any?(&:nil?)
+
+    normalized
+  end
+
+  def line_break_between_provider_offsets?(text, base_offset, start_offset, end_offset)
+    text.each_char.with_index.any? do |character, character_index|
+      next false unless character.match?(LINE_BREAK_PATTERN)
+
+      line_break_offset = provider_offset(text, base_offset, character_index)
+      line_break_offset >= start_offset && line_break_offset < end_offset
     end
   end
 
@@ -761,7 +814,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       BigDecimal(value.to_s)
     when BigDecimal
       return unless value.finite?
-      return if value.precs.first > 64 || value.exponent.abs > 64
+      return if value.precision > 64 || value.exponent.abs > 64
 
       value
     when String
@@ -870,16 +923,23 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def local_expression_line(text, start_offset, end_offset)
-    line_start = text.rindex("\n", start_offset - 1)
-    line_end = text.index("\n", end_offset)
+    line_start = previous_line_break_index(text, start_offset)
+    line_end = text.index(LINE_BREAK_PATTERN, end_offset)
 
     text[(line_start ? line_start + 1 : 0)...(line_end || text.length)].to_s
   end
 
+  def previous_line_break_index(text, offset)
+    return if offset <= 0
+
+    text.rindex(LINE_BREAK_PATTERN, offset - 1)
+  end
+
   def normalized_mappable_text(value, max_bytes:)
     return unless value.is_a?(String)
+    return if value.bytesize > max_bytes
     return unless value.valid_encoding?
-    return if value.bytesize > max_bytes || value.match?(CONTROL_CHARACTER_PATTERN)
+    return if value.match?(CONTROL_CHARACTER_PATTERN)
 
     encoded = value.encode(Encoding::UTF_8)
     normalized = encoded.unicode_normalize(:nfkc)
@@ -889,6 +949,17 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     normalized
   rescue EncodingError, ArgumentError
     nil
+  end
+
+  def content_supplied?(value)
+    return false if value.nil?
+    return true unless value.is_a?(String)
+    return true if value.bytesize > MAX_FIELD_CONTENT_BYTES
+    return true unless value.valid_encoding?
+
+    value.present?
+  rescue EncodingError, ArgumentError
+    true
   end
 
   def single_span(container)
@@ -909,25 +980,26 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def mark_item_identity_conflicts(candidates, parent_spans)
-    conflicting_indexes = candidates.each_with_object([]) do |candidate, indexes|
+    overlap_index = build_parent_span_overlap_index(parent_spans)
+    conflicting_indexes = candidates.each_with_object({}) do |candidate, indexes|
       item_index = candidate[:item_index]
       parent_span = parent_spans[item_index]
       next unless parent_span
 
-      evidence_ranges = candidate_evidence_ranges(candidate)
-      conflict = parent_spans.each_with_index.any? do |other_span, other_index|
-        next false if other_index == item_index || other_span.nil?
-
-        same_span = span_offset(parent_span) == span_offset(other_span) && span_end(parent_span) == span_end(other_span)
-        same_span || evidence_ranges.any? do |start_offset, end_offset|
-          ranges_overlap?(start_offset, end_offset, span_offset(other_span), span_end(other_span))
-        end
+      conflict = candidate_evidence_ranges(candidate).any? do |start_offset, end_offset|
+        parent_span_overlap_with_other_item?(
+          overlap_index,
+          start_offset: start_offset,
+          end_offset: end_offset,
+          item_index: item_index
+        )
       end
-      indexes << item_index if conflict
+
+      indexes[item_index] = true if conflict
     end
 
     candidates.map do |candidate|
-      next candidate unless conflicting_indexes.include?(candidate[:item_index])
+      next candidate unless conflicting_indexes.key?(candidate[:item_index])
 
       reasons = normalize_reasons(candidate[:rejection_reasons] + [ "ambiguous_reference_expression" ])
       candidate.merge(
@@ -936,6 +1008,56 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         corroboration: nil
       )
     end
+  end
+
+  def build_parent_span_overlap_index(parent_spans)
+    entries = parent_spans.filter_map.with_index do |span, item_index|
+      next unless span
+
+      {
+        start_offset: span_offset(span),
+        end_offset: span_end(span),
+        item_index: item_index
+      }
+    end.sort_by { |entry| [ entry[:start_offset], entry[:end_offset], entry[:item_index] ] }
+
+    starts = []
+    prefix_top_two = []
+    top_two = []
+    entries.each do |entry|
+      starts << entry[:start_offset]
+      top_two = (top_two + [ entry ])
+        .sort_by { |candidate| [ -candidate[:end_offset], candidate[:item_index] ] }
+        .first(2)
+      prefix_top_two << top_two
+    end
+
+    { starts: starts, prefix_top_two: prefix_top_two }
+  end
+
+  def parent_span_overlap_with_other_item?(overlap_index, start_offset:, end_offset:, item_index:)
+    prefix_length = lower_bound(overlap_index[:starts], end_offset)
+    return false if prefix_length.zero?
+
+    overlap_index[:prefix_top_two].fetch(prefix_length - 1).any? do |entry|
+      entry[:item_index] != item_index && entry[:end_offset] > start_offset
+    end
+  end
+
+  def lower_bound(sorted_values, target)
+    left = 0
+    right = sorted_values.length
+
+    while left < right
+      middle = (left + right) / 2
+      if sorted_values[middle] < target
+        left = middle + 1
+      else
+        right = middle
+      end
+    end
+
+    left
   end
 
   def candidate_evidence_ranges(candidate)

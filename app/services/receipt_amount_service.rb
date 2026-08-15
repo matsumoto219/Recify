@@ -41,6 +41,23 @@
 class ReceiptAmountService
   class InvalidItemSourceError < ArgumentError; end
 
+  MAX_NUMERIC_SOURCE_BYTES = 512
+  ITEM_NUMERIC_SOURCE_ATTRIBUTES = %i[
+    price
+    quantity
+    original_line_total
+    line_total
+    discount_amount
+    discount_rate
+    tax_rate
+    amount_persisted_original_line_total
+    amount_persisted_discount_amount
+    amount_persisted_discount_rate
+    amount_persisted_line_total
+  ].freeze
+  private_constant :MAX_NUMERIC_SOURCE_BYTES
+  private_constant :ITEM_NUMERIC_SOURCE_ATTRIBUTES
+
   INVALID_ITEM_SOURCE_ERRORS = [
     Amounts::ItemPricingSource::InvalidContractError,
     Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
@@ -79,16 +96,40 @@ class ReceiptAmountService
   end
 
   def self.parse_amount_or_nil(value)
+    return nil unless bounded_numeric_source?(value)
+
     Amounts::NumberParser.parse_amount_or_nil(value)
   end
 
   def self.parse_amount(value, default: 0)
+    return default unless bounded_numeric_source?(value)
+
     Amounts::NumberParser.parse_amount(value, default: default)
   end
 
   def self.parse_quantity(value, default: BigDecimal("1"))
+    return default unless bounded_numeric_source?(value)
+
     Amounts::NumberParser.parse_quantity(value, default: default)
   end
+
+  def self.bounded_numeric_source?(value)
+    case value
+    when String
+      value.bytesize <= MAX_NUMERIC_SOURCE_BYTES && value.valid_encoding?
+    when Integer
+      value.bit_length <= Amounts::ExactBoundedDecimal::MAX_NUMERIC_BITS
+    when BigDecimal
+      value.finite? &&
+        value.precision <= Amounts::ExactBoundedDecimal::MAX_COMPONENT_DIGITS &&
+        value.exponent.abs <= Amounts::ExactBoundedDecimal::MAX_COMPONENT_DIGITS
+    when Float
+      value.finite? && !value.to_s.match?(/[eE]/)
+    end || false
+  rescue EncodingError, ArgumentError, FloatDomainError
+    false
+  end
+  private_class_method :bounded_numeric_source?
 
   def self.apply_rounding(value, rounding_mode)
     Amounts::Rounding.apply_rounding(value, rounding_mode)
@@ -134,11 +175,37 @@ class ReceiptAmountService
     purchased_quantity:,
     purchased_unit_code:
   )
+    exact_price = Amounts::ExactBoundedDecimal.call(
+      reference_price_amount,
+      minimum: 0,
+      maximum: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX.to_r,
+      maximum_scale: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX_SCALE,
+      minimum_inclusive: true
+    )
+    exact_reference_quantity = Amounts::ExactBoundedDecimal.call(
+      reference_quantity,
+      minimum: 0,
+      maximum: ReceiptItem::REFERENCE_QUANTITY_MAX.to_r,
+      maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+      minimum_inclusive: false
+    )
+    exact_purchased_quantity = Amounts::ExactBoundedDecimal.call(
+      purchased_quantity,
+      minimum: 0,
+      maximum: ReceiptItem::REFERENCE_QUANTITY_MAX.to_r,
+      maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+      minimum_inclusive: false
+    )
+    unless exact_price && exact_reference_quantity && exact_purchased_quantity
+      raise Amounts::ReferenceItemExtension::InvalidSourceError,
+        "reference projection requires bounded exact decimal sources"
+    end
+
     result = Amounts::ReferenceItemExtension.call(
-      reference_price_amount: reference_price_amount,
-      reference_quantity: reference_quantity,
+      reference_price_amount: exact_price,
+      reference_quantity: exact_reference_quantity,
       reference_unit_code: reference_unit_code,
-      purchased_quantity: purchased_quantity,
+      purchased_quantity: exact_purchased_quantity,
       purchased_unit_code: purchased_unit_code,
       reference_price_tax_inclusion: :gross
     )
@@ -721,12 +788,13 @@ class ReceiptAmountService
   end
 
   def normalize_item(i)
+    pricing_source_kind = fetch_value(i, :pricing_source_kind)&.to_s.presence
+    validate_bounded_item_numeric_sources!(i, pricing_source_kind: pricing_source_kind)
     price = fetch_value(i, :price)
     quantity = fetch_value(i, :quantity)
     original_line_total = fetch_value(i, :original_line_total)
     line_total = fetch_value(i, :line_total)
     discount_amount = fetch_value(i, :discount_amount)
-    pricing_source_kind = fetch_value(i, :pricing_source_kind)&.to_s.presence
     unless pricing_source_kind.nil? || ReceiptItem::PRICING_SOURCE_KINDS.include?(pricing_source_kind)
       raise Amounts::ItemPricingSource::InvalidContractError, "unknown item pricing authority kind"
     end
@@ -900,45 +968,52 @@ class ReceiptAmountService
   end
 
   def exact_bounded_decimal!(value, minimum:, maximum:, maximum_scale:, minimum_inclusive:, attribute:)
-    exact = exact_decimal_rational(value)
-    valid_minimum = exact && (minimum_inclusive ? exact >= minimum : exact > minimum)
-    valid = exact && valid_minimum && exact <= maximum && finite_decimal_scale(exact)&.<=(maximum_scale)
-    return exact if valid
+    exact = Amounts::ExactBoundedDecimal.call(
+      value,
+      minimum: minimum,
+      maximum: maximum,
+      maximum_scale: maximum_scale,
+      minimum_inclusive: minimum_inclusive
+    )
+    return exact if exact
 
     raise Amounts::ReferenceItemExtension::InvalidSourceError,
       "#{attribute} must be an exact bounded decimal"
   end
 
-  def exact_decimal_rational(value)
+  def validate_bounded_item_numeric_sources!(item, pricing_source_kind:)
+    ITEM_NUMERIC_SOURCE_ATTRIBUTES.each do |attribute|
+      value = fetch_value(item, attribute)
+      next if bounded_item_numeric_source?(value, attribute:, pricing_source_kind:)
+
+      raise Amounts::ItemPricingSource::InvalidContractError,
+        "#{attribute} must use a bounded valid-encoding numeric source"
+    end
+  end
+
+  def bounded_item_numeric_source?(value, attribute:, pricing_source_kind:)
     case value
-    when Integer, Rational
-      value.to_r
-    when BigDecimal
-      value.to_r if value.finite?
+    when nil
+      true
     when String
-      Rational(value) if value.match?(/\A[+-]?\d+(?:\.\d+)?\z/)
+      value.bytesize <= MAX_NUMERIC_SOURCE_BYTES && value.valid_encoding?
+    when Integer
+      value.bit_length <= Amounts::ExactBoundedDecimal::MAX_NUMERIC_BITS
+    when BigDecimal
+      value.finite? &&
+        value.precision <= Amounts::ExactBoundedDecimal::MAX_COMPONENT_DIGITS &&
+        value.exponent.abs <= Amounts::ExactBoundedDecimal::MAX_COMPONENT_DIGITS
+    when Float
+      value.finite? && !value.to_s.match?(/[eE]/)
+    when Rational
+      attribute == :quantity && pricing_source_kind == "reference_quantity_price" &&
+        value.numerator.bit_length <= Amounts::ExactBoundedDecimal::MAX_NUMERIC_BITS &&
+        value.denominator.bit_length <= Amounts::ExactBoundedDecimal::MAX_NUMERIC_BITS
+    else
+      false
     end
-  rescue ArgumentError, TypeError, FloatDomainError, ZeroDivisionError
-    nil
-  end
-
-  def finite_decimal_scale(value)
-    denominator = value.denominator
-    powers_of_two = factor_count(denominator, 2)
-    denominator /= 2**powers_of_two
-    powers_of_five = factor_count(denominator, 5)
-    denominator /= 5**powers_of_five
-
-    [ powers_of_two, powers_of_five ].max if denominator == 1
-  end
-
-  def factor_count(value, factor)
-    count = 0
-    while (value % factor).zero?
-      count += 1
-      value /= factor
-    end
-    count
+  rescue EncodingError, ArgumentError, FloatDomainError
+    false
   end
 
   def normalize_adjustment(adjustment)

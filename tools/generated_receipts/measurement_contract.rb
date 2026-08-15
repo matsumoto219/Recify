@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "bigdecimal"
+
 module GeneratedReceipts
   class MeasurementContract
     Projection = Data.define(
@@ -11,6 +13,13 @@ module GeneratedReceipts
     )
 
     DECIMAL_PATTERN = /\A(?:0|[1-9]\d*)(?:\.\d+)?\z/.freeze
+    EXACT_TOKEN_MAX_BYTES = 64
+    MAX_INTEGER_BITS = 64
+    MAX_EXACT_BITS = 128
+    MAX_PRICE_AMOUNT = Rational(999_999_999_999)
+    MAX_QUANTITY = Rational(9_999_999, 1_000)
+    MAX_LINE_TOTAL = 999_999_999
+    MAX_RATE = Rational(1)
     UNIT_SCALES = {
       "gram" => [ "mass", Rational(1) ],
       "kilogram" => [ "mass", Rational(1_000) ],
@@ -22,10 +31,25 @@ module GeneratedReceipts
 
     class << self
       def project(source_item:, tax_rate:, tax_rounding:, discount_rounding:)
-        source = source_item.to_h
-        price = exact_decimal(source["reference_price_amount"], max_scale: 6, allow_zero: true)
-        reference_quantity = exact_decimal(source["reference_quantity"], max_scale: 3)
-        purchased_quantity = exact_decimal(source["purchased_quantity"], max_scale: 3)
+        return nil unless source_item.is_a?(Hash)
+
+        source = source_item
+        price = exact_decimal(
+          source["reference_price_amount"],
+          max_scale: 6,
+          maximum: MAX_PRICE_AMOUNT,
+          allow_zero: true
+        )
+        reference_quantity = exact_decimal(
+          source["reference_quantity"],
+          max_scale: 3,
+          maximum: MAX_QUANTITY
+        )
+        purchased_quantity = exact_decimal(
+          source["purchased_quantity"],
+          max_scale: 3,
+          maximum: MAX_QUANTITY
+        )
         conversion_ratio = exact_conversion_ratio(
           from: source["purchased_unit"],
           to: source["reference_unit"]
@@ -34,6 +58,8 @@ module GeneratedReceipts
 
         exact_amount = price * purchased_quantity * conversion_ratio / reference_quantity
         projected_amount = round_value(exact_amount, "round")
+        return nil unless projected_amount.between?(0, MAX_LINE_TOTAL)
+
         discount = projected_discount(
           source,
           projected_amount,
@@ -48,6 +74,7 @@ module GeneratedReceipts
           tax_rate: tax_rate,
           rounding: tax_rounding
         )
+        return nil if gross_amount && !gross_amount.between?(0, MAX_LINE_TOTAL)
 
         Projection.new(
           exact_reference_amount: exact_amount,
@@ -56,40 +83,91 @@ module GeneratedReceipts
           discounted_source_line_total: discounted_amount,
           projected_gross_line_total: gross_amount
         )
-      rescue ArgumentError, TypeError, ZeroDivisionError
+      rescue ArgumentError, TypeError, ZeroDivisionError, FloatDomainError, RangeError
         nil
       end
 
       def rounding_matches(exact_amount:, printed_line_total:)
         return [] if exact_amount.nil? || printed_line_total.nil?
 
-        printed = Integer(printed_line_total.to_s, 10)
+        exact = bounded_exact_amount(exact_amount)
+        printed = bounded_line_total_integer(printed_line_total)
+        return [] unless exact && printed
+
         {
-          "floor" => exact_amount.floor,
-          "half_up" => (exact_amount + Rational(1, 2)).floor,
-          "ceil" => exact_amount.ceil
+          "floor" => exact.floor,
+          "half_up" => (exact + Rational(1, 2)).floor,
+          "ceil" => exact.ceil
         }.filter_map { |mode, amount| mode if amount == printed }
-      rescue ArgumentError, TypeError
+      rescue ArgumentError, TypeError, FloatDomainError, RangeError
         []
       end
 
       private
 
-      def exact_decimal(value, max_scale:, allow_zero: false)
-        text = value.to_s
+      def exact_decimal(
+        value,
+        max_scale:,
+        maximum:,
+        allow_zero: false,
+        allow_integer: false,
+        allow_float: false
+      )
+        text = bounded_decimal_token(
+          value,
+          maximum: maximum,
+          allow_integer: allow_integer,
+          allow_float: allow_float
+        )
+        return nil unless text
         return nil unless text.match?(DECIMAL_PATTERN)
         return nil if text.include?(".") && text.split(".", 2).last.length > max_scale
 
         value = Rational(text)
         return nil if value.negative?
         return nil if value.zero? && !allow_zero
+        return nil if value > maximum
 
         value
       end
 
+      def bounded_decimal_token(value, maximum:, allow_integer:, allow_float:)
+        case value
+        when String
+          return nil unless safe_token?(value)
+
+          value
+        when Integer
+          return nil unless allow_integer
+          return nil if value.negative? || value > maximum || value.bit_length > MAX_INTEGER_BITS
+
+          value.to_s
+        when Float
+          return nil unless allow_float
+          return nil unless value.finite? && value >= 0 && value <= maximum.to_f
+
+          token = value.to_s
+          safe_token?(token) ? token : nil
+        else
+          nil
+        end
+      end
+
+      def safe_token?(value)
+        return false if value.empty? || value.bytesize > EXACT_TOKEN_MAX_BYTES
+        return false unless value.valid_encoding? && value.ascii_only?
+
+        true
+      rescue EncodingError
+        false
+      end
+
       def exact_conversion_ratio(from:, to:)
-        from_dimension, from_scale = UNIT_SCALES[from.to_s]
-        to_dimension, to_scale = UNIT_SCALES[to.to_s]
+        return nil unless from.is_a?(String) && to.is_a?(String)
+        return nil unless safe_token?(from) && safe_token?(to)
+
+        from_dimension, from_scale = UNIT_SCALES[from]
+        to_dimension, to_scale = UNIT_SCALES[to]
         return nil unless from_dimension && from_dimension == to_dimension
 
         from_scale / to_scale
@@ -97,12 +175,23 @@ module GeneratedReceipts
 
       def projected_discount(source, projected_amount, rounding:)
         if source.key?("discount_rate") && !source["discount_rate"].nil?
-          rate = exact_decimal(source["discount_rate"], max_scale: 6, allow_zero: true)
-          return nil unless rate && rate <= 1
+          rate = exact_decimal(
+            source["discount_rate"],
+            max_scale: 6,
+            maximum: MAX_RATE,
+            allow_zero: true
+          )
+          return nil unless rate
 
           round_value(projected_amount * rate, rounding)
         elsif source.key?("discount_amount") && !source["discount_amount"].nil?
-          amount = exact_decimal(source["discount_amount"], max_scale: 0, allow_zero: true)
+          amount = exact_decimal(
+            source["discount_amount"],
+            max_scale: 0,
+            maximum: Rational(MAX_LINE_TOTAL),
+            allow_zero: true,
+            allow_integer: true
+          )
           amount&.denominator == 1 ? amount.to_i : nil
         else
           0
@@ -114,7 +203,14 @@ module GeneratedReceipts
         when "gross"
           discounted_amount
         when "net"
-          rate = exact_decimal(tax_rate, max_scale: 6, allow_zero: true)
+          rate = exact_decimal(
+            tax_rate,
+            max_scale: 6,
+            maximum: MAX_RATE,
+            allow_zero: true,
+            allow_integer: true,
+            allow_float: true
+          )
           return nil unless rate
 
           discounted_amount + round_value(discounted_amount * rate, rounding)
@@ -129,6 +225,38 @@ module GeneratedReceipts
           (value + Rational(1, 2)).floor
         else
           value.floor
+        end
+      end
+
+      def bounded_exact_amount(value)
+        exact = case value
+        when Integer
+          return nil if value.bit_length > MAX_EXACT_BITS
+
+          Rational(value)
+        when Rational
+          return nil if value.numerator.bit_length > MAX_EXACT_BITS
+          return nil if value.denominator.bit_length > MAX_EXACT_BITS
+
+          value
+        else
+          return nil
+        end
+        return nil if exact.negative? || exact > Rational(MAX_LINE_TOTAL + 1)
+
+        exact
+      end
+
+      def bounded_line_total_integer(value)
+        case value
+        when Integer
+          value if value.between?(0, MAX_LINE_TOTAL)
+        when String
+          return nil unless safe_token?(value)
+          return nil unless value.match?(/\A(?:0|[1-9]\d*)\z/)
+
+          integer = Integer(value, 10)
+          integer if integer <= MAX_LINE_TOTAL
         end
       end
     end

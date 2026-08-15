@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "rails_helper"
+require "timeout"
 
 RSpec.describe UserNumericInput do
   describe ".integer" do
@@ -25,6 +26,12 @@ RSpec.describe UserNumericInput do
         expect { described_class.integer(value, signed: false) }
           .to raise_error(UserNumericInput::InvalidValue), value
       end
+    end
+
+    it "巨大Integerを文字列化する前に拒否する" do
+      expect {
+        Timeout.timeout(1) { described_class.integer(2**10_000) }
+      }.to raise_error(UserNumericInput::InvalidValue, "Invalid user numeric input")
     end
   end
 
@@ -62,6 +69,46 @@ RSpec.describe UserNumericInput do
           .to raise_error(UserNumericInput::InvalidValue)
         expect { described_class.decimal("\u00a01.5\u00a0") }
           .to raise_error(UserNumericInput::InvalidValue)
+      end
+    end
+
+    it "128 bytesまでの入力を維持し、それを超える数値文字列をBigDecimal化せず拒否する" do
+      boundary = "9" * described_class::MAX_INPUT_BYTES
+      oversized = "9" * 100_000
+
+      aggregate_failures do
+        expect(described_class.decimal(boundary)).to eq(BigDecimal(boundary))
+        expect {
+          Timeout.timeout(1) { described_class.decimal(oversized) }
+        }.to raise_error(UserNumericInput::InvalidValue, "Invalid user numeric input")
+      end
+    end
+
+    it "巨大BigDecimalと非scalar入力を文字列化せず拒否する" do
+      aggregate_failures do
+        expect {
+          Timeout.timeout(1) { described_class.decimal(BigDecimal("1E100000")) }
+        }.to raise_error(UserNumericInput::InvalidValue, "Invalid user numeric input")
+        expect {
+          Timeout.timeout(1) { described_class.decimal(BigDecimal("9" * 1_000)) }
+        }.to raise_error(UserNumericInput::InvalidValue, "Invalid user numeric input")
+
+        [ [], {} ].each do |value|
+          expect(value).not_to receive(:to_s)
+          expect { described_class.decimal(value) }
+            .to raise_error(UserNumericInput::InvalidValue, "Invalid user numeric input")
+        end
+      end
+    end
+
+    it "invalid encodingを正規化前に拒否し、既存のscalar入力を維持する" do
+      invalid = "\xFF".b.force_encoding(Encoding::UTF_8)
+
+      aggregate_failures do
+        expect { described_class.decimal(invalid) }
+          .to raise_error(UserNumericInput::InvalidValue, "Invalid user numeric input")
+        expect(described_class.decimal(BigDecimal("1.5"))).to eq(BigDecimal("1.5"))
+        expect(described_class.decimal(1.5)).to eq(BigDecimal("1.5"))
       end
     end
   end

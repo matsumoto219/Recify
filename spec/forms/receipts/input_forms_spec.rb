@@ -1,4 +1,5 @@
 require "rails_helper"
+require "timeout"
 
 RSpec.describe "Receipts input forms" do
   def normalize_with(form_class, receipt:, attributes:)
@@ -186,6 +187,31 @@ RSpec.describe "Receipts input forms" do
 
   include_examples "receipt input normalization", Receipts::ManualEntryForm
   include_examples "receipt input normalization", Receipts::EditForm
+
+  it "手動入力の巨大な基準価格をInputNormalizer境界で短時間にtyped rejectionする" do
+    oversized = "9" * 100_000
+    attributes = {
+      "receipt_items_attributes" => {
+        "0" => {
+          "pricing_source_kind" => "reference_quantity_price",
+          "reference_price_amount" => oversized,
+          "reference_quantity" => "1",
+          "reference_quantity_unit_code" => "gram",
+          "reference_price_tax_inclusion" => "gross",
+          "quantity" => "1",
+          "quantity_unit_code" => "gram"
+        }
+      }
+    }
+
+    expect {
+      Timeout.timeout(1) do
+        Receipts::ManualEntryForm.call(receipt: build(:receipt), attributes: attributes)
+      end
+    }.to raise_error(Receipts::NumericInput::InvalidValue, "Invalid user numeric input")
+
+    expect(attributes.dig("receipt_items_attributes", "0", "reference_price_amount")).to equal(oversized)
+  end
 
   describe Receipts::EditForm do
     it "既存itemのpartial入力で未送信の数量単位を補完しない" do
