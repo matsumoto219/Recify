@@ -42,6 +42,26 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     item_row
   end
 
+  def expand_pricing_source_details(item_row)
+    details = item_row.find('details[data-receipt-pricing-source-details]', visible: :all)
+    unless details['data-collapsible-open'] == 'true'
+      summary = details.find('summary[data-receipt-pricing-source-summary]', visible: true)
+      summary.scroll_to(:center)
+      summary.click
+    end
+
+    expect(item_row).to have_css(
+      "details[data-receipt-pricing-source-details][data-collapsible-open='true']",
+      visible: :all
+    )
+    expect(page.evaluate_script('arguments[0].open', details)).to be(true)
+    content = details.find('[data-collapsible-details-target="content"]', visible: :all)
+    expect(content['aria-hidden']).to eq('false')
+    expect(page.evaluate_script('arguments[0].inert', content)).to be(false)
+
+    details
+  end
+
   def select_with_keyboard(select_element, value)
     options = select_element.all("option", visible: :all)
     option_index = options.index { |option| option.value == value }
@@ -310,6 +330,7 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
         const summary = document.querySelector("[data-controller~='mobile-amount-summary']")
         const amount = summary.querySelector("[data-receipt-form-target='totalAmount']")
         const details = summary.querySelector("[data-mobile-amount-summary-target='details']")
+        const detailsInner = details.querySelector(".receipt-amount-summary-details-inner")
         const toggle = summary.querySelector("[data-mobile-amount-summary-target='toggle']")
         const toolbar = summary.querySelector(".receipt-amount-summary-toolbar")
         const heading = summary.querySelector(".receipt-amount-summary-heading")
@@ -377,6 +398,7 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
         const decorationIconStyle = window.getComputedStyle(decorationIcon)
         const summaryStyle = window.getComputedStyle(summary)
         const formContentStyle = window.getComputedStyle(formContent)
+        const detailsInnerStyle = window.getComputedStyle(detailsInner)
         const compactHeight = toolbarRect.height +
           Number.parseFloat(summaryStyle.paddingTop) + Number.parseFloat(summaryStyle.paddingBottom) +
           Number.parseFloat(summaryStyle.borderTopWidth) + Number.parseFloat(summaryStyle.borderBottomWidth)
@@ -440,6 +462,9 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
           detailsHidden: details.getAttribute("aria-hidden"),
           detailsInert: details.inert,
           detailsHeight: detailsRect.height,
+          detailsOverflowY: detailsInnerStyle.overflowY,
+          detailsScrollbarWidth: detailsInnerStyle.scrollbarWidth,
+          detailsScrollbarColor: detailsInnerStyle.scrollbarColor,
           toggleExpanded: toggle.getAttribute("aria-expanded"),
           primaryDetailsHorizontal: primaryDetailRects.length === 3 &&
             primaryDetailRects.every((rect) => rect.width > 0) &&
@@ -476,6 +501,95 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
 
     expect(validation_entries.size).to eq(1)
     expect(unexpected_entries).to be_empty
+  end
+
+  it "手動measurementはunit変更だけでsourceを推測せず明示0円authorityを保存する" do
+    user = create_system_test_user
+
+    sign_in_through_browser(user)
+    visit new_receipt_path
+    wait_for_stimulus_controller("receipt-form")
+
+    item_row = expanded_receipt_item_row
+    expand_pricing_source_details(item_row)
+    original_line_total = item_row.find(
+      "[data-receipt-form-target='originalLineTotalInput']",
+      visible: :all
+    )
+    line_total = item_row.find(
+      "[data-receipt-form-target='lineTotalInput']",
+      visible: :all
+    )
+
+    aggregate_failures do
+      expect(original_line_total.value).to eq("")
+      expect(line_total.value).to eq("")
+    end
+
+    find("input[name='receipt[store_name]']").set("手動計量0円店")
+    find("select[name='receipt[payment_method]'] option[value='cash']").select_option
+    item_row.find("input[name$='[confirmed_name]']").set("手動計量商品")
+    quantity_unit = item_row.find("[data-receipt-form-target='quantityUnitInput']", visible: :all)
+    quantity = item_row.find("[data-receipt-form-target='quantityInput']", visible: :all)
+    price = item_row.find("[data-receipt-form-target='priceInput']", visible: :all)
+    pricing_mode = item_row.find("[data-receipt-form-target='pricingSourceModeInput']", visible: :all)
+    quantity_unit.find("option[value='liter']").select_option
+    quantity.set("8.12")
+    price.set("140")
+
+    visible_line_total = item_row.find(
+      "[data-receipt-form-target='lineTotalDisplay']",
+      visible: true,
+      match: :first
+    )
+
+    aggregate_failures "unit変更だけではcount sourceを変換しない" do
+      expect(pricing_mode.value).to eq("count_unit_price")
+      expect(quantity.value).to eq("8.12")
+      expect(quantity_unit.value).to eq("liter")
+      expect(price.value).to eq("140")
+      expect(original_line_total.value).to eq("")
+      expect(line_total.value).to eq("")
+      expect(visible_line_total).to have_text("—")
+    end
+
+    pricing_mode.find("option[value='explicit_line_total']").select_option
+    explicit_line_total = item_row.find(
+      "[data-receipt-form-target='explicitLineTotalInput']",
+      visible: :all
+    )
+    explicit_line_total.set("0")
+
+    aggregate_failures "明示した0円だけをauthorityとして同期する" do
+      expect(pricing_mode.value).to eq("explicit_line_total")
+      expect(explicit_line_total.value).to eq("0")
+      expect(line_total.value).to eq("0")
+      expect(visible_line_total).to have_text("¥0")
+    end
+
+    click_mobile_save_button
+
+    expect(page).to have_current_path(receipts_path, ignore_query: true)
+    receipt = user.receipts.find_by!(store_name: "手動計量0円店")
+    item = receipt.receipt_items.first
+
+    aggregate_failures do
+      expect(receipt).to have_attributes(
+        subtotal_amount: 0,
+        tax_amount: 0,
+        total_amount: 0,
+        status: "completed"
+      )
+      expect(item).to have_attributes(
+        price: nil,
+        quantity: BigDecimal("8.12"),
+        quantity_unit_code: "liter",
+        pricing_source_kind: "explicit_line_total",
+        original_line_total: 0,
+        line_total: 0
+      )
+    end
+    expect_browser_console_clean
   end
 
   it "不正な単価を保持し、修正後に明細を保存できる" do
@@ -1486,6 +1600,9 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
       expect(toggle["aria-expanded"]).to eq("true")
       expect(details["aria-hidden"]).to eq("false")
       expect(page.evaluate_script("arguments[0].inert", details)).to be(false)
+      expect(open_metrics.fetch("detailsOverflowY")).to eq("auto")
+      expect(open_metrics.fetch("detailsScrollbarWidth")).to eq("thin")
+      expect(open_metrics.fetch("detailsScrollbarColor")).not_to eq("auto")
       expect(details).to have_text(I18n.t("shared.amount_summary_card.subtotal"))
       expect(details).to have_text(I18n.t("shared.amount_summary_card.tax_amount"))
       expect(page.evaluate_script("document.activeElement === arguments[0]", toggle)).to be(true)

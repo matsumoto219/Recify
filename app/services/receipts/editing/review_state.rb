@@ -262,7 +262,7 @@ class Receipts::Editing::ReviewState
       end
     end
 
-    legacy_adjustment_review_resolved?(attributes, attributes_by_id)
+    receipt_level_adjustment_review_resolved_by_submission?(attributes, attributes_by_id)
   end
 
   def adjustment_absence_confirmation_resolves_reason?
@@ -302,7 +302,7 @@ class Receipts::Editing::ReviewState
     !adjustment_review_confirmed_by_server?(submitted_attributes)
   end
 
-  def legacy_adjustment_review_resolved?(submitted_attributes, attributes_by_id)
+  def receipt_level_adjustment_review_resolved_by_submission?(submitted_attributes, attributes_by_id)
     existing_adjustment_resolved = receipt.receipt_adjustments.any? do |adjustment|
       item_attributes = attributes_by_id[adjustment.id.to_s]
       item_attributes.present? &&

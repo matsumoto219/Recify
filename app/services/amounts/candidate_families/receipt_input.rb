@@ -11,6 +11,8 @@ module Amounts
         purchase_total = to_i(candidate_values[:total])
         payment = payment_reconciliation(purchase_total, payment_adjustment_total)
         item_delta = item_total_delta(purchase_total)
+        computed_items = reference_items_projected_to_gross(rounding_mode: :floor)
+        return nil unless computed_items
 
         Amounts::Candidate.new(
           candidate_id: receipt_input_candidate_id,
@@ -34,7 +36,7 @@ module Amounts
             item_total: item_data_present? ? item_total : nil,
             item_delta: item_delta
           }.compact ],
-          computed_items: items,
+          computed_items: computed_items,
           calculation_profile: calculation_profile(
             receipt_input_resolved: resolved,
             receipt_input_tax_rate_present: value_present?(receipt[:tax_rate])

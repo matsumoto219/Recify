@@ -36,6 +36,13 @@ class Receipts::Editing::ChangeSet
     quantity_unit_code
     tax_rate
     discount_rate
+    pricing_source_kind
+    reference_price_amount
+    reference_quantity
+    reference_quantity_unit_code
+    quantity_unit_raw
+    reference_quantity_unit_raw
+    reference_price_tax_inclusion
   ].freeze
   ITEM_NON_AMOUNT_FIELDS = %w[
     confirmed_name
@@ -71,6 +78,7 @@ class Receipts::Editing::ChangeSet
   def initialize(receipt:, permitted:)
     @receipt = receipt
     @permitted = permitted
+    @existing_records_by_association = {}
   end
 
   def call
@@ -109,7 +117,7 @@ class Receipts::Editing::ChangeSet
       next item_monetary_source_present?(changed_record) if record.nil?
 
       changed = record_changed?(record, attributes, ITEM_AMOUNT_FIELDS) ||
-        item_line_total_source_changed?(record, attributes)
+        item_line_total_contract_changed?(record, attributes)
       changed && (item_monetary_source_present?(record) || item_monetary_source_present?(changed_record))
     end
   end
@@ -123,7 +131,8 @@ class Receipts::Editing::ChangeSet
   def item_monetary_source_present?(record)
     return false unless record
 
-    value_present?(record.price) ||
+    value_present?(record.pricing_source_kind) ||
+      value_present?(record.price) ||
       value_present?(record.line_total) ||
       record.original_line_total.to_i.positive? ||
       record.discount_amount.to_i.positive?
@@ -133,7 +142,15 @@ class Receipts::Editing::ChangeSet
     !value.nil? && value.to_s.strip != ""
   end
 
-  def item_line_total_source_changed?(record, attributes)
+  def item_line_total_contract_changed?(record, attributes)
+    return false unless attributes.key?("original_line_total") || attributes.key?("line_total")
+
+    pricing_source_kind = attributes.fetch("pricing_source_kind", record.pricing_source_kind).presence
+    return false if %w[count_unit_price reference_quantity_price].include?(pricing_source_kind)
+    if pricing_source_kind == "explicit_line_total"
+      return explicit_line_total_contract_changed?(record, attributes)
+    end
+
     return false unless attributes.key?("line_total")
 
     quantity_unit_code = attributes.fetch("quantity_unit_code", record.quantity_unit_code)
@@ -143,6 +160,32 @@ class Receipts::Editing::ChangeSet
     end
 
     record_changed?(record, attributes, %w[line_total])
+  end
+
+  def explicit_line_total_contract_changed?(record, attributes)
+    return false unless attributes.key?("original_line_total")
+
+    changed_record = record.dup
+    changed_record.assign_attributes("original_line_total" => attributes["original_line_total"])
+    submitted_source = changed_record.original_line_total
+    persisted_source_recorded = !record.original_line_total.nil?
+    persisted_source = if persisted_source_recorded
+      record.original_line_total
+    else
+      record.line_total
+    end
+    return true if !persisted_source_recorded && !submitted_source.nil?
+
+    submitted_source = persisted_source if !persisted_source_recorded && submitted_source.nil?
+    return true if submitted_source != persisted_source
+    return false unless persisted_source_recorded
+
+    derived_repair_required = persisted_source.to_i.zero? || !persisted_positive_discount?(record)
+    derived_repair_required && record.line_total != persisted_source
+  end
+
+  def persisted_positive_discount?(record)
+    record.discount_rate.to_d.positive? || record.discount_amount.to_i.positive?
   end
 
   def unexplained_countable_total?(record, attributes)
@@ -240,7 +283,13 @@ class Receipts::Editing::ChangeSet
   def existing_record(association_name, id)
     return nil if id.blank?
 
-    @receipt.public_send(association_name).find { |record| record.id.to_s == id.to_s }
+    existing_records_by_id(association_name)[id.to_s]
+  end
+
+  def existing_records_by_id(association_name)
+    @existing_records_by_association[association_name] ||= @receipt
+      .public_send(association_name)
+      .index_by { |record| record.id.to_s }
   end
 
   def submitted_attributes(key)

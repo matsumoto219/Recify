@@ -3,6 +3,7 @@
 
 require "optparse"
 require "securerandom"
+require_relative "../tools/generated_receipts/comparison_runner"
 
 options = {
   runs: 1,
@@ -13,10 +14,22 @@ options = {
 OptionParser.new do |parser|
   parser.banner = "Usage: bin/generated_receipts_compare [options]"
   parser.on("--case CASE_ID", "Run one generated receipt case") { |value| options[:case_id] = value }
-  parser.on("--runs N", Integer, "Number of executions per case") { |value| options[:runs] = value }
+  parser.on("--runs N", "Number of executions per case") { |value| options[:runs] = value }
   parser.on("--execute", "Execute Recify OCR/AI/finalize pipeline") { options[:execute] = true }
   parser.on("--keep", "Keep generated receipt records") { options[:keep] = true }
 end.parse!(ARGV)
+
+runs_token = options[:runs]
+if runs_token.is_a?(String) &&
+    runs_token.bytesize == 1 &&
+    runs_token.valid_encoding? &&
+    runs_token.ascii_only? &&
+    runs_token.match?(/\A[1-2]\z/)
+  options[:runs] = runs_token.to_i
+end
+unless GeneratedReceipts::ComparisonRunner.valid_runs?(options[:runs])
+  abort GeneratedReceipts::ComparisonRunner::INVALID_RUNS_MESSAGE
+end
 
 abort "--execute is required to run Recify comparison" unless options[:execute]
 
@@ -30,10 +43,11 @@ end
 require_relative "../config/environment"
 require_relative "../tools/generated_receipts"
 
-case_paths = Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort
+case_paths = GeneratedReceipts.case_paths
 case_paths.select! { |path| File.basename(path, ".json") == options[:case_id] } if options[:case_id]
 abort "No generated receipt cases matched" if case_paths.empty?
 
+validation_failed = false
 results = case_paths.map do |path|
   user = User.new(
     email: "generated-receipts-#{SecureRandom.hex(4)}@example.com",
@@ -47,13 +61,18 @@ results = case_paths.map do |path|
     case_data = GeneratedReceipts::Validator.load_file(path)
     validation = GeneratedReceipts::Validator.call(case_data)
     unless validation.valid?
+      validation_failed = true
       puts "FAIL #{case_data['case_id']} validation"
       validation.errors.each { |error| puts "  - #{error}" }
       next
     end
 
-    image_path = File.join(GeneratedReceipts::IMAGES_DIR, "#{case_data.fetch('case_id')}.png")
-    abort "Missing generated PNG: #{image_path}" unless File.exist?(image_path)
+    image_path = GeneratedReceipts::Validator.artifact_path(
+      root: GeneratedReceipts::IMAGES_DIR,
+      case_id: case_data.fetch("case_id"),
+      extension: "png",
+      must_exist: true
+    )
 
     result = GeneratedReceipts::ComparisonRunner.new(
       case_data,
@@ -71,12 +90,17 @@ results = case_paths.map do |path|
       end
     end
     result
+  rescue GeneratedReceipts::Validator::FixtureLoadError => error
+    validation_failed = true
+    puts "FAIL generated receipt fixture validation"
+    puts "  - #{error.message}"
+    nil
   ensure
     user.destroy! unless options[:keep]
   end
 end.compact
 
-if results.any? { |result| result.status == "FAIL" }
+if validation_failed || results.any? { |result| result.status == "FAIL" }
   exit 1
 elsif results.any? { |result| result.status == "ENV_BLOCKED" }
   exit 2

@@ -17,7 +17,46 @@ RSpec.describe GeneratedReceipts::PipelineRunner do
   end
 
   it "does not call AI when OCR already produced a finalize decision" do
-    ocr_result = { success: true, raw_text: "合計 ¥880" }
+    ocr_result = {
+      success: true,
+      raw_text: "合計 ¥880",
+      "candidates" => {
+        "reference_pricing_candidates" => [
+          {
+            candidate_id: "azure_items_0_reference_pricing",
+            item_index: 0,
+            validation_state: "valid",
+            rejection_reasons: [],
+            reference_price: {
+              amount: "1480",
+              evidence: { source_field_path: "private/provider/path" }
+            },
+            reference_quantity: {
+              amount: "100",
+              unit_code: "gram",
+              unit_status: "known",
+              unit_raw: "g",
+              origin: "explicit",
+              evidence: { provider_span_start: 10, provider_span_end: 14 }
+            },
+            purchased_quantity: {
+              amount: "342",
+              unit_code: "gram",
+              unit_status: "known",
+              unit_raw: "g"
+            },
+            reference_price_tax_inclusion: "gross",
+            printed_line_total: { amount: "5061", evidence: { provider_span_start: 20 } },
+            corroboration: {
+              exact_amount: { numerator: "25308", denominator: "5" },
+              projected_amount: 5_062,
+              printed_line_total: "5061",
+              rounding_matches: [ "floor" ]
+            }
+          }
+        ]
+      }
+    }
 
     allow(Receipts::Processing).to receive(:run_ocr).and_return(
       Receipts::Processing::Result.new(
@@ -29,9 +68,35 @@ RSpec.describe GeneratedReceipts::PipelineRunner do
     allow(Receipts::Processing).to receive(:run_finalize)
     expect(Receipts::Processing).not_to receive(:run_ai)
 
-    described_class.call(case_data, image_path: image_path, user: user)
+    result = described_class.call(case_data, image_path: image_path, user: user)
 
-    expect(Receipts::Processing).to have_received(:run_finalize)
+    aggregate_failures do
+      expect(Receipts::Processing).to have_received(:run_finalize)
+      expect(result.dig(:actual, "reference_pricing_candidates")).to eq(
+        [
+          {
+            "item_index" => 0,
+            "validation_state" => "valid",
+            "rejection_reasons" => [],
+            "reference_price_amount" => "1480",
+            "reference_quantity" => "100",
+            "reference_unit_code" => "gram",
+            "purchased_quantity" => "342",
+            "purchased_unit_code" => "gram",
+            "reference_price_tax_inclusion" => "gross",
+            "projected_line_total" => 5_062,
+            "printed_line_total" => 5_061,
+            "rounding_matches" => [ "floor" ]
+          }
+        ]
+      )
+      expect(JSON.generate(result.dig(:actual, "reference_pricing_candidates"))).not_to include(
+        "evidence",
+        "unit_raw",
+        "private/provider/path",
+        "provider_span"
+      )
+    end
   end
 
   it "does not retry generated probe failures caused by external service environment errors" do

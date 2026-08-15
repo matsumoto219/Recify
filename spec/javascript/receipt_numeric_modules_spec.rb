@@ -5,11 +5,19 @@ require "open3"
 require "rails_helper"
 
 RSpec.describe "Receipt numeric JavaScript modules" do
+  let(:reference_pricing_contract) do
+    ReceiptFormPresenter.new(receipt: build(:receipt)).reference_pricing_contract_value
+  end
+
   def run_module_script(name, script)
     source = Rails.root.join("app/javascript/receipts/#{name}.js").read.gsub(/^export /, "")
     encoded_source = Base64.strict_encode64(source)
+    encoded_reference_pricing_contract = Base64.strict_encode64(reference_pricing_contract.to_json)
     harness = <<~JAVASCRIPT
       const source = Buffer.from(#{encoded_source.inspect}, 'base64').toString('utf8')
+      const referencePricingContract = JSON.parse(
+        Buffer.from(#{encoded_reference_pricing_contract.inspect}, 'base64').toString('utf8')
+      )
       eval(`${source}\n#{script}`)
     JAVASCRIPT
 
@@ -25,6 +33,9 @@ RSpec.describe "Receipt numeric JavaScript modules" do
       process.stdout.write(JSON.stringify({
         integers: ['100', '1,000', '001', '１００', '1e2', '-1', '¥100'].map((value) => serialize(parseIntegerInput(value))),
         decimals: ['1.5', '.5', '1.', '０．５', '1,5', '1e2', '-0.5'].map((value) => serialize(parseDecimalInput(value))),
+        groupedDecimals: ['1,000', '1,000.5', '１，０００．５', '1,00'].map((value) => serialize(parseGroupedDecimalInput(value))),
+        taxPercentages: ['10.55', '１０．５５０', '0.01', '10.555', '10.5550000000000000000000001'].map((value) => serialize(parseTaxRateInput(value))),
+        discountPercentages: ['10.5', '１０．５０', '0.1', '10.55', '10.5000000000000000000000001'].map((value) => serialize(parseDiscountRateInput(value))),
         discountBlank: parseDiscountRateInput(''),
         unsafeInteger: serialize(parseIntegerInput('9007199254740992'))
       }))
@@ -36,8 +47,55 @@ RSpec.describe "Receipt numeric JavaScript modules" do
       expect(result["integers"].last(3)).to all(include("valid" => false))
       expect(result["decimals"].first(5).pluck("value")).to eq([ 1.5, 0.5, 1, 0.5, 1.5 ])
       expect(result["decimals"].last(2)).to all(include("valid" => false))
+      expect(result["groupedDecimals"].first(3).pluck("value")).to eq([ 1_000, 1_000.5, 1_000.5 ])
+      expect(result["groupedDecimals"].last).to include("valid" => false)
+      expect(result["taxPercentages"].first(3).pluck("value")).to eq([ 10.55, 10.55, 0.01 ])
+      expect(result["taxPercentages"].last(2)).to all(include("valid" => false))
+      expect(result["discountPercentages"].first(3).pluck("value")).to eq([ 10.5, 10.5, 0.1 ])
+      expect(result["discountPercentages"].last(2)).to all(include("valid" => false))
       expect(result["discountBlank"]).to be_nil
       expect(result["unsafeInteger"]).to include("valid" => false)
+    end
+  end
+
+  it "matches Ruby outer-whitespace and exact quantity-scale boundaries" do
+    result = run_module_script("numeric_input", <<~JAVASCRIPT)
+      const serialize = (value) => ({ valid: Number.isFinite(value), value })
+      const parsers = {
+        integer: parseIntegerInput,
+        decimal: parseDecimalInput,
+        groupedDecimal: parseGroupedDecimalInput,
+        taxPercentage: parseTaxRateInput,
+        discountPercentage: parseDiscountRateInput,
+        quantity: parseQuantityInput
+      }
+      const asciiOuter = (value) => ' ' + String.fromCharCode(9) + value + String.fromCharCode(13, 10)
+      const parsed = Object.fromEntries(Object.entries(parsers).map(([name, parser]) => {
+        const value = name === 'integer' ? '100' : '1.5'
+        return [name, {
+          ascii: serialize(parser(asciiOuter(value))),
+          ideographic: serialize(parser('　' + value + '　')),
+          nbsp: serialize(parser(String.fromCharCode(160) + value + String.fromCharCode(160)))
+        }]
+      }))
+
+      process.stdout.write(JSON.stringify({
+        parsed,
+        quantities: ['1.234', '1.2300', '1.2345', '1,000'].map((value) => serialize(parseQuantityInput(value)))
+      }))
+    JAVASCRIPT
+
+    aggregate_failures do
+      %w[integer decimal groupedDecimal taxPercentage discountPercentage quantity].each do |parser|
+        expect(result.dig("parsed", parser, "ascii")).to include("valid" => true), parser
+      end
+      result.fetch("parsed").each_value do |values|
+        expect(values.fetch("ideographic")).to include("valid" => false)
+        expect(values.fetch("nbsp")).to include("valid" => false)
+      end
+      expect(result.fetch("quantities").first(2)).to all(include("valid" => true))
+      expect(result.fetch("quantities")[2]).to include("valid" => false)
+      expect(result.fetch("quantities")[3]).to include("valid" => true, "value" => 1)
     end
   end
 
@@ -95,6 +153,203 @@ RSpec.describe "Receipt numeric JavaScript modules" do
     )
   end
 
+  it "matches the exact reference price extension and half-up contract" do
+    result = run_module_script("amount_preview", <<~JAVASCRIPT)
+      const calculate = (overrides = {}) => referenceItemExtension({
+        referencePricingContract,
+        referencePriceAmount: '120',
+        referenceQuantity: '500',
+        referenceUnitCode: 'milliliter',
+        purchasedQuantity: '1.5',
+        purchasedUnitCode: 'liter',
+        ...overrides
+      })
+
+      process.stdout.write(JSON.stringify({
+        volume: calculate(),
+        mass: calculate({
+          referencePriceAmount: '498',
+          referenceQuantity: '100',
+          referenceUnitCode: 'gram',
+          purchasedQuantity: '342',
+          purchasedUnitCode: 'gram'
+        }),
+        tie: calculate({
+          referencePriceAmount: '105',
+          referenceQuantity: '100',
+          referenceUnitCode: 'gram',
+          purchasedQuantity: '10',
+          purchasedUnitCode: 'gram'
+        }),
+        repeating: calculate({
+          referencePriceAmount: '100',
+          referenceQuantity: '3',
+          referenceUnitCode: 'gram',
+          purchasedQuantity: '1',
+          purchasedUnitCode: 'gram'
+        }),
+        zero: calculate({ referencePriceAmount: '0' }),
+        beforeTie: calculate({
+          referencePriceAmount: '0.999998',
+          referenceQuantity: '2',
+          referenceUnitCode: 'gram',
+          purchasedQuantity: '1',
+          purchasedUnitCode: 'gram'
+        }),
+        afterTie: calculate({
+          referencePriceAmount: '1.000002',
+          referenceQuantity: '2',
+          referenceUnitCode: 'gram',
+          purchasedQuantity: '1',
+          purchasedUnitCode: 'gram'
+        }),
+        groupedAmount: calculate({
+          referencePriceAmount: '1,000',
+          referenceQuantity: '1',
+          referenceUnitCode: 'each',
+          purchasedQuantity: '1',
+          purchasedUnitCode: 'each'
+        }),
+        fullWidthGroupedDecimalAmount: calculate({
+          referencePriceAmount: '１，０００．５',
+          referenceQuantity: '１',
+          referenceUnitCode: 'each',
+          purchasedQuantity: '１',
+          purchasedUnitCode: 'each'
+        })
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "volume" => { "exactNumerator" => "360", "exactDenominator" => "1", "projectedAmount" => 360 },
+      "mass" => { "exactNumerator" => "42579", "exactDenominator" => "25", "projectedAmount" => 1_703 },
+      "tie" => { "exactNumerator" => "21", "exactDenominator" => "2", "projectedAmount" => 11 },
+      "repeating" => { "exactNumerator" => "100", "exactDenominator" => "3", "projectedAmount" => 33 },
+      "zero" => { "exactNumerator" => "0", "exactDenominator" => "1", "projectedAmount" => 0 },
+      "beforeTie" => { "exactNumerator" => "499999", "exactDenominator" => "1000000", "projectedAmount" => 0 },
+      "afterTie" => { "exactNumerator" => "500001", "exactDenominator" => "1000000", "projectedAmount" => 1 },
+      "groupedAmount" => { "exactNumerator" => "1000", "exactDenominator" => "1", "projectedAmount" => 1_000 },
+      "fullWidthGroupedDecimalAmount" => { "exactNumerator" => "2001", "exactDenominator" => "2", "projectedAmount" => 1_001 }
+    )
+  end
+
+  it "uses Ruby outer-whitespace rules for exact reference pricing inputs" do
+    result = run_module_script("amount_preview", <<~JAVASCRIPT)
+      const calculate = (overrides = {}) => referenceItemExtension({
+        referencePricingContract,
+        referencePriceAmount: '120',
+        referenceQuantity: '500',
+        referenceUnitCode: 'milliliter',
+        purchasedQuantity: '750',
+        purchasedUnitCode: 'milliliter',
+        ...overrides
+      })
+      const asciiPrice = ' ' + String.fromCharCode(9) + '120' + String.fromCharCode(13, 10)
+      process.stdout.write(JSON.stringify({
+        ascii: calculate({ referencePriceAmount: asciiPrice }),
+        ideographic: calculate({ referencePriceAmount: '　120　' }),
+        nbsp: calculate({ purchasedQuantity: String.fromCharCode(160) + '750' + String.fromCharCode(160) })
+      }))
+    JAVASCRIPT
+
+    aggregate_failures do
+      expect(result.dig("ascii", "projectedAmount")).to eq(180)
+      expect(result["ideographic"]).to be_nil
+      expect(result["nbsp"]).to be_nil
+    end
+  end
+
+  it "rejects incomplete, incompatible, imprecise, and out-of-range reference sources" do
+    result = run_module_script("amount_preview", <<~JAVASCRIPT)
+      const calculate = (overrides = {}) => referenceItemExtension({
+        referencePricingContract,
+        referencePriceAmount: '120',
+        referenceQuantity: '500',
+        referenceUnitCode: 'milliliter',
+        purchasedQuantity: '1.5',
+        purchasedUnitCode: 'liter',
+        ...overrides
+      })
+      const inputs = [
+        { referencePriceAmount: '' },
+        { referencePriceAmount: '1.1234567' },
+        { referencePriceAmount: '1000000000000' },
+        { referenceQuantity: '0' },
+        { referenceQuantity: '1.0001' },
+        { referenceQuantity: '10000' },
+        { purchasedQuantity: '0.0001' },
+        { purchasedQuantity: '10000' },
+        { purchasedUnitCode: 'gram' },
+        { referenceUnitCode: 'ml' },
+        { referenceUnitCode: 'each', purchasedUnitCode: 'box' },
+        { referencePriceAmount: '1e2' },
+        { referencePriceAmount: '-1' },
+        { referencePriceAmount: '+1' }
+      ]
+
+      process.stdout.write(JSON.stringify(inputs.map((input) => calculate(input))))
+    JAVASCRIPT
+
+    expect(result).to all(be_nil)
+  end
+
+  it "enforces the purchased and reference roles supplied by the Ruby unit catalog" do
+    result = run_module_script("amount_preview", <<~JAVASCRIPT)
+      const calculate = (contract) => referenceItemExtension({
+        referencePricingContract: contract,
+        referencePriceAmount: '120',
+        referenceQuantity: '500',
+        referenceUnitCode: 'milliliter',
+        purchasedQuantity: '1.5',
+        purchasedUnitCode: 'liter'
+      })
+      const withoutReferenceRole = structuredClone(referencePricingContract)
+      withoutReferenceRole.units.milliliter.allowed_pricing_roles = ['purchased']
+      const withoutPurchasedRole = structuredClone(referencePricingContract)
+      withoutPurchasedRole.units.liter.allowed_pricing_roles = ['reference']
+
+      process.stdout.write(JSON.stringify({
+        accepted: calculate(referencePricingContract),
+        referenceRejected: calculate(withoutReferenceRole),
+        purchasedRejected: calculate(withoutPurchasedRole)
+      }))
+    JAVASCRIPT
+
+    aggregate_failures do
+      expect(result.dig("accepted", "projectedAmount")).to eq(360)
+      expect(result["referenceRejected"]).to be_nil
+      expect(result["purchasedRejected"]).to be_nil
+    end
+  end
+
+  it "keeps source text unchanged and preserves equivalent reference ratios" do
+    result = run_module_script("amount_preview", <<~JAVASCRIPT)
+      const source = {
+        referencePricingContract,
+        referencePriceAmount: '４９８.０',
+        referenceQuantity: '１００.０',
+        referenceUnitCode: 'gram',
+        purchasedQuantity: '３４２.０',
+        purchasedUnitCode: 'gram'
+      }
+      const before = JSON.stringify(source)
+      const base = referenceItemExtension(source)
+      const scaled = referenceItemExtension({
+        ...source,
+        referencePriceAmount: '996',
+        referenceQuantity: '200'
+      })
+
+      process.stdout.write(JSON.stringify({ before, after: JSON.stringify(source), base, scaled }))
+    JAVASCRIPT
+
+    aggregate_failures do
+      expect(result["after"]).to eq(result["before"])
+      expect(result["scaled"]).to eq(result["base"])
+      expect(result.dig("base", "projectedAmount")).to eq(1_703)
+    end
+  end
+
   it "formats signed amounts, payment differences, and tax rate summaries" do
     result = run_module_script("amount_preview", <<~JAVASCRIPT)
       process.stdout.write(JSON.stringify({
@@ -139,10 +394,12 @@ RSpec.describe "Receipt numeric JavaScript modules" do
         externalTaxRound: externalTaxTotal(taxGroups, 'round'),
         externalDecimalHalfRound: externalTaxTotal(new Map([[0.7, 5500]]), 'round'),
         externalNegativeHalfRound: externalTaxTotal(negativeHalfGroup, 'round'),
+        internalTaxStorageBoundary: internalTaxTotal(new Map([[10.55, 178]]), 'floor'),
         discountUnset: discountedLineTotal(101, null, 'floor'),
         discountHalfPercent: discountedLineTotal(1000, 0.5, 'round'),
         discountOnePercent: discountedLineTotal(1000, 1, 'round'),
         discountDecimalHalfRound: discountedLineTotal(5500, 0.7, 'round'),
+        discountStorageBoundary: discountedLineTotal(52, 10.5, 'round'),
         discountFull: discountedLineTotal(101, 100, 'floor'),
         discountFloor: discountedLineTotal(101, 50, 'floor'),
         discountCeil: discountedLineTotal(101, 50, 'ceil'),
@@ -156,10 +413,12 @@ RSpec.describe "Receipt numeric JavaScript modules" do
       "externalTaxRound" => 19,
       "externalDecimalHalfRound" => 39,
       "externalNegativeHalfRound" => -1,
+      "internalTaxStorageBoundary" => 16,
       "discountUnset" => 101,
       "discountHalfPercent" => 995,
       "discountOnePercent" => 990,
       "discountDecimalHalfRound" => 5461,
+      "discountStorageBoundary" => 47,
       "discountFull" => 0,
       "discountFloor" => 51,
       "discountCeil" => 50,

@@ -39,6 +39,7 @@
   input_class = local_assigns[:input_class]
   html_options = local_assigns.fetch(:html_options, {})
   unit_data = local_assigns.fetch(:unit_data, {})
+  unit_html_options = local_assigns.fetch(:unit_html_options, {})
   unit_aria_label = local_assigns.fetch(:unit_aria_label, t("shared.quantity_unit_number_field.unit_aria", label: label))
   normalized_unit_options = unit_options.dup
   option_values = normalized_unit_options.map { |option| Array(option).last.to_s }
@@ -120,6 +121,10 @@
     controller: "number-field",
     number_field_decimal_precision_value: decimal_precision
   }.compact
+  unit_options = unit_html_options.deep_dup
+  unit_options[:class] = [ unit_select_classes, unit_options[:class] ].compact.join(" ")
+  unit_options[:data] = unit_options.fetch(:data, {}).merge(unit_data)
+  unit_options[:aria] = { label: unit_aria_label }.merge(unit_options.fetch(:aria, {}))
 %>
 
 <div class="space-y-2">
@@ -135,9 +140,7 @@
     <%= f.select unit_attribute,
                  options_for_select(normalized_unit_options, selected_unit),
                  {},
-                 class: unit_select_classes,
-                 data: unit_data,
-                 aria: { label: unit_aria_label } %>
+                 unit_options %>
   <% end %>
 
   <% if has_error && show_error_message %>

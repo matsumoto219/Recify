@@ -37,6 +37,78 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator 
     it 'uses strict boolean restoration' do
       expect(described_class.ocr('success' => 'true')).to include(success: false)
     end
+
+    it 'reference pricing candidatesをOCR snapshotからBuildParams入力まで復元する' do
+      candidate = {
+        'candidate_id' => 'azure_items_0_reference_pricing',
+        'item_index' => 0,
+        'validation_state' => 'unsupported',
+        'rejection_reasons' => [ 'unsupported_reference_unit', 'unsupported_purchased_unit' ],
+        'reference_price' => {
+          'amount' => '498',
+          'evidence' => {
+            'source_provider' => 'azure_structured',
+            'source_field_path' => 'documents[0].fields.Items[0].Price',
+            'item_index' => 0,
+            'provider_span_start' => 10,
+            'provider_span_end' => 13
+          }
+        },
+        'reference_quantity' => {
+          'amount' => '100',
+          'unit_code' => nil,
+          'unit_status' => 'unknown',
+          'unit_raw' => '杯',
+          'origin' => 'explicit',
+          'evidence' => {
+            'source_provider' => 'azure_structured',
+            'source_field_path' => 'documents[0].fields.Items[0].Price',
+            'item_index' => 0,
+            'provider_span_start' => 14,
+            'provider_span_end' => 18
+          }
+        },
+        'purchased_quantity' => {
+          'amount' => '2',
+          'unit_code' => nil,
+          'unit_status' => 'unknown',
+          'unit_raw' => '杯',
+          'evidence' => {
+            'source_provider' => 'azure_structured',
+            'source_field_path' => 'documents[0].fields.Items[0].Quantity',
+            'item_index' => 0,
+            'provider_span_start' => 19,
+            'provider_span_end' => 21
+          }
+        }
+      }
+
+      result = described_class.ocr(
+        'success' => true,
+        'candidates' => {
+          'items' => [],
+          'reference_pricing_candidates' => [ candidate ]
+        },
+        'candidate_counts' => {
+          'reference_pricing_candidates' => {
+            'actual_count' => 1,
+            'snapshot_count' => 1
+          }
+        }
+      )
+
+      aggregate_failures do
+        expect(result.dig(:candidates, 'reference_pricing_candidates')).to eq([ candidate ])
+        expect(result.dig(:candidate_counts, 'reference_pricing_candidates')).to eq(
+          'actual_count' => 1,
+          'snapshot_count' => 1
+        )
+
+        build_params = Analysis.build_receipt_params(ocr_result: result, ai_result: nil)
+        expect(build_params[:reference_pricing_candidates]).to eq([ candidate.deep_symbolize_keys ])
+        expect(build_params.fetch(:receipt_items_attributes)).to be_empty
+      end
+    end
   end
 
   describe '.ai' do

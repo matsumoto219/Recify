@@ -62,6 +62,13 @@ class Ocr::ResponseParser
         payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
         tax_details: extract_tax_details(parsed_response, normalized_lines),
         adjustment_candidates: extract_adjustment_candidates(parsed_response, normalized_lines),
+        reference_pricing_candidates: Ocr::ResponseParser::ReferencePricingCandidateExtractor.call(
+          items: extract_fields(parsed_response).dig("Items", "valueArray"),
+          profile: profile,
+          projection: ->(**attributes) {
+            ReceiptAmountService.reference_item_extension_projection(**attributes)
+          }
+        ),
         items: extract_items(parsed_response, normalized_lines),
         review_reasons: extract_review_reasons(parsed_response),
         confidence_summary: extract_confidence_summary(parsed_response)
@@ -1384,13 +1391,16 @@ class Ocr::ResponseParser
         else
           original_line_total
         end
-      quantity_unit_code = profile.normalize_quantity_unit(value_object.dig("QuantityUnit", "valueString"))
+      quantity_unit_resolution = profile.resolve_quantity_unit(value_object.dig("QuantityUnit", "valueString"))
+      quantity_unit_code = quantity_unit_resolution.known? ? quantity_unit_resolution.code : ReceiptQuantityUnit.default_code
 
       {
         raw_text: raw_text,
         price: value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
         quantity: value_object.dig("Quantity", "valueNumber"),
         quantity_unit_code: quantity_unit_code,
+        quantity_unit_status: quantity_unit_resolution.status.to_s,
+        **unknown_quantity_unit_diagnostic(quantity_unit_resolution),
         product_code: value_object.dig("ProductCode", "valueString"),
         line_total: line_total,
         original_line_total: original_line_total,
@@ -1407,6 +1417,19 @@ class Ocr::ResponseParser
     end
   rescue NoMethodError, TypeError
     []
+  end
+
+  def unknown_quantity_unit_diagnostic(resolution)
+    return {} unless resolution.unknown?
+
+    raw = resolution.raw.to_s.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: "")
+      .delete("\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F")
+    raw = raw.byteslice(0, 64).to_s
+    raw = raw.byteslice(0, raw.bytesize - 1).to_s until raw.valid_encoding?
+
+    { quantity_unit_raw: raw }
+  rescue EncodingError
+    { quantity_unit_raw: "" }
   end
 
   def adjustment_only_item?(item, raw_text:, total_price:)

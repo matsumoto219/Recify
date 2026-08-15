@@ -1,0 +1,87 @@
+{
+  "case_id": "g118_reference_cc_ml_equivalence",
+  "category": "measurement",
+  "intent": "Cubic centimeters and milliliters remain exact equivalent volume units.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル液体C 税込 ¥980/1000cc 250ml", "¥245"],
+        "purchased_quantity": "250",
+        "purchased_unit": "milliliter",
+        "reference_price_amount": "980",
+        "reference_quantity": "1000",
+        "reference_unit": "cubic_centimeter",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 245
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル量売 同等容量店",
+    "store_address": "サンプル県サンプル市基準町1-6",
+    "purchased_at": "2026-08-06T10:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル液体C",
+        "unit_price": 980,
+        "quantity": "250",
+        "quantity_unit_code": "milliliter",
+        "pricing_source_kind": null,
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 245,
+        "line_total": 245,
+        "tax_rate": 0.1,
+        "discount_amount": 0
+      }
+    ],
+    "measurement_projections": [
+      {
+        "item_index": 0,
+        "exact_reference_amount": {"numerator": "245", "denominator": "1"},
+        "projected_reference_line_total": 245,
+        "discount_amount": 0,
+        "discounted_source_line_total": 245,
+        "projected_gross_line_total": 245
+      }
+    ],
+    "reference_pricing_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "980",
+        "reference_quantity": "1000",
+        "reference_unit_code": "cubic_centimeter",
+        "purchased_quantity": "250",
+        "purchased_unit_code": "milliliter",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 245,
+        "printed_line_total": "245",
+        "rounding_matches": ["floor", "half_up", "ceil"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 223, "tax": 22, "gross": 245, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 223,
+    "tax": 22,
+    "total": 245,
+    "payments": [{"method": "cash", "label": "現金", "amount": 245}],
+    "payment_sum": 245,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "measurement_projections", "reference_pricing_candidates"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

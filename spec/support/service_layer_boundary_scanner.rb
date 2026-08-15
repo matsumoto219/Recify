@@ -1,6 +1,5 @@
 require "pathname"
 require "prism"
-require "set"
 
 module ServiceLayerBoundary
   TARGET_GLOBS = %w[
@@ -200,7 +199,6 @@ module ServiceLayerBoundary
       internal_reference_roots
       public_facades
       public_constants
-      legacy_exceptions
     ].freeze
 
     attr_reader :root, :registry
@@ -237,9 +235,6 @@ module ServiceLayerBoundary
         issues.concat(entry_issues(directory, entry))
       end
 
-      duplicate_legacy_keys.each do |source_path, referenced_constant|
-        issues << "duplicate legacy exception: #{source_path} -> #{referenced_constant}"
-      end
       issues
     end
 
@@ -248,7 +243,6 @@ module ServiceLayerBoundary
         child_catalog_issues(directory, path)
       end
       issues.concat(public_constant_issues)
-      issues.concat(legacy_exception_issues)
       issues
     end
 
@@ -286,38 +280,12 @@ module ServiceLayerBoundary
       end.uniq.sort_by { |violation| [ violation.source_path, violation.line, violation.referenced_constant ] }
     end
 
-    def unused_legacy_exceptions
-      used = target_files.flat_map do |path|
-        source_path = relative_path(path)
-        analysis_for(path).references.filter_map do |reference|
-          resolved = resolve_private_reference(reference)
-          next unless resolved
-
-          referenced_constant, private_owner = resolved
-          key = [ source_path, referenced_constant ]
-          key if legacy_exception_keys.include?(key) && !normally_allowed?(source_path, referenced_constant, private_owner)
-        end
-      end.uniq
-
-      legacy_exceptions.reject do |exception|
-        used.include?([ exception.fetch(:source_path), exception.fetch(:referenced_constant) ])
-      end
-    end
-
     def format_violations(found = violations)
       lines = found.map do |violation|
         "#{violation.source_path}:#{violation.line} -> #{violation.referenced_constant} " \
           "(private owner: #{violation.private_owner})"
       end
-      ([ "Service layer boundary violations:" ] + lines + [ "", format_legacy_exceptions ]).join("\n")
-    end
-
-    def format_legacy_exceptions(exceptions = legacy_exceptions)
-      lines = exceptions.sort_by { |entry| [ entry.fetch(:source_path), entry.fetch(:referenced_constant) ] }.map do |entry|
-        "#{entry.fetch(:source_path)} -> #{entry.fetch(:referenced_constant)} " \
-          "(remove in Loop #{entry.fetch(:remove_in_loop)}: #{entry.fetch(:reason)})"
-      end
-      ([ "Exact legacy exceptions:" ] + lines).join("\n")
+      ([ "Service layer boundary violations:" ] + lines).join("\n")
     end
 
     private
@@ -431,8 +399,7 @@ module ServiceLayerBoundary
     end
 
     def allowed_reference?(source_path, referenced_constant, private_owner)
-      normally_allowed?(source_path, referenced_constant, private_owner) ||
-        legacy_exception_keys.include?([ source_path, referenced_constant ])
+      normally_allowed?(source_path, referenced_constant, private_owner)
     end
 
     def normally_allowed?(source_path, referenced_constant, private_owner)
@@ -444,27 +411,12 @@ module ServiceLayerBoundary
         end
     end
 
-    def legacy_exceptions
-      registry.values.flat_map { |entry| entry.fetch(:legacy_exceptions) }
-    end
-
-    def legacy_exception_keys
-      @legacy_exception_keys ||= legacy_exceptions.map do |exception|
-        [ exception.fetch(:source_path), exception.fetch(:referenced_constant) ]
-      end.to_set
-    end
-
-    def duplicate_legacy_keys
-      legacy_exception_keys_array = legacy_exceptions.map do |exception|
-        [ exception.fetch(:source_path), exception.fetch(:referenced_constant) ]
-      end
-      legacy_exception_keys_array.tally.select { |_key, count| count > 1 }.keys
-    end
-
     def entry_issues(directory, entry)
       issues = []
       missing_keys = REQUIRED_REGISTRY_KEYS - entry.keys
+      unexpected_keys = entry.keys - REQUIRED_REGISTRY_KEYS
       issues << "#{directory}: missing registry keys: #{missing_keys.join(", ")}" if missing_keys.any?
+      issues << "#{directory}: unexpected registry keys: #{unexpected_keys.join(", ")}" if unexpected_keys.any?
       return issues if missing_keys.any?
 
       expected_root = "app/services/#{directory}"
@@ -508,36 +460,6 @@ module ServiceLayerBoundary
         entry.fetch(:public_constants).filter_map do |constant|
           "#{directory}: public constant is not defined by its facade/private root: #{constant}" unless owned_constants(directory).include?(constant)
         end
-      end
-    end
-
-    def legacy_exception_issues
-      legacy_exceptions.flat_map do |exception|
-        issues = []
-        source_path = exception[:source_path]
-        referenced_constant = exception[:referenced_constant]
-        if source_path.blank? || source_path.match?(/[\*?\[\]]/)
-          issues << "legacy exception must use an exact source_path: #{source_path.inspect}"
-        elsif !root.join(source_path).file?
-          issues << "legacy exception source does not exist: #{source_path}"
-        end
-        if referenced_constant.blank? || referenced_constant.match?(/[\*?\[\]]/)
-          issues << "legacy exception must use an exact referenced_constant: #{referenced_constant.inspect}"
-        end
-        issues << "legacy exception reason is required: #{source_path} -> #{referenced_constant}" if exception[:reason].blank?
-        unless exception[:remove_in_loop].is_a?(Integer) && exception[:remove_in_loop].between?(2, 22)
-          issues << "legacy exception remove_in_loop must be 2..22: #{source_path} -> #{referenced_constant}"
-        end
-        if referenced_constant.present? && !referenced_constant.match?(/[\*?\[\]]/) && !private_reference_name?(referenced_constant)
-          issues << "legacy exception is not a private constant reference: #{source_path} -> #{referenced_constant}"
-        end
-        issues
-      end
-    end
-
-    def private_reference_name?(referenced_constant)
-      private_constant_owners.keys.any? do |constant|
-        referenced_constant == constant || referenced_constant.start_with?("#{constant}::")
       end
     end
   end

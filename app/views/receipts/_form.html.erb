@@ -33,6 +33,9 @@
                   "receipt-form-delete-confirm-title-value": t("receipts.form.delete_confirm_title"),
                   "receipt-form-delete-confirm-label-value": t("common.delete"),
                   "receipt-form-delete-confirm-backdrop-value": "plain",
+                  "receipt-form-pricing-source-discount-clear-confirmation-message-value": t("receipts.item_fields.clear_discount_before_explicit_confirm"),
+                  "receipt-form-pricing-source-discount-clear-confirm-title-value": t("receipts.item_fields.clear_discount_before_explicit_title"),
+                  "receipt-form-pricing-source-discount-clear-confirm-label-value": t("receipts.item_fields.clear_discount_before_explicit_label"),
                   "receipt-form-receipt-tax-basis-value": receipt.receipt_tax_basis_for_form,
                   "receipt-form-subtotal-label-value": t("receipts.item_fields.subtotal"),
                   "receipt-form-unset-label-value": t("receipts.common.not_available"),
@@ -52,6 +55,8 @@
                   "receipt-form-default-quantity-unit-value": form_presenter.default_quantity_unit_value,
                   "receipt-form-integer-quantity-step-value": form_presenter.integer_quantity_step_value,
                   "receipt-form-decimal-quantity-step-value": form_presenter.decimal_quantity_step_value,
+                  "receipt-form-reference-pricing-contract-value": form_presenter.reference_pricing_contract_value.to_json,
+                  "receipt-form-reference-projection-fallback-tax-rate-value": form_presenter.reference_projection_fallback_tax_rate_value,
                   "receipt-form-receipt-total-amount-max-value": ReceiptAmountService.receipt_total_amount_max,
                   "receipt-form-receipt-item-price-max-value": ReceiptAmountService.receipt_item_price_max,
                   "receipt-form-receipt-item-line-total-max-value": ReceiptAmountService.receipt_item_line_total_max,
@@ -90,6 +95,14 @@
     error_flags = form_presenter.error_flags
   %>
   <section class="receipt-form-content w-full min-w-0 max-w-7xl mx-auto px-0 md:px-4 py-2">
+    <div class="mb-6 rounded-lg border token-border-soft token-bg-card p-4 token-text-error"
+         data-receipt-form-target="invalidItemSourceSummary"
+         role="alert"
+         tabindex="-1"
+         <% unless form_presenter.invalid_item_source? %> hidden<% end %>>
+      <p class="font-bold"><%= t("receipts.form.errors.invalid_item_pricing_source") %></p>
+    </div>
+
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
       <%= render "shared/ui/layout/section_header",
             title: page_title,
@@ -235,7 +248,7 @@
             <div class="hidden md:grid receipt-form-item-layout gap-4 md:gap-1.5 px-2 text-xs font-bold uppercase tracking-wider token-text-muted">
               <div><%= t("receipts.form.item_columns.name") %></div>
               <div><%= t("receipts.form.item_columns.quantity") %></div>
-              <div><%= t("receipts.form.item_columns.unit_price") %></div>
+              <div><%= t("receipts.form.item_columns.amount") %></div>
               <div><%= t("receipts.form.item_columns.details") %></div>
               <div></div>
             </div>
@@ -246,7 +259,8 @@
                       item_form: item_form,
                       item: item_form.object,
                       new_record: item_form.object.new_record?,
-                      row_state: form_presenter.item_row(item_form.object, new_record: item_form.object.new_record?) %>
+                      row_state: form_presenter.item_row(item_form.object, new_record: item_form.object.new_record?),
+                      pricing_source_details_open: form_presenter.invalid_item_source? %>
               <% end %>
             <% end %>
 
@@ -268,7 +282,8 @@
                       item_form: item_form,
                       item: item_form.object,
                       new_record: true,
-                      row_state: form_presenter.item_row(item_form.object, new_record: true) %>
+                      row_state: form_presenter.item_row(item_form.object, new_record: true),
+                      pricing_source_details_open: false %>
               <% end %>
             </template>
           </div>
