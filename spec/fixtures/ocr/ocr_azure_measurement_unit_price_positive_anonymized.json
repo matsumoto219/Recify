@@ -1,0 +1,374 @@
+{
+  "fixture_type": "synthetic_azure_measurement_unit_price",
+  "model_id": "prebuilt-receipt",
+  "api_version": "2024-11-30",
+  "synthetic": true,
+  "cases": [
+    {
+      "case_id": "volume_at",
+      "classification": "reference_quantity_price",
+      "item": {
+        "content": "SYNTH-VOLUME-A\n@123\n2.5 L\n308",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 29
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-VOLUME-A",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 14
+              }
+            ],
+            "valueString": "SYNTH-VOLUME-A"
+          },
+          "Price": {
+            "content": "@123",
+            "spans": [
+              {
+                "offset": 15,
+                "length": 4
+              }
+            ],
+            "valueCurrency": {
+              "amount": 123,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "2.5 L",
+            "spans": [
+              {
+                "offset": 20,
+                "length": 5
+              }
+            ],
+            "valueNumber": 2.5
+          },
+          "QuantityUnit": {
+            "content": "2.5 L",
+            "spans": [
+              {
+                "offset": 20,
+                "length": 5
+              }
+            ],
+            "valueString": "L"
+          },
+          "TotalPrice": {
+            "content": "308",
+            "spans": [
+              {
+                "offset": 26,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 308,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      },
+      "expected": {
+        "reference_price_amount": "123",
+        "reference_quantity": "1",
+        "reference_unit_code": "liter",
+        "purchased_quantity": "2.5",
+        "purchased_unit_code": "liter",
+        "printed_total": "308",
+        "exact_numerator": "615",
+        "exact_denominator": "2",
+        "projected_amount": 308,
+        "rounding_matches": [
+          "half_up",
+          "ceil"
+        ],
+        "validation_state": "ambiguous",
+        "rejection_reasons": [
+          "ambiguous_tax_inclusion"
+        ]
+      }
+    },
+    {
+      "case_id": "volume_column",
+      "classification": "reference_quantity_price",
+      "item": {
+        "content": "SYNTH-COLUMN-B\n75\n4 L\n300",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 25
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-COLUMN-B",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 14
+              }
+            ],
+            "valueString": "SYNTH-COLUMN-B"
+          },
+          "Price": {
+            "content": "75",
+            "spans": [
+              {
+                "offset": 15,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 75,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "4 L",
+            "spans": [
+              {
+                "offset": 18,
+                "length": 3
+              }
+            ],
+            "valueNumber": 4
+          },
+          "QuantityUnit": {
+            "content": "4 L",
+            "spans": [
+              {
+                "offset": 18,
+                "length": 3
+              }
+            ],
+            "valueString": "L"
+          },
+          "TotalPrice": {
+            "content": "300",
+            "spans": [
+              {
+                "offset": 22,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 300,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      },
+      "expected": {
+        "reference_price_amount": "75",
+        "reference_quantity": "1",
+        "reference_unit_code": "liter",
+        "purchased_quantity": "4",
+        "purchased_unit_code": "liter",
+        "printed_total": "300",
+        "exact_numerator": "300",
+        "exact_denominator": "1",
+        "projected_amount": 300,
+        "rounding_matches": [
+          "floor",
+          "half_up",
+          "ceil"
+        ],
+        "validation_state": "ambiguous",
+        "rejection_reasons": [
+          "ambiguous_tax_inclusion"
+        ]
+      }
+    },
+    {
+      "case_id": "volume_discount_nearby",
+      "classification": "reference_quantity_price",
+      "item": {
+      "content": "SYNTH-DISCOUNT-C\ndiscount\n137\n4円/L\n4 L\n548",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 42
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-DISCOUNT-C",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 16
+              }
+            ],
+            "valueString": "SYNTH-DISCOUNT-C"
+          },
+          "Price": {
+            "content": "137",
+            "spans": [
+              {
+              "offset": 26,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 137,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "4 L",
+            "spans": [
+              {
+              "offset": 35,
+                "length": 3
+              }
+            ],
+            "valueNumber": 4
+          },
+          "QuantityUnit": {
+            "content": "4 L",
+            "spans": [
+              {
+              "offset": 35,
+                "length": 3
+              }
+            ],
+            "valueString": "L"
+          },
+          "TotalPrice": {
+            "content": "548",
+            "spans": [
+              {
+                "offset": 39,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 548,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      },
+      "expected": {
+        "reference_price_amount": "137",
+        "reference_quantity": "1",
+        "reference_unit_code": "liter",
+        "purchased_quantity": "4",
+        "purchased_unit_code": "liter",
+        "printed_total": "548",
+        "exact_numerator": "548",
+        "exact_denominator": "1",
+        "projected_amount": 548,
+        "rounding_matches": [
+          "floor",
+          "half_up",
+          "ceil"
+        ],
+        "validation_state": "ambiguous",
+        "rejection_reasons": [
+          "ambiguous_tax_inclusion"
+        ]
+      }
+    },
+    {
+      "case_id": "weight_adjustment_nearby",
+      "classification": "reference_quantity_price",
+      "item": {
+        "content": "🧪SYNTH-WEIGHT-D\n321\n1.25 kg\nadjustment -20\n401",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 47
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "🧪SYNTH-WEIGHT-D",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 16
+              }
+            ],
+            "valueString": "🧪SYNTH-WEIGHT-D"
+          },
+          "Price": {
+            "content": "321",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 321,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "1.25 kg",
+            "spans": [
+              {
+                "offset": 21,
+                "length": 7
+              }
+            ],
+            "valueNumber": 1.25
+          },
+          "QuantityUnit": {
+            "content": "kg",
+            "spans": [
+              {
+                "offset": 26,
+                "length": 2
+              }
+            ],
+            "valueString": "kg"
+          },
+          "TotalPrice": {
+            "content": "401",
+            "spans": [
+              {
+                "offset": 44,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 401,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      },
+      "expected": {
+        "reference_price_amount": "321",
+        "reference_quantity": "1",
+        "reference_unit_code": "kilogram",
+        "purchased_quantity": "1.25",
+        "purchased_unit_code": "kilogram",
+        "printed_total": "401",
+        "exact_numerator": "1605",
+        "exact_denominator": "4",
+        "projected_amount": 401,
+        "rounding_matches": [
+          "floor",
+          "half_up"
+        ],
+        "validation_state": "ambiguous",
+        "rejection_reasons": [
+          "ambiguous_tax_inclusion"
+        ]
+      }
+    }
+  ]
+}

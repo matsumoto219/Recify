@@ -301,6 +301,7 @@ module ReceiptAnalysisProfiles
     OCR_TAX_AMOUNT_DESCRIPTION_PATTERN = /消費税|税額|tax/i.freeze
     OCR_TAX_CONTEXT_LABEL_PATTERN = /小\s*計|対象|消費税|税額|内税|外税|税抜|税込|tax/i.freeze
     OCR_ITEM_DISCOUNT_KEYWORD_PATTERN = /値引|割引|discount/i.freeze
+    OCR_POST_DISCOUNT_PRICE_BASIS_PATTERN = /(?:値引|割引)(?:き)?(?:後|済み?)|discounted/i.freeze
     OCR_TOTAL_AMOUNT_LINE_PATTERN = /合計|小計|total|税込|現計/i.freeze
     OCR_SUBTOTAL_AMOUNT_LINE_PATTERN = /小計|subtotal|税抜/i.freeze
     OCR_CARD_SLIP_CONTEXT_PATTERN = /クレジットカード売上票|カード会社|お支払方法|支払方法|payment method/i.freeze
@@ -797,6 +798,10 @@ module ReceiptAnalysisProfiles
 
       def ocr_item_discount_keyword_pattern
         OCR_ITEM_DISCOUNT_KEYWORD_PATTERN
+      end
+
+      def ocr_post_discount_price_basis_pattern
+        OCR_POST_DISCOUNT_PRICE_BASIS_PATTERN
       end
 
       def ocr_total_amount_line_pattern

@@ -251,4 +251,18 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
   end
+
+  describe 'JPN profile post-discount reference pricing labels' do
+    it '値引額と値引適用後の明示basisを区別する' do
+      pattern = described_class.fetch('JPN').ocr_post_discount_price_basis_pattern
+
+      aggregate_failures do
+        expect('値引後 149円/1L').to match(pattern)
+        expect('割引き済み 149円/1L').to match(pattern)
+        expect('discounted 149 JPY/L').to match(pattern)
+        expect('値引 7円/L').not_to match(pattern)
+        expect('discount 7 JPY/L').not_to match(pattern)
+      end
+    end
+  end
 end
