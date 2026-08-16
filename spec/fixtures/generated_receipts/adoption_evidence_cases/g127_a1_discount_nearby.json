@@ -1,0 +1,63 @@
+{
+  "case_id": "g127_a1_discount_nearby",
+  "intent": "A labelled post-discount basis is selected while a nearby per-unit discount is not treated as the price.",
+  "expected": {},
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "custom_lines": [
+      "サンプル計量レシート",
+      "領収書",
+      "------------------------",
+      "検証品A05 値引後 税込 ¥193/1L",
+      "単価値引 ¥7/L",
+      "計量 3L",
+      "------------------------",
+      "ご利用ありがとうございました"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "ground_truth": {
+    "defined_before_image_generation": true,
+    "items": [
+      {
+        "item_index": 0,
+        "evidence_class": "reference_pricing",
+        "printed_line_total": null,
+        "existing_authority": false,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": null,
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": false,
+        "discount_conflict": false,
+        "deterministic_projection": true,
+        "projection_within_bounds": true,
+        "projected_gross_line_total": 579,
+        "adoption_outcome": "eligible",
+        "adoption_blocking_reasons": []
+      }
+    ],
+    "expected_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "193",
+        "reference_quantity": "1",
+        "reference_unit_code": "liter",
+        "purchased_quantity": "3",
+        "purchased_unit_code": "liter",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 579,
+        "printed_line_total": null,
+        "rounding_matches": []
+      }
+    ],
+    "expected_associations": [
+      { "candidate_index": 0, "item_index": 0, "evidence_scope": "same_item" }
+    ]
+  }
+}

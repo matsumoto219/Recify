@@ -1,0 +1,66 @@
+{
+  "case_id": "g132_a1_tax_basis_conflict",
+  "intent": "Conflicting item-local gross and net labels remain ambiguous and are not auto-adopted.",
+  "expected": {},
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "custom_lines": [
+      "サンプル計量レシート",
+      "領収書",
+      "------------------------",
+      "検証品A10 税込 税抜 ¥283/100g",
+      "計量 300g",
+      "------------------------",
+      "ご利用ありがとうございました"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "ground_truth": {
+    "defined_before_image_generation": true,
+    "items": [
+      {
+        "item_index": 0,
+        "evidence_class": "reference_pricing",
+        "printed_line_total": null,
+        "existing_authority": false,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": null,
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": false,
+        "discount_conflict": false,
+        "deterministic_projection": false,
+        "projection_within_bounds": true,
+        "projected_gross_line_total": null,
+        "adoption_outcome": "review",
+        "adoption_blocking_reasons": [
+          "candidate_not_valid",
+          "item_local_tax_basis_missing",
+          "deterministic_projection_unavailable"
+        ]
+      }
+    ],
+    "expected_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "ambiguous",
+        "rejection_reasons": ["ambiguous_reference_expression", "ambiguous_tax_inclusion"],
+        "reference_price_amount": "283",
+        "reference_quantity": "100",
+        "reference_unit_code": "gram",
+        "purchased_quantity": "300",
+        "purchased_unit_code": "gram",
+        "reference_price_tax_inclusion": "unknown",
+        "projected_line_total": 849,
+        "printed_line_total": null,
+        "rounding_matches": []
+      }
+    ],
+    "expected_associations": [
+      { "candidate_index": 0, "item_index": 0, "evidence_scope": "same_item" }
+    ]
+  }
+}

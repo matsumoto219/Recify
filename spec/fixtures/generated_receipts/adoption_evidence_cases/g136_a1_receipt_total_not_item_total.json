@@ -1,0 +1,86 @@
+{
+  "case_id": "g136_a1_receipt_total_not_item_total",
+  "intent": "A receipt total is not borrowed as a missing item TotalPrice.",
+  "expected": {},
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "custom_lines": [
+      "サンプル計量レシート",
+      "領収書",
+      "------------------------",
+      "検証品A14 税込 ¥311/100g  計量250g",
+      "対照品A14 1個 @¥127  ¥127",
+      "------------------------",
+      "小計 ¥905",
+      "合計 ¥905",
+      "ご利用ありがとうございました"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "ground_truth": {
+    "defined_before_image_generation": true,
+    "items": [
+      {
+        "item_index": 0,
+        "evidence_class": "reference_pricing",
+        "printed_line_total": null,
+        "existing_authority": false,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": null,
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": false,
+        "discount_conflict": false,
+        "deterministic_projection": true,
+        "projection_within_bounds": true,
+        "projected_gross_line_total": 778,
+        "adoption_outcome": "eligible",
+        "adoption_blocking_reasons": []
+      },
+      {
+        "item_index": 1,
+        "evidence_class": "count_unit_price",
+        "printed_line_total": 127,
+        "existing_authority": true,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": null,
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": false,
+        "discount_conflict": false,
+        "deterministic_projection": false,
+        "projection_within_bounds": true,
+        "projected_gross_line_total": null,
+        "adoption_outcome": "unsupported",
+        "adoption_blocking_reasons": [
+          "printed_total_present",
+          "existing_authority_present",
+          "candidate_count_not_one"
+        ]
+      }
+    ],
+    "expected_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "311",
+        "reference_quantity": "100",
+        "reference_unit_code": "gram",
+        "purchased_quantity": "250",
+        "purchased_unit_code": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 778,
+        "printed_line_total": null,
+        "rounding_matches": []
+      }
+    ],
+    "expected_associations": [
+      { "candidate_index": 0, "item_index": 0, "evidence_scope": "same_item" }
+    ]
+  }
+}

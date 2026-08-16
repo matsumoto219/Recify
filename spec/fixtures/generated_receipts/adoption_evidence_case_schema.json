@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Generated Receipt Adoption Evidence Case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "intent", "expected", "render", "degradation", "ground_truth"],
+  "properties": {
+    "case_id": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^g[0-9]{3}_[a-z0-9_]+$"
+    },
+    "intent": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["custom_lines"],
+      "properties": {
+        "locale": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "paper_width": { "enum": ["58mm", "80mm"] },
+        "font": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "custom_lines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        },
+        "noise_lines": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        }
+      }
+    },
+    "degradation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "profile"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "profile": { "type": ["string", "null"] }
+      }
+    },
+    "ground_truth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defined_before_image_generation",
+        "items",
+        "expected_candidates",
+        "expected_associations"
+      ],
+      "properties": {
+        "defined_before_image_generation": { "const": true },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "item_index",
+              "evidence_class",
+              "printed_line_total",
+              "existing_authority",
+              "same_item_evidence",
+              "dimension_compatible",
+              "item_local_tax_rate",
+              "tax_rounding_mode",
+              "tax_rate_conflict",
+              "package_conflict",
+              "discount_conflict",
+              "deterministic_projection",
+              "projection_within_bounds",
+              "projected_gross_line_total",
+              "adoption_outcome",
+              "adoption_blocking_reasons"
+            ],
+            "properties": {
+              "item_index": { "type": "integer", "minimum": 0, "maximum": 99 },
+              "evidence_class": {
+                "enum": [
+                  "reference_pricing",
+                  "count_unit_price",
+                  "package_content",
+                  "discount",
+                  "other"
+                ]
+              },
+              "printed_line_total": {
+                "type": ["integer", "null"],
+                "minimum": 0,
+                "maximum": 999999999
+              },
+              "existing_authority": { "type": "boolean" },
+              "same_item_evidence": { "type": "boolean" },
+              "dimension_compatible": { "type": "boolean" },
+              "item_local_tax_rate": {
+                "type": ["string", "null"],
+                "maxLength": 64,
+                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+              },
+              "tax_rounding_mode": { "enum": ["floor", "round", "ceil"] },
+              "tax_rate_conflict": { "type": "boolean" },
+              "package_conflict": { "type": "boolean" },
+              "discount_conflict": { "type": "boolean" },
+              "deterministic_projection": { "type": "boolean" },
+              "projection_within_bounds": { "type": "boolean" },
+              "projected_gross_line_total": {
+                "type": ["integer", "null"],
+                "minimum": 0,
+                "maximum": 999999999
+              },
+              "adoption_outcome": { "enum": ["eligible", "review", "unsupported"] },
+              "adoption_blocking_reasons": {
+                "type": "array",
+                "maxItems": 14,
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "printed_total_present",
+                    "existing_authority_present",
+                    "candidate_count_not_one",
+                    "candidate_not_valid",
+                    "same_item_evidence_incomplete",
+                    "reference_components_incomplete",
+                    "purchased_components_incomplete",
+                    "dimension_incompatible",
+                    "item_local_tax_basis_missing",
+                    "item_local_tax_rate_missing_or_conflicting",
+                    "package_conflict",
+                    "discount_conflict",
+                    "deterministic_projection_unavailable",
+                    "projected_amount_out_of_bounds"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "expected_candidates": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "item_index",
+              "validation_state",
+              "rejection_reasons",
+              "reference_price_amount",
+              "reference_quantity",
+              "reference_unit_code",
+              "purchased_quantity",
+              "purchased_unit_code",
+              "reference_price_tax_inclusion",
+              "projected_line_total",
+              "printed_line_total",
+              "rounding_matches"
+            ],
+            "properties": {
+              "item_index": { "type": "integer", "minimum": 0, "maximum": 99 },
+              "validation_state": { "enum": ["valid", "ambiguous", "unsupported", "missing"] },
+              "rejection_reasons": {
+                "type": "array",
+                "maxItems": 8,
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "missing_reference_price",
+                    "missing_reference_quantity",
+                    "missing_reference_unit",
+                    "missing_purchased_quantity",
+                    "missing_purchased_unit",
+                    "ambiguous_reference_expression",
+                    "ambiguous_purchased_quantity",
+                    "ambiguous_tax_inclusion",
+                    "unsupported_reference_unit",
+                    "unsupported_purchased_unit",
+                    "incompatible_unit_dimension",
+                    "invalid_reference_price",
+                    "invalid_reference_quantity",
+                    "invalid_purchased_quantity",
+                    "reference_price_out_of_bounds",
+                    "reference_quantity_out_of_bounds",
+                    "purchased_quantity_out_of_bounds",
+                    "evidence_outside_item",
+                    "insufficient_component_evidence"
+                  ]
+                }
+              },
+              "reference_price_amount": {
+                "type": ["string", "null"],
+                "maxLength": 64,
+                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+              },
+              "reference_quantity": {
+                "type": ["string", "null"],
+                "maxLength": 64,
+                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+              },
+              "reference_unit_code": { "type": ["string", "null"], "maxLength": 64 },
+              "purchased_quantity": {
+                "type": ["string", "null"],
+                "maxLength": 64,
+                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+              },
+              "purchased_unit_code": { "type": ["string", "null"], "maxLength": 64 },
+              "reference_price_tax_inclusion": { "enum": ["gross", "net", "unknown", null] },
+              "projected_line_total": {
+                "type": ["integer", "null"],
+                "minimum": 0,
+                "maximum": 999999999
+              },
+              "printed_line_total": {
+                "type": ["integer", "null"],
+                "minimum": 0,
+                "maximum": 999999999
+              },
+              "rounding_matches": {
+                "type": "array",
+                "maxItems": 3,
+                "uniqueItems": true,
+                "items": { "enum": ["floor", "half_up", "ceil"] }
+              }
+            }
+          }
+        },
+        "expected_associations": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["candidate_index", "item_index", "evidence_scope"],
+            "properties": {
+              "candidate_index": { "type": "integer", "minimum": 0, "maximum": 99 },
+              "item_index": { "type": "integer", "minimum": 0, "maximum": 99 },
+              "evidence_scope": { "enum": ["same_item", "outside_item"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

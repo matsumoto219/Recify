@@ -4,6 +4,9 @@ module GeneratedReceipts
   ROOT = File.expand_path("../spec/fixtures/generated_receipts", __dir__)
   CASES_DIR = File.join(ROOT, "cases")
   MEASUREMENT_CASES_DIR = File.join(ROOT, "measurement_cases")
+  ADOPTION_EVIDENCE_CASES_DIR = File.join(ROOT, "adoption_evidence_cases")
+  ADOPTION_EVIDENCE_TEXT_DIR = File.join(ROOT, "adoption_evidence_text")
+  ADOPTION_EVIDENCE_IMAGES_DIR = File.join(ROOT, "adoption_evidence_images")
   TEXT_DIR = File.join(ROOT, "text")
   IMAGES_DIR = File.join(ROOT, "images")
   OCR_DIR = File.join(ROOT, "ocr")
@@ -36,6 +39,10 @@ module GeneratedReceipts
   def self.case_paths
     legacy_case_paths + measurement_case_paths
   end
+
+  def self.adoption_evidence_case_paths
+    Dir[File.join(ADOPTION_EVIDENCE_CASES_DIR, "*.json")].sort
+  end
 end
 
 require_relative "generated_receipts/degradation_profiles"
@@ -48,3 +55,5 @@ require_relative "generated_receipts/png_renderer"
 require_relative "generated_receipts/comparator"
 require_relative "generated_receipts/pipeline_runner"
 require_relative "generated_receipts/comparison_runner"
+require_relative "generated_receipts/adoption_evidence/validator"
+require_relative "generated_receipts/adoption_evidence/comparator"

@@ -1,0 +1,87 @@
+{
+  "case_id": "g131_a1_adjacent_package_isolation",
+  "intent": "A reference-priced item does not borrow package capacity or amount from an adjacent item.",
+  "expected": {},
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "custom_lines": [
+      "サンプル計量レシート",
+      "領収書",
+      "------------------------",
+      "検証品A09 税込 ¥281/1L",
+      "計量 2.5L",
+      "対照品A09 700ml入り",
+      "1個 ¥398",
+      "------------------------",
+      "ご利用ありがとうございました"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "ground_truth": {
+    "defined_before_image_generation": true,
+    "items": [
+      {
+        "item_index": 0,
+        "evidence_class": "reference_pricing",
+        "printed_line_total": null,
+        "existing_authority": false,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": null,
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": false,
+        "discount_conflict": false,
+        "deterministic_projection": true,
+        "projection_within_bounds": true,
+        "projected_gross_line_total": 703,
+        "adoption_outcome": "eligible",
+        "adoption_blocking_reasons": []
+      },
+      {
+        "item_index": 1,
+        "evidence_class": "package_content",
+        "printed_line_total": 398,
+        "existing_authority": true,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": null,
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": true,
+        "discount_conflict": false,
+        "deterministic_projection": false,
+        "projection_within_bounds": true,
+        "projected_gross_line_total": null,
+        "adoption_outcome": "unsupported",
+        "adoption_blocking_reasons": [
+          "printed_total_present",
+          "existing_authority_present",
+          "candidate_count_not_one",
+          "package_conflict"
+        ]
+      }
+    ],
+    "expected_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "281",
+        "reference_quantity": "1",
+        "reference_unit_code": "liter",
+        "purchased_quantity": "2.5",
+        "purchased_unit_code": "liter",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 703,
+        "printed_line_total": null,
+        "rounding_matches": []
+      }
+    ],
+    "expected_associations": [
+      { "candidate_index": 0, "item_index": 0, "evidence_scope": "same_item" }
+    ]
+  }
+}
