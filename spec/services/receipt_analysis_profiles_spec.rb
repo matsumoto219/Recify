@@ -265,4 +265,65 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
   end
+
+  describe 'JPN profile strict receipt summary labels' do
+    it 'receipt summaryだけを認識し小計やtax-labelled itemを除外する' do
+      pattern = described_class.fetch('JPN').ocr_strict_receipt_summary_total_line_pattern
+
+      aggregate_failures do
+        expect('合計 300円').to match(pattern)
+        expect('合計 ３００円').to match(pattern)
+        expect('総合計：¥300').to match(pattern)
+        expect('TOTAL 300').to match(pattern)
+        expect('小計 300円').not_to match(pattern)
+        expect('税込 300円').not_to match(pattern)
+        expect('通常明細 300円').not_to match(pattern)
+      end
+    end
+  end
+
+  describe 'JPN profile reference pricing line-group lexemes' do
+    let(:profile) { described_class.fetch('JPN') }
+
+    it 'owns the purchased quantity and package or uncertainty vocabulary' do
+      aggregate_failures do
+        expect('計量 2.5 L').to match(profile.ocr_reference_pricing_line_group_purchased_quantity_line_pattern)
+        expect('商品 計量 2.5 L').not_to match(profile.ocr_reference_pricing_line_group_purchased_quantity_line_pattern)
+        expect('計量 2.5 L 税込').not_to match(profile.ocr_reference_pricing_line_group_purchased_quantity_line_pattern)
+        expect('内容量500ml').to match(profile.ocr_reference_pricing_line_group_package_or_uncertain_pattern)
+        expect('約1L').to match(profile.ocr_reference_pricing_line_group_package_or_uncertain_pattern)
+        expect('gross weight 1kg').to match(profile.ocr_reference_pricing_line_group_package_or_uncertain_pattern)
+        expect('検証品A01').not_to match(profile.ocr_reference_pricing_line_group_package_or_uncertain_pattern)
+      end
+    end
+
+    it 'owns discount, summary, identifier, and subtotal vocabulary' do
+      aggregate_failures do
+        expect('3%引').to match(profile.ocr_reference_pricing_line_group_discount_conflict_pattern)
+        expect('商品小計').to match(profile.ocr_reference_pricing_line_group_summary_context_pattern)
+        expect('非課税A1').to match(profile.ocr_reference_pricing_line_group_identifier_conflict_pattern)
+        expect('検証品A03').to match(profile.ocr_reference_pricing_line_group_identifier_pattern)
+        expect('小計 300円').to match(profile.ocr_strict_receipt_subtotal_line_pattern)
+        expect('値引後 120円/1L').not_to match(profile.ocr_reference_pricing_line_group_discount_conflict_pattern)
+        expect('検証品A01').not_to match(profile.ocr_reference_pricing_line_group_summary_context_pattern)
+        expect('検証品A01').not_to match(profile.ocr_reference_pricing_line_group_identifier_conflict_pattern)
+        expect('ITEMA03').not_to match(profile.ocr_reference_pricing_line_group_identifier_pattern)
+        expect('検証品０３').not_to match(profile.ocr_reference_pricing_line_group_identifier_pattern)
+        expect('検証品ABC').not_to match(profile.ocr_reference_pricing_line_group_identifier_pattern)
+        expect('合計 300円').not_to match(profile.ocr_strict_receipt_subtotal_line_pattern)
+        expect('検証品 300円').not_to match(profile.ocr_strict_receipt_subtotal_line_pattern)
+      end
+    end
+
+    it 'owns tax-negation and package-context vocabulary used by the shared validator' do
+      aggregate_failures do
+        expect('非:').to match(profile.ocr_reference_pricing_tax_negation_prefix_pattern)
+        expect('約').to match(profile.ocr_reference_pricing_package_quantity_context_before_pattern)
+        expect('入り').to match(profile.ocr_reference_pricing_package_quantity_context_after_pattern)
+        expect('非課税の後').not_to match(profile.ocr_reference_pricing_tax_negation_prefix_pattern)
+        expect('約 商品').not_to match(profile.ocr_reference_pricing_package_quantity_context_before_pattern)
+        expect('商品 入り').not_to match(profile.ocr_reference_pricing_package_quantity_context_after_pattern)
+      end
+    end
+  end
 end

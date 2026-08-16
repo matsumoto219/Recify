@@ -145,6 +145,147 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       end
     end
 
+    it 'Azure line-group candidateを診断専用で保持しstrict block以外の通常明細だけを維持する' do
+      ocr_result = ocr_fixture('ocr_azure_measurement_line_group_anonymized')
+      candidate = ocr_result.dig(:candidates, :reference_pricing_candidates).sole
+      ocr_result[:lines] << '通常明細 200円'
+
+      params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+      items = params.fetch(:receipt_items_attributes)
+
+      aggregate_failures do
+        expect(candidate).to include(
+          candidate_id: 'azure_line_group_p0_l1_l2_reference_pricing',
+          source_kind: 'azure_line_group',
+          validation_state: 'valid'
+        )
+        expect(candidate).not_to have_key(:item_index)
+        expect(params.fetch(:reference_pricing_candidates)).to eq([ candidate.deep_symbolize_keys ])
+        expect(items.size).to eq(1)
+        expect(items.sole).to include(raw_text: '通常明細 200円', line_total: 200)
+        expect(items.sole.keys).not_to include(
+          :pricing_source_kind,
+          :reference_price_amount,
+          :reference_quantity,
+          :reference_quantity_unit_code,
+          :reference_price_tax_inclusion
+        )
+        expect(params.fetch(:receipt_attributes).keys).not_to include(
+          :pricing_source_kind,
+          :reference_price_amount,
+          :reference_quantity,
+          :reference_quantity_unit_code,
+          :reference_price_tax_inclusion,
+          :price,
+          :line_total,
+          :original_line_total
+        )
+      end
+    end
+
+    it 'Azure line-groupと対応不能なAI明細を通常fallback明細へ位置合わせで適用しない' do
+      ocr_result = ocr_fixture('ocr_azure_measurement_line_group_anonymized')
+      ocr_result[:lines] << '通常明細 200円'
+      ai_result = {
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: '計量候補',
+            price: 120,
+            quantity: 2.5,
+            quantity_unit_code: 'liter',
+            line_total: 300,
+            needs_review: false
+          },
+          {
+            index: 1,
+            suggested_name: '通常明細',
+            price: 200,
+            quantity: 1,
+            quantity_unit_code: 'each',
+            line_total: 200,
+            needs_review: false
+          }
+        ]
+      }
+
+      item = described_class.call(ocr_result:, ai_result:)
+        .fetch(:receipt_items_attributes).sole
+
+      aggregate_failures do
+        expect(item).to include(raw_text: '通常明細 200円', price: 200, line_total: 200)
+        expect(item[:suggested_name]).not_to eq('計量候補')
+        expect(item.keys).not_to include(
+          :pricing_source_kind,
+          :reference_price_amount,
+          :reference_quantity,
+          :reference_quantity_unit_code,
+          :reference_price_tax_inclusion
+        )
+      end
+    end
+
+    it 'Azure line-group内の値をOCR/AI adjustment authorityへ昇格しない' do
+      ocr_result = ocr_fixture('ocr_azure_measurement_line_group_anonymized')
+      ocr_result[:lines][1] = '値引後 税込 120円/1 L'
+      ocr_result[:candidates][:adjustment_candidates] = [
+        {
+          source_text: ocr_result[:lines][1],
+          source_line_index: 1,
+          amount: 120,
+          sign_hint: 'discount',
+          confidence: 0.99,
+          candidate_reason: 'label_same_line_amount',
+          needs_review: false
+        }
+      ]
+      ai_result = {
+        receipt_adjustments_attributes: [
+          {
+            source_text: ocr_result[:lines][2],
+            source_line_index: 2,
+            kind: 'receipt_discount',
+            sign: 'decrease',
+            amount: 120,
+            confidence: 0.99,
+            needs_review: false
+          }
+        ]
+      }
+
+      params = described_class.call(ocr_result:, ai_result:)
+
+      expect(params.fetch(:receipt_adjustments_attributes)).to eq([])
+    end
+
+    it 'Azure Itemsとline-group候補が併存する場合はItemsのindexに対応するAI補完を維持する' do
+      ocr_result[:candidates][:reference_pricing_candidates] = [
+        {
+          candidate_id: 'azure_line_group_p0_l1_l2_reference_pricing',
+          source_kind: 'azure_line_group',
+          page_index: 0,
+          reference_line_index: 1,
+          purchased_quantity_line_index: 2,
+          validation_state: 'valid'
+        }
+      ]
+      ai_result = {
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: 'コーヒー補完',
+            category: 'food',
+            needs_review: false
+          }
+        ]
+      }
+
+      item = described_class.call(ocr_result:, ai_result:)
+        .fetch(:receipt_items_attributes).first
+
+      expect(item).to include(raw_text: 'コーヒー', suggested_name: 'コーヒー補完', category: 'food')
+    end
+
     context 'AI結果なしの場合' do
       it 'receipt_attributesが正しく生成される' do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)

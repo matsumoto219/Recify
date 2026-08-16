@@ -4,10 +4,12 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingCandidateExtractor do
   subject(:extract) do
     described_class.call(
       items: items,
-      profile: ReceiptAnalysisProfiles.fetch('JPN'),
+      profile:,
       projection: ReceiptAmountService.method(:reference_item_extension_projection)
     )
   end
+
+  let(:profile) { ReceiptAnalysisProfiles.fetch('JPN') }
 
   def fixture_items(name)
     response = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read)
@@ -228,6 +230,62 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingCandidateExtractor do
           rejection_reasons: include('missing_purchased_quantity', 'missing_purchased_unit'),
           purchased_quantity: nil
         ))
+      end
+    end
+
+    context 'with injected package-quantity context vocabulary' do
+      let(:items) do
+        [
+          '税込 120円/100g BEFORE 342g',
+          '税込 120円/100g 342g AFTER'
+        ].map.with_index do |content, index|
+          {
+            'content' => content,
+            'spans' => [ { 'offset' => index * 100, 'length' => content.length } ],
+            'valueObject' => {}
+          }
+        end
+      end
+
+      before do
+        allow(profile).to receive(:ocr_reference_pricing_package_quantity_context_before_pattern)
+          .and_return(/BEFORE\s*\z/)
+        allow(profile).to receive(:ocr_reference_pricing_package_quantity_context_after_pattern)
+          .and_return(/\A\s*AFTER/)
+      end
+
+      it 'does not use either custom package quantity as purchased evidence' do
+        expect(extract).to all(include(
+          validation_state: 'missing',
+          rejection_reasons: include('missing_purchased_quantity', 'missing_purchased_unit'),
+          purchased_quantity: nil
+        ))
+      end
+    end
+
+    context 'with injected tax-negation vocabulary' do
+      let(:items) do
+        content = 'NEG:税込 120円/100g 342g'
+        [
+          {
+            'content' => content,
+            'spans' => [ { 'offset' => 0, 'length' => content.length } ],
+            'valueObject' => {}
+          }
+        ]
+      end
+
+      before do
+        allow(profile).to receive(:ocr_reference_pricing_tax_negation_prefix_pattern)
+          .and_return(/NEG:\z/)
+      end
+
+      it 'does not establish tax basis from the negated custom marker' do
+        expect(extract.sole).to include(
+          validation_state: 'ambiguous',
+          rejection_reasons: include('ambiguous_tax_inclusion'),
+          reference_price_tax_inclusion: 'unknown'
+        )
       end
     end
 
@@ -523,7 +581,7 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingCandidateExtractor do
 
     context 'when a supplementary Unicode character precedes evidence' do
       let(:items) do
-        content = "🍎商品\n税込 ¥498/100g 342g"
+        content = "\u{20BB7}商品\n税込 ¥498/100g 342g"
         [
           {
             'content' => content,
@@ -551,7 +609,7 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingCandidateExtractor do
 
       it 'does not trust a field path whose declared UTF-16 span is shorter than its content' do
         malformed = items.first.deep_dup
-        price_content = '🍎税込 ¥498/100g'
+        price_content = "\u{20BB7}税込 ¥498/100g"
         malformed['content'] = "#{price_content}\n342g"
         malformed['spans'] = [
           { 'offset' => 100, 'length' => malformed['content'].encode(Encoding::UTF_16LE).bytesize / 2 }

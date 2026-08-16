@@ -1,4 +1,5 @@
 require 'rails_helper'
+require 'timeout'
 
 RSpec.describe 'Azure structured measurement unit-price mapping' do
   POSITIVE_FIXTURE = 'ocr_azure_measurement_unit_price_positive_anonymized.json'
@@ -38,12 +39,25 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
   end
 
   def synthetic_response(item)
+    content = item.fetch('content')
+    cursor = 0
+    lines = content.lines(chomp: true).map do |line|
+      length = utf16_length(line)
+      entry = {
+        'content' => line,
+        'spans' => [ { 'offset' => cursor, 'length' => length } ]
+      }
+      cursor += length + 1
+      entry
+    end
+
     {
       'status' => 'succeeded',
       'analyzeResult' => {
         'apiVersion' => '2024-11-30',
         'modelId' => 'prebuilt-receipt',
-        'content' => item.fetch('content'),
+        'stringIndexType' => 'utf16CodeUnit',
+        'content' => content,
         'documents' => [
           {
             'docType' => 'receipt.retailMeal',
@@ -55,11 +69,25 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
         'pages' => [
           {
             'pageNumber' => 1,
-            'lines' => item.fetch('content').lines(chomp: true).map { |line| { 'content' => line } }
+            'lines' => lines
           }
         ]
       }
     }
+  end
+
+  def append_response_line(response, line)
+    analyze_result = response.fetch('analyzeResult')
+    offset = utf16_length(analyze_result.fetch('content')) + 1
+    analyze_result['content'] = "#{analyze_result.fetch('content')}\n#{line}"
+    analyze_result.dig('pages', 0, 'lines') << {
+      'content' => line,
+      'spans' => [ { 'offset' => offset, 'length' => utf16_length(line) } ]
+    }
+  end
+
+  def utf16_length(value)
+    value.encode(Encoding::UTF_16LE).bytesize / 2
   end
 
   def structured_item(description:, price:, quantity:, unit:, total:)
@@ -149,6 +177,253 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
         )
       end
     end
+  end
+
+  it 'does not treat an Azure Items Measurement component as the receipt Total' do
+    item = positive_cases.first.fetch('item').deep_dup
+    response = synthetic_response(item)
+    summary_amount = item.dig('valueObject', 'TotalPrice', 'content')
+    append_response_line(response, "合計 #{summary_amount}円")
+    price = item.dig('valueObject', 'Price')
+    price_digits = price.fetch('content').scan(/\d+/).sole
+    price_offset = price.dig('spans', 0, 'offset') + price.fetch('content').index(price_digits)
+    response.dig('analyzeResult', 'documents', 0, 'fields')['Total'] = {
+      'content' => price_digits,
+      'spans' => [ { 'offset' => price_offset, 'length' => price_digits.length } ],
+      'valueCurrency' => { 'amount' => price_digits.to_i, 'currencyCode' => 'JPY' }
+    }
+
+    result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+
+    aggregate_failures do
+      expect(result.dig(:candidates, :reference_pricing_candidates).sole[:candidate_id]).to eq(
+        'azure_items_0_reference_pricing'
+      )
+      expect(result.dig(:candidates, :total_amount)).to eq(summary_amount.to_i)
+    end
+
+    response.dig('analyzeResult', 'pages', 0, 'lines').pop
+    result_without_summary = Ocr::ResponseParser.new(response:, provider: :fixture).call
+
+    expect(result_without_summary.dig(:candidates, :total_amount)).to be_nil
+  end
+
+  it 'requires a bounded document Total to belong to an explicit receipt summary line' do
+    item = positive_cases.first.fetch('item').deep_dup
+    summary_amount = item.dig('valueObject', 'TotalPrice', 'content')
+    base_response = synthetic_response(item)
+    analyze_result = base_response.fetch('analyzeResult')
+    header = 'SYNTH-HEADER 999'
+    summary = "合計 #{summary_amount}円"
+    append_response_line(base_response, header)
+    append_response_line(base_response, summary)
+    header_line = analyze_result.dig('pages', 0, 'lines', -2)
+    header_amount_offset = header_line.dig('spans', 0, 'offset') + header.index('999')
+
+    malformed_totals = [
+      {
+        'content' => '999',
+        'spans' => [ { 'offset' => header_amount_offset, 'length' => 3 } ],
+        'valueCurrency' => { 'amount' => 999, 'currencyCode' => 'JPY' }
+      },
+      {
+        'content' => '999',
+        'spans' => [ { 'offset' => header_amount_offset, 'length' => 0 } ],
+        'valueCurrency' => { 'amount' => 999, 'currencyCode' => 'JPY' }
+      }
+    ]
+
+    malformed_totals.each do |total|
+      response = base_response.deep_dup
+      response.dig('analyzeResult', 'documents', 0, 'fields')['Total'] = total
+
+      result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+
+      expect(result.dig(:candidates, :total_amount)).to eq(summary_amount.to_i)
+    end
+  end
+
+  it 'does not trust a summary line without an exact provider span and top-level slice' do
+    item = positive_cases.first.fetch('item').deep_dup
+    response = synthetic_response(item)
+    price = item.dig('valueObject', 'Price')
+    price_digits = price.fetch('content').scan(/\d+/).sole
+    price_offset = price.dig('spans', 0, 'offset') + price.fetch('content').index(price_digits)
+    response.dig('analyzeResult', 'documents', 0, 'fields')['Total'] = {
+      'content' => price_digits,
+      'spans' => [ { 'offset' => price_offset, 'length' => price_digits.length } ],
+      'valueCurrency' => { 'amount' => price_digits.to_i, 'currencyCode' => 'JPY' }
+    }
+    response.dig('analyzeResult', 'pages', 0, 'lines') << { 'content' => '合計 999円' }
+
+    result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+
+    expect(result.dig(:candidates, :total_amount)).to be_nil
+  end
+
+  it 'preserves an exact document Total owned by one explicit summary line' do
+    item = positive_cases.first.fetch('item').deep_dup
+    response = synthetic_response(item)
+    summary_amount = item.dig('valueObject', 'TotalPrice', 'content')
+    summary = "合計 #{summary_amount}円"
+    append_response_line(response, summary)
+    summary_line = response.dig('analyzeResult', 'pages', 0, 'lines').last
+    amount_offset = summary_line.dig('spans', 0, 'offset') + summary.index(summary_amount)
+    response.dig('analyzeResult', 'documents', 0, 'fields')['Total'] = {
+      'content' => summary_amount,
+      'spans' => [ { 'offset' => amount_offset, 'length' => utf16_length(summary_amount) } ],
+      'valueCurrency' => { 'amount' => summary_amount.to_i, 'currencyCode' => 'JPY' }
+    }
+    parser = Ocr::ResponseParser.new(response:, provider: :fixture)
+
+    expect(parser).not_to receive(:extract_strict_summary_total_from_response)
+    expect(parser.call.dig(:candidates, :total_amount)).to eq(summary_amount.to_i)
+  end
+
+  it 'fails closed from malformed or non-JPY structured Total ownership' do
+    item = positive_cases.first.fetch('item').deep_dup
+    response = synthetic_response(item)
+    summary_amount = item.dig('valueObject', 'TotalPrice', 'content')
+    summary = "合計 #{summary_amount}円"
+    append_response_line(response, summary)
+    summary_line = response.dig('analyzeResult', 'pages', 0, 'lines').last
+    amount_offset = summary_line.dig('spans', 0, 'offset') + summary.index(summary_amount)
+    total = {
+      'content' => summary_amount,
+      'spans' => [ { 'offset' => amount_offset, 'length' => utf16_length(summary_amount) } ],
+      'valueCurrency' => { 'amount' => summary_amount.to_i, 'currencyCode' => 'JPY' }
+    }
+
+    [
+      total.deep_merge('valueCurrency' => { 'amount' => summary_amount.to_i + 0.5 }),
+      total.deep_merge('valueCurrency' => { 'currencyCode' => 'USD' }),
+      total.deep_dup.tap { |value| value.fetch('spans').unshift(nil) }
+    ].each do |invalid_total|
+      invalid_response = response.deep_dup
+      invalid_response.dig('analyzeResult', 'documents', 0, 'fields')['Total'] = invalid_total
+      parser = Ocr::ResponseParser.new(response: invalid_response, provider: :fixture)
+
+      expect(parser).to receive(:extract_strict_summary_total_from_response).and_call_original
+      expect(parser.call.dig(:candidates, :total_amount)).to eq(summary_amount.to_i)
+    end
+  end
+
+  it 'rejects an oversized structured Total before decimal conversion' do
+    item = positive_cases.first.fetch('item').deep_dup
+    response = synthetic_response(item)
+    parser = Ocr::ResponseParser.new(response:, provider: :fixture)
+    total = {
+      'valueCurrency' => { 'amount' => 10**10_000, 'currencyCode' => 'JPY' }
+    }
+
+    expect(parser).not_to receive(:BigDecimal)
+    expect(parser.send(:strict_document_total_amount, total, '300')).to be_nil
+  end
+
+  it 'indexes bounded provider content once while validating a dense summary-line receipt' do
+    item = positive_cases.first.fetch('item').deep_dup
+    response = synthetic_response(item)
+    summary_amount = item.dig('valueObject', 'TotalPrice', 'content')
+    while response.dig('analyzeResult', 'pages', 0, 'lines').size < 149
+      append_response_line(response, 'X' * 500)
+    end
+    append_response_line(response, "合計 #{summary_amount}円")
+    parser = Ocr::ResponseParser.new(response:, provider: :fixture)
+
+    Timeout.timeout(2) do
+      expect(parser.send(:extract_strict_summary_total_from_response, response)).to eq(
+        summary_amount.to_i
+      )
+    end
+  end
+
+  it 'does not widen separated tax-label binding on the existing Azure Items path' do
+    content = "SYNTH-TAX-SCOPE\n税抜10% 181円/250ml\n1.5 L"
+    price_content = '税抜10% 181円/250ml'
+    quantity_content = '1.5 L'
+    price_offset = content.index(price_content)
+    quantity_offset = content.index(quantity_content)
+    item = {
+      'content' => content,
+      'spans' => [ { 'offset' => 0, 'length' => content.length } ],
+      'valueObject' => {
+        'Price' => {
+          'content' => price_content,
+          'spans' => [ { 'offset' => price_offset, 'length' => price_content.length } ]
+        },
+        'Quantity' => {
+          'content' => quantity_content,
+          'spans' => [ { 'offset' => quantity_offset, 'length' => quantity_content.length } ]
+        }
+      }
+    }
+
+    candidate = extract([ item ]).sole
+
+    expect(candidate).to include(
+      validation_state: 'ambiguous',
+      rejection_reasons: [ 'ambiguous_tax_inclusion' ],
+      reference_price_tax_inclusion: 'unknown',
+      tax_inclusion_evidence: nil
+    )
+
+    prefixed = item.deep_dup
+    prefixed_content = "SYNTH-TAX-PREFIX\n非税込 181円/250ml\n1.5 L"
+    prefixed_price = '非税込 181円/250ml'
+    prefixed['content'] = prefixed_content
+    prefixed['spans'] = [ { 'offset' => 0, 'length' => utf16_length(prefixed_content) } ]
+    prefixed.dig('valueObject', 'Price').merge!(
+      'content' => prefixed_price,
+      'spans' => [ { 'offset' => prefixed_content.index(prefixed_price), 'length' => utf16_length(prefixed_price) } ]
+    )
+    prefixed.dig('valueObject', 'Quantity')['spans'] = [
+      { 'offset' => prefixed_content.index(quantity_content), 'length' => utf16_length(quantity_content) }
+    ]
+
+    expect(extract([ prefixed ]).sole).to include(
+      validation_state: 'ambiguous',
+      rejection_reasons: [ 'ambiguous_tax_inclusion' ],
+      reference_price_tax_inclusion: 'unknown',
+      tax_inclusion_evidence: nil
+    )
+
+    [ '非:税込', '非（税込', 'NOT 税込', 'ＮＯＴ：税込' ].each do |negated_label|
+      negated = item.deep_dup
+      negated_price = "#{negated_label} 181円/250ml"
+      negated_content = "SYNTH-TAX-NEGATION\n#{negated_price}\n#{quantity_content}"
+      negated['content'] = negated_content
+      negated['spans'] = [ { 'offset' => 0, 'length' => utf16_length(negated_content) } ]
+      negated.dig('valueObject', 'Price').merge!(
+        'content' => negated_price,
+        'spans' => [ { 'offset' => negated_content.index(negated_price), 'length' => utf16_length(negated_price) } ]
+      )
+      negated.dig('valueObject', 'Quantity')['spans'] = [
+        { 'offset' => negated_content.index(quantity_content), 'length' => utf16_length(quantity_content) }
+      ]
+
+      expect(extract([ negated ]).sole).to include(
+        validation_state: 'ambiguous',
+        reference_price_tax_inclusion: 'unknown',
+        tax_inclusion_evidence: nil
+      )
+    end
+  end
+
+  it 'does not bind a negated tax substring on the structured Price fallback' do
+    item = structured_item(
+      description: 'SYNTH-TAX-NEGATED',
+      price: { content: '非税込 149円', amount: 149 },
+      quantity: { content: '4 L', amount: 4 },
+      unit: { content: 'L', value: 'L' },
+      total: { content: '596円', amount: 596 }
+    )
+
+    expect(extract([ item ]).sole).to include(
+      validation_state: 'ambiguous',
+      rejection_reasons: [ 'ambiguous_tax_inclusion' ],
+      reference_price_tax_inclusion: 'unknown',
+      tax_inclusion_evidence: nil
+    )
   end
 
   it 'binds all emitted evidence to the same Azure item and its exact structured field path' do
@@ -446,6 +721,9 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
       end,
       baseline.deep_dup.tap do |item|
         item.dig('valueObject', 'Description', 'spans', 0)['length'] = 0
+      end,
+      baseline.deep_dup.tap do |item|
+        item.dig('valueObject', 'Price', 'spans') << nil
       end,
       baseline.deep_dup.tap do |item|
         item.fetch('valueObject').delete('Description')

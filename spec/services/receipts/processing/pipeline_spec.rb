@@ -2212,6 +2212,53 @@ RSpec.describe Receipts::Processing::Pipeline do
   end
 
   describe '.finalize' do
+    it 'Azure line-group candidateだけのOCR結果をReceiptItem authorityへ永続化しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = ocr_fixture('ocr_azure_measurement_line_group_anonymized')
+      captured_build_params = nil
+      captured_amount_items = nil
+
+      allow(Analysis::ReceiptBuildParamsService).to receive(:call).and_wrap_original do |original, **kwargs|
+        captured_build_params = original.call(**kwargs)
+      end
+      allow(ReceiptAmountService).to receive(:call) do |**kwargs|
+        captured_amount_items = kwargs.fetch(:receipt_items)
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      end
+
+      result = described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ocr_only, ocr_result: ocr_result)
+      )
+      candidate = captured_build_params.fetch(:reference_pricing_candidates).sole
+
+      aggregate_failures do
+        expect(result).to eq(receipt)
+        expect(candidate).to include(
+          candidate_id: 'azure_line_group_p0_l1_l2_reference_pricing',
+          source_kind: 'azure_line_group',
+          validation_state: 'valid'
+        )
+        expect(captured_build_params.fetch(:receipt_items_attributes)).to eq([])
+        expect(captured_amount_items).to eq([])
+        expect(receipt.reload.receipt_items).to be_empty
+        expect(receipt.receipt_items.pluck(
+          :pricing_source_kind,
+          :price,
+          :line_total,
+          :original_line_total,
+          :reference_price_amount,
+          :reference_quantity,
+          :reference_quantity_unit_code,
+          :reference_price_tax_inclusion
+        )).to eq([])
+      end
+    end
+
     it 'ai_success decisionを保存しcompletedにできる' do
       receipt = create(:receipt, :processing, :with_image)
       allow(ReceiptAmountService).to receive(:call).and_return(

@@ -49,7 +49,7 @@ RSpec.describe 'synthetic Azure measurement unit-price fixtures' do
 
       aggregate_failures case_data.fetch('case_id') do
         expect(case_data.fetch('case_id')).to match(/\A[a-z0-9_]+\z/)
-        expect(label.delete_prefix('🧪')).to start_with('SYNTH-')
+        expect(label).to start_with('SYNTH-')
         expect(item.fetch('valueObject').keys).to match_array(ALLOWED_ITEM_FIELDS)
         expect(item.keys).to match_array(%w[confidence content spans valueObject])
       end

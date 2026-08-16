@@ -283,30 +283,30 @@
       "case_id": "weight_adjustment_nearby",
       "classification": "reference_quantity_price",
       "item": {
-        "content": "🧪SYNTH-WEIGHT-D\n321\n1.25 kg\nadjustment -20\n401",
+        "content": "SYNTH-WEIGHT-D\n321\n1.25 kg\nadjustment -20\n401",
         "spans": [
           {
             "offset": 0,
-            "length": 47
+            "length": 45
           }
         ],
         "confidence": 0.99,
         "valueObject": {
           "Description": {
-            "content": "🧪SYNTH-WEIGHT-D",
+            "content": "SYNTH-WEIGHT-D",
             "spans": [
               {
                 "offset": 0,
-                "length": 16
+                "length": 14
               }
             ],
-            "valueString": "🧪SYNTH-WEIGHT-D"
+            "valueString": "SYNTH-WEIGHT-D"
           },
           "Price": {
             "content": "321",
             "spans": [
               {
-                "offset": 17,
+                "offset": 15,
                 "length": 3
               }
             ],
@@ -319,7 +319,7 @@
             "content": "1.25 kg",
             "spans": [
               {
-                "offset": 21,
+                "offset": 19,
                 "length": 7
               }
             ],
@@ -329,7 +329,7 @@
             "content": "kg",
             "spans": [
               {
-                "offset": 26,
+                "offset": 24,
                 "length": 2
               }
             ],
@@ -339,7 +339,7 @@
             "content": "401",
             "spans": [
               {
-                "offset": 44,
+                "offset": 42,
                 "length": 3
               }
             ],

@@ -74,13 +74,14 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u0084\u0086-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
   LINE_BREAK_PATTERN = /[\n\r\u0085\u2028\u2029]/.freeze
 
-  def self.call(items:, profile:, projection: nil)
-    new(items:, profile:, projection:).call
+  def self.call(items:, profile:, projection: nil, allow_separated_tax_label: false)
+    new(items:, profile:, projection:, allow_separated_tax_label:).call
   end
 
-  def initialize(items:, profile:, projection: nil)
+  def initialize(items:, profile:, projection: nil, allow_separated_tax_label: false)
     @items = items
     @profile = profile
+    @allow_separated_tax_label = allow_separated_tax_label
     @projection = projection || ->(**attributes) {
       ReceiptAmountService.reference_item_extension_projection(**attributes)
     }
@@ -102,7 +103,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
 
   private
 
-  attr_reader :items, :profile, :projection
+  attr_reader :items, :profile, :projection, :allow_separated_tax_label
 
   def extract_candidate(item, item_index)
     return unless item.is_a?(Hash)
@@ -726,13 +727,12 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def structured_price_tax_evidence(price, item_index:)
-    labels = tax_basis_labels.values.flatten.filter_map do |label|
-      index = price[:content].index(label)
-      [ label, index ] if index
-    end
-    return [ nil, nil ] if labels.empty?
+    labels = tax_label_matches(price[:content])
+    return [ nil, nil ] unless labels.map { |entry| entry[:inclusion] }.uniq.one?
 
-    label, index = labels.first
+    match = labels.min_by { |entry| [ entry[:index], -entry[:label].length ] }
+    label = match.fetch(:label)
+    index = match.fetch(:index)
     [
       label,
       evidence(
@@ -772,6 +772,13 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     tax_capture = %i[tax_before tax_middle tax_after].find { |name| match_data[name].present? }
     price_capture = match_data[:price_prefix].present? ? :price_prefix : :price_suffix
     local_window = local_expression_line(text, match_data.begin(0), match_data.end(0))
+    tax_text, tax_start, tax_end = local_tax_evidence(
+      text,
+      expression_start: match_data.begin(0),
+      captured_tax: tax_capture ? match_data[tax_capture] : nil,
+      captured_start: tax_capture ? match_data.begin(tax_capture) : nil,
+      captured_end: tax_capture ? match_data.end(tax_capture) : nil
+    )
     reference_quantity_start = if match_data[:reference_quantity].present?
       match_data.begin(:reference_quantity)
     else
@@ -797,12 +804,12 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         start_offset: provider_offset(text, base_offset, reference_quantity_start),
         end_offset: provider_offset(text, base_offset, match_data.end(:reference_unit))
       ),
-      tax_text: tax_capture ? match_data[tax_capture] : nil,
-      tax_evidence: tax_capture ? evidence(
+      tax_text: tax_text,
+      tax_evidence: tax_text ? evidence(
         source_field_path:,
         item_index:,
-        start_offset: provider_offset(text, base_offset, match_data.begin(tax_capture)),
-        end_offset: provider_offset(text, base_offset, match_data.end(tax_capture))
+        start_offset: provider_offset(text, base_offset, tax_start),
+        end_offset: provider_offset(text, base_offset, tax_end)
       ) : nil,
       tax_window_text: local_window,
       priority: priority,
@@ -813,6 +820,81 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         local_window
       )
     }
+  end
+
+  def local_tax_evidence(
+    text,
+    expression_start:,
+    captured_tax:,
+    captured_start:,
+    captured_end:
+  )
+    if captured_tax.present?
+      return [ nil, nil, nil ] unless tax_label_boundary?(text, captured_start, captured_end)
+
+      return [ captured_tax, captured_start, captured_end ]
+    end
+    return [ nil, nil, nil ] unless allow_separated_tax_label
+
+    line_start = previous_line_break_index(text, expression_start)
+    line_content_start = line_start ? line_start + 1 : 0
+    prefix = text[line_content_start...expression_start].to_s
+    matches = tax_basis_labels.flat_map do |inclusion, labels|
+      labels.filter_map do |label|
+        match = prefix.match(
+          /(?:\A|[ \t:：(（])(?<tax_label>#{Regexp.escape(label)})[ \t]*(?:[(（]?[0-9０-９]+(?:[.．][0-9０-９]+)?[%％][)）]?[ \t]*)?(?:[¥￥@＠][ \t]*)?\z/
+        )
+        next unless match
+
+        index = match.begin(:tax_label)
+        absolute_start = line_content_start + index
+        next unless tax_label_boundary?(text, absolute_start, absolute_start + label.length)
+
+        { inclusion:, label:, index: }
+      end
+    end
+    return [ nil, nil, nil ] unless matches.map { |match| match[:inclusion] }.uniq.one?
+
+    match = matches.min_by { |entry| [ entry[:index], -entry[:label].length ] }
+    start_offset = line_content_start + match[:index]
+
+    [ match[:label], start_offset, start_offset + match[:label].length ]
+  end
+
+  def tax_label_left_boundary?(text, start_offset)
+    return false unless start_offset.is_a?(Integer) && start_offset >= 0
+    return true if start_offset.zero?
+    prefix = text[0...start_offset].to_s.unicode_normalize(:nfkc)
+    return false if prefix.match?(profile.ocr_reference_pricing_tax_negation_prefix_pattern)
+
+    text[start_offset - 1]&.match?(/[ \t\r\n:：(（]/)
+  rescue EncodingError, ArgumentError
+    false
+  end
+
+  def tax_label_boundary?(text, start_offset, end_offset)
+    return false unless end_offset.is_a?(Integer) && end_offset >= start_offset
+    return false unless tax_label_left_boundary?(text, start_offset)
+    return true if end_offset == text.length
+
+    text[end_offset]&.match?(%r{[ \t\r\n:：()（）¥￥@＠0-9０-９/／]})
+  end
+
+  def tax_label_matches(text)
+    tax_basis_labels.flat_map do |inclusion, labels|
+      labels.flat_map do |label|
+        offset = 0
+        matches = []
+        while (index = text.index(label, offset))
+          label_end = index + label.length
+          if tax_label_boundary?(text, index, label_end)
+            matches << { inclusion:, label:, index: }
+          end
+          offset = label_end
+        end
+        matches
+      end
+    end
   end
 
   def deduplicate_reference_matches(matches)
@@ -1012,8 +1094,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     before = text[[ match_data.begin(0) - 12, 0 ].max...match_data.begin(0)].to_s
     after = text[match_data.end(0), 6].to_s
 
-    before.match?(/(?:約|およそ|[x×@＠]|[-–—〜～~]|gross|tare|風袋|総重量)\s*\z/i) ||
-      after.match?(/\A\s*(?:入|入り|詰|パック|[x×@＠]|gross|tare|風袋|総重量)/i)
+    before.match?(profile.ocr_reference_pricing_package_quantity_context_before_pattern) ||
+      after.match?(profile.ocr_reference_pricing_package_quantity_context_after_pattern)
   end
 
   def quantity_only_component_span?(field, start_offset, end_offset)
@@ -1134,15 +1216,17 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   def tax_inclusion(reference_match)
     expression = reference_match[:expression_text]
     local_window = reference_match[:tax_window_text].to_s
-    inclusions_in_window = tax_basis_labels.filter_map do |inclusion, labels|
-      inclusion if labels.any? { |label| local_window.include?(label) }
-    end
+    inclusions_in_window = tax_label_matches(local_window).map { |entry| entry[:inclusion] }
     if inclusions_in_window.uniq.many?
       return [ "unknown", nil, [ "ambiguous_tax_inclusion", "ambiguous_reference_expression" ] ]
     end
 
-    inclusion = profile.reference_price_tax_inclusion(reference_match[:tax_text].presence || expression)
-    matched_labels = tax_basis_labels.values.flatten.select { |label| expression.include?(label) }
+    inclusion = if reference_match[:tax_text].present? && reference_match[:tax_evidence].present?
+      profile.reference_price_tax_inclusion(reference_match[:tax_text])
+    else
+      "unknown"
+    end
+    matched_labels = tax_label_matches(expression).map { |entry| entry[:label] }
 
     if inclusion == "unknown"
       reasons = [ "ambiguous_tax_inclusion" ]
@@ -1398,7 +1482,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
 
   def single_span(container)
     spans = container["spans"]
-    return unless spans.is_a?(Array) && spans.one?
+    return unless spans.is_a?(Array) && spans.size == 1
 
     bounded_span(spans.first)
   end
