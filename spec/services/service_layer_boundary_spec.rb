@@ -82,6 +82,7 @@ RSpec.describe "Service layer child implementation boundary" do
         Receipts::Processing::Error
         Receipts::Processing::InvalidTransition
         Receipts::Processing::Result
+        Receipts::Processing::RetryableFinalizeError
         Receipts::Processing::StartResult
         Receipts::Processing::TerminalRunError
       ]

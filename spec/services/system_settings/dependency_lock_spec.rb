@@ -9,6 +9,22 @@ RSpec.describe 'SystemSettings dependency lock' do
     Timeout.timeout(5) { threads.each(&:join) }
   end
 
+  def wait_for_dependency_lock(thread)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
+    loop do
+      locations = Array(thread.backtrace_locations)
+      return if thread.status == 'sleep' && locations.any? do |location|
+        location.absolute_path&.end_with?('/app/services/system_settings/dependency_lock.rb')
+      end
+
+      raise 'dependency lock waiter terminated before blocking' unless thread.alive?
+      raise Timeout::Error, 'dependency lock waiter did not block' if
+        Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      Thread.pass
+    end
+  end
+
   it '相互依存する外部サービス設定を同じlock groupへまとめる' do
     ai_groups = SystemSettings.dependency_lock_groups_for(
       'external_services.ai.read_timeout_seconds'
@@ -62,11 +78,10 @@ RSpec.describe 'SystemSettings dependency lock' do
     rescue StandardError => error
       errors << error
     end
+    wait_for_dependency_lock(second)
 
     begin
-      expect do
-        Timeout.timeout(0.05) { second_entered.pop }
-      end.to raise_error(Timeout::Error)
+      expect(second_entered).to be_empty
     ensure
       release_first << true
       join_threads(first, second)

@@ -11,6 +11,22 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
     Timeout.timeout(5) { threads.each(&:join) }
   end
 
+  def wait_for_database_lock(backend_pid, thread)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
+    loop do
+      wait_event_type = ActiveRecord::Base.connection.select_value(
+        "SELECT wait_event_type FROM pg_stat_activity WHERE pid = #{Integer(backend_pid)}"
+      )
+      return if wait_event_type == 'Lock'
+
+      raise 'database lock waiter terminated before blocking' unless thread.alive?
+      raise Timeout::Error, 'database lock waiter did not block' if
+        Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      Thread.pass
+    end
+  end
+
   def destination_ocr_result
     raw_json = JSON.parse(
       Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
@@ -47,6 +63,7 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
     release_writer = Queue.new
     writer_result = Queue.new
     off_attempted = Queue.new
+    off_backend = Queue.new
     off_completed = Queue.new
     errors = Queue.new
 
@@ -65,6 +82,7 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
 
     off = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
+        off_backend << ActiveRecord::Base.connection.raw_connection.backend_pid
         setting = SystemSetting.find(@setting.id)
         off_attempted << true
         setting.update!(value: SystemSettings.stored_value(false))
@@ -74,11 +92,10 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
       errors << error
     end
     queue_pop(off_attempted)
+    wait_for_database_lock(queue_pop(off_backend), off)
 
     begin
-      expect do
-        Timeout.timeout(0.05) { off_completed.pop }
-      end.to raise_error(Timeout::Error)
+      expect(off_completed).to be_empty
     ensure
       release_writer << true
       join_threads(writer, off)
@@ -98,6 +115,7 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
     release_off = Queue.new
     writer_completed = Queue.new
     writer_attempted = Queue.new
+    writer_backend = Queue.new
     writes = Queue.new
     errors = Queue.new
 
@@ -122,6 +140,7 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
 
     writer = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
+        writer_backend << ActiveRecord::Base.connection.raw_connection.backend_pid
         result = Receipts::Processing::ReferencePricingAutoAdoptionFence.with_locked_run(run: @run) do
           writes << true
           true
@@ -132,11 +151,10 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
       errors << error
     end
     queue_pop(writer_attempted)
+    wait_for_database_lock(queue_pop(writer_backend), writer)
 
     begin
-      expect do
-        Timeout.timeout(0.05) { writer_completed.pop }
-      end.to raise_error(Timeout::Error)
+      expect(writer_completed).to be_empty
     ensure
       release_off << true
       join_threads(off, writer)

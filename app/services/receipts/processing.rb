@@ -14,6 +14,7 @@ module Receipts
     InvalidTransition = Class.new(Error)
     TerminalRunError = Class.new(Error)
     EnqueueError = Class.new(Error)
+    RetryableFinalizeError = Class.new(Error)
 
     Result = Data.define(
       :ocr_result,
