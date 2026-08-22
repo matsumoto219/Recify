@@ -110,6 +110,7 @@ RSpec.describe Receipts::Processing::ReferencePricingAutoAdoptionFence do
       expect(changed.reason).to eq('proposal_binding_mismatch')
       expect(missing.reason).to eq('gate_snapshot_invalid')
       expect(retry_result.reason).to eq('run_source_unsupported')
+      expect(described_class.serialization_required?(retry_run)).to be(false)
     end
   end
 
@@ -130,6 +131,25 @@ RSpec.describe Receipts::Processing::ReferencePricingAutoAdoptionFence do
       expect(
         described_class.with_locked_run(run:) { true }
       ).to be_enabled
+    end
+  end
+
+  it 'start時は有効でもcurrent OFFならserialized blockを通常Finalize用にyieldしA1 claimは作らない' do
+    run = prepared_run
+    SystemSetting.find_by!(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+      .update!(value: SystemSettings.stored_value(false))
+    yielded = nil
+
+    serialized = described_class.with_serialized_run(run:) do |locked_run, gate_result|
+      yielded = [ locked_run.id, gate_result.reason ]
+      false
+    end
+
+    aggregate_failures do
+      expect(yielded).to eq([ run.id, 'current_setting_disabled' ])
+      expect(serialized.gate_result.reason).to eq('current_setting_disabled')
+      expect(serialized).not_to be_operation_committed
+      expect(run.reload.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
     end
   end
 end

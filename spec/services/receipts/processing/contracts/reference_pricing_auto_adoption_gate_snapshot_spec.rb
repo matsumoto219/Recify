@@ -10,7 +10,7 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
   end
 
-  it 'run開始時のsetting stateとgenerationをbounded v1 snapshotへ固定する' do
+  it 'run開始時のsetting state・generation・Receipt versionをbounded v2 snapshotへ固定する' do
     setting = create(
       :system_setting,
       key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
@@ -20,12 +20,13 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
 
     snapshot = described_class.capture_start(
       run_key:,
-      run_source: 'upload'
+      run_source: 'upload',
+      receipt_lock_version: 7
     )
 
     aggregate_failures do
       expect(snapshot).to include(
-        'schema_version' => 'reference_pricing_auto_adoption_gate_v1',
+        'schema_version' => 'reference_pricing_auto_adoption_gate_v2',
         'capture_stage' => 'run_start',
         'setting_key' => SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
         'setting_enabled' => true,
@@ -33,6 +34,7 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
         'writer_contract_version' => 'reference_pricing_auto_adoption_writer_v1',
         'run_key' => run_key,
         'run_source' => 'upload',
+        'receipt_lock_version_at_start' => 7,
         'proposal_binding' => nil
       )
       expect(snapshot.fetch('setting_generation')).to eq(
@@ -47,7 +49,8 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
   it 'setting rowなしはfalseと専用absent sentinelで固定する' do
     snapshot = described_class.capture_start(
       run_key: SecureRandom.uuid,
-      run_source: 'batch_upload'
+      run_source: 'batch_upload',
+      receipt_lock_version: 0
     )
 
     aggregate_failures do
@@ -56,22 +59,28 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     end
   end
 
-  it 'OCR proposal生成時に同じrunへcandidate/destination/checksumだけをbindする' do
+  it 'OCR proposal生成時に同じrunへidentity/checksumと開始時Receipt versionだけをbindする' do
     run = create(:receipt_analysis_run)
     start_snapshot = described_class.capture_start(
       run_key: run.run_key,
-      run_source: run.source
+      run_source: run.source,
+      receipt_lock_version: run.receipt.lock_version
     )
     ocr_snapshot = destination_ocr_snapshot
     proposal = ocr_snapshot.dig('adoption_proposals', 'reference_pricing')
 
-    bound = described_class.bind(start_snapshot, run:, ocr_snapshot:)
+    bound = described_class.bind(
+      start_snapshot,
+      run:,
+      ocr_snapshot:
+    )
 
     aggregate_failures do
       expect(bound.fetch('proposal_binding')).to eq(
         'candidate_identity' => proposal.fetch('candidate_id'),
         'destination_identity' => proposal.dig('destination', 'identity'),
-        'proposal_checksum' => proposal.fetch('integrity_checksum')
+        'proposal_checksum' => proposal.fetch('integrity_checksum'),
+        'receipt_lock_version' => run.receipt.lock_version
       )
       expect(bound['setting_enabled']).to be(false)
       expect(bound.to_json).not_to include(
@@ -89,15 +98,23 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     run = create(:receipt_analysis_run)
     start_snapshot = described_class.capture_start(
       run_key: run.run_key,
-      run_source: run.source
+      run_source: run.source,
+      receipt_lock_version: run.receipt.lock_version
     )
     ocr_snapshot = destination_ocr_snapshot
-    bound = described_class.bind(start_snapshot, run:, ocr_snapshot:)
+    bound = described_class.bind(
+      start_snapshot,
+      run:,
+      ocr_snapshot:
+    )
     mutations = [
-      bound.merge('schema_version' => 'reference_pricing_auto_adoption_gate_v2'),
+      bound.merge('schema_version' => 'reference_pricing_auto_adoption_gate_v1'),
+      bound.merge('schema_version' => 'reference_pricing_auto_adoption_gate_v3'),
       bound.merge('unknown' => true),
       bound.merge('setting_enabled' => 'true'),
       bound.deep_merge('setting_generation' => { 'id' => -1 }),
+      bound.merge('receipt_lock_version_at_start' => -1),
+      bound.deep_merge('proposal_binding' => { 'receipt_lock_version' => run.receipt.lock_version + 1 }),
       bound.merge('run_key' => 'x' * 200)
     ]
 
@@ -107,14 +124,26 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
 
 
     checksum_tampered = bound.deep_merge('proposal_binding' => { 'proposal_checksum' => '0' * 64 })
-    expect(described_class.bind(checksum_tampered, run:, ocr_snapshot:)).to be_nil
+    expect(
+      described_class.bind(
+        checksum_tampered,
+        run:,
+        ocr_snapshot:
+      )
+    ).to be_nil
 
     other_run = create(:receipt_analysis_run, receipt: create(:receipt))
     expect(described_class.from_snapshot(bound, run: other_run, require_binding: true)).to be_nil
 
     tampered_ocr = ocr_snapshot.deep_dup
     tampered_ocr.dig('adoption_proposals', 'reference_pricing')['integrity_checksum'] = '0' * 64
-    expect(described_class.bind(start_snapshot, run:, ocr_snapshot: tampered_ocr)).to be_nil
+    expect(
+      described_class.bind(
+        start_snapshot,
+        run:,
+        ocr_snapshot: tampered_ocr
+      )
+    ).to be_nil
   end
 
   it 'setting取得失敗時はsnapshotを作らずadoptionだけを停止する' do
@@ -123,7 +152,15 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     expect(
       described_class.capture_start(
         run_key: SecureRandom.uuid,
-        run_source: 'upload'
+        run_source: 'upload',
+        receipt_lock_version: 0
+      )
+    ).to be_nil
+    expect(
+      described_class.capture_start(
+        run_key: SecureRandom.uuid,
+        run_source: 'upload',
+        receipt_lock_version: -1
       )
     ).to be_nil
   end

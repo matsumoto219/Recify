@@ -25,16 +25,17 @@ module Receipts::Processing::Runs
 
     def call
       run_key = SecureRandom.uuid
-      adoption_gate_snapshot = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.capture_start(
-        run_key:,
-        run_source: source
-      )
 
       receipt.with_lock do
         if (active_run = latest_active_run)
           return Receipts::Processing::StartResult.new(run: active_run, created: false)
         end
 
+        adoption_gate_snapshot = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.capture_start(
+          run_key:,
+          run_source: source,
+          receipt_lock_version: receipt.lock_version
+        )
         runtime_config_metadata = RuntimeConfigSnapshot.metadata_for_new_run
         if adoption_gate_snapshot
           runtime_config_metadata = runtime_config_metadata.merge(

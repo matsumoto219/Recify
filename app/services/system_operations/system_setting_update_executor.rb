@@ -35,7 +35,7 @@ module SystemOperations
       after_state = nil
       casted_value = nil
 
-      SystemSettingDependencyLock.call(groups: SystemSettings.dependency_lock_groups_for(key)) do
+      SystemSettings.with_dependency_lock(key:) do
         before_state = current_state
         casted_value = SystemSettings.cast_update_value(key, raw_value)
         setting = update_setting_record!(casted_value)

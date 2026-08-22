@@ -296,8 +296,13 @@ module Receipts::Processing::Runs
       key = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot::METADATA_KEY
       return metadata unless metadata.key?(key)
 
-      bound = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.bind(
+      start_gate = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.from_snapshot(
         metadata[key],
+        run: locked_run,
+        require_binding: false
+      )
+      bound = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.bind(
+        start_gate,
         run: locked_run,
         ocr_snapshot: snapshot
       )

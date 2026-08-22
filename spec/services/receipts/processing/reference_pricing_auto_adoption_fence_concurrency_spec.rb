@@ -3,6 +3,14 @@ require 'rails_helper'
 RSpec.describe 'Reference pricing auto adoption fence concurrency' do
   self.use_transactional_tests = false
 
+  def queue_pop(queue)
+    Timeout.timeout(5) { queue.pop }
+  end
+
+  def join_threads(*threads)
+    Timeout.timeout(5) { threads.each(&:join) }
+  end
+
   def destination_ocr_result
     raw_json = JSON.parse(
       Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
@@ -38,6 +46,7 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
     writer_entered = Queue.new
     release_writer = Queue.new
     writer_result = Queue.new
+    off_attempted = Queue.new
     off_completed = Queue.new
     errors = Queue.new
 
@@ -45,23 +54,26 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
       ActiveRecord::Base.connection_pool.with_connection do
         writer_result << Receipts::Processing::ReferencePricingAutoAdoptionFence.with_locked_run(run: @run) do
           writer_entered << true
-          release_writer.pop
+          queue_pop(release_writer)
           true
         end
       end
     rescue StandardError => error
       errors << error
     end
-    writer_entered.pop
+    queue_pop(writer_entered)
 
     off = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
-        SystemSetting.find(@setting.id).update!(value: SystemSettings.stored_value(false))
+        setting = SystemSetting.find(@setting.id)
+        off_attempted << true
+        setting.update!(value: SystemSettings.stored_value(false))
         off_completed << true
       end
     rescue StandardError => error
       errors << error
     end
+    queue_pop(off_attempted)
 
     begin
       expect do
@@ -69,13 +81,13 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
       end.to raise_error(Timeout::Error)
     ensure
       release_writer << true
-      [ writer, off ].each(&:join)
+      join_threads(writer, off)
     end
-    raise errors.pop unless errors.empty?
+    raise queue_pop(errors) unless errors.empty?
 
     aggregate_failures do
-      expect(writer_result.pop).to be_enabled
-      expect(off_completed.pop).to be(true)
+      expect(queue_pop(writer_result)).to be_enabled
+      expect(queue_pop(off_completed)).to be(true)
       expect(@setting.reload.value).to eq('value' => false)
       expect(@run.reload.metadata).to have_key('reference_pricing_auto_adoption_claim')
     end
@@ -85,6 +97,7 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
     off_locked = Queue.new
     release_off = Queue.new
     writer_completed = Queue.new
+    writer_attempted = Queue.new
     writes = Queue.new
     errors = Queue.new
 
@@ -94,13 +107,18 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
           setting = SystemSetting.lock.find(@setting.id)
           setting.update!(value: SystemSettings.stored_value(false))
           off_locked << true
-          release_off.pop
+          queue_pop(release_off)
         end
       end
     rescue StandardError => error
       errors << error
     end
-    off_locked.pop
+    queue_pop(off_locked)
+
+    allow(SystemSettings).to receive(:with_dependency_lock).and_wrap_original do |original, key:, &operation|
+      writer_attempted << true
+      original.call(key:, &operation)
+    end
 
     writer = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
@@ -113,6 +131,7 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
     rescue StandardError => error
       errors << error
     end
+    queue_pop(writer_attempted)
 
     begin
       expect do
@@ -120,12 +139,12 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
       end.to raise_error(Timeout::Error)
     ensure
       release_off << true
-      [ off, writer ].each(&:join)
+      join_threads(off, writer)
     end
-    raise errors.pop unless errors.empty?
+    raise queue_pop(errors) unless errors.empty?
 
     aggregate_failures do
-      expect(writer_completed.pop.reason).to eq('current_setting_disabled')
+      expect(queue_pop(writer_completed).reason).to eq('current_setting_disabled')
       expect(writes).to be_empty
       expect(@run.reload.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
     end

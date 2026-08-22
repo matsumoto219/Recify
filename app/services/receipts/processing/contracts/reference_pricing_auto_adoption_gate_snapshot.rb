@@ -1,6 +1,6 @@
 module Receipts::Processing::Contracts
   class ReferencePricingAutoAdoptionGateSnapshot
-    SCHEMA_VERSION = "reference_pricing_auto_adoption_gate_v1"
+    SCHEMA_VERSION = "reference_pricing_auto_adoption_gate_v2"
     METADATA_KEY = "reference_pricing_auto_adoption_gate"
     CAPTURE_STAGE = "run_start"
     WRITER_CONTRACT_VERSION = "reference_pricing_auto_adoption_writer_v1"
@@ -11,14 +11,19 @@ module Receipts::Processing::Contracts
     CHECKSUM_PATTERN = /\A[0-9a-f]{64}\z/.freeze
     ROOT_KEYS = %w[
       schema_version capture_stage setting_key setting_enabled setting_generation
-      eligibility_contract_version writer_contract_version run_key run_source proposal_binding
+      eligibility_contract_version writer_contract_version
+      run_key run_source receipt_lock_version_at_start proposal_binding
     ].freeze
     ROW_GENERATION_KEYS = %w[kind id lock_version].freeze
     ABSENT_GENERATION_KEYS = %w[kind].freeze
-    BINDING_KEYS = %w[candidate_identity destination_identity proposal_checksum].freeze
+    BINDING_KEYS = %w[
+      candidate_identity destination_identity proposal_checksum receipt_lock_version
+    ].freeze
 
     class << self
-      def capture_start(run_key:, run_source:)
+      def capture_start(run_key:, run_source:, receipt_lock_version:)
+        return nil unless bounded_integer?(receipt_lock_version, minimum: 0)
+
         entry = SystemSettings.fetch(SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
         snapshot = {
           "schema_version" => SCHEMA_VERSION,
@@ -30,6 +35,7 @@ module Receipts::Processing::Contracts
           "writer_contract_version" => WRITER_CONTRACT_VERSION,
           "run_key" => run_key,
           "run_source" => run_source.to_s,
+          "receipt_lock_version_at_start" => receipt_lock_version,
           "proposal_binding" => nil
         }
 
@@ -57,7 +63,10 @@ module Receipts::Processing::Contracts
         return snapshot if stored_proposal.nil? && snapshot["proposal_binding"].nil?
         return nil if proposal.nil?
 
-        binding = binding_for(proposal)
+        binding = binding_for(
+          proposal,
+          receipt_lock_version: snapshot.fetch("receipt_lock_version_at_start")
+        )
         return nil if snapshot["proposal_binding"] && snapshot["proposal_binding"] != binding
 
         from_snapshot(snapshot.merge("proposal_binding" => binding), run:, require_binding: true)
@@ -79,7 +88,12 @@ module Receipts::Processing::Contracts
         return nil unless snapshot["writer_contract_version"] == WRITER_CONTRACT_VERSION
         return nil unless bounded_string?(snapshot["run_key"], max_bytes: 36, pattern: RUN_KEY_PATTERN)
         return nil unless ReceiptAnalysisRun::SOURCES.include?(snapshot["run_source"])
-        return nil unless binding_valid?(snapshot["proposal_binding"], required: require_binding)
+        return nil unless bounded_integer?(snapshot["receipt_lock_version_at_start"], minimum: 0)
+        return nil unless binding_valid?(
+          snapshot["proposal_binding"],
+          required: require_binding,
+          receipt_lock_version: snapshot["receipt_lock_version_at_start"]
+        )
         return nil if run && (
           snapshot["run_key"] != run.run_key || snapshot["run_source"] != run.source
         )
@@ -103,11 +117,12 @@ module Receipts::Processing::Contracts
 
       private
 
-      def binding_for(proposal)
+      def binding_for(proposal, receipt_lock_version:)
         {
           "candidate_identity" => proposal["candidate_id"],
           "destination_identity" => proposal.dig("destination", "identity"),
-          "proposal_checksum" => proposal["integrity_checksum"]
+          "proposal_checksum" => proposal["integrity_checksum"],
+          "receipt_lock_version" => receipt_lock_version
         }
       end
 
@@ -125,14 +140,15 @@ module Receipts::Processing::Contracts
         end
       end
 
-      def binding_valid?(value, required:)
+      def binding_valid?(value, required:, receipt_lock_version:)
         return !required if value.nil?
 
         binding = normalized_hash(value)
         exact_keys?(binding, BINDING_KEYS) &&
           bounded_string?(binding["candidate_identity"], max_bytes: 128) &&
           bounded_string?(binding["destination_identity"], max_bytes: MAX_ID_BYTES) &&
-          bounded_string?(binding["proposal_checksum"], max_bytes: 64, pattern: CHECKSUM_PATTERN)
+          bounded_string?(binding["proposal_checksum"], max_bytes: 64, pattern: CHECKSUM_PATTERN) &&
+          binding["receipt_lock_version"] == receipt_lock_version
       end
 
       def bounded_integer?(value, minimum:)

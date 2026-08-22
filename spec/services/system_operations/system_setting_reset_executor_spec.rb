@@ -132,7 +132,7 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
       value: SystemSettings.stored_value(300),
       updated_by_user: actor
     )
-    allow(SystemOperations::SystemSettingDependencyLock).to receive(:call).and_call_original
+    allow(SystemSettings).to receive(:with_dependency_lock).and_call_original
 
     result = described_class.call(
       key: "external_services.ai.max_elapsed_seconds",
@@ -147,8 +147,8 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
       expect(result).to be_failure
       expect(result.error_code).to eq("external_service_ai_elapsed_budget")
       expect(SystemSetting.find_by!(key: "external_services.ai.max_elapsed_seconds").value).to eq("value" => 1200)
-      expect(SystemOperations::SystemSettingDependencyLock).to have_received(:call)
-        .with(groups: [ "external_service_ai_runtime" ])
+      expect(SystemSettings).to have_received(:with_dependency_lock)
+        .with(key: "external_services.ai.max_elapsed_seconds")
     end
   end
 

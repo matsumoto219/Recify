@@ -321,6 +321,10 @@ module SystemSettings
       end.sort
     end
 
+    def with_dependency_lock(key:, &operation)
+      DependencyLock.call(groups: dependency_lock_groups_for(key), &operation)
+    end
+
     def validate_stored_value!(key, value)
       definition = definition_for(key)
       raise ValidationError, "must_be_hash" unless value.is_a?(Hash)

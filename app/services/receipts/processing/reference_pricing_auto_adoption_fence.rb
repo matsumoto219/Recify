@@ -32,25 +32,21 @@ class Receipts::Processing::ReferencePricingAutoAdoptionFence
     end
   end
 
+  SerializationResult = Data.define(:gate_result, :operation_committed) do
+    def operation_committed?
+      operation_committed == true
+    end
+  end
+
   class << self
     def with_locked_run(run:)
-      result = nil
-      operation_committed = false
-      ReceiptAnalysisRun.transaction do
-        current_entry = SystemSettings.fetch_for_update(
-          SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY
-        )
-        locked_run = ReceiptAnalysisRun.lock.find_by(id: run&.id)
-        result = evaluate(locked_run, current_entry:)
-        next unless result.enabled?
+      serialized = with_serialized_run(run:) do |locked_run, gate_result|
+        next false unless gate_result.enabled?
 
-        completed = yield locked_run
-        if completed == true
-          record_claim!(locked_run)
-          operation_committed = true
-        end
+        yield locked_run
       end
-      if result&.enabled? && !operation_committed
+      result = serialized.gate_result
+      if result&.enabled? && !serialized.operation_committed?
         return result(
           "operation_not_committed",
           candidate_identity: result.candidate_identity,
@@ -59,6 +55,43 @@ class Receipts::Processing::ReferencePricingAutoAdoptionFence
       end
 
       result
+    end
+
+    def serialization_required?(run)
+      return false unless SUPPORTED_RUN_SOURCES.include?(run&.source)
+
+      gate = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.from_snapshot(
+        run&.metadata.to_h[
+          Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot::METADATA_KEY
+        ],
+        run:,
+        require_binding: true
+      )
+
+      gate.present? && gate["setting_enabled"] == true
+    rescue ArgumentError, KeyError, TypeError
+      false
+    end
+
+    def with_serialized_run(run:)
+      gate_result = nil
+      operation_committed = false
+      SystemSettings.with_dependency_lock(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY) do
+        ReceiptAnalysisRun.transaction(requires_new: true) do
+          current_entry = SystemSettings.fetch_for_update(
+            SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY
+          )
+          locked_run = ReceiptAnalysisRun.lock.find_by(id: run&.id)
+          gate_result = evaluate(locked_run, current_entry:)
+          completed = yield locked_run, gate_result
+          if gate_result.enabled? && completed == true
+            record_claim!(locked_run)
+            operation_committed = true
+          end
+        end
+      end
+
+      SerializationResult.new(gate_result:, operation_committed:)
     end
 
     private
