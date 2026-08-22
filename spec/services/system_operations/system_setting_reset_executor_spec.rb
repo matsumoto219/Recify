@@ -26,6 +26,36 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
     }
   end
 
+
+  it "OCR基準価格候補の自動採用をresetするとdefault falseへ戻して監査する" do
+    setting = create(
+      :system_setting,
+      key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+      value: SystemSettings.stored_value(true),
+      updated_by_user: actor
+    )
+
+    result = described_class.call(
+      key: setting.key,
+      actor: actor,
+      reason: "stop new automatic adoption",
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: "1"
+    )
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(SystemSetting.find_by(key: setting.key)).to be_nil
+      expect(SystemSettings.enabled?(setting.key)).to be(false)
+      expect(AuditLog.last).to have_attributes(
+        action: "system_settings.reset",
+        outcome: "succeeded",
+        target_uid: setting.key
+      )
+    end
+  end
+
   around do |example|
     travel_to(Time.zone.parse("2026-07-11 12:00:00")) { example.run }
   end

@@ -66,6 +66,15 @@ module SystemSettings
         risk_level: "high"
       ),
       Definition.new(
+        key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        category: "amount_engine",
+        value_type: "boolean",
+        default: false,
+        editable: true,
+        risk_level: "high",
+        requires_confirmation: true
+      ),
+      Definition.new(
         key: "amount_engine.tax_excluded_price_conversion_enabled",
         category: "amount_engine",
         value_type: "boolean",

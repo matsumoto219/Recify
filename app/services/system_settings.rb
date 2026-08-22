@@ -15,6 +15,7 @@ module SystemSettings
   STORE_NAME_CASING_CONTEXT_LINES_KEY = "limits.store_name_casing_context_lines_max"
   OCR_RAW_RESPONSE_RETENTION_KEY = "analysis_artifact.ocr_raw_response_retention_days"
   OCR_RAW_RESPONSE_MAX_BYTES_KEY = "analysis_artifact.ocr_raw_response_max_bytes"
+  REFERENCE_PRICING_AUTO_ADOPTION_KEY = "amount_engine.reference_pricing_auto_adoption_enabled"
   ANALYSIS_RUNS_FAILED_RETENTION_KEY = "retention.analysis_runs_failed_days"
   RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
   STORE_NAME_CASING_SNAPSHOT_OCR_LINES_LIMIT_ERROR = "store_name_casing_snapshot_ocr_lines_limit"
@@ -149,7 +150,8 @@ module SystemSettings
     "security_event_retention" => SECURITY_EVENT_RETENTION_KEYS,
     "external_service_status" => EXTERNAL_SERVICE_FAILURE_THRESHOLD_KEYS,
     "external_service_ai_runtime" => AI_RUNTIME_TUNING_KEYS,
-    "external_service_ocr_runtime" => OCR_RUNTIME_TUNING_KEYS
+    "external_service_ocr_runtime" => OCR_RUNTIME_TUNING_KEYS,
+    "reference_pricing_auto_adoption" => [ REFERENCE_PRICING_AUTO_ADOPTION_KEY ].freeze
   }.freeze
 
   UnknownKeyError = Class.new(KeyError)

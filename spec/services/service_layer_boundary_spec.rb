@@ -110,6 +110,7 @@ RSpec.describe "Service layer child implementation boundary" do
         SystemSettings::EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS
         SystemSettings::OCR_RAW_RESPONSE_MAX_BYTES_KEY
         SystemSettings::OCR_RAW_RESPONSE_RETENTION_KEY
+        SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY
         SystemSettings::SETTING_DEPENDENCY_LOCK_GROUPS
         SystemSettings::UnknownKeyError
         SystemSettings::ValidationError

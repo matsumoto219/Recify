@@ -79,6 +79,7 @@ module Admin
 
       {
         key: definition.key,
+        display_name: display_name_for(definition.key),
         category: definition.category,
         value_type: definition.value_type,
         default_value: safe_value(entry.default_value),
@@ -95,6 +96,10 @@ module Admin
         updated_at: entry.updated_at,
         definition: definition.to_h
       }
+    end
+
+    def display_name_for(key)
+      I18n.t("admin.system_settings.names.#{key}", default: key)
     end
 
     def safe_value(value)

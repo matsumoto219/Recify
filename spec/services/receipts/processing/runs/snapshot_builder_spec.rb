@@ -511,6 +511,20 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     end
   end
 
+  it '自動採用設定OFFでもcandidate extractionとtyped proposal保存を継続する' do
+    create(
+      :system_setting,
+      key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+      value: SystemSettings.stored_value(false)
+    )
+
+    expect {
+      snapshot = described_class.ocr_result_snapshot(destination_ocr_result)
+
+      expect(snapshot.dig('adoption_proposals', 'reference_pricing')).to be_present
+    }.not_to change(ReceiptItem, :count)
+  end
+
   it 'gross corroboration・single candidate・lossless case lineのどれかを欠くとproposal全体だけを除外する' do
     net = destination_ocr_result.deep_dup
     net.dig(:candidates, :reference_pricing_candidates, 0)[:reference_price_tax_inclusion] = 'net'

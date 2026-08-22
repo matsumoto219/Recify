@@ -132,6 +132,14 @@ RSpec.describe 'Admin system settings', type: :request do
 
       get admin_system_settings_path
 
+      document = Nokogiri::HTML(response.body)
+      reference_pricing_key = SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY
+      reference_pricing_row = document.css('tbody tr').find do |row|
+        row.at_css("a[href='#{admin_system_setting_path(reference_pricing_key)}']")
+      end
+      reference_pricing_primary_key = reference_pricing_row&.at_css('td span.block.font-semibold')
+      reference_pricing_secondary_key = reference_pricing_row&.at_css('td span.font-mono.text-xs')
+
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('システム設定')
@@ -142,6 +150,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('external_services.ai.read_timeout_seconds')
         expect(response.body).to include('external_services.ocr.poll_interval_seconds')
         expect(response.body).to include('amount_engine.tax_excluded_price_conversion_enabled')
+        expect(response.body).to include(reference_pricing_key)
         expect(response.body).to include('amount_engine.max_candidate_snapshot_count')
         expect(response.body).to include('limits.receipt_upload_soft_limit')
         expect(response.body).to include('limits.receipt_uploads_per_day')
@@ -184,6 +193,8 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).not_to include('SECRET')
         expect(response.body).not_to include('name="reason"')
         expect(response.body).not_to include('設定を更新')
+        expect(reference_pricing_primary_key&.text&.strip).to eq(reference_pricing_key)
+        expect(reference_pricing_secondary_key).to be_nil
         expect_no_side_effects
       end
     end
@@ -248,6 +259,53 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(note.text).to include('手動作成・編集保存には適用されません')
         expect(response.body).to include('パスキー再認証')
         expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it 'OCR基準価格候補設定を実キー・default falseの単一toggleとして表示する' do
+      admin = create(:user, :admin)
+      sign_in admin
+
+      get admin_system_setting_path(SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+
+      document = Nokogiri::HTML(response.body)
+      note = document.at_css('p.token-bg-warning-soft')
+      heading = document.at_css('h2.section-header-title')
+      subtitle = heading&.parent&.xpath('following-sibling::p[1]')&.first
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+        expect(heading&.text&.strip).to eq(SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+        expect(subtitle&.text&.strip).to eq(I18n.t('admin.system_settings.show.subtitle'))
+        expect(response.body).to include('amount_engine')
+        expect(response.body).to include('high')
+        expect(note.text).to include('ONは新しい採用を許可')
+        expect(note.text).to include('OFFでも候補と提案の生成を継続')
+        expect(response.body).to include('パスキー再認証')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
+
+    it 'display_nameが実キーと異なる場合は表示名を見出し、実キーを副見出しにする' do
+      admin = create(:user, :admin)
+      key = SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY
+      record = Admin.system_setting(key: key)
+      allow(Admin).to receive(:system_setting).with(key: key).and_return(
+        record.merge(display_name: 'Localized setting name')
+      )
+      sign_in admin
+
+      get admin_system_setting_path(key)
+
+      document = Nokogiri::HTML(response.body)
+      heading = document.at_css('h2.section-header-title')
+      subtitle = heading&.parent&.xpath('following-sibling::p[1]')&.first
+
+      aggregate_failures do
+        expect(response).to have_http_status(:success)
+        expect(heading&.text&.strip).to eq('Localized setting name')
+        expect(subtitle&.text&.strip).to eq(key)
       end
     end
 
@@ -1094,6 +1152,43 @@ RSpec.describe 'Admin system settings', type: :request do
         )
         expect(audit_log.before_state).to eq('value' => true, 'source' => 'default')
         expect(audit_log.after_state).to eq('value' => false, 'source' => 'db')
+        expect(audit_log.metadata).to include(
+          'category' => 'amount_engine',
+          'risk_level' => 'high',
+          'reauthenticated' => true
+        )
+      end
+    end
+
+    it 'OCR基準価格候補の自動採用を理由・確認・fresh reauth付きで更新する' do
+      admin = create(:user, :admin)
+      sign_in admin
+      reauthenticate_admin_with_passkey!(admin)
+
+      expect {
+        patch admin_system_setting_path(SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY),
+              params: {
+                value: 'true',
+                reason: 'enable strict bounded adoption',
+                confirm: '1'
+              },
+              headers: { 'HTTP_USER_AGENT' => 'System Settings Request Spec' }
+      }.to change(AuditLog, :count).by(1)
+
+      setting = SystemSetting.find_by!(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+      audit_log = AuditLog.last
+
+      aggregate_failures do
+        expect(response).to redirect_to(admin_system_setting_path(setting.key))
+        expect(setting.value).to eq('value' => true)
+        expect(audit_log).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_uid: setting.key,
+          reason: 'enable strict bounded adoption'
+        )
+        expect(audit_log.before_state).to eq('value' => false, 'source' => 'default')
+        expect(audit_log.after_state).to eq('value' => true, 'source' => 'db')
         expect(audit_log.metadata).to include(
           'category' => 'amount_engine',
           'risk_level' => 'high',
