@@ -59,6 +59,16 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     end
   end
 
+  it 'automatic adoption対象外のrun sourceにはgate metadataを作らない' do
+    expect(
+      described_class.capture_start(
+        run_key: SecureRandom.uuid,
+        run_source: 'admin_retry',
+        receipt_lock_version: 0
+      )
+    ).to be_nil
+  end
+
   it 'OCR proposal生成時に同じrunへidentity/checksumと開始時Receipt versionだけをbindする' do
     run = create(:receipt_analysis_run)
     start_snapshot = described_class.capture_start(

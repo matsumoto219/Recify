@@ -2,7 +2,8 @@ class Receipts::Processing::ReferencePricingAutoAdoptionFence
   CLAIM_METADATA_KEY = "reference_pricing_auto_adoption_claim"
   CLAIM_SCHEMA_VERSION = "reference_pricing_auto_adoption_claim_v1"
   CLAIM_KEYS = %w[schema_version proposal_checksum].freeze
-  SUPPORTED_RUN_SOURCES = %w[upload batch_upload].freeze
+  SUPPORTED_RUN_SOURCES =
+    Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot::SUPPORTED_RUN_SOURCES
   REASONS = %w[
     enabled
     run_missing

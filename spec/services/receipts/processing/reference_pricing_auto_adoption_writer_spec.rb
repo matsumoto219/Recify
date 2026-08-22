@@ -207,6 +207,36 @@ RSpec.describe Receipts::Processing::ReferencePricingAutoAdoptionWriter do
     end
   end
 
+  it 'valid proposalと同居する深いunknown siblingを再帰変換せずbounded proposalだけを採用する' do
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN', currency_code: 'JPY')
+    run = build_run(receipt)
+    deep_value = { 'leaf' => true }
+    2_048.times { deep_value = { 'nested' => deep_value } }
+    snapshot = run.ocr_result_snapshot.dup
+    snapshot['adoption_proposals'] = snapshot.fetch('adoption_proposals').dup
+    snapshot['adoption_proposals']['unknown_additive_contract'] = deep_value
+    run_with_deep_snapshot = instance_double(
+      ReceiptAnalysisRun,
+      ocr_result_snapshot: snapshot,
+      metadata: run.metadata,
+      run_key: run.run_key,
+      source: run.source
+    )
+
+    result = nil
+    expect do
+      result = described_class.call(
+        receipt:,
+        run: run_with_deep_snapshot,
+        params: eligible_params,
+        gate_result: enabled_gate,
+        existing_items: []
+      )
+    end.not_to raise_error
+
+    expect(result).to be_applied
+  end
+
 
   it 'printed・explicit・count・reference・partial・manual相当の既存itemを一切上書きしない' do
     receipt = create(:receipt, :processing, :with_image, country_region: 'JPN', currency_code: 'JPY')

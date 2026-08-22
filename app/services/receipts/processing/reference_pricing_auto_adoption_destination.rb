@@ -4,12 +4,13 @@ class Receipts::Processing::ReferencePricingAutoAdoptionDestination
   MAX_NESTED_ENTRIES = 32
   MAX_PROPOSAL_CONTAINER_ENTRIES = 8
 
-  Result = Data.define(:candidate_identity, :destination_identity, :item_attributes) do
-    def initialize(candidate_identity:, destination_identity:, item_attributes:)
+  Result = Data.define(:candidate_identity, :destination_identity, :item_attributes, :proposal) do
+    def initialize(candidate_identity:, destination_identity:, item_attributes:, proposal:)
       super(
         candidate_identity: candidate_identity.dup.freeze,
         destination_identity: destination_identity.dup.freeze,
-        item_attributes: item_attributes.deep_dup.freeze
+        item_attributes: item_attributes.deep_dup.freeze,
+        proposal: proposal.deep_dup.freeze
       )
     end
   end
@@ -41,7 +42,8 @@ class Receipts::Processing::ReferencePricingAutoAdoptionDestination
       Result.new(
         candidate_identity: proposal.fetch("candidate_id"),
         destination_identity: proposal.dig("destination", "identity"),
-        item_attributes: item_attributes(name, proposal:)
+        item_attributes: item_attributes(name, proposal:),
+        proposal:
       )
     rescue EncodingError, ArgumentError, KeyError, SystemStackError, TypeError
       nil

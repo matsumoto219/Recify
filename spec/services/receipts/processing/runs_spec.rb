@@ -568,7 +568,7 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
-    it 'retry runはparent gateをコピーせずfresh start gateへcopied proposalを再bindする' do
+    it 'unsupportedなadmin retryはparent gateをコピーせずproposal-only境界を維持する' do
       create(
         :system_setting,
         key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
@@ -594,13 +594,12 @@ RSpec.describe Receipts::Processing::Runs do
         include_finalize_decision: true
       )
       parent_gate = parent_run.reload.metadata.fetch('reference_pricing_auto_adoption_gate')
-      retry_gate = retry_run.reload.metadata.fetch('reference_pricing_auto_adoption_gate')
+      retry_run.reload
 
       aggregate_failures do
-        expect(retry_gate['run_key']).to eq(retry_run.run_key)
-        expect(retry_gate['run_source']).to eq('admin_retry')
-        expect(retry_gate['run_key']).not_to eq(parent_gate['run_key'])
-        expect(retry_gate['proposal_binding']).to eq(parent_gate['proposal_binding'])
+        expect(parent_gate.dig('proposal_binding', 'candidate_identity')).to be_present
+        expect(retry_run.metadata).not_to have_key('reference_pricing_auto_adoption_gate')
+        expect(retry_run.ocr_result_snapshot.dig('adoption_proposals', 'reference_pricing')).to be_present
         expect(retry_run.metadata['finalize_decision']).to be_present
         expect(retry_run.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
       end

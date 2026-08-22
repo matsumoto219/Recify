@@ -53,7 +53,7 @@ class Receipts::Processing::ReferencePricingAutoAdoptionWriter
       gate = gate_snapshot(run)
       return result("ineligible", params: safe_params) if gate.nil?
 
-      proposal = normalized_hash(snapshot["adoption_proposals"])["reference_pricing"]
+      proposal = destination.proposal
       projection = projection_for(proposal)
       return result("ineligible", params: safe_params) unless
         projection && projected_total_matches?(safe_params, projection:)
@@ -113,7 +113,6 @@ class Receipts::Processing::ReferencePricingAutoAdoptionWriter
     end
 
     def projection_for(proposal)
-      proposal = normalized_hash(proposal)
       ReceiptAmountService.reference_item_extension_projection(
         reference_price_amount: proposal.dig("reference_price", "amount"),
         reference_quantity: proposal.dig("reference_quantity", "amount"),

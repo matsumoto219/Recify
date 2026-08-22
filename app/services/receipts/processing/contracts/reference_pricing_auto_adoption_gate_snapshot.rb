@@ -4,6 +4,7 @@ module Receipts::Processing::Contracts
     METADATA_KEY = "reference_pricing_auto_adoption_gate"
     CAPTURE_STAGE = "run_start"
     WRITER_CONTRACT_VERSION = "reference_pricing_auto_adoption_writer_v1"
+    SUPPORTED_RUN_SOURCES = %w[upload batch_upload].freeze
     MAX_SERIALIZED_BYTES = 1024
     MAX_ID_BYTES = 160
     MAX_DATABASE_ID = (2**63) - 1
@@ -22,6 +23,7 @@ module Receipts::Processing::Contracts
 
     class << self
       def capture_start(run_key:, run_source:, receipt_lock_version:)
+        return nil unless SUPPORTED_RUN_SOURCES.include?(run_source.to_s)
         return nil unless bounded_integer?(receipt_lock_version, minimum: 0)
 
         entry = SystemSettings.fetch(SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
@@ -87,7 +89,7 @@ module Receipts::Processing::Contracts
           ReferencePricingAutoAdoptionEligibility::CONTRACT_VERSION
         return nil unless snapshot["writer_contract_version"] == WRITER_CONTRACT_VERSION
         return nil unless bounded_string?(snapshot["run_key"], max_bytes: 36, pattern: RUN_KEY_PATTERN)
-        return nil unless ReceiptAnalysisRun::SOURCES.include?(snapshot["run_source"])
+        return nil unless SUPPORTED_RUN_SOURCES.include?(snapshot["run_source"])
         return nil unless bounded_integer?(snapshot["receipt_lock_version_at_start"], minimum: 0)
         return nil unless binding_valid?(
           snapshot["proposal_binding"],
