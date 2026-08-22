@@ -99,7 +99,13 @@ RSpec.describe 'Reference pricing automatic adoption pipeline concurrency' do
   end
 
   after do
+    blob_ids = ActiveStorage::Attachment.where(
+      record_type: 'Receipt',
+      record_id: @receipt&.id,
+      name: 'image'
+    ).pluck(:blob_id)
     Receipt.where(id: @receipt&.id).destroy_all
+    ActiveStorage::Blob.where(id: blob_ids).find_each(&:purge)
     SystemSetting.where(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY).delete_all
     AuditLog.where(actor_user_id: @admin&.id).delete_all
     User.where(id: @admin&.id).destroy_all
