@@ -298,6 +298,8 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
 
     it 'owns discount, summary, identifier, and subtotal vocabulary' do
+      destination_conflicts = profile.ocr_reference_pricing_line_group_destination_identifier_conflict_patterns
+
       aggregate_failures do
         expect('3%引').to match(profile.ocr_reference_pricing_line_group_discount_conflict_pattern)
         expect('商品小計').to match(profile.ocr_reference_pricing_line_group_summary_context_pattern)
@@ -310,6 +312,9 @@ RSpec.describe ReceiptAnalysisProfiles do
         expect('ITEMA03').not_to match(profile.ocr_reference_pricing_line_group_identifier_pattern)
         expect('検証品０３').not_to match(profile.ocr_reference_pricing_line_group_identifier_pattern)
         expect('検証品ABC').not_to match(profile.ocr_reference_pricing_line_group_identifier_pattern)
+        expect(destination_conflicts).to all(be_a(Regexp))
+        expect(destination_conflicts.any? { |pattern| '合計額ABC'.match?(pattern) }).to be(true)
+        expect(destination_conflicts.any? { |pattern| '検証品A03'.match?(pattern) }).to be(false)
         expect('合計 300円').not_to match(profile.ocr_strict_receipt_subtotal_line_pattern)
         expect('検証品 300円').not_to match(profile.ocr_strict_receipt_subtotal_line_pattern)
       end

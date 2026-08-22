@@ -840,6 +840,20 @@ module ReceiptAnalysisProfiles
         OCR_REFERENCE_PRICING_LINE_GROUP_DESTINATION_CONFLICT_PATTERN
       end
 
+      def ocr_reference_pricing_line_group_destination_identifier_conflict_patterns
+        [
+          ocr_reference_pricing_line_group_identifier_conflict_pattern,
+          ocr_reference_pricing_line_group_destination_conflict_pattern,
+          ocr_reference_pricing_line_group_summary_context_pattern,
+          ocr_merchant_anchor_pattern,
+          ocr_payment_anchor_pattern,
+          ocr_adjustment_discount_label_pattern,
+          ocr_adjustment_surcharge_label_pattern,
+          ocr_adjustment_excluded_line_pattern,
+          ocr_datetime_anchor_pattern
+        ]
+      end
+
       def ocr_reference_pricing_line_group_identifier_pattern
         OCR_REFERENCE_PRICING_LINE_GROUP_IDENTIFIER_PATTERN
       end

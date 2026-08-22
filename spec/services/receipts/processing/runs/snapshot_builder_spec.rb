@@ -1,6 +1,14 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
+  def destination_ocr_result
+    raw_json = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
+    )
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
   it 'invalid categoryを保存せず未分類の確認状態だけをsnapshotへ残す' do
     snapshot = described_class.ai_normalized_result_snapshot(
       success: true,
@@ -438,6 +446,111 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
         'manifest_hash',
         '/private/path'
       )
+    end
+  end
+
+  it 'strict destination付きgross candidateだけをbounded typed adoption proposalへ分離する' do
+    snapshot = described_class.ocr_result_snapshot(destination_ocr_result)
+    proposal = snapshot.dig('adoption_proposals', 'reference_pricing')
+    diagnostic = snapshot.dig('candidates', 'reference_pricing_candidates', 0)
+
+    aggregate_failures do
+      expect(snapshot['schema_version']).to eq('receipt_analysis_run_ocr_result_v1')
+      expect(proposal).to include(
+        'schema_version' => 'reference_pricing_adoption_proposal_v1',
+        'creation_stage' => 'ocr_validation',
+        'source_kind' => 'azure_line_group',
+        'provider_model_id' => 'prebuilt-receipt',
+        'provider_api_version' => '2024-11-30',
+        'string_index_type' => 'textElements',
+        'candidate_id' => 'azure_line_group_p0_l1_l2_reference_pricing',
+        'validation_state' => 'valid',
+        'validation_contract_version' => 'azure_line_group_v1',
+        'analysis_profile_country_code' => 'JPN',
+        'reference_price_tax_inclusion' => 'gross',
+        'integrity_checksum' => match(/\A[0-9a-f]{64}\z/)
+      )
+      expect(proposal.dig('reference_price')).to include('amount' => '120')
+      expect(proposal.dig('reference_quantity')).to include(
+        'amount' => '1',
+        'unit_code' => 'liter',
+        'origin' => 'explicit'
+      )
+      expect(proposal.dig('purchased_quantity')).to include(
+        'amount' => '2.5',
+        'unit_code' => 'liter'
+      )
+      expect(proposal.dig('corroboration')).to eq(
+        'state' => 'matched',
+        'rounding_matches' => %w[floor half_up ceil]
+      )
+      expect(proposal.dig('destination', 'identity')).to eq(
+        'azure_line_group_destination_p0_name_l1_s13_e19_ref_l1_qty_l2'
+      )
+      expect(proposal.dig('destination', 'evidence', 'word_spans').size).to eq(4)
+      expect(proposal.dig('destination', 'evidence', 'tax_word_spans').size).to eq(2)
+      expect(diagnostic).to include(
+        'provider_model_id' => 'prebuilt-receipt',
+        'provider_api_version' => '2024-11-30',
+        'validation_contract_version' => 'azure_line_group_v1',
+        'analysis_profile_country_code' => 'JPN'
+      )
+      expect(diagnostic.dig('destination_item_identity', 'identity')).to eq(
+        proposal.dig('destination', 'identity')
+      )
+      expect(diagnostic.dig('reference_price').keys).to eq([ 'evidence' ])
+      expect(JSON.generate(proposal).bytesize).to be <= 4096
+      expect(proposal.to_json).not_to include(
+        '検証品A01',
+        'SYNTH-LAYOUT',
+        'line_content',
+        'word_content',
+        'polygon',
+        'provider_raw_response'
+      )
+    end
+  end
+
+  it 'gross corroboration・single candidate・lossless case lineのどれかを欠くとproposal全体だけを除外する' do
+    net = destination_ocr_result.deep_dup
+    net.dig(:candidates, :reference_pricing_candidates, 0)[:reference_price_tax_inclusion] = 'net'
+
+    uncorroborated = destination_ocr_result.deep_dup
+    uncorroborated.dig(:candidates, :reference_pricing_candidates, 0).delete(:summary_total_corroboration)
+
+    multiple = destination_ocr_result.deep_dup
+    multiple.dig(:candidates, :reference_pricing_candidates) <<
+      multiple.dig(:candidates, :reference_pricing_candidates, 0).deep_dup
+
+    truncated_line = destination_ocr_result.deep_dup
+    truncated_line[:case_preserved_lines][1] = 'x' * 600
+
+    truncated_purchased_line = destination_ocr_result.deep_dup
+    truncated_purchased_line[:case_preserved_lines][2] = '計量 2.5 L ' + ('x' * 600)
+
+    [ net, uncorroborated, multiple, truncated_line, truncated_purchased_line ].each do |ocr_result|
+      snapshot = described_class.ocr_result_snapshot(ocr_result)
+
+      aggregate_failures do
+        expect(snapshot).not_to have_key('adoption_proposals')
+        expect(snapshot.dig('candidates', 'reference_pricing_candidates')).to be_present
+      end
+    end
+  end
+
+  it 'stored proposalをretry用snapshotへexactに再sanitizeし改変proposalだけfail closedに除外する' do
+    initial = described_class.ocr_result_snapshot(destination_ocr_result)
+    copied = described_class.ocr_result_snapshot(initial)
+    tampered = initial.deep_dup
+    tampered.dig('adoption_proposals', 'reference_pricing')['unknown'] = 'not-allowed'
+    rejected = described_class.ocr_result_snapshot(tampered)
+
+    aggregate_failures do
+      expect(copied.dig('adoption_proposals', 'reference_pricing')).to eq(
+        initial.dig('adoption_proposals', 'reference_pricing')
+      )
+      expect(rejected).not_to have_key('adoption_proposals')
+      expect(rejected.dig('candidates', 'reference_pricing_candidates')).to be_present
     end
   end
 

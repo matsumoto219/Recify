@@ -1397,6 +1397,39 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
+    it 'async run snapshotのtyped proposalをFinalizeで再検証してauthority非採用を維持する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ocr_result = ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      captured_ocr_result = nil
+      captured_amount_items = nil
+
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      Receipts::Processing.record_finalize_decision(run, finalize_decision(:ocr_only))
+      allow(Analysis::ReceiptBuildParamsService).to receive(:call).and_wrap_original do |original, **kwargs|
+        captured_ocr_result = kwargs.fetch(:ocr_result)
+        original.call(**kwargs)
+      end
+      allow(ReceiptAmountService).to receive(:call) do |**kwargs|
+        captured_amount_items = kwargs.fetch(:receipt_items)
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      end
+
+      result = described_class.run_finalize(run)
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:done)
+        expect(captured_ocr_result.dig(:adoption_proposals, 'reference_pricing')).to be_present
+        expect(captured_amount_items).to eq([])
+        expect(receipt.reload.receipt_items).to be_empty
+        expect(run.reload.status).to eq('succeeded')
+      end
+    end
+
     it 'final result summary保存失敗時はReceipt保存をrollbackしてrunとともにfailedへ倒す' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
@@ -2244,6 +2277,53 @@ RSpec.describe Receipts::Processing::Pipeline do
           validation_state: 'valid'
         )
         expect(captured_build_params.fetch(:receipt_items_attributes)).to eq([])
+        expect(captured_amount_items).to eq([])
+        expect(receipt.reload.receipt_items).to be_empty
+        expect(receipt.receipt_items.pluck(
+          :pricing_source_kind,
+          :price,
+          :line_total,
+          :original_line_total,
+          :reference_price_amount,
+          :reference_quantity,
+          :reference_quantity_unit_code,
+          :reference_price_tax_inclusion
+        )).to eq([])
+      end
+    end
+
+    it 'rehydrated typed proposalがあってもReceiptItem/Amount authorityへ永続化しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(ocr_result)
+      run = create(:receipt_analysis_run, receipt:, ocr_result_snapshot: snapshot)
+      captured_ocr_result = nil
+      captured_amount_items = nil
+
+      allow(Analysis::ReceiptBuildParamsService).to receive(:call).and_wrap_original do |original, **kwargs|
+        captured_ocr_result = kwargs.fetch(:ocr_result)
+        original.call(**kwargs)
+      end
+      allow(ReceiptAmountService).to receive(:call) do |**kwargs|
+        captured_amount_items = kwargs.fetch(:receipt_items)
+        amount_result(
+          inconsistencies: [],
+          blocking_inconsistencies: [],
+          warning_inconsistencies: []
+        )
+      end
+
+      result = described_class.finalize(
+        receipt:,
+        decision: finalize_decision(:ocr_only),
+        run:
+      )
+
+      aggregate_failures do
+        expect(result).to eq(receipt)
+        expect(captured_ocr_result.dig(:adoption_proposals, 'reference_pricing')).to eq(
+          snapshot.dig('adoption_proposals', 'reference_pricing')
+        )
         expect(captured_amount_items).to eq([])
         expect(receipt.reload.receipt_items).to be_empty
         expect(receipt.receipt_items.pluck(

@@ -285,7 +285,10 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
       content:,
       mapper:
     )
-    typed[:destination_item_identity] = destination_item_identity if destination_item_identity
+    if destination_item_identity && (country_code = destination_profile_country_code)
+      typed[:destination_item_identity] = destination_item_identity
+      typed[:analysis_profile_country_code] = country_code
+    end
 
     summary = summary_total_corroboration(
       typed,
@@ -521,19 +524,18 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
 
   def destination_identifier_conflict?(name)
     normalized = name.unicode_normalize(:nfkc)
-    [
-      profile.ocr_reference_pricing_line_group_identifier_conflict_pattern,
-      profile.ocr_reference_pricing_line_group_destination_conflict_pattern,
-      profile.ocr_reference_pricing_line_group_summary_context_pattern,
-      profile.ocr_merchant_anchor_pattern,
-      profile.ocr_payment_anchor_pattern,
-      profile.ocr_adjustment_discount_label_pattern,
-      profile.ocr_adjustment_surcharge_label_pattern,
-      profile.ocr_adjustment_excluded_line_pattern,
-      profile.ocr_datetime_anchor_pattern
-    ].any? { |pattern| normalized.match?(pattern) }
+    profile.ocr_reference_pricing_line_group_destination_identifier_conflict_patterns.any? do |pattern|
+      normalized.match?(pattern)
+    end
   rescue EncodingError, ArgumentError, NoMethodError
     true
+  end
+
+  def destination_profile_country_code
+    country_codes = Array(profile.country_codes).map(&:to_s).uniq
+    country_codes.sole if country_codes.one?
+  rescue NoMethodError
+    nil
   end
 
   def destination_word_evidence(name_start:, name_end:, tax_start:, tax_end:, page_index:, words:)

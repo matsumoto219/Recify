@@ -70,14 +70,26 @@ module Receipts::Processing::Runs
     REFERENCE_PRICING_CANDIDATE_ID_MAX_BYTES = 128
     REFERENCE_PRICING_EXACT_NUMBER_MAX_BYTES = 64
     REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES = 256
+    REFERENCE_PRICING_DESTINATION_ID_MAX_BYTES = 160
     REFERENCE_PRICING_SOURCE_PROVIDERS = %w[azure_structured].freeze
     REFERENCE_PRICING_LINE_SOURCE_PROVIDERS = %w[azure_line_group].freeze
     REFERENCE_PRICING_SOURCE_KINDS = %w[azure_line_group].freeze
     REFERENCE_PRICING_STRING_INDEX_TYPES = %w[utf16CodeUnit textElements].freeze
+    REFERENCE_PRICING_LINE_GROUP_PROVIDER_MODELS = %w[prebuilt-receipt].freeze
+    REFERENCE_PRICING_LINE_GROUP_API_VERSIONS = %w[2024-11-30].freeze
+    REFERENCE_PRICING_LINE_GROUP_VALIDATION_CONTRACTS = %w[azure_line_group_v1].freeze
+    REFERENCE_PRICING_LINE_GROUP_PROFILE_COUNTRY_CODES = %w[JPN].freeze
+    REFERENCE_PRICING_DESTINATION_CONTRACTS = %w[azure_line_group_destination_v1].freeze
+    REFERENCE_PRICING_DESTINATION_KINDS = %w[reference_line_prefix].freeze
+    MAX_REFERENCE_PRICING_DESTINATION_GRAPHEMES = 24
+    MAX_REFERENCE_PRICING_DESTINATION_WORDS = 8
+    REFERENCE_PRICING_TAX_WORD_COUNT = 2
+    MAX_REFERENCE_PRICING_WORD_INDEX = 4_799
     MAX_REFERENCE_PRICING_PAGE_INDEX = 99
     MAX_REFERENCE_PRICING_LINE_INDEX = MAX_OCR_LINES - 1
     REFERENCE_PRICING_SOURCE_FIELD_PATH_PATTERN = /\Adocuments\[\d+\]\.fields\.Items\[\d+\](?:\.[A-Za-z][A-Za-z0-9]*)?\z/
     REFERENCE_PRICING_LINE_SOURCE_FIELD_PATH_PATTERN = /\Apages\[\d+\]\.lines\[\d+\]\z/
+    REFERENCE_PRICING_WORD_SOURCE_FIELD_PATH_PATTERN = /\Apages\[\d+\]\.words\[\d+\]\z/
     SNAPSHOT_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/.freeze
     OWNERSHIP_CONTRACT_KEYS = %i[
       schema_version
@@ -320,28 +332,28 @@ module Receipts::Processing::Runs
       lines = limited_strings(result[:lines], ocr_lines_limit)
       case_preserved_lines = limited_strings(result[:case_preserved_lines], ocr_lines_limit)
       candidates_snapshot = ocr_candidates_snapshot(candidates)
+      snapshot = {
+        schema_version: OCR_RESULT_SCHEMA_VERSION,
+        success: result[:success] == true,
+        lines: lines,
+        case_preserved_lines: case_preserved_lines.presence,
+        candidates: candidates_snapshot,
+        candidate_counts: ocr_candidate_counts(candidates, candidates_snapshot),
+        error_code: safe_string(result[:error_code]),
+        meta: ocr_meta_snapshot(result[:meta]),
+        truncated: {
+          lines: Array(result[:lines]).size > ocr_lines_limit,
+          case_preserved_lines: Array(result[:case_preserved_lines]).size > ocr_lines_limit,
+          items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
+          payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
+          tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,
+          adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit,
+          reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).size > MAX_REFERENCE_PRICING_CANDIDATES
+        }
+      }.compact
+      snapshot[:adoption_proposals] = reference_pricing_adoption_proposals_snapshot(result, snapshot).presence
 
-      sanitize_hash(
-        {
-          schema_version: OCR_RESULT_SCHEMA_VERSION,
-          success: result[:success] == true,
-          lines: lines,
-          case_preserved_lines: case_preserved_lines.presence,
-          candidates: candidates_snapshot,
-          candidate_counts: ocr_candidate_counts(candidates, candidates_snapshot),
-          error_code: safe_string(result[:error_code]),
-          meta: ocr_meta_snapshot(result[:meta]),
-          truncated: {
-            lines: Array(result[:lines]).size > ocr_lines_limit,
-            case_preserved_lines: Array(result[:case_preserved_lines]).size > ocr_lines_limit,
-            items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
-            payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
-            tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,
-            adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit,
-            reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).size > MAX_REFERENCE_PRICING_CANDIDATES
-          }
-        }.compact
-      )
+      sanitize_hash(snapshot.compact)
     end
 
     def ai_input_snapshot(ai_input)
@@ -607,6 +619,30 @@ module Receipts::Processing::Runs
       end
     end
 
+    def reference_pricing_adoption_proposals_snapshot(result, ocr_snapshot)
+      proposal = if result.key?(:schema_version)
+        return nil unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+        stored = normalized_hash(result[:adoption_proposals])[:reference_pricing]
+        Receipts::Processing::Contracts::ReferencePricingAdoptionProposal.from_snapshot(
+          stored,
+          ocr_snapshot:
+        )
+      else
+        candidates = Array(normalized_hash(result[:candidates])[:reference_pricing_candidates])
+        return nil unless candidates.one?
+
+        Receipts::Processing::Contracts::ReferencePricingAdoptionProposal.build(
+          candidate: candidates.sole,
+          ocr_snapshot:,
+          source_case_preserved_lines: result[:case_preserved_lines]
+        )
+      end
+      return nil if proposal.nil?
+
+      { reference_pricing: proposal }
+    end
+
     def reference_pricing_candidate_snapshot(value)
       candidate = normalized_hash(value)
       return nil if candidate.blank?
@@ -647,6 +683,34 @@ module Receipts::Processing::Runs
           candidate[:string_index_type],
           REFERENCE_PRICING_STRING_INDEX_TYPES
         ) : nil,
+        provider_model_id: line_group ? enum_string(
+          candidate[:provider_model_id],
+          REFERENCE_PRICING_LINE_GROUP_PROVIDER_MODELS
+        ) : nil,
+        provider_api_version: line_group ? enum_string(
+          candidate[:provider_api_version],
+          REFERENCE_PRICING_LINE_GROUP_API_VERSIONS
+        ) : nil,
+        validation_contract_version: line_group ? enum_string(
+          candidate[:validation_contract_version],
+          REFERENCE_PRICING_LINE_GROUP_VALIDATION_CONTRACTS
+        ) : nil,
+        analysis_profile_country_code: line_group ? enum_string(
+          candidate[:analysis_profile_country_code],
+          REFERENCE_PRICING_LINE_GROUP_PROFILE_COUNTRY_CODES
+        ) : nil,
+        block_provider_span_start: line_group ? bounded_non_negative_integer(
+          candidate[:block_provider_span_start],
+          maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+        ) : nil,
+        block_provider_span_end: line_group ? bounded_non_negative_integer(
+          candidate[:block_provider_span_end],
+          maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+        ) : nil,
+        destination_item_identity: line_group ? reference_pricing_destination_snapshot(
+          candidate[:destination_item_identity],
+          index_type: candidate[:string_index_type]
+        ).presence : nil,
         validation_state: enum_string(candidate[:validation_state], REFERENCE_PRICING_VALIDATION_STATES),
         rejection_reasons: reference_pricing_rejection_reasons(candidate[:rejection_reasons]),
         reference_price: line_group ? reference_pricing_line_component_snapshot(
@@ -807,6 +871,188 @@ module Receipts::Processing::Runs
       }.compact
     end
 
+    def reference_pricing_destination_snapshot(value, index_type:)
+      destination = normalized_hash(value)
+      return {} if destination.blank?
+
+      page_index = bounded_non_negative_integer(
+        destination[:page_index],
+        maximum: MAX_REFERENCE_PRICING_PAGE_INDEX
+      )
+      name_line_index = bounded_non_negative_integer(
+        destination[:name_line_index],
+        maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+      )
+      reference_line_index = bounded_non_negative_integer(
+        destination[:reference_line_index],
+        maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+      )
+      purchased_line_index = bounded_non_negative_integer(
+        destination[:purchased_quantity_line_index],
+        maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+      )
+      normalized_name_grapheme_length = bounded_non_negative_integer(
+        destination[:normalized_name_grapheme_length],
+        maximum: MAX_REFERENCE_PRICING_DESTINATION_GRAPHEMES
+      )
+      evidence = reference_pricing_destination_evidence_snapshot(
+        destination[:evidence],
+        index_type:
+      )
+      snapshot = {
+        contract_version: enum_string(
+          destination[:contract_version],
+          REFERENCE_PRICING_DESTINATION_CONTRACTS
+        ),
+        kind: enum_string(destination[:kind], REFERENCE_PRICING_DESTINATION_KINDS),
+        identity: bounded_string(
+          destination[:identity],
+          max_bytes: REFERENCE_PRICING_DESTINATION_ID_MAX_BYTES,
+          pattern: /\Aazure_line_group_destination_p\d+_name_l\d+_s\d+_e\d+_ref_l\d+_qty_l\d+\z/
+        ),
+        page_index:,
+        name_line_index:,
+        reference_line_index:,
+        purchased_quantity_line_index: purchased_line_index,
+        normalized_name_grapheme_length:,
+        evidence: evidence.presence
+      }.compact
+      return {} unless valid_reference_pricing_destination_snapshot?(snapshot, index_type:)
+
+      snapshot
+    end
+
+    def reference_pricing_destination_evidence_snapshot(value, index_type:)
+      evidence = normalized_hash(value)
+      return {} if evidence.blank?
+
+      span_start = bounded_non_negative_integer(
+        evidence[:provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        evidence[:provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      valid_span = span_start && span_end && span_end > span_start
+
+      {
+        source_provider: enum_string(
+          evidence[:source_provider],
+          REFERENCE_PRICING_LINE_SOURCE_PROVIDERS
+        ),
+        source_field_path: bounded_string(
+          evidence[:source_field_path],
+          max_bytes: REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES,
+          pattern: REFERENCE_PRICING_LINE_SOURCE_FIELD_PATH_PATTERN
+        ),
+        page_index: bounded_non_negative_integer(
+          evidence[:page_index],
+          maximum: MAX_REFERENCE_PRICING_PAGE_INDEX
+        ),
+        line_index: bounded_non_negative_integer(
+          evidence[:line_index],
+          maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+        ),
+        string_index_type: enum_string(index_type, REFERENCE_PRICING_STRING_INDEX_TYPES),
+        provider_span_start: valid_span ? span_start : nil,
+        provider_span_end: valid_span ? span_end : nil,
+        word_spans: reference_pricing_word_spans_snapshot(
+          evidence[:word_spans],
+          maximum: MAX_REFERENCE_PRICING_DESTINATION_WORDS
+        ).presence,
+        tax_word_spans: reference_pricing_word_spans_snapshot(
+          evidence[:tax_word_spans],
+          exact_count: REFERENCE_PRICING_TAX_WORD_COUNT
+        ).presence
+      }.compact
+    end
+
+    def reference_pricing_word_spans_snapshot(value, maximum: nil, exact_count: nil)
+      spans = Array(value)
+      return [] if maximum && !spans.size.between?(1, maximum)
+      return [] if exact_count && spans.size != exact_count
+
+      snapshots = spans.filter_map do |span|
+        span = normalized_hash(span)
+        start_offset = bounded_non_negative_integer(
+          span[:provider_span_start],
+          maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+        )
+        end_offset = bounded_non_negative_integer(
+          span[:provider_span_end],
+          maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+        )
+        next unless start_offset && end_offset && end_offset > start_offset
+
+        {
+          source_field_path: bounded_string(
+            span[:source_field_path],
+            max_bytes: REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES,
+            pattern: REFERENCE_PRICING_WORD_SOURCE_FIELD_PATH_PATTERN
+          ),
+          word_index: bounded_non_negative_integer(
+            span[:word_index],
+            maximum: MAX_REFERENCE_PRICING_WORD_INDEX
+          ),
+          provider_span_start: start_offset,
+          provider_span_end: end_offset
+        }.compact
+      end
+      return [] unless snapshots.size == spans.size
+
+      snapshots
+    end
+
+    def valid_reference_pricing_destination_snapshot?(snapshot, index_type:)
+      page_index = snapshot[:page_index]
+      name_line_index = snapshot[:name_line_index]
+      reference_line_index = snapshot[:reference_line_index]
+      purchased_line_index = snapshot[:purchased_quantity_line_index]
+      evidence = snapshot[:evidence]
+      return false unless snapshot.keys.sort == %i[
+        contract_version evidence identity kind name_line_index normalized_name_grapheme_length
+        page_index purchased_quantity_line_index reference_line_index
+      ].sort
+      return false unless page_index == 0 && name_line_index == reference_line_index
+      return false unless purchased_line_index == reference_line_index + 1
+      return false unless snapshot[:normalized_name_grapheme_length].between?(3, MAX_REFERENCE_PRICING_DESTINATION_GRAPHEMES)
+      return false unless snapshot[:identity] ==
+        "azure_line_group_destination_p#{page_index}_name_l#{name_line_index}_" \
+          "s#{evidence[:provider_span_start]}_e#{evidence[:provider_span_end]}_" \
+          "ref_l#{reference_line_index}_qty_l#{purchased_line_index}"
+      return false unless evidence[:source_provider] == "azure_line_group"
+      return false unless evidence[:source_field_path] == "pages[#{page_index}].lines[#{name_line_index}]"
+      return false unless evidence[:page_index] == page_index && evidence[:line_index] == name_line_index
+      return false unless evidence[:string_index_type] == index_type.to_s
+      return false unless exact_reference_pricing_word_coverage?(
+        evidence[:word_spans],
+        span_start: evidence[:provider_span_start],
+        span_end: evidence[:provider_span_end]
+      )
+
+      ordered_reference_pricing_word_spans?(evidence[:tax_word_spans])
+    rescue ArgumentError, KeyError, NoMethodError, TypeError
+      false
+    end
+
+    def exact_reference_pricing_word_coverage?(spans, span_start:, span_end:)
+      spans = Array(spans)
+      spans.present? && spans.first[:provider_span_start] == span_start &&
+        spans.last[:provider_span_end] == span_end &&
+        spans.each_cons(2).all? do |left, right|
+          left[:provider_span_end] == right[:provider_span_start]
+        end && ordered_reference_pricing_word_spans?(spans)
+    end
+
+    def ordered_reference_pricing_word_spans?(spans)
+      spans = Array(spans)
+      spans.present? && spans.each_cons(2).all? do |left, right|
+        left[:word_index] < right[:word_index] &&
+          left[:provider_span_end] <= right[:provider_span_start]
+      end
+    end
+
     def valid_line_group_candidate_snapshot?(snapshot)
       page_index = snapshot[:page_index]
       reference_line_index = snapshot[:reference_line_index]
@@ -819,6 +1065,7 @@ module Receipts::Processing::Runs
         "azure_line_group_p#{page_index}_l#{reference_line_index}_l#{purchased_line_index}_reference_pricing"
       return false unless snapshot[:validation_state] == "valid" && snapshot[:rejection_reasons] == []
       return false unless %w[gross net].include?(snapshot[:reference_price_tax_inclusion])
+      return false unless valid_optional_line_group_destination?(snapshot, index_type:)
 
       expected_paths = {
         reference_price: "pages[#{page_index}].lines[#{reference_line_index}]",
@@ -833,6 +1080,28 @@ module Receipts::Processing::Runs
         expected_path: expected_paths.fetch(:reference_price),
         index_type:
       )
+    end
+
+    def valid_optional_line_group_destination?(snapshot, index_type:)
+      destination = snapshot[:destination_item_identity]
+      return true if destination.nil?
+      return false unless snapshot[:provider_model_id] == "prebuilt-receipt"
+      return false unless snapshot[:provider_api_version] == "2024-11-30"
+      return false unless snapshot[:validation_contract_version] == "azure_line_group_v1"
+      return false unless snapshot[:analysis_profile_country_code] == "JPN"
+
+      block_start = snapshot[:block_provider_span_start]
+      block_end = snapshot[:block_provider_span_end]
+      return false unless block_start.is_a?(Integer) && block_end.is_a?(Integer) && block_end > block_start
+      return false unless destination[:reference_line_index] == snapshot[:reference_line_index]
+      return false unless destination[:purchased_quantity_line_index] == snapshot[:purchased_quantity_line_index]
+
+      tax_evidence = snapshot[:tax_inclusion_evidence]
+      tax_words = destination.dig(:evidence, :tax_word_spans)
+      tax_evidence.is_a?(Hash) && Array(tax_words).size == REFERENCE_PRICING_TAX_WORD_COUNT &&
+        tax_words.first[:provider_span_start] == tax_evidence[:provider_span_start] &&
+        tax_words.last[:provider_span_end] == tax_evidence[:provider_span_end] &&
+        destination.dig(:evidence, :string_index_type) == index_type
     end
 
     def valid_line_group_evidence?(evidence, expected_path:, index_type:)

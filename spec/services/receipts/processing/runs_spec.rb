@@ -510,6 +510,49 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
+    it 'typed adoption proposalをretry snapshotへexactにコピーして再sanitizeする' do
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt:,
+        ocr_result_snapshot: snapshot
+      )
+      retry_run = create(
+        :receipt_analysis_run,
+        receipt:,
+        parent_run: parent_run,
+        attempt_number: 2
+      )
+
+      described_class.copy_retry_snapshots(retry_run, parent_run:, include_ocr: true)
+
+      aggregate_failures do
+        expect(retry_run.reload.ocr_result_snapshot.dig('adoption_proposals', 'reference_pricing')).to eq(
+          snapshot.dig('adoption_proposals', 'reference_pricing')
+        )
+        expect(retry_run.ocr_result_snapshot['schema_version']).to eq('receipt_analysis_run_ocr_result_v1')
+      end
+    end
+
+    it 'typed adoption proposalをJSONB round-trip後もcanonical checksumでrehydrateする' do
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      stored_run = create(:receipt_analysis_run, receipt:, ocr_result_snapshot: snapshot)
+
+      persisted_snapshot = ReceiptAnalysisRun.find(stored_run.id).ocr_result_snapshot
+      rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(
+        persisted_snapshot
+      )
+
+      expect(rehydrated.dig(:adoption_proposals, 'reference_pricing')).to eq(
+        snapshot.dig('adoption_proposals', 'reference_pricing')
+      )
+    end
+
     it 'snapshot上限の設定可能最大値はreceipt_items_per_receiptの最大override値と同期する' do
       max_receipt_items = UserLimits.definition_for('receipt_items_per_receipt').max
 
