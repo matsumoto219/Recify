@@ -14,6 +14,14 @@ module GeneratedReceipts
       SAFE_CANDIDATE_KEYS = Validator::CANDIDATE_KEYS.freeze
       SAFE_ASSOCIATION_KEYS = Validator::ASSOCIATION_KEYS.freeze
       CANDIDATE_LIMIT = Validator::MAX_COLLECTION_ITEMS
+      SENSITIVE_CANDIDATE_VALUE_KEYS = %w[
+        reference_price_amount
+        reference_quantity
+        purchased_quantity
+        projected_line_total
+        printed_line_total
+      ].freeze
+      REDACTED_DIFF_VALUE = "[redacted]".freeze
       GENERIC_INPUT_DIFF = {
         path: "comparison_input",
         expected: "bounded candidate summary and association map",
@@ -216,7 +224,8 @@ module GeneratedReceipts
               diffs,
               path: "candidate_summary[#{index}].#{key}",
               expected: expected[index][key],
-              actual: actual[index][key]
+              actual: actual[index][key],
+              redact_values: SENSITIVE_CANDIDATE_VALUE_KEYS.include?(key)
             )
           end
         end
@@ -245,11 +254,13 @@ module GeneratedReceipts
         end
       end
 
-      def add_diff(diffs, path:, expected:, actual:)
+      def add_diff(diffs, path:, expected:, actual:, redact_values: false)
+        expected_value = redact_values ? REDACTED_DIFF_VALUE : safe_diff_value(expected)
+        actual_value = redact_values ? REDACTED_DIFF_VALUE : safe_diff_value(actual)
         diffs << {
           path: path,
-          expected: safe_diff_value(expected),
-          actual: safe_diff_value(actual),
+          expected: expected_value,
+          actual: actual_value,
           severity: "FAIL"
         }
       end

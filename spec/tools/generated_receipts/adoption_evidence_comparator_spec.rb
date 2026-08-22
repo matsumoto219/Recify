@@ -105,6 +105,40 @@ RSpec.describe GeneratedReceipts::AdoptionEvidence::Comparator do
     end
   end
 
+  it "redacts amount and quantity values from candidate drift diffs" do
+    actual = candidate_summary.merge(
+      "reference_price_amount" => "121",
+      "reference_quantity" => "125",
+      "purchased_quantity" => "375",
+      "projected_line_total" => 363,
+      "printed_line_total" => "363"
+    )
+
+    result = described_class.call(
+      evidence_case,
+      candidate_summary: [ actual ],
+      associations: [ association ]
+    )
+    value_paths = %w[
+      reference_price_amount
+      reference_quantity
+      purchased_quantity
+      projected_line_total
+      printed_line_total
+    ].map { |field| "candidate_summary[0].#{field}" }
+    value_diffs = result.diffs.select { |diff| value_paths.include?(diff.fetch(:path)) }
+    serialized = JSON.generate(value_diffs)
+
+    aggregate_failures do
+      expect(result.status).to eq("FAIL")
+      expect(value_diffs.map { |diff| diff.fetch(:path) }).to match_array(value_paths)
+      expect(value_diffs).to all(include(expected: "[redacted]", actual: "[redacted]"))
+      %w[120 121 100 125 250 375 300 363].each do |sensitive_value|
+        expect(serialized).not_to include(sensitive_value)
+      end
+    end
+  end
+
   it "does not count a candidate with a provider printed total as no-total eligible" do
     actual = candidate_summary.merge("printed_line_total" => 300)
 
