@@ -1,0 +1,64 @@
+{
+  "case_id": "g128_a1_multiple_reference_conflict",
+  "intent": "Two different reference bases for one item remain ambiguous and are not auto-adopted.",
+  "expected": {},
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "custom_lines": [
+      "サンプル計量レシート",
+      "領収書",
+      "------------------------",
+      "検証品A06",
+      "通常 税込 ¥251/100g",
+      "会員 税込 ¥239/100g",
+      "計量 300g",
+      "------------------------",
+      "ご利用ありがとうございました"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "ground_truth": {
+    "defined_before_image_generation": true,
+    "items": [
+      {
+        "item_index": 0,
+        "evidence_class": "reference_pricing",
+        "printed_line_total": null,
+        "existing_authority": false,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": null,
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": false,
+        "discount_conflict": false,
+        "deterministic_projection": true,
+        "projection_within_bounds": true,
+        "projected_gross_line_total": 753,
+        "adoption_outcome": "review",
+        "adoption_blocking_reasons": ["candidate_not_valid"]
+      }
+    ],
+    "expected_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "ambiguous",
+        "rejection_reasons": ["ambiguous_reference_expression"],
+        "reference_price_amount": "251",
+        "reference_quantity": "100",
+        "reference_unit_code": "gram",
+        "purchased_quantity": "300",
+        "purchased_unit_code": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": 753,
+        "printed_line_total": null,
+        "rounding_matches": []
+      }
+    ],
+    "expected_associations": [
+      { "candidate_index": 0, "item_index": 0, "evidence_scope": "same_item" }
+    ]
+  }
+}

@@ -12,6 +12,8 @@ module Analysis
         candidates = normalize_candidates(normalized_ocr_result)
         lines = normalized_lines(normalized_ocr_result)
         case_preserved_lines = normalized_case_preserved_lines(normalized_ocr_result)
+        lines = mask_azure_line_group_lines(lines, candidates)
+        case_preserved_lines = mask_azure_line_group_lines(case_preserved_lines, candidates)
         normalized_ai_result = normalize_ai_result(ai_result)
         skipped_negative_items = []
         ai_receipt_attributes = normalized_ai_result[:receipt_attributes]
@@ -48,6 +50,7 @@ module Analysis
           receipt_payments_attributes,
           receipt_tax_details_attributes,
           source_evidence_index,
+          excluded_line_indexes: azure_line_group_line_indexes(candidates),
           invalid_review_reasons: invalid_adjustment_review_reasons
         )
         ownership_result = ReceiptFactOwnershipResolver.call(
@@ -292,26 +295,37 @@ module Analysis
       def build_receipt_items_attributes(candidates, lines, ai_items, ai_name_completion_enabled: nil, skipped_negative_items: [])
         candidate_items = Array(candidates[:items])
         normalized_ai_items = normalize_items(ai_items)
+        applicable_ai_items = if candidate_items.empty? && azure_line_group_line_indexes(candidates).present?
+          []
+        else
+          normalized_ai_items
+        end
 
         source_items =
           if candidate_items.present?
-            if normalized_ai_items.present?
-              merge_items(candidate_items, normalized_ai_items, lines:, ai_name_completion_enabled: ai_name_completion_enabled)
+            if applicable_ai_items.present?
+              merge_items(candidate_items, applicable_ai_items, lines:, ai_name_completion_enabled: ai_name_completion_enabled)
             else
               candidate_items
             end
           else
-            fallback_items = build_items_from_lines(lines)
+            fallback_lines = lines_without_azure_line_group(lines, candidates)
+            fallback_items = build_items_from_lines(fallback_lines)
 
-            if normalized_ai_items.present?
-              merge_items(fallback_items, normalized_ai_items, lines:, ai_name_completion_enabled: ai_name_completion_enabled)
+            if applicable_ai_items.present?
+              merge_items(
+                fallback_items,
+                applicable_ai_items,
+                lines: fallback_lines,
+                ai_name_completion_enabled: ai_name_completion_enabled
+              )
             else
               fallback_items
             end
           end
         source_items = repair_amount_only_split_items(source_items, lines)
 
-        ai_items_present = normalized_ai_items.present?
+        ai_items_present = applicable_ai_items.present?
         # product_code は保存/permit済みだがUI入力欄と検索では未活用。quantity_unit_code は編集/表示で利用する。
         source_items.each_with_index.filter_map do |item, index|
           normalized_item =
@@ -429,6 +443,35 @@ module Analysis
         end
       end
 
+      def lines_without_azure_line_group(lines, candidates)
+        excluded_indexes = azure_line_group_line_indexes(candidates)
+
+        Array(lines).each_with_index.filter_map do |line, index|
+          line unless excluded_indexes.include?(index)
+        end
+      end
+
+      def mask_azure_line_group_lines(lines, candidates)
+        excluded_indexes = azure_line_group_line_indexes(candidates)
+
+        Array(lines).each_with_index.map do |line, index|
+          excluded_indexes.include?(index) ? "" : line
+        end
+      end
+
+      def azure_line_group_line_indexes(candidates)
+        Array(candidates[:reference_pricing_candidates]).filter_map do |candidate|
+          normalized = candidate.respond_to?(:with_indifferent_access) ? candidate.with_indifferent_access : {}
+          next unless normalized[:source_kind] == "azure_line_group"
+
+          reference_index = normalized[:reference_line_index]
+          purchased_index = normalized[:purchased_quantity_line_index]
+          next unless reference_index.is_a?(Integer) && purchased_index == reference_index + 1
+
+          [ reference_index, purchased_index ]
+        end.flatten.uniq
+      end
+
       def build_receipt_adjustments_attributes(
         ai_adjustments,
         ocr_adjustment_candidates,
@@ -438,8 +481,10 @@ module Analysis
         receipt_payments = [],
         receipt_tax_details = [],
         source_evidence_index = [],
+        excluded_line_indexes: [],
         invalid_review_reasons: nil
       )
+        excluded_line_indexes = Array(excluded_line_indexes).select { |index| index.is_a?(Integer) && index >= 0 }
         adjustment_proposals(
           ai_adjustments,
           ocr_adjustment_candidates,
@@ -455,6 +500,8 @@ module Analysis
           next unless amount.positive?
 
           source_line_index = normalize_non_negative_integer(normalized[:source_line_index])
+          next if excluded_line_indexes.include?(source_line_index)
+
           source_text = adjustment_source_text_for(normalized, source_line_index, lines)
           validation = AdjustmentEvidenceValidator.call(
             proposal: normalized.merge(amount: amount, source_line_index: source_line_index),

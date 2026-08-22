@@ -301,7 +301,19 @@ module ReceiptAnalysisProfiles
     OCR_TAX_AMOUNT_DESCRIPTION_PATTERN = /消費税|税額|tax/i.freeze
     OCR_TAX_CONTEXT_LABEL_PATTERN = /小\s*計|対象|消費税|税額|内税|外税|税抜|税込|tax/i.freeze
     OCR_ITEM_DISCOUNT_KEYWORD_PATTERN = /値引|割引|discount/i.freeze
+    OCR_POST_DISCOUNT_PRICE_BASIS_PATTERN = /(?:値引|割引)(?:き)?(?:後|済み?)|discounted/i.freeze
+    OCR_REFERENCE_PRICING_LINE_GROUP_PURCHASED_QUANTITY_LINE_PATTERN = /\A[ \t]*計量[ \t:：]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})[ \t]*\z/u.freeze
+    OCR_REFERENCE_PRICING_LINE_GROUP_PACKAGE_OR_UNCERTAIN_PATTERN = /(?:内容量|正味量|入(?:り)?|詰|パック|セット|約|およそ|前後|程度|目安|(?:く|ぐ)らい|以上|以下|未満|超(?:過)?|概算|暫定|予定|参考|推定|見込(?:み)?|仮(?:値|価格)|試算|通常|希望|定価|メーカー希望|[〜～~±]|プラスマイナス|風袋|総重量|tare|gross\s*weight|approx(?:imately)?|about|at\s+least|at\s+most|up\s+to|estimated?|provisional|tentative)/i.freeze
+    OCR_REFERENCE_PRICING_LINE_GROUP_DISCOUNT_CONFLICT_PATTERN = /(?:[0-9]+(?:\.[0-9]+)?[ \t]*%[ \t]*(?:off|引(?:き)?|割)|coupon|クーポン|値下げ|割戻)/i.freeze
+    OCR_REFERENCE_PRICING_LINE_GROUP_SUMMARY_CONTEXT_PATTERN = /(?:総合計|商品小計|小計|現計|grand\s+total|subtotal|total)/i.freeze
+    OCR_REFERENCE_PRICING_LINE_GROUP_IDENTIFIER_CONFLICT_PATTERN = /(?:非課税|不課税|免税|無税|課税対象外|税込対象外|対象外|税込|内税|税別|外税|税抜|非税込|返金|返品|返却|払(?:い)?戻し?|取消|取り消し|void|refund|return|cancel|taxfree|exempt)/i.freeze
+    OCR_REFERENCE_PRICING_LINE_GROUP_IDENTIFIER_PATTERN = /\A(?=.*\p{Han})(?=.*[A-Za-z])(?=.*\p{N})\p{L}[\p{L}\p{N}_-]*\z/u.freeze
+    OCR_REFERENCE_PRICING_TAX_NEGATION_PREFIX_PATTERN = /(?:非|未|不|not)[\p{Zs}\t\r\n\p{P}]*\z/iu.freeze
+    OCR_REFERENCE_PRICING_PACKAGE_QUANTITY_CONTEXT_BEFORE_PATTERN = /(?:約|およそ|[x×@＠]|[-–—〜～~]|gross|tare|風袋|総重量)\s*\z/i.freeze
+    OCR_REFERENCE_PRICING_PACKAGE_QUANTITY_CONTEXT_AFTER_PATTERN = /\A\s*(?:入|入り|詰|パック|[x×@＠]|gross|tare|風袋|総重量)/i.freeze
     OCR_TOTAL_AMOUNT_LINE_PATTERN = /合計|小計|total|税込|現計/i.freeze
+    OCR_STRICT_RECEIPT_SUMMARY_TOTAL_LINE_PATTERN = /\A(?:総合計|合計|現計|grand\s+total|total)[ \t]*[:：]?[ \t]*(?:[¥￥][ \t]*)?[0-9０-９][0-9０-９,，]*(?:[ \t]*円)?[ \t]*\z/i.freeze
+    OCR_STRICT_RECEIPT_SUBTOTAL_LINE_PATTERN = /\A(?:商品小計|小計|subtotal)[ \t]*[:：]?[ \t]*(?:[¥￥][ \t]*)?[0-9０-９][0-9０-９,，]*(?:[ \t]*円)?[ \t]*\z/i.freeze
     OCR_SUBTOTAL_AMOUNT_LINE_PATTERN = /小計|subtotal|税抜/i.freeze
     OCR_CARD_SLIP_CONTEXT_PATTERN = /クレジットカード売上票|カード会社|お支払方法|支払方法|payment method/i.freeze
     OCR_PAYMENT_RESULT_CONTEXT_PATTERN = /支払|決済|payment/i.freeze
@@ -799,8 +811,56 @@ module ReceiptAnalysisProfiles
         OCR_ITEM_DISCOUNT_KEYWORD_PATTERN
       end
 
+      def ocr_post_discount_price_basis_pattern
+        OCR_POST_DISCOUNT_PRICE_BASIS_PATTERN
+      end
+
+      def ocr_reference_pricing_line_group_purchased_quantity_line_pattern
+        OCR_REFERENCE_PRICING_LINE_GROUP_PURCHASED_QUANTITY_LINE_PATTERN
+      end
+
+      def ocr_reference_pricing_line_group_package_or_uncertain_pattern
+        OCR_REFERENCE_PRICING_LINE_GROUP_PACKAGE_OR_UNCERTAIN_PATTERN
+      end
+
+      def ocr_reference_pricing_line_group_discount_conflict_pattern
+        OCR_REFERENCE_PRICING_LINE_GROUP_DISCOUNT_CONFLICT_PATTERN
+      end
+
+      def ocr_reference_pricing_line_group_summary_context_pattern
+        OCR_REFERENCE_PRICING_LINE_GROUP_SUMMARY_CONTEXT_PATTERN
+      end
+
+      def ocr_reference_pricing_line_group_identifier_conflict_pattern
+        OCR_REFERENCE_PRICING_LINE_GROUP_IDENTIFIER_CONFLICT_PATTERN
+      end
+
+      def ocr_reference_pricing_line_group_identifier_pattern
+        OCR_REFERENCE_PRICING_LINE_GROUP_IDENTIFIER_PATTERN
+      end
+
+      def ocr_reference_pricing_tax_negation_prefix_pattern
+        OCR_REFERENCE_PRICING_TAX_NEGATION_PREFIX_PATTERN
+      end
+
+      def ocr_reference_pricing_package_quantity_context_before_pattern
+        OCR_REFERENCE_PRICING_PACKAGE_QUANTITY_CONTEXT_BEFORE_PATTERN
+      end
+
+      def ocr_reference_pricing_package_quantity_context_after_pattern
+        OCR_REFERENCE_PRICING_PACKAGE_QUANTITY_CONTEXT_AFTER_PATTERN
+      end
+
       def ocr_total_amount_line_pattern
         OCR_TOTAL_AMOUNT_LINE_PATTERN
+      end
+
+      def ocr_strict_receipt_summary_total_line_pattern
+        OCR_STRICT_RECEIPT_SUMMARY_TOTAL_LINE_PATTERN
+      end
+
+      def ocr_strict_receipt_subtotal_line_pattern
+        OCR_STRICT_RECEIPT_SUBTOTAL_LINE_PATTERN
       end
 
       def ocr_subtotal_amount_line_pattern

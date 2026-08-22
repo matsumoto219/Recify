@@ -328,6 +328,215 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     end
   end
 
+  it 'Azure line-group candidateをItems identityと混在させず構造evidenceだけ保存する' do
+    line_evidence = {
+      source_provider: 'azure_line_group',
+      source_field_path: 'pages[0].lines[1]',
+      provider_span_start: 19,
+      provider_span_end: 22,
+      string_index_type: 'textElements',
+      item_index: 0,
+      source_text: '保存しないline OCR全文',
+      polygon: [ 20, 50, 122, 50, 122, 66, 20, 66 ],
+      provider_raw_response: { 'private' => '保存しないprovider payload' }
+    }
+    candidate = {
+      candidate_id: 'azure_line_group_p0_l1_l2_reference_pricing',
+      source_kind: 'azure_line_group',
+      page_index: 0,
+      reference_line_index: 1,
+      purchased_quantity_line_index: 2,
+      string_index_type: 'textElements',
+      item_index: 0,
+      validation_state: 'valid',
+      rejection_reasons: [],
+      reference_price: { amount: '120', evidence: line_evidence },
+      reference_quantity: {
+        amount: '1',
+        unit_code: 'liter',
+        unit_status: 'known',
+        origin: 'explicit',
+        evidence: line_evidence.merge(provider_span_start: 24, provider_span_end: 27)
+      },
+      purchased_quantity: {
+        amount: '2.5',
+        unit_code: 'liter',
+        unit_status: 'known',
+        evidence: line_evidence.merge(
+          source_field_path: 'pages[0].lines[2]',
+          provider_span_start: 31,
+          provider_span_end: 36
+        )
+      },
+      reference_price_tax_inclusion: 'gross',
+      tax_inclusion_evidence: line_evidence.merge(provider_span_start: 16, provider_span_end: 18),
+      printed_line_total: nil,
+      summary_total_corroboration: {
+        exact_amount: { numerator: '300', denominator: '1' },
+        projected_amount: 300,
+        summary_total: '300',
+        rounding_matches: %w[floor half_up ceil]
+      },
+      raw_text: '保存しないcandidate OCR全文',
+      line_content: '保存しないline content',
+      word_content: '保存しないword content',
+      full_page_content: '保存しないfull page content',
+      provider_raw_response: '保存しないprovider payload',
+      private_filename: '/private/path/receipt.png',
+      manifest_hash: '保存しないprivate hash'
+    }
+
+    snapshot = described_class.ocr_result_snapshot(
+      success: true,
+      candidates: { items: [], reference_pricing_candidates: [ candidate ] }
+    )
+    stored = snapshot.dig('candidates', 'reference_pricing_candidates', 0)
+
+    aggregate_failures do
+      expect(snapshot.dig('candidates', 'items')).to eq([])
+      expect(stored).to include(
+        'candidate_id' => 'azure_line_group_p0_l1_l2_reference_pricing',
+        'source_kind' => 'azure_line_group',
+        'page_index' => 0,
+        'reference_line_index' => 1,
+        'purchased_quantity_line_index' => 2,
+        'string_index_type' => 'textElements',
+        'validation_state' => 'valid',
+        'rejection_reasons' => [],
+        'reference_price_tax_inclusion' => 'gross'
+      )
+      expect(stored).not_to have_key('item_index')
+      expect(stored.dig('reference_price', 'evidence')).to eq(
+        'source_provider' => 'azure_line_group',
+        'source_field_path' => 'pages[0].lines[1]',
+        'provider_span_start' => 19,
+        'provider_span_end' => 22,
+        'string_index_type' => 'textElements'
+      )
+      expect(stored.dig('purchased_quantity', 'evidence', 'source_field_path')).to eq(
+        'pages[0].lines[2]'
+      )
+      expect(stored.dig('reference_price').keys).to eq([ 'evidence' ])
+      expect(stored.dig('reference_quantity').keys).to eq([ 'evidence' ])
+      expect(stored.dig('purchased_quantity').keys).to eq([ 'evidence' ])
+      expect(stored.dig('summary_total_corroboration')).to eq(
+        'state' => 'matched',
+        'rounding_matches' => %w[floor half_up ceil]
+      )
+      expect(snapshot.to_json).not_to include(
+        'documents[0].fields.Items',
+        'item_index',
+        '保存しない',
+        'source_text',
+        'raw_text',
+        'line_content',
+        'word_content',
+        'polygon',
+        'full_page_content',
+        'provider_raw_response',
+        'private_filename',
+        'manifest_hash',
+        '/private/path'
+      )
+    end
+  end
+
+  it 'Azure line-group candidateのItems path混入をsnapshotへ保存しない' do
+    snapshot = described_class.ocr_result_snapshot(
+      success: true,
+      candidates: {
+        reference_pricing_candidates: [
+          {
+            candidate_id: 'azure_line_group_p0_l1_l2_reference_pricing',
+            source_kind: 'azure_line_group',
+            page_index: 0,
+            reference_line_index: 1,
+            purchased_quantity_line_index: 2,
+            string_index_type: 'textElements',
+            validation_state: 'valid',
+            rejection_reasons: [],
+            reference_price: {
+              amount: '120',
+              evidence: {
+                source_provider: 'azure_line_group',
+                source_field_path: 'documents[0].fields.Items[0].Price',
+                item_index: 0,
+                provider_span_start: 19,
+                provider_span_end: 22,
+                string_index_type: 'textElements'
+              }
+            }
+          }
+        ]
+      }
+    )
+    expect(snapshot.dig('candidates', 'reference_pricing_candidates')).to eq([])
+    expect(snapshot.to_json).not_to include('documents[0].fields.Items')
+  end
+
+  it 'Azure line-group candidateのidentityとline pathが一致しなければ候補全体を除外する' do
+    base_evidence = {
+      source_provider: 'azure_line_group',
+      source_field_path: 'pages[0].lines[1]',
+      provider_span_start: 10,
+      provider_span_end: 12,
+      string_index_type: 'textElements'
+    }
+    candidate = {
+      candidate_id: 'azure_line_group_p0_l1_l2_reference_pricing',
+      source_kind: 'azure_line_group',
+      page_index: 0,
+      reference_line_index: 1,
+      purchased_quantity_line_index: 2,
+      string_index_type: 'textElements',
+      validation_state: 'valid',
+      rejection_reasons: [],
+      reference_price: { amount: '120', evidence: base_evidence },
+      reference_quantity: { amount: '1', evidence: base_evidence },
+      purchased_quantity: {
+        amount: '2.5',
+        evidence: base_evidence.merge(source_field_path: 'pages[0].lines[2]')
+      },
+      reference_price_tax_inclusion: 'gross',
+      tax_inclusion_evidence: base_evidence
+    }
+
+    mismatches = [
+      candidate.deep_merge(reference_price: { evidence: { source_field_path: 'pages[0].lines[9]' } }),
+      candidate.merge(purchased_quantity_line_index: 3),
+      candidate.merge(candidate_id: 'azure_line_group_p0_l8_l9_reference_pricing'),
+      candidate.deep_merge(purchased_quantity: { evidence: { string_index_type: 'utf16CodeUnit' } }),
+      candidate.merge(printed_line_total: { amount: '999', evidence: base_evidence }),
+      candidate.merge(
+        corroboration: {
+          exact_amount: { numerator: '999', denominator: '1' },
+          projected_amount: 999,
+          printed_line_total: '999',
+          rounding_matches: %w[floor]
+        }
+      ),
+      candidate.except(:reference_price_tax_inclusion),
+      candidate.merge(reference_price_tax_inclusion: 'unknown'),
+      candidate.deep_merge(
+        candidate_id: 'azure_line_group_p1_l1_l2_reference_pricing',
+        page_index: 1,
+        reference_price: { evidence: { source_field_path: 'pages[1].lines[1]' } },
+        reference_quantity: { evidence: { source_field_path: 'pages[1].lines[1]' } },
+        purchased_quantity: { evidence: { source_field_path: 'pages[1].lines[2]' } },
+        tax_inclusion_evidence: { source_field_path: 'pages[1].lines[1]' }
+      )
+    ]
+
+    mismatches.each do |mismatch|
+      snapshot = described_class.ocr_result_snapshot(
+        success: true,
+        candidates: { reference_pricing_candidates: [ mismatch ] }
+      )
+
+      expect(snapshot.dig('candidates', 'reference_pricing_candidates')).to eq([])
+    end
+  end
+
   it 'reference pricing candidateの未知enumと不正型をfail closedに除外する' do
     snapshot = described_class.ocr_result_snapshot(
       success: true,

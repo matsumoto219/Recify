@@ -1,0 +1,65 @@
+{
+  "case_id": "g134_a1_missing_purchased_quantity",
+  "intent": "A complete reference basis without purchased quantity remains missing evidence.",
+  "expected": {},
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "custom_lines": [
+      "サンプル計量レシート",
+      "領収書",
+      "------------------------",
+      "検証品A12 税込 ¥307/100g",
+      "------------------------",
+      "ご利用ありがとうございました"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "ground_truth": {
+    "defined_before_image_generation": true,
+    "items": [
+      {
+        "item_index": 0,
+        "evidence_class": "reference_pricing",
+        "printed_line_total": null,
+        "existing_authority": false,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": null,
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": false,
+        "discount_conflict": false,
+        "deterministic_projection": false,
+        "projection_within_bounds": true,
+        "projected_gross_line_total": null,
+        "adoption_outcome": "review",
+        "adoption_blocking_reasons": [
+          "candidate_not_valid",
+          "purchased_components_incomplete",
+          "deterministic_projection_unavailable"
+        ]
+      }
+    ],
+    "expected_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "missing",
+        "rejection_reasons": ["missing_purchased_quantity", "missing_purchased_unit"],
+        "reference_price_amount": "307",
+        "reference_quantity": "100",
+        "reference_unit_code": "gram",
+        "purchased_quantity": null,
+        "purchased_unit_code": null,
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": null,
+        "printed_line_total": null,
+        "rounding_matches": []
+      }
+    ],
+    "expected_associations": [
+      { "candidate_index": 0, "item_index": 0, "evidence_scope": "same_item" }
+    ]
+  }
+}

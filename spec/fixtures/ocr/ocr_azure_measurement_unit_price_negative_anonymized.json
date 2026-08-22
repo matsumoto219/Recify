@@ -1,0 +1,728 @@
+{
+  "fixture_type": "synthetic_azure_measurement_unit_price",
+  "model_id": "prebuilt-receipt",
+  "api_version": "2024-11-30",
+  "synthetic": true,
+  "cases": [
+    {
+      "case_id": "count_each",
+      "classification": "count_unit_price",
+      "item": {
+        "content": "SYNTH-COUNT-1\n20\n2 個\n40",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 23
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-COUNT-1",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 13
+              }
+            ],
+            "valueString": "SYNTH-COUNT-1"
+          },
+          "Price": {
+            "content": "20",
+            "spans": [
+              {
+                "offset": 14,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 20,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "2 個",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueNumber": 2
+          },
+          "QuantityUnit": {
+            "content": "2 個",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueString": "個"
+          },
+          "TotalPrice": {
+            "content": "40",
+            "spans": [
+              {
+                "offset": 21,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 40,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case_id": "count_item",
+      "classification": "count_unit_price",
+      "item": {
+        "content": "SYNTH-COUNT-2\n21\n3 点\n63",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 23
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-COUNT-2",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 13
+              }
+            ],
+            "valueString": "SYNTH-COUNT-2"
+          },
+          "Price": {
+            "content": "21",
+            "spans": [
+              {
+                "offset": 14,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 21,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "3 点",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueNumber": 3
+          },
+          "QuantityUnit": {
+            "content": "3 点",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueString": "点"
+          },
+          "TotalPrice": {
+            "content": "63",
+            "spans": [
+              {
+                "offset": 21,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 63,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case_id": "count_piece",
+      "classification": "count_unit_price",
+      "item": {
+        "content": "SYNTH-COUNT-3\n22\n4 本\n88",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 23
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-COUNT-3",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 13
+              }
+            ],
+            "valueString": "SYNTH-COUNT-3"
+          },
+          "Price": {
+            "content": "22",
+            "spans": [
+              {
+                "offset": 14,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 22,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "4 本",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueNumber": 4
+          },
+          "QuantityUnit": {
+            "content": "4 本",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueString": "本"
+          },
+          "TotalPrice": {
+            "content": "88",
+            "spans": [
+              {
+                "offset": 21,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 88,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case_id": "count_bag",
+      "classification": "count_unit_price",
+      "item": {
+        "content": "SYNTH-COUNT-4\n23\n5 袋\n115",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 24
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-COUNT-4",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 13
+              }
+            ],
+            "valueString": "SYNTH-COUNT-4"
+          },
+          "Price": {
+            "content": "23",
+            "spans": [
+              {
+                "offset": 14,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 23,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "5 袋",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueNumber": 5
+          },
+          "QuantityUnit": {
+            "content": "5 袋",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueString": "袋"
+          },
+          "TotalPrice": {
+            "content": "115",
+            "spans": [
+              {
+                "offset": 21,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 115,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case_id": "count_sheet",
+      "classification": "count_unit_price",
+      "item": {
+        "content": "SYNTH-COUNT-5\n24\n6 枚\n144",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 24
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-COUNT-5",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 13
+              }
+            ],
+            "valueString": "SYNTH-COUNT-5"
+          },
+          "Price": {
+            "content": "24",
+            "spans": [
+              {
+                "offset": 14,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 24,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "6 枚",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueNumber": 6
+          },
+          "QuantityUnit": {
+            "content": "6 枚",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueString": "枚"
+          },
+          "TotalPrice": {
+            "content": "144",
+            "spans": [
+              {
+                "offset": 21,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 144,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case_id": "count_box",
+      "classification": "count_unit_price",
+      "item": {
+        "content": "SYNTH-COUNT-6\n25\n7 箱\n175",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 24
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-COUNT-6",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 13
+              }
+            ],
+            "valueString": "SYNTH-COUNT-6"
+          },
+          "Price": {
+            "content": "25",
+            "spans": [
+              {
+                "offset": 14,
+                "length": 2
+              }
+            ],
+            "valueCurrency": {
+              "amount": 25,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "7 箱",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueNumber": 7
+          },
+          "QuantityUnit": {
+            "content": "7 箱",
+            "spans": [
+              {
+                "offset": 17,
+                "length": 3
+              }
+            ],
+            "valueString": "箱"
+          },
+          "TotalPrice": {
+            "content": "175",
+            "spans": [
+              {
+                "offset": 21,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 175,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case_id": "package_capacity",
+      "classification": "package_content",
+      "item": {
+        "content": "SYNTH-PACKAGE-A 650ml入り\n0.4\n650 ml\n260",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 38
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-PACKAGE-A 650ml入り",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 23
+              }
+            ],
+            "valueString": "SYNTH-PACKAGE-A 650ml入り"
+          },
+          "Price": {
+            "content": "0.4",
+            "spans": [
+              {
+                "offset": 24,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 0.4,
+              "currencyCode": "JPY"
+            }
+          },
+        "Quantity": {
+          "content": "650 ml",
+          "spans": [
+            {
+              "offset": 28,
+              "length": 6
+            }
+          ],
+          "valueNumber": 650
+          },
+          "QuantityUnit": {
+            "content": "ml",
+          "spans": [
+            {
+              "offset": 32,
+              "length": 2
+              }
+            ],
+            "valueString": "ml"
+          },
+          "TotalPrice": {
+            "content": "260",
+          "spans": [
+            {
+              "offset": 35,
+              "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 260,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case_id": "package_count",
+      "classification": "package_content",
+      "item": {
+        "content": "SYNTH-PACKAGE-B 4個入\n210\n1 個\n210",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 31
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-PACKAGE-B 4個入",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 19
+              }
+            ],
+            "valueString": "SYNTH-PACKAGE-B 4個入"
+          },
+          "Price": {
+            "content": "210",
+            "spans": [
+              {
+                "offset": 20,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 210,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "1 個",
+            "spans": [
+              {
+                "offset": 24,
+                "length": 3
+              }
+            ],
+            "valueNumber": 1
+          },
+          "QuantityUnit": {
+            "content": "1 個",
+            "spans": [
+              {
+                "offset": 24,
+                "length": 3
+              }
+            ],
+            "valueString": "個"
+          },
+          "TotalPrice": {
+            "content": "210",
+            "spans": [
+              {
+                "offset": 28,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 210,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case_id": "package_multipack",
+      "classification": "package_content",
+      "item": {
+        "content": "SYNTH-PACKAGE-C 4袋 x 250g\n220\n1 袋\n220",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 37
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-PACKAGE-C 4袋 x 250g",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 25
+              }
+            ],
+            "valueString": "SYNTH-PACKAGE-C 4袋 x 250g"
+          },
+          "Price": {
+            "content": "220",
+            "spans": [
+              {
+                "offset": 26,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 220,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "1 袋",
+            "spans": [
+              {
+                "offset": 30,
+                "length": 3
+              }
+            ],
+            "valueNumber": 1
+          },
+          "QuantityUnit": {
+            "content": "1 袋",
+            "spans": [
+              {
+                "offset": 30,
+                "length": 3
+              }
+            ],
+            "valueString": "袋"
+          },
+          "TotalPrice": {
+            "content": "220",
+            "spans": [
+              {
+                "offset": 34,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 220,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case_id": "package_box",
+      "classification": "package_content",
+      "item": {
+        "content": "SYNTH-PACKAGE-D 24本入\n230\n1 箱\n230",
+        "spans": [
+          {
+            "offset": 0,
+            "length": 32
+          }
+        ],
+        "confidence": 0.99,
+        "valueObject": {
+          "Description": {
+            "content": "SYNTH-PACKAGE-D 24本入",
+            "spans": [
+              {
+                "offset": 0,
+                "length": 20
+              }
+            ],
+            "valueString": "SYNTH-PACKAGE-D 24本入"
+          },
+          "Price": {
+            "content": "230",
+            "spans": [
+              {
+                "offset": 21,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 230,
+              "currencyCode": "JPY"
+            }
+          },
+          "Quantity": {
+            "content": "1 箱",
+            "spans": [
+              {
+                "offset": 25,
+                "length": 3
+              }
+            ],
+            "valueNumber": 1
+          },
+          "QuantityUnit": {
+            "content": "1 箱",
+            "spans": [
+              {
+                "offset": 25,
+                "length": 3
+              }
+            ],
+            "valueString": "箱"
+          },
+          "TotalPrice": {
+            "content": "230",
+            "spans": [
+              {
+                "offset": 29,
+                "length": 3
+              }
+            ],
+            "valueCurrency": {
+              "amount": 230,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

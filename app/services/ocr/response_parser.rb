@@ -4,6 +4,26 @@ class Ocr::ResponseParser
   ADJUSTMENT_SIGNED_MONEY_PATTERN = /(?:\A|[\s　])(?:[▲△]|[\-−]\s*)[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?/.freeze
   ADJUSTMENT_AMOUNT_ONLY_PATTERN = /\A\s*[▲△\-−]?\s*[¥￥$€£]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?(?:円)?\s*\z/.freeze
   PAYMENT_QUERY_FIELD_NAME = "PaymentMethods"
+  MAX_REFERENCE_PRICING_PROVIDER_SPAN = 10_000_000
+  MAX_REFERENCE_PRICING_TOTAL_PAGES = 8
+  MAX_REFERENCE_PRICING_TOTAL_LINES = 150
+  MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES = 512
+  MAX_REFERENCE_PRICING_TOTAL_AMOUNT = 999_999_999_999
+  MAX_REFERENCE_PRICING_AUTHORITY_FIELD_NODES = 512
+  MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS = 100
+  MAX_REFERENCE_PRICING_AUTHORITY_HASH_ENTRIES = 100
+  MAX_REFERENCE_PRICING_AUTHORITY_FIELDS = 100
+  REFERENCE_PRICING_AUTHORITY_VALUE_KEYS = %w[
+    content
+    valueAddress
+    valueCountryRegion
+    valueCurrency
+    valueDate
+    valueNumber
+    valuePhoneNumber
+    valueString
+    valueTime
+  ].freeze
   POLLING_METRICS_KEY = Ocr::Client::POLLING_METRICS_KEY
   POLLING_METRIC_KEYS = %i[
     elapsed_ms
@@ -33,6 +53,38 @@ class Ocr::ResponseParser
     normalized_raw_text = normalize_text(raw_text)
     normalized_lines = normalized_lines(parsed_response)
     case_preserved_lines = case_preserved_lines(parsed_response)
+    structured_reference_pricing_candidates = Ocr::ResponseParser::ReferencePricingCandidateExtractor.call(
+      items: extract_fields(parsed_response).dig("Items", "valueArray"),
+      profile: profile,
+      projection: ->(**attributes) {
+        ReceiptAmountService.reference_item_extension_projection(**attributes)
+      }
+    )
+    line_group_reference_pricing_candidates = if structured_reference_pricing_candidates.empty?
+      Ocr::ResponseParser::ReferencePricingLineGroupExtractor.call(
+        analyze_result: extract_analyze_result(parsed_response),
+        profile: profile,
+        projection: ->(**attributes) {
+          ReceiptAmountService.reference_item_extension_projection(**attributes)
+        }
+      )
+    else
+      []
+    end
+    reference_pricing_candidates = if structured_reference_pricing_candidates.any?
+      structured_reference_pricing_candidates
+    else
+      line_group_reference_pricing_candidates
+    end
+    authority_response = response_without_reference_pricing_line_group_fields(
+      parsed_response,
+      reference_pricing_candidates
+    )
+    authority_lines = lines_without_reference_pricing_line_groups(
+      normalized_lines,
+      reference_pricing_candidates
+    )
+    authority_raw_text = authority_lines.reject(&:blank?).join("\n")
 
     {
       success: normalized_raw_text.present? || normalized_lines.any?,
@@ -40,38 +92,40 @@ class Ocr::ResponseParser
       lines: normalized_lines,
       case_preserved_lines: case_preserved_lines,
       candidates: {
-        store_name: extract_store_name(parsed_response, normalized_lines),
-        store_address: extract_store_address(parsed_response),                                                     # MerchantAddress は取得率にばらつきあり。取得値は住所として保存/表示する
-        store_address_components: extract_store_address_components(parsed_response),
-        store_phone_number: extract_store_phone_number(parsed_response),
+        store_name: extract_store_name(authority_response, authority_lines),
+        store_address: extract_store_address(authority_response),                                                   # MerchantAddress は取得率にばらつきあり。取得値は住所として保存/表示する
+        store_address_components: extract_store_address_components(authority_response),
+        store_phone_number: extract_store_phone_number(authority_response),
         purchased_at_text: Ocr::ResponseParser::PurchasedAtCandidateExtractor.call(
-          fields: extract_fields(parsed_response),
-          lines: normalized_lines,
+          fields: extract_fields(authority_response),
+          lines: authority_lines,
           profile: profile
         ),
-        total_amount: extract_total_amount(parsed_response, normalized_lines),
-        subtotal_amount: extract_subtotal_amount(parsed_response, normalized_lines),
-        tax_amount: extract_tax_amount(parsed_response, normalized_lines),
-        tax_rate: extract_tax_rate(parsed_response),
-        payment_method_text: extract_payment_method_text(parsed_response, normalized_raw_text, normalized_lines),
-        payment_candidates: extract_payment_candidates(parsed_response),
-        tip_amount: extract_tip_amount(parsed_response),                                                           # NOTE: Tip は日本レシートではほぼ存在せず、保存はされるが未使用に近い
-        currency_code: extract_currency_code(parsed_response),
-        country_region: extract_country_region(parsed_response),
-        receipt_type: extract_receipt_type(parsed_response),
-        payments: extract_payments(parsed_response),                                                               # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
-        tax_details: extract_tax_details(parsed_response, normalized_lines),
-        adjustment_candidates: extract_adjustment_candidates(parsed_response, normalized_lines),
-        reference_pricing_candidates: Ocr::ResponseParser::ReferencePricingCandidateExtractor.call(
-          items: extract_fields(parsed_response).dig("Items", "valueArray"),
-          profile: profile,
-          projection: ->(**attributes) {
-            ReceiptAmountService.reference_item_extension_projection(**attributes)
-          }
+        total_amount: extract_total_amount(
+          authority_response,
+          authority_lines,
+          reference_pricing_candidates:
         ),
-        items: extract_items(parsed_response, normalized_lines),
-        review_reasons: extract_review_reasons(parsed_response),
-        confidence_summary: extract_confidence_summary(parsed_response)
+        subtotal_amount: extract_subtotal_amount(
+          authority_response,
+          authority_lines,
+          reference_pricing_candidates:
+        ),
+        tax_amount: extract_tax_amount(authority_response, authority_lines),
+        tax_rate: extract_tax_rate(authority_response),
+        payment_method_text: extract_payment_method_text(authority_response, authority_raw_text, authority_lines),
+        payment_candidates: extract_payment_candidates(authority_response),
+        tip_amount: extract_tip_amount(authority_response),                                                         # NOTE: Tip は日本レシートではほぼ存在せず、保存はされるが未使用に近い
+        currency_code: extract_currency_code(authority_response),
+        country_region: extract_country_region(authority_response),
+        receipt_type: extract_receipt_type(authority_response),
+        payments: extract_payments(authority_response),                                                             # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
+        tax_details: extract_tax_details(authority_response, authority_lines),
+        adjustment_candidates: extract_adjustment_candidates(authority_response, authority_lines),
+        reference_pricing_candidates: reference_pricing_candidates,
+        items: extract_items(authority_response, authority_lines),
+        review_reasons: extract_review_reasons(authority_response),
+        confidence_summary: extract_confidence_summary(authority_response)
       },
       error_code: nil,
       meta: {
@@ -462,7 +516,185 @@ class Ocr::ResponseParser
     nil
   end
 
-  def extract_total_amount(parsed_response, lines)
+  def lines_without_reference_pricing_line_groups(lines, candidates)
+    source_lines = Array(lines)
+    excluded_indexes = Array(candidates).filter_map do |candidate|
+      next unless candidate.is_a?(Hash) && candidate[:source_kind] == "azure_line_group"
+
+      reference_index = candidate[:reference_line_index]
+      purchased_index = candidate[:purchased_quantity_line_index]
+      next unless reference_index.is_a?(Integer) && purchased_index == reference_index + 1
+      next unless reference_index >= 0 && purchased_index < source_lines.size
+
+      [ reference_index, purchased_index ]
+    end.flatten.uniq
+    return source_lines if excluded_indexes.empty?
+
+    source_lines.each_with_index.map do |line, index|
+      excluded_indexes.include?(index) ? "" : line
+    end
+  end
+
+  # A strict line-group candidate is diagnostic evidence only. Azure occasionally assigns
+  # receipt-level fields to the same glyphs, so those fields must prove ownership outside
+  # the candidate block before any receipt authority extractor can consume them.
+  def response_without_reference_pricing_line_group_fields(parsed_response, candidates)
+    block_ranges = reference_pricing_line_group_block_ranges(candidates)
+    return parsed_response if block_ranges.empty?
+
+    analyze_result = extract_analyze_result(parsed_response)
+    documents = analyze_result["documents"]
+    return parsed_response unless documents.is_a?(Array) && documents.size == 1
+
+    document = documents.sole
+    return response_with_reference_pricing_authority_fields(parsed_response, {}) unless document.is_a?(Hash)
+
+    fields = document["fields"]
+    return response_with_reference_pricing_authority_fields(parsed_response, {}) unless fields.is_a?(Hash)
+    return response_with_reference_pricing_authority_fields(parsed_response, {}) if
+      fields.size > MAX_REFERENCE_PRICING_AUTHORITY_FIELDS
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(
+      index_type: analyze_result["stringIndexType"]
+    )
+    content = analyze_result["content"]
+    return response_with_reference_pricing_authority_fields(parsed_response, fields.slice("Items")) if mapper.nil?
+    return response_with_reference_pricing_authority_fields(parsed_response, fields.slice("Items")) unless
+      content.is_a?(String) && content.valid_encoding?
+    if content.bytesize > Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
+      return response_with_reference_pricing_authority_fields(parsed_response, fields.slice("Items"))
+    end
+
+    content = content.dup.freeze
+    filtered_fields = fields.each_with_object({}) do |(field_name, field), filtered|
+      if field_name == "Items" || structured_authority_field_owned_outside_blocks?(
+        field,
+        content:,
+        mapper:,
+        block_ranges:
+      )
+        filtered[field_name] = field
+      end
+    end
+
+    response_with_reference_pricing_authority_fields(parsed_response, filtered_fields)
+  rescue EncodingError, ArgumentError, TypeError
+    response_with_reference_pricing_authority_fields(parsed_response, {})
+  end
+
+  def response_with_reference_pricing_authority_fields(parsed_response, fields)
+    analyze_result = parsed_response["analyzeResult"]
+    analyze_result = {} unless analyze_result.is_a?(Hash)
+    documents = analyze_result["documents"]
+    document = documents.is_a?(Array) && documents.size == 1 && documents.sole.is_a?(Hash) ? documents.sole : {}
+    filtered_document = document.merge("fields" => fields)
+    filtered_analyze_result = analyze_result.merge("documents" => [ filtered_document ])
+    parsed_response.merge("analyzeResult" => filtered_analyze_result, "fields" => {})
+  rescue NoMethodError, TypeError
+    { "analyzeResult" => { "documents" => [ { "fields" => {} } ] } }
+  end
+
+  def reference_pricing_line_group_block_ranges(candidates)
+    Array(candidates).filter_map do |candidate|
+      next unless candidate.is_a?(Hash) && candidate[:source_kind] == "azure_line_group"
+
+      range_start = candidate[:block_provider_span_start]
+      range_end = candidate[:block_provider_span_end]
+      next unless range_start.is_a?(Integer) && range_end.is_a?(Integer)
+      next unless range_start >= 0 && range_end > range_start
+      next if range_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN ||
+        range_end > MAX_REFERENCE_PRICING_PROVIDER_SPAN
+
+      [ range_start, range_end ]
+    end
+  end
+
+  def structured_authority_field_owned_outside_blocks?(field, content:, mapper:, block_ranges:)
+    return false unless field.is_a?(Hash)
+
+    stack = [ field ]
+    visited_nodes = 0
+    exact_span_found = false
+    until stack.empty?
+      node = stack.pop
+      visited_nodes += 1
+      return false if visited_nodes > MAX_REFERENCE_PRICING_AUTHORITY_FIELD_NODES
+
+      case node
+      when Hash
+        return false if node.size > MAX_REFERENCE_PRICING_AUTHORITY_HASH_ENTRIES
+
+        has_authority_value = REFERENCE_PRICING_AUTHORITY_VALUE_KEYS.any? { |key| node.key?(key) }
+        if node.key?("spans") || has_authority_value
+          span_range = exact_structured_authority_span(node, content:, mapper:)
+          return false if span_range.nil?
+          return false if block_ranges.any? do |block_start, block_end|
+            spans_overlap?(span_range.first, span_range.last, block_start, block_end)
+          end
+
+          exact_span_found = true if has_authority_value
+        end
+        children = []
+        node.each do |key, value|
+          next if key == "spans"
+          next unless value.is_a?(Hash) || value.is_a?(Array)
+
+          children << value
+        end
+        return false if stack.size + children.size + visited_nodes > MAX_REFERENCE_PRICING_AUTHORITY_FIELD_NODES
+
+        stack.concat(children)
+      when Array
+        return false if node.size > MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS
+        return false if stack.size + node.size + visited_nodes > MAX_REFERENCE_PRICING_AUTHORITY_FIELD_NODES
+
+        node.each do |value|
+          return false unless value.is_a?(Hash) || value.is_a?(Array)
+
+          stack << value
+        end
+      else
+        return false
+      end
+    end
+
+    exact_span_found
+  end
+
+  def exact_structured_authority_span(field, content:, mapper:)
+    field_content = field["content"]
+    spans = field["spans"]
+    return unless field_content.is_a?(String) && field_content.valid_encoding?
+    return if field_content.blank? || field_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+    return unless spans.is_a?(Array) && spans.size == 1 && spans.sole.is_a?(Hash)
+
+    span_start = spans.sole["offset"]
+    span_length = spans.sole["length"]
+    return unless span_start.is_a?(Integer) && span_length.is_a?(Integer)
+    return if span_start.negative? || span_length <= 0
+    return if span_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN ||
+      span_length > MAX_REFERENCE_PRICING_PROVIDER_SPAN - span_start
+    return unless mapper.length(field_content) == span_length
+    return unless mapper.slice(content, offset: span_start, length: span_length) == field_content
+
+    [ span_start, span_start + span_length ]
+  end
+
+  def spans_overlap?(left_start, left_end, right_start, right_end)
+    left_start < right_end && right_start < left_end
+  end
+
+  def extract_total_amount(parsed_response, lines, reference_pricing_candidates: [])
+    line_group_candidates = Array(reference_pricing_candidates).select do |candidate|
+      candidate[:source_kind] == "azure_line_group"
+    end
+    if line_group_candidates.any?
+      return line_group_summary_total(line_group_candidates)
+    end
+    if strict_summary_total_required?(parsed_response, reference_pricing_candidates)
+      return extract_strict_summary_total_from_response(parsed_response)
+    end
+
     fields = extract_fields(parsed_response)
     total_amount = fields.dig("Total", "valueCurrency", "amount") || fields.dig("Total", "valueNumber")
     line_total_amount = extract_total_amount_from_lines(lines)
@@ -474,6 +706,209 @@ class Ocr::ResponseParser
     end
 
     line_total_amount
+  end
+
+  def line_group_summary_total(candidates)
+    return unless candidates.one?
+
+    value = candidates.sole.dig(:summary_total_corroboration, :summary_total)
+    ReceiptAmountService.parse_amount_or_nil(value)&.to_i
+  rescue NoMethodError, TypeError
+    nil
+  end
+
+  def strict_summary_total_required?(parsed_response, candidates)
+    candidates = Array(candidates)
+    return false if candidates.empty?
+
+    total_field = extract_fields(parsed_response)["Total"]
+    return true unless total_field.is_a?(Hash)
+
+    spans = total_field["spans"]
+    return true unless spans.is_a?(Array) && spans.size == 1
+
+    total_span = spans.sole
+    total_start = total_span["offset"]
+    total_length = total_span["length"]
+    return true unless total_start.is_a?(Integer) && total_length.is_a?(Integer)
+    return true if total_start.negative? || total_length.negative?
+    return true if total_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN ||
+      total_length > MAX_REFERENCE_PRICING_PROVIDER_SPAN - total_start
+
+    total_end = total_start + total_length
+    return true if total_length.zero?
+    return true unless document_total_owned_by_strict_summary_line?(
+      parsed_response,
+      total_field,
+      total_start:,
+      total_length:
+    )
+
+    reference_pricing_evidence_ranges(candidates).any? do |range_start, range_end|
+      total_start < range_end && range_start < total_end
+    end
+  rescue NoMethodError, TypeError
+    true
+  end
+
+  def document_total_owned_by_strict_summary_line?(
+    parsed_response,
+    total_field,
+    total_start:,
+    total_length:
+  )
+    analyze_result = extract_analyze_result(parsed_response)
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(
+      index_type: analyze_result["stringIndexType"]
+    )
+    return false if mapper.nil?
+
+    content = analyze_result["content"]
+    field_content = total_field["content"]
+    return false unless content.is_a?(String) && content.valid_encoding?
+    return false unless field_content.is_a?(String) && field_content.valid_encoding?
+    return false if field_content.blank? || field_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+    return false unless mapper.length(field_content) == total_length
+    return false unless mapper.slice(content, offset: total_start, length: total_length) == field_content
+
+    structured_amount = strict_document_total_amount(total_field, field_content)
+    return false if structured_amount.nil?
+
+    summary_lines = exact_strict_summary_lines(parsed_response)
+    return false if summary_lines.nil?
+
+    owners = summary_lines.filter_map do |line|
+      line_start = line.fetch(:span_start)
+      line_end = line.fetch(:span_end)
+      next unless total_start >= line_start && total_start + total_length <= line_end
+      next unless line.fetch(:amount) == structured_amount
+
+      line
+    end
+
+    owners.one?
+  rescue EncodingError, ArgumentError, TypeError
+    false
+  end
+
+  def strict_document_total_amount(total_field, field_content)
+    currency = total_field["valueCurrency"]
+    raw_amount = if currency
+      return unless currency.is_a?(Hash) && currency["currencyCode"] == "JPY"
+
+      currency["amount"]
+    else
+      total_field["valueNumber"]
+    end
+    return unless raw_amount.is_a?(Integer) || raw_amount.is_a?(Float)
+    return if raw_amount.negative? || raw_amount > MAX_REFERENCE_PRICING_TOTAL_AMOUNT
+    return if raw_amount.is_a?(Float) && (!raw_amount.finite? || raw_amount.floor != raw_amount)
+
+    amount = raw_amount.to_i
+
+    lexical_amounts = normalized_money_numbers(field_content)
+    amount if lexical_amounts.one? && lexical_amounts.sole == amount
+  rescue NoMethodError, TypeError
+    nil
+  end
+
+  def strict_summary_line_amount(line_content)
+    amounts = normalized_money_numbers(line_content)
+    amounts.sole if amounts.one?
+  rescue Enumerable::SoleItemExpectedError
+    nil
+  end
+
+  def normalized_money_numbers(text)
+    text.unicode_normalize(:nfkc).scan(/\d[\d,]*/).filter_map do |value|
+      ReceiptAmountService.parse_amount_or_nil(value)&.to_i
+    end.uniq
+  rescue EncodingError, ArgumentError
+    []
+  end
+
+  def extract_strict_summary_total_from_response(parsed_response)
+    matches = exact_strict_summary_lines(parsed_response)
+    return if matches.nil? || !matches.one?
+
+    matches.sole.fetch(:amount)
+  rescue Enumerable::SoleItemExpectedError, KeyError
+    nil
+  end
+
+  def exact_strict_summary_lines(parsed_response)
+    analyze_result = extract_analyze_result(parsed_response)
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(
+      index_type: analyze_result["stringIndexType"]
+    )
+    return if mapper.nil?
+
+    content = analyze_result["content"]
+    return unless content.is_a?(String) && content.valid_encoding?
+    return if content.bytesize > Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
+
+    content = content.dup.freeze
+
+    pages = analyze_result["pages"]
+    return unless pages.is_a?(Array) && pages.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
+
+    line_count = 0
+    matches = []
+    pages.each do |page|
+      return unless page.is_a?(Hash) && page["lines"].is_a?(Array)
+
+      raw_lines = page["lines"]
+      return if raw_lines.size > MAX_REFERENCE_PRICING_TOTAL_LINES - line_count
+
+      line_count += raw_lines.size
+      raw_lines.each do |line|
+        return unless line.is_a?(Hash)
+
+        line_content = line["content"]
+        spans = line["spans"]
+        return unless line_content.is_a?(String) && line_content.valid_encoding?
+        return if line_content.blank? || line_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+        return unless spans.is_a?(Array) && spans.size == 1 && spans.sole.is_a?(Hash)
+
+        line_start = spans.sole["offset"]
+        line_length = spans.sole["length"]
+        return unless line_start.is_a?(Integer) && line_length.is_a?(Integer) && line_length.positive?
+        return if line_start.negative? || line_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN
+        return if line_length > MAX_REFERENCE_PRICING_PROVIDER_SPAN - line_start
+        return unless mapper.length(line_content) == line_length
+        return unless mapper.slice(content, offset: line_start, length: line_length) == line_content
+        next unless line_content.match?(profile.ocr_strict_receipt_summary_total_line_pattern)
+
+        amount = strict_summary_line_amount(line_content)
+        return if amount.nil?
+
+        matches << {
+          span_start: line_start,
+          span_end: line_start + line_length,
+          amount:
+        }
+        return if matches.many?
+      end
+    end
+
+    matches
+  rescue EncodingError, ArgumentError, TypeError
+    nil
+  end
+
+  def reference_pricing_evidence_ranges(candidates)
+    Array(candidates).flat_map do |candidate|
+      evidence = %i[reference_price reference_quantity purchased_quantity printed_line_total].filter_map do |component|
+        candidate.dig(component, :evidence)
+      end
+      evidence << candidate[:tax_inclusion_evidence] if candidate[:tax_inclusion_evidence]
+      evidence.filter_map do |entry|
+        range_start = entry[:provider_span_start]
+        range_end = entry[:provider_span_end]
+        [ range_start, range_end ] if range_start.is_a?(Integer) && range_end.is_a?(Integer) &&
+          range_start >= 0 && range_end >= range_start
+      end
+    end
   end
 
   def extract_total_amount_from_lines(lines)
@@ -499,7 +934,11 @@ class Ocr::ResponseParser
     payment_line_profile(line)[:settlement]
   end
 
-  def extract_subtotal_amount(parsed_response, lines)
+  def extract_subtotal_amount(parsed_response, lines, reference_pricing_candidates: [])
+    if Array(reference_pricing_candidates).any? { |candidate| candidate[:source_kind] == "azure_line_group" }
+      return extract_subtotal_amount_from_lines(lines)
+    end
+
     fields = extract_fields(parsed_response)
 
     fields.dig("Subtotal", "valueCurrency", "amount") ||

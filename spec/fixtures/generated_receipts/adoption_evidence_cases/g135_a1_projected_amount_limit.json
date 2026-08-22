@@ -1,0 +1,62 @@
+{
+  "case_id": "g135_a1_projected_amount_limit",
+  "intent": "Individually bounded source values are not eligible when their projected amount exceeds the line-total limit.",
+  "expected": {},
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "custom_lines": [
+      "サンプル計量レシート",
+      "領収書",
+      "------------------------",
+      "検証品A13 税込 ¥999999999/1g",
+      "計量 2g",
+      "------------------------",
+      "ご利用ありがとうございました"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "ground_truth": {
+    "defined_before_image_generation": true,
+    "items": [
+      {
+        "item_index": 0,
+        "evidence_class": "reference_pricing",
+        "printed_line_total": null,
+        "existing_authority": false,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": null,
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": false,
+        "discount_conflict": false,
+        "deterministic_projection": true,
+        "projection_within_bounds": false,
+        "projected_gross_line_total": null,
+        "adoption_outcome": "unsupported",
+        "adoption_blocking_reasons": ["projected_amount_out_of_bounds"]
+      }
+    ],
+    "expected_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "999999999",
+        "reference_quantity": "1",
+        "reference_unit_code": "gram",
+        "purchased_quantity": "2",
+        "purchased_unit_code": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "projected_line_total": null,
+        "printed_line_total": null,
+        "rounding_matches": []
+      }
+    ],
+    "expected_associations": [
+      { "candidate_index": 0, "item_index": 0, "evidence_scope": "same_item" }
+    ]
+  }
+}

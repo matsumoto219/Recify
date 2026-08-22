@@ -71,7 +71,13 @@ module Receipts::Processing::Runs
     REFERENCE_PRICING_EXACT_NUMBER_MAX_BYTES = 64
     REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES = 256
     REFERENCE_PRICING_SOURCE_PROVIDERS = %w[azure_structured].freeze
+    REFERENCE_PRICING_LINE_SOURCE_PROVIDERS = %w[azure_line_group].freeze
+    REFERENCE_PRICING_SOURCE_KINDS = %w[azure_line_group].freeze
+    REFERENCE_PRICING_STRING_INDEX_TYPES = %w[utf16CodeUnit textElements].freeze
+    MAX_REFERENCE_PRICING_PAGE_INDEX = 99
+    MAX_REFERENCE_PRICING_LINE_INDEX = MAX_OCR_LINES - 1
     REFERENCE_PRICING_SOURCE_FIELD_PATH_PATTERN = /\Adocuments\[\d+\]\.fields\.Items\[\d+\](?:\.[A-Za-z][A-Za-z0-9]*)?\z/
+    REFERENCE_PRICING_LINE_SOURCE_FIELD_PATH_PATTERN = /\Apages\[\d+\]\.lines\[\d+\]\z/
     SNAPSHOT_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/.freeze
     OWNERSHIP_CONTRACT_KEYS = %i[
       schema_version
@@ -605,42 +611,101 @@ module Receipts::Processing::Runs
       candidate = normalized_hash(value)
       return nil if candidate.blank?
 
-      {
+      source_kind = enum_string(candidate[:source_kind], REFERENCE_PRICING_SOURCE_KINDS)
+      line_group = source_kind == "azure_line_group"
+      return nil if line_group && (
+        normalized_hash(candidate[:printed_line_total]).present? ||
+        normalized_hash(candidate[:corroboration]).present?
+      )
+
+      snapshot = {
         candidate_id: bounded_string(
           candidate[:candidate_id],
           max_bytes: REFERENCE_PRICING_CANDIDATE_ID_MAX_BYTES,
-          pattern: /\Aazure_items_\d+_reference_pricing\z/
+          pattern: line_group ?
+            /\Aazure_line_group_p\d+_l\d+_l\d+_reference_pricing\z/ :
+            /\Aazure_items_\d+_reference_pricing\z/
         ),
-        item_index: bounded_non_negative_integer(
+        source_kind: source_kind,
+        item_index: line_group ? nil : bounded_non_negative_integer(
           candidate[:item_index],
           maximum: MAX_REFERENCE_PRICING_ITEM_INDEX
         ),
+        page_index: line_group ? bounded_non_negative_integer(
+          candidate[:page_index],
+          maximum: MAX_REFERENCE_PRICING_PAGE_INDEX
+        ) : nil,
+        reference_line_index: line_group ? bounded_non_negative_integer(
+          candidate[:reference_line_index],
+          maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+        ) : nil,
+        purchased_quantity_line_index: line_group ? bounded_non_negative_integer(
+          candidate[:purchased_quantity_line_index],
+          maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+        ) : nil,
+        string_index_type: line_group ? enum_string(
+          candidate[:string_index_type],
+          REFERENCE_PRICING_STRING_INDEX_TYPES
+        ) : nil,
         validation_state: enum_string(candidate[:validation_state], REFERENCE_PRICING_VALIDATION_STATES),
         rejection_reasons: reference_pricing_rejection_reasons(candidate[:rejection_reasons]),
-        reference_price: reference_price_snapshot(candidate[:reference_price]).presence,
-        reference_quantity: reference_quantity_snapshot(candidate[:reference_quantity]).presence,
-        purchased_quantity: purchased_quantity_snapshot(candidate[:purchased_quantity]).presence,
+        reference_price: line_group ? reference_pricing_line_component_snapshot(
+          candidate[:reference_price],
+          source_kind:
+        ).presence : reference_price_snapshot(candidate[:reference_price], source_kind:).presence,
+        reference_quantity: line_group ? reference_pricing_line_component_snapshot(
+          candidate[:reference_quantity],
+          source_kind:
+        ).presence : reference_quantity_snapshot(candidate[:reference_quantity], source_kind:).presence,
+        purchased_quantity: line_group ? reference_pricing_line_component_snapshot(
+          candidate[:purchased_quantity],
+          source_kind:
+        ).presence : purchased_quantity_snapshot(candidate[:purchased_quantity], source_kind:).presence,
         reference_price_tax_inclusion: enum_string(
           candidate[:reference_price_tax_inclusion],
           REFERENCE_PRICE_TAX_INCLUSIONS
         ),
-        tax_inclusion_evidence: reference_pricing_evidence_snapshot(candidate[:tax_inclusion_evidence]).presence,
-        printed_line_total: printed_line_total_snapshot(candidate[:printed_line_total]).presence,
-        corroboration: reference_pricing_corroboration_snapshot(candidate[:corroboration]).presence
+        tax_inclusion_evidence: reference_pricing_evidence_snapshot(
+          candidate[:tax_inclusion_evidence],
+          source_kind:
+        ).presence,
+        printed_line_total: line_group ? nil : printed_line_total_snapshot(
+          candidate[:printed_line_total],
+          source_kind:
+        ).presence,
+        corroboration: line_group ? nil : reference_pricing_corroboration_snapshot(
+          candidate[:corroboration]
+        ).presence,
+        summary_total_corroboration: line_group ? reference_pricing_summary_corroboration_snapshot(
+          candidate[:summary_total_corroboration]
+        ).presence : nil
+      }.compact
+
+      return unless !line_group || valid_line_group_candidate_snapshot?(snapshot)
+
+      snapshot
+    end
+
+    def reference_pricing_line_component_snapshot(value, source_kind:)
+      component = normalized_hash(value)
+      return {} if component.blank?
+
+      {
+        evidence: reference_pricing_evidence_snapshot(component[:evidence], source_kind:).presence
       }.compact
     end
 
-    def reference_price_snapshot(value)
+    def reference_price_snapshot(value, source_kind: nil)
       component = normalized_hash(value)
       return {} if component.blank?
 
       {
         amount: exact_decimal_string(component[:amount]),
-        evidence: reference_pricing_evidence_snapshot(component[:evidence]).presence
+        evidence: reference_pricing_evidence_snapshot(component[:evidence], source_kind:).presence
       }.compact
     end
 
-    def reference_quantity_snapshot(value)
+    def reference_quantity_snapshot(value, source_kind: nil)
       component = normalized_hash(value)
       return {} if component.blank?
       unit_status = enum_string(component[:unit_status], REFERENCE_PRICING_UNIT_STATUSES)
@@ -651,11 +716,11 @@ module Receipts::Processing::Runs
         unit_status: unit_status,
         unit_raw: reference_pricing_unit_raw(component[:unit_raw], status: unit_status),
         origin: enum_string(component[:origin], REFERENCE_PRICING_ORIGINS),
-        evidence: reference_pricing_evidence_snapshot(component[:evidence]).presence
+        evidence: reference_pricing_evidence_snapshot(component[:evidence], source_kind:).presence
       }.compact
     end
 
-    def purchased_quantity_snapshot(value)
+    def purchased_quantity_snapshot(value, source_kind: nil)
       component = normalized_hash(value)
       return {} if component.blank?
       unit_status = enum_string(component[:unit_status], REFERENCE_PRICING_UNIT_STATUSES)
@@ -665,7 +730,7 @@ module Receipts::Processing::Runs
         unit_code: enum_string(component[:unit_code], ReceiptQuantityUnit.allowed_codes),
         unit_status: unit_status,
         unit_raw: reference_pricing_unit_raw(component[:unit_raw], status: unit_status),
-        evidence: reference_pricing_evidence_snapshot(component[:evidence]).presence
+        evidence: reference_pricing_evidence_snapshot(component[:evidence], source_kind:).presence
       }.compact
     end
 
@@ -676,17 +741,17 @@ module Receipts::Processing::Runs
       truncate_string(value, max_bytes: REFERENCE_PRICING_UNIT_RAW_MAX_BYTES).presence
     end
 
-    def printed_line_total_snapshot(value)
+    def printed_line_total_snapshot(value, source_kind: nil)
       component = normalized_hash(value)
       return {} if component.blank?
 
       {
         amount: exact_decimal_string(component[:amount]),
-        evidence: reference_pricing_evidence_snapshot(component[:evidence]).presence
+        evidence: reference_pricing_evidence_snapshot(component[:evidence], source_kind:).presence
       }.compact
     end
 
-    def reference_pricing_evidence_snapshot(value)
+    def reference_pricing_evidence_snapshot(value, source_kind: nil)
       evidence = normalized_hash(value)
       return {} if evidence.blank?
 
@@ -700,20 +765,84 @@ module Receipts::Processing::Runs
       )
       valid_span = span_start && span_end && span_end >= span_start
 
+      line_group = source_kind == "azure_line_group"
+      source_field_path = bounded_string(
+        evidence[:source_field_path],
+        max_bytes: REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES,
+        pattern: line_group ?
+          REFERENCE_PRICING_LINE_SOURCE_FIELD_PATH_PATTERN :
+          REFERENCE_PRICING_SOURCE_FIELD_PATH_PATTERN
+      )
+
       {
-        source_provider: enum_string(evidence[:source_provider], REFERENCE_PRICING_SOURCE_PROVIDERS),
-        source_field_path: bounded_string(
-          evidence[:source_field_path],
-          max_bytes: REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES,
-          pattern: REFERENCE_PRICING_SOURCE_FIELD_PATH_PATTERN
+        source_provider: enum_string(
+          evidence[:source_provider],
+          line_group ? REFERENCE_PRICING_LINE_SOURCE_PROVIDERS : REFERENCE_PRICING_SOURCE_PROVIDERS
         ),
-        item_index: bounded_non_negative_integer(
+        source_field_path: source_field_path,
+        item_index: line_group ? nil : bounded_non_negative_integer(
           evidence[:item_index],
           maximum: MAX_REFERENCE_PRICING_ITEM_INDEX
         ),
+        string_index_type: line_group ? enum_string(
+          evidence[:string_index_type],
+          REFERENCE_PRICING_STRING_INDEX_TYPES
+        ) : nil,
         provider_span_start: valid_span ? span_start : nil,
         provider_span_end: valid_span ? span_end : nil
       }.compact
+    end
+
+    def reference_pricing_summary_corroboration_snapshot(value)
+      corroboration = normalized_hash(value)
+      return {} if corroboration.blank?
+
+      rounding_matches = Array(corroboration[:rounding_matches]).filter_map do |rounding_match|
+        enum_string(rounding_match, REFERENCE_PRICING_ROUNDING_MATCHES)
+      end.uniq.first(REFERENCE_PRICING_ROUNDING_MATCHES.size)
+
+      {
+        state: rounding_matches.any? ? "matched" : "mismatched",
+        rounding_matches:
+      }.compact
+    end
+
+    def valid_line_group_candidate_snapshot?(snapshot)
+      page_index = snapshot[:page_index]
+      reference_line_index = snapshot[:reference_line_index]
+      purchased_line_index = snapshot[:purchased_quantity_line_index]
+      index_type = snapshot[:string_index_type]
+      return false unless page_index && reference_line_index && purchased_line_index && index_type
+      return false unless page_index.zero?
+      return false unless purchased_line_index == reference_line_index + 1
+      return false unless snapshot[:candidate_id] ==
+        "azure_line_group_p#{page_index}_l#{reference_line_index}_l#{purchased_line_index}_reference_pricing"
+      return false unless snapshot[:validation_state] == "valid" && snapshot[:rejection_reasons] == []
+      return false unless %w[gross net].include?(snapshot[:reference_price_tax_inclusion])
+
+      expected_paths = {
+        reference_price: "pages[#{page_index}].lines[#{reference_line_index}]",
+        reference_quantity: "pages[#{page_index}].lines[#{reference_line_index}]",
+        purchased_quantity: "pages[#{page_index}].lines[#{purchased_line_index}]"
+      }
+      expected_paths.all? do |component, expected_path|
+        evidence = snapshot.dig(component, :evidence)
+        valid_line_group_evidence?(evidence, expected_path:, index_type:)
+      end && valid_line_group_evidence?(
+        snapshot[:tax_inclusion_evidence],
+        expected_path: expected_paths.fetch(:reference_price),
+        index_type:
+      )
+    end
+
+    def valid_line_group_evidence?(evidence, expected_path:, index_type:)
+      evidence.is_a?(Hash) &&
+        evidence[:source_provider] == "azure_line_group" &&
+        evidence[:source_field_path] == expected_path &&
+        evidence[:string_index_type] == index_type &&
+        evidence[:provider_span_start].is_a?(Integer) &&
+        evidence[:provider_span_end].is_a?(Integer) &&
+        evidence[:provider_span_end] > evidence[:provider_span_start]
     end
 
     def reference_pricing_corroboration_snapshot(value)

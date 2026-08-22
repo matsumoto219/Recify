@@ -69,16 +69,19 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   ).freeze
   PURCHASED_QUANTITY_PATTERN = /(?<![0-9０-９])(?<quantity>#{DECIMAL_SOURCE})[ \t]*(?<unit>#{UNIT_SOURCE})/u
   PRINTED_AMOUNT_PATTERN = /[¥￥]?[ \t]*(?<amount>#{DECIMAL_SOURCE})(?:[ \t]*円)?/u
+  DECIMAL_TOKEN_PATTERN = /(?<![0-9０-９])(?<decimal>#{DECIMAL_SOURCE})(?![0-9０-９])/u
+  UNIT_TOKEN_PATTERN = /#{UNIT_SOURCE}/u
   CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u0084\u0086-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
   LINE_BREAK_PATTERN = /[\n\r\u0085\u2028\u2029]/.freeze
 
-  def self.call(items:, profile:, projection: nil)
-    new(items:, profile:, projection:).call
+  def self.call(items:, profile:, projection: nil, allow_separated_tax_label: false)
+    new(items:, profile:, projection:, allow_separated_tax_label:).call
   end
 
-  def initialize(items:, profile:, projection: nil)
+  def initialize(items:, profile:, projection: nil, allow_separated_tax_label: false)
     @items = items
     @profile = profile
+    @allow_separated_tax_label = allow_separated_tax_label
     @projection = projection || ->(**attributes) {
       ReceiptAmountService.reference_item_extension_projection(**attributes)
     }
@@ -100,7 +103,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
 
   private
 
-  attr_reader :items, :profile, :projection
+  attr_reader :items, :profile, :projection, :allow_separated_tax_label
 
   def extract_candidate(item, item_index)
     return unless item.is_a?(Hash)
@@ -168,6 +171,10 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       printed_line_total:,
       reasons:
     )
+    if reference_match[:structured_unit_price] &&
+        (!corroboration.is_a?(Hash) || Array(corroboration[:rounding_matches]).empty?)
+      return
+    end
 
     {
       candidate_id: "azure_items_#{item_index}_reference_pricing",
@@ -189,6 +196,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     evidence_errors = []
     raw_match_budget = { remaining: MAX_REFERENCE_EXPRESSION_MATCHES, exceeded: false }
     price_field = value_object["Price"]
+    discount_price_span = nil
+    field_match_kind = nil
 
     if price_field.is_a?(Hash) && content_supplied?(price_field["content"])
       field_content = normalized_mappable_text(price_field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
@@ -198,7 +207,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
           utf16_length(field_content) > span_length(field_span)
         evidence_errors << "evidence_outside_item"
       else
-        matches.concat(scan_reference_expressions(
+        price_matches = scan_reference_expressions(
           field_content,
           base_offset: span_offset(field_span),
           source_field_path: "documents[0].fields.Items[#{item_index}].Price",
@@ -206,11 +215,30 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
           parent_span: parent_span,
           priority: 0,
           raw_match_budget: raw_match_budget
-        ))
+        )
+        if discount_adjustment_text?(field_content)
+          discount_price_span = field_span
+        else
+          matches.concat(price_matches)
+          field_match_kind = :explicit_price if price_matches.any?
+        end
       end
     end
 
-    matches.concat(scan_reference_expressions(
+    if matches.empty?
+      structured_match = structured_measurement_unit_price_match(
+        value_object:,
+        item_content:,
+        parent_span:,
+        item_index:
+      )
+      if structured_match
+        matches << structured_match
+        field_match_kind = :structured
+      end
+    end
+
+    item_matches = scan_reference_expressions(
       item_content,
       base_offset: span_offset(parent_span),
       source_field_path: "documents[0].fields.Items[#{item_index}]",
@@ -218,7 +246,26 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       parent_span: parent_span,
       priority: 1,
       raw_match_budget: raw_match_budget
-    ))
+    )
+    if discount_price_span
+      item_matches.reject! do |match|
+        ranges_overlap?(
+          match[:expression_start], match[:expression_end],
+          span_offset(discount_price_span), span_end(discount_price_span)
+        )
+      end
+    end
+    if field_match_kind == :structured
+      item_matches.reject! { |match| match[:discount_context] }
+    elsif field_match_kind.nil? && structured_measurement_context?(
+      value_object,
+      item_content:,
+      parent_span:,
+      item_index:
+    )
+      item_matches.reject! { |match| match[:discount_context] }
+    end
+    matches.concat(item_matches)
 
     evidence_errors << "ambiguous_reference_expression" if raw_match_budget[:exceeded]
 
@@ -331,11 +378,378 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         item_index:,
         priority:
       )
-
       matches << match if range_within_parent?(match[:expression_start], match[:expression_end], parent_span)
     end
 
     matches
+  end
+
+  def structured_measurement_unit_price_match(value_object:, item_content:, parent_span:, item_index:)
+    return unless utf16_length(item_content) == span_length(parent_span)
+
+    fields = %w[Price Quantity QuantityUnit TotalPrice].to_h do |field_name|
+      [ field_name, value_object[field_name] ]
+    end
+    return unless fields.values.all? { |field| field.is_a?(Hash) }
+
+    price = structured_decimal_lexeme(
+      fields.fetch("Price"),
+      item_content:,
+      parent_span:,
+      item_index:,
+      field_name: "Price"
+    )
+    purchased = structured_decimal_lexeme(
+      fields.fetch("Quantity"),
+      item_content:,
+      parent_span:,
+      item_index:,
+      field_name: "Quantity"
+    )
+    printed_total = structured_decimal_lexeme(
+      fields.fetch("TotalPrice"),
+      item_content:,
+      parent_span:,
+      item_index:,
+      field_name: "TotalPrice"
+    )
+    unit = structured_measurement_unit_lexeme(
+      fields.fetch("QuantityUnit"),
+      item_content:,
+      parent_span:,
+      item_index:
+    )
+    return if [ price, purchased, printed_total, unit ].any?(&:nil?)
+    return if discount_adjustment_text?(price[:content])
+    return if structured_quantity_conflicts_with_description?(
+      value_object["Description"],
+      item_content:,
+      purchased:,
+      unit:,
+      purchased_span: purchased[:field_span],
+      unit_span: unit[:field_span],
+      parent_span:
+    )
+    return unless structured_currency_value_matches?(fields.fetch("Price"), price[:amount])
+    return unless structured_number_value_matches?(fields.fetch("Quantity"), purchased[:amount])
+    return unless structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code])
+    return unless structured_currency_value_matches?(fields.fetch("TotalPrice"), printed_total[:amount])
+    return unless structured_formula_agrees?(price:, purchased:, unit:, printed_total:)
+
+    tax_text, tax_evidence = structured_price_tax_evidence(
+      price,
+      item_index:
+    )
+    evidence_ranges = [ price[:evidence], unit[:evidence] ]
+
+    {
+      expression_text: price[:content],
+      expression_start: evidence_ranges.map { |entry| entry[:provider_span_start] }.min,
+      expression_end: evidence_ranges.map { |entry| entry[:provider_span_end] }.max,
+      price_text: price[:amount],
+      price_evidence: price[:evidence],
+      reference_quantity_text: nil,
+      reference_unit_text: unit[:text],
+      reference_quantity_evidence: unit[:evidence],
+      tax_text: tax_text,
+      tax_evidence: tax_evidence,
+      tax_window_text: price[:content],
+      priority: 0,
+      source_text: price[:content],
+      discount_context: false,
+      structured_unit_price: true,
+      structured_purchased_match: {
+        quantity_text: purchased[:amount],
+        unit_text: unit[:text],
+        evidence: purchased[:evidence],
+        priority: 0
+      }
+    }
+  end
+
+  def structured_measurement_context?(value_object, item_content:, parent_span:, item_index:)
+    return false unless utf16_length(item_content) == span_length(parent_span)
+
+    fields = %w[Quantity QuantityUnit TotalPrice].to_h do |field_name|
+      [ field_name, value_object[field_name] ]
+    end
+    return false unless fields.values.all? { |field| field.is_a?(Hash) }
+
+    purchased = structured_decimal_lexeme(
+      fields.fetch("Quantity"),
+      item_content:,
+      parent_span:,
+      item_index:,
+      field_name: "Quantity"
+    )
+    printed_total = structured_decimal_lexeme(
+      fields.fetch("TotalPrice"),
+      item_content:,
+      parent_span:,
+      item_index:,
+      field_name: "TotalPrice"
+    )
+    unit = structured_measurement_unit_lexeme(
+      fields.fetch("QuantityUnit"),
+      item_content:,
+      parent_span:,
+      item_index:
+    )
+    return false if [ purchased, printed_total, unit ].any?(&:nil?)
+    return false if structured_quantity_conflicts_with_description?(
+      value_object["Description"],
+      item_content:,
+      purchased:,
+      unit:,
+      purchased_span: purchased[:field_span],
+      unit_span: unit[:field_span],
+      parent_span:
+    )
+
+    structured_number_value_matches?(fields.fetch("Quantity"), purchased[:amount]) &&
+      structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code]) &&
+      structured_currency_value_matches?(fields.fetch("TotalPrice"), printed_total[:amount])
+  end
+
+  def structured_decimal_lexeme(field, item_content:, parent_span:, item_index:, field_name:)
+    mapped_field = exact_structured_field(field, item_content:, parent_span:)
+    return if mapped_field.nil?
+
+    content = mapped_field.fetch(:content)
+    span = mapped_field.fetch(:span)
+
+    matches = []
+    content.scan(DECIMAL_TOKEN_PATTERN) do
+      match_data = Regexp.last_match
+      amount = canonical_decimal(match_data[:decimal])
+      return if amount.nil?
+
+      matches << {
+        amount:,
+        start_index: match_data.begin(:decimal),
+        end_index: match_data.end(:decimal)
+      }
+      return if matches.many?
+    end
+    return unless matches.one?
+
+    match = matches.sole
+    match.merge(
+      content:,
+      field_span: span,
+      field_span_offset: span_offset(span),
+      evidence: evidence(
+        source_field_path: "documents[0].fields.Items[#{item_index}].#{field_name}",
+        item_index:,
+        start_offset: provider_offset(content, span_offset(span), match[:start_index]),
+        end_offset: provider_offset(content, span_offset(span), match[:end_index])
+      )
+    )
+  end
+
+  def structured_measurement_unit_lexeme(field, item_content:, parent_span:, item_index:)
+    mapped_field = exact_structured_field(field, item_content:, parent_span:)
+    return if mapped_field.nil?
+
+    content = mapped_field.fetch(:content)
+    span = mapped_field.fetch(:span)
+
+    matches = []
+    content.scan(UNIT_TOKEN_PATTERN) do
+      match_data = Regexp.last_match
+      resolution = resolve_unit(match_data[0])
+      unit = resolution.known? ? ReceiptQuantityUnit.unit_for(resolution.code) : nil
+      next unless unit&.kind == :decimal
+      next unless unit.allows_pricing_role?(:purchased) && unit.allows_pricing_role?(:reference)
+
+      matches << {
+        text: match_data[0],
+        unit_code: resolution.code,
+        start_index: match_data.begin(0),
+        end_index: match_data.end(0)
+      }
+      return if matches.many?
+    end
+    return unless matches.one?
+
+    match = matches.sole
+    match.merge(
+      field_span: span,
+      evidence: evidence(
+        source_field_path: "documents[0].fields.Items[#{item_index}].QuantityUnit",
+        item_index:,
+        start_offset: provider_offset(content, span_offset(span), match[:start_index]),
+        end_offset: provider_offset(content, span_offset(span), match[:end_index])
+      )
+    )
+  end
+
+  def structured_currency_value_matches?(field, lexical_amount)
+    currency = field["valueCurrency"]
+    return false unless currency.is_a?(Hash) && currency.key?("amount")
+
+    return false unless currency["currencyCode"] == "JPY"
+
+    structured_decimal_value(currency["amount"]) == BigDecimal(lexical_amount)
+  rescue ArgumentError, TypeError
+    false
+  end
+
+  def exact_structured_field(field, item_content:, parent_span:)
+    content = normalized_mappable_text(field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
+    span = single_span(field)
+    return if content.blank? || span.nil? || !span_within?(span, parent_span)
+    return unless utf16_length(content) == span_length(span)
+    return unless utf16_slice_for_span(item_content, span, parent_span) == content
+
+    { content:, span: }
+  end
+
+  def utf16_slice_for_span(text, span, parent_span)
+    relative_offset = span_offset(span) - span_offset(parent_span)
+    return if relative_offset.negative?
+
+    encoded = text.encode(Encoding::UTF_16LE)
+    bytes = encoded.byteslice(relative_offset * 2, span_length(span) * 2)
+    return unless bytes&.bytesize == span_length(span) * 2
+
+    bytes.force_encoding(Encoding::UTF_16LE).encode(Encoding::UTF_8)
+  rescue EncodingError, ArgumentError
+    nil
+  end
+
+  def structured_quantity_conflicts_with_description?(
+    description_field,
+    item_content:,
+    purchased:,
+    unit:,
+    purchased_span:,
+    unit_span:,
+    parent_span:
+  )
+    return true if description_field.nil?
+    return true unless description_field.is_a?(Hash)
+
+    description = exact_structured_field(description_field, item_content:, parent_span:)
+    return true if description.nil?
+
+    overlaps_description = [ purchased_span, unit_span ].any? do |quantity_span|
+      ranges_overlap?(
+        span_offset(description[:span]), span_end(description[:span]),
+        span_offset(quantity_span), span_end(quantity_span)
+      )
+    end
+    return true if overlaps_description
+
+    description[:content].scan(description_quantity_pattern) do
+      match_data = Regexp.last_match
+      amount = canonical_decimal(match_data[:quantity])
+      resolution = resolve_unit(match_data[:unit])
+      next if amount.nil? || !resolution.known?
+      next unless ReceiptQuantityUnit.convertible?(from: resolution.code, to: unit[:unit_code])
+
+      converted = ReceiptQuantityUnit.convert_exact(
+        BigDecimal(amount),
+        from: resolution.code,
+        to: unit[:unit_code]
+      )
+      return true if converted == BigDecimal(purchased[:amount]).to_r
+    end
+
+    false
+  rescue ArgumentError, TypeError
+    true
+  end
+
+  def description_quantity_pattern
+    @description_quantity_pattern ||= begin
+      aliases = profile.quantity_unit_aliases.keys.map(&:to_s).reject(&:empty?).uniq
+        .sort_by { |value| [ -value.length, value ] }
+      unit_source = Regexp.union(aliases).source
+
+      Regexp.new(
+        "(?<![0-9０-９])(?<quantity>#{DECIMAL_SOURCE})[ \\t]*(?<unit>#{unit_source})" \
+          "(?![A-Za-zＡ-Ｚａ-ｚ])",
+        Regexp::FIXEDENCODING
+      )
+    end
+  end
+
+  def structured_number_value_matches?(field, lexical_amount)
+    return false unless field.key?("valueNumber")
+
+    structured_decimal_value(field["valueNumber"]) == BigDecimal(lexical_amount)
+  rescue ArgumentError, TypeError
+    false
+  end
+
+  def structured_unit_value_matches?(field, lexical_unit_code)
+    return false unless field.key?("valueString")
+
+    resolution = resolve_unit(field["valueString"])
+    resolution.known? && resolution.code == lexical_unit_code
+  end
+
+  def structured_formula_agrees?(price:, purchased:, unit:, printed_total:)
+    result = projection.call(
+      reference_price_amount: price[:amount],
+      reference_quantity: "1",
+      reference_unit_code: unit[:unit_code],
+      purchased_quantity: purchased[:amount],
+      purchased_unit_code: unit[:unit_code]
+    )
+    exact_amount = result.fetch(:exact_amount).to_r
+    printed_amount = Rational(printed_total[:amount])
+
+    rounding_matches(exact_amount, printed_amount).any?
+  rescue ReceiptAmountService::InvalidItemSourceError, ArgumentError, KeyError, TypeError
+    false
+  end
+
+  def discount_context_for_expression(text, expression_start, local_window)
+    return :same_line if discount_adjustment_text?(local_window)
+    return if tax_basis_labels.values.flatten.any? { |label| local_window.include?(label) }
+
+    line_start = previous_line_break_index(text, expression_start)
+    return if line_start.nil?
+
+    matched = text[0...line_start].to_s.split(LINE_BREAK_PATTERN).last(3).any? do |line|
+      discount_adjustment_text?(line)
+    end
+    :preceding if matched
+  rescue EncodingError, TypeError
+    nil
+  end
+
+  def discount_adjustment_text?(text)
+    text.match?(profile.ocr_item_discount_keyword_pattern) &&
+      !text.match?(profile.ocr_post_discount_price_basis_pattern)
+  end
+
+  def structured_price_tax_evidence(price, item_index:)
+    labels = tax_label_matches(price[:content])
+    return [ nil, nil ] unless labels.map { |entry| entry[:inclusion] }.uniq.one?
+
+    match = labels.min_by { |entry| [ entry[:index], -entry[:label].length ] }
+    label = match.fetch(:label)
+    index = match.fetch(:index)
+    [
+      label,
+      evidence(
+        source_field_path: "documents[0].fields.Items[#{item_index}].Price",
+        item_index:,
+        start_offset: provider_offset(
+          price[:content],
+          price[:field_span_offset],
+          index
+        ),
+        end_offset: provider_offset(
+          price[:content],
+          price[:field_span_offset],
+          index + label.length
+        )
+      )
+    ]
   end
 
   def reference_expression_pattern
@@ -357,6 +771,14 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   def build_reference_match(match_data, text, base_offset:, source_field_path:, item_index:, priority:)
     tax_capture = %i[tax_before tax_middle tax_after].find { |name| match_data[name].present? }
     price_capture = match_data[:price_prefix].present? ? :price_prefix : :price_suffix
+    local_window = local_expression_line(text, match_data.begin(0), match_data.end(0))
+    tax_text, tax_start, tax_end = local_tax_evidence(
+      text,
+      expression_start: match_data.begin(0),
+      captured_tax: tax_capture ? match_data[tax_capture] : nil,
+      captured_start: tax_capture ? match_data.begin(tax_capture) : nil,
+      captured_end: tax_capture ? match_data.end(tax_capture) : nil
+    )
     reference_quantity_start = if match_data[:reference_quantity].present?
       match_data.begin(:reference_quantity)
     else
@@ -382,17 +804,97 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         start_offset: provider_offset(text, base_offset, reference_quantity_start),
         end_offset: provider_offset(text, base_offset, match_data.end(:reference_unit))
       ),
-      tax_text: tax_capture ? match_data[tax_capture] : nil,
-      tax_evidence: tax_capture ? evidence(
+      tax_text: tax_text,
+      tax_evidence: tax_text ? evidence(
         source_field_path:,
         item_index:,
-        start_offset: provider_offset(text, base_offset, match_data.begin(tax_capture)),
-        end_offset: provider_offset(text, base_offset, match_data.end(tax_capture))
+        start_offset: provider_offset(text, base_offset, tax_start),
+        end_offset: provider_offset(text, base_offset, tax_end)
       ) : nil,
-      tax_window_text: local_expression_line(text, match_data.begin(0), match_data.end(0)),
+      tax_window_text: local_window,
       priority: priority,
-      source_text: text
+      source_text: text,
+      discount_context: discount_context_for_expression(
+        text,
+        match_data.begin(0),
+        local_window
+      )
     }
+  end
+
+  def local_tax_evidence(
+    text,
+    expression_start:,
+    captured_tax:,
+    captured_start:,
+    captured_end:
+  )
+    if captured_tax.present?
+      return [ nil, nil, nil ] unless tax_label_boundary?(text, captured_start, captured_end)
+
+      return [ captured_tax, captured_start, captured_end ]
+    end
+    return [ nil, nil, nil ] unless allow_separated_tax_label
+
+    line_start = previous_line_break_index(text, expression_start)
+    line_content_start = line_start ? line_start + 1 : 0
+    prefix = text[line_content_start...expression_start].to_s
+    matches = tax_basis_labels.flat_map do |inclusion, labels|
+      labels.filter_map do |label|
+        match = prefix.match(
+          /(?:\A|[ \t:：(（])(?<tax_label>#{Regexp.escape(label)})[ \t]*(?:[(（]?[0-9０-９]+(?:[.．][0-9０-９]+)?[%％][)）]?[ \t]*)?(?:[¥￥@＠][ \t]*)?\z/
+        )
+        next unless match
+
+        index = match.begin(:tax_label)
+        absolute_start = line_content_start + index
+        next unless tax_label_boundary?(text, absolute_start, absolute_start + label.length)
+
+        { inclusion:, label:, index: }
+      end
+    end
+    return [ nil, nil, nil ] unless matches.map { |match| match[:inclusion] }.uniq.one?
+
+    match = matches.min_by { |entry| [ entry[:index], -entry[:label].length ] }
+    start_offset = line_content_start + match[:index]
+
+    [ match[:label], start_offset, start_offset + match[:label].length ]
+  end
+
+  def tax_label_left_boundary?(text, start_offset)
+    return false unless start_offset.is_a?(Integer) && start_offset >= 0
+    return true if start_offset.zero?
+    prefix = text[0...start_offset].to_s.unicode_normalize(:nfkc)
+    return false if prefix.match?(profile.ocr_reference_pricing_tax_negation_prefix_pattern)
+
+    text[start_offset - 1]&.match?(/[ \t\r\n:：(（]/)
+  rescue EncodingError, ArgumentError
+    false
+  end
+
+  def tax_label_boundary?(text, start_offset, end_offset)
+    return false unless end_offset.is_a?(Integer) && end_offset >= start_offset
+    return false unless tax_label_left_boundary?(text, start_offset)
+    return true if end_offset == text.length
+
+    text[end_offset]&.match?(%r{[ \t\r\n:：()（）¥￥@＠0-9０-９/／]})
+  end
+
+  def tax_label_matches(text)
+    tax_basis_labels.flat_map do |inclusion, labels|
+      labels.flat_map do |label|
+        offset = 0
+        matches = []
+        while (index = text.index(label, offset))
+          label_end = index + label.length
+          if tax_label_boundary?(text, index, label_end)
+            matches << { inclusion:, label:, index: }
+          end
+          offset = label_end
+        end
+        matches
+      end
+    end
   end
 
   def deduplicate_reference_matches(matches)
@@ -468,6 +970,10 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def purchased_quantity_matches(value_object, item_content, parent_span, item_index, reference_match)
+    if reference_match[:structured_purchased_match]
+      return [ [ reference_match[:structured_purchased_match] ], [] ]
+    end
+
     matches = []
     evidence_errors = []
     raw_match_budget = { remaining: MAX_PURCHASED_QUANTITY_MATCHES, exceeded: false }
@@ -588,8 +1094,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     before = text[[ match_data.begin(0) - 12, 0 ].max...match_data.begin(0)].to_s
     after = text[match_data.end(0), 6].to_s
 
-    before.match?(/(?:約|およそ|[x×@＠]|[-–—〜～~]|gross|tare|風袋|総重量)\s*\z/i) ||
-      after.match?(/\A\s*(?:入|入り|詰|パック|[x×@＠]|gross|tare|風袋|総重量)/i)
+    before.match?(profile.ocr_reference_pricing_package_quantity_context_before_pattern) ||
+      after.match?(profile.ocr_reference_pricing_package_quantity_context_after_pattern)
   end
 
   def quantity_only_component_span?(field, start_offset, end_offset)
@@ -710,15 +1216,17 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   def tax_inclusion(reference_match)
     expression = reference_match[:expression_text]
     local_window = reference_match[:tax_window_text].to_s
-    inclusions_in_window = tax_basis_labels.filter_map do |inclusion, labels|
-      inclusion if labels.any? { |label| local_window.include?(label) }
-    end
+    inclusions_in_window = tax_label_matches(local_window).map { |entry| entry[:inclusion] }
     if inclusions_in_window.uniq.many?
       return [ "unknown", nil, [ "ambiguous_tax_inclusion", "ambiguous_reference_expression" ] ]
     end
 
-    inclusion = profile.reference_price_tax_inclusion(reference_match[:tax_text].presence || expression)
-    matched_labels = tax_basis_labels.values.flatten.select { |label| expression.include?(label) }
+    inclusion = if reference_match[:tax_text].present? && reference_match[:tax_evidence].present?
+      profile.reference_price_tax_inclusion(reference_match[:tax_text])
+    else
+      "unknown"
+    end
+    matched_labels = tax_label_matches(expression).map { |entry| entry[:label] }
 
     if inclusion == "unknown"
       reasons = [ "ambiguous_tax_inclusion" ]
@@ -974,7 +1482,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
 
   def single_span(container)
     spans = container["spans"]
-    return unless spans.is_a?(Array) && spans.one?
+    return unless spans.is_a?(Array) && spans.size == 1
 
     bounded_span(spans.first)
   end

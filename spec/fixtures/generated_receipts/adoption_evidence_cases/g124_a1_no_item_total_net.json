@@ -1,0 +1,62 @@
+{
+  "case_id": "g124_a1_no_item_total_net",
+  "intent": "A no-total item with an explicit item-local net basis and tax rate is eligible evidence.",
+  "expected": {},
+  "render": {
+    "locale": "ja-JP",
+    "paper_width": "58mm",
+    "font": "monospace",
+    "custom_lines": [
+      "サンプル計量レシート",
+      "領収書",
+      "------------------------",
+      "検証品A02 税抜10% ¥173/250ml",
+      "計量 1.500L",
+      "------------------------",
+      "ご利用ありがとうございました"
+    ]
+  },
+  "degradation": { "enabled": false, "profile": null },
+  "ground_truth": {
+    "defined_before_image_generation": true,
+    "items": [
+      {
+        "item_index": 0,
+        "evidence_class": "reference_pricing",
+        "printed_line_total": null,
+        "existing_authority": false,
+        "same_item_evidence": true,
+        "dimension_compatible": true,
+        "item_local_tax_rate": "0.1",
+        "tax_rounding_mode": "round",
+        "tax_rate_conflict": false,
+        "package_conflict": false,
+        "discount_conflict": false,
+        "deterministic_projection": true,
+        "projection_within_bounds": true,
+        "projected_gross_line_total": 1142,
+        "adoption_outcome": "eligible",
+        "adoption_blocking_reasons": []
+      }
+    ],
+    "expected_candidates": [
+      {
+        "item_index": 0,
+        "validation_state": "valid",
+        "rejection_reasons": [],
+        "reference_price_amount": "173",
+        "reference_quantity": "250",
+        "reference_unit_code": "milliliter",
+        "purchased_quantity": "1.5",
+        "purchased_unit_code": "liter",
+        "reference_price_tax_inclusion": "net",
+        "projected_line_total": 1038,
+        "printed_line_total": null,
+        "rounding_matches": []
+      }
+    ],
+    "expected_associations": [
+      { "candidate_index": 0, "item_index": 0, "evidence_scope": "same_item" }
+    ]
+  }
+}
