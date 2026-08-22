@@ -272,8 +272,7 @@ module Receipts::Processing::Contracts
         return false unless source_evidence_ordered?(proposal)
         return false unless corroboration_valid?(proposal["corroboration"])
 
-        projection = projection_for(proposal)
-        projection && projection.fetch(:projected_amount) <= ReceiptAmountService.receipt_item_line_total_max
+        projection_for(proposal).present?
       end
 
       def context_valid?(context, proposal:)
@@ -285,6 +284,7 @@ module Receipts::Processing::Contracts
 
         diagnostic = diagnostic_candidate(context)
         return false if diagnostic.nil?
+        return false unless diagnostic_state_valid?(diagnostic, proposal:)
         return false unless proposal["candidate_id"] == diagnostic["candidate_id"]
         return false unless proposal["source_kind"] == diagnostic["source_kind"]
         return false unless proposal["provider_model_id"] == diagnostic["provider_model_id"]
@@ -304,6 +304,15 @@ module Receipts::Processing::Contracts
         return false unless proposal["corroboration"] == diagnostic["summary_total_corroboration"]
 
         destination_line_linked?(context, proposal["destination"])
+      end
+
+      def diagnostic_state_valid?(diagnostic, proposal:)
+        return false unless diagnostic["validation_state"] == "valid"
+        return false unless Array(diagnostic["rejection_reasons"]).empty?
+        return false unless diagnostic["printed_line_total"].nil? && diagnostic["corroboration"].nil?
+        return false unless diagnostic["reference_price_tax_inclusion"] == "gross"
+
+        normalized_hash(diagnostic["summary_total_corroboration"]) == proposal["corroboration"]
       end
 
       def candidate_counts_valid?(context)
