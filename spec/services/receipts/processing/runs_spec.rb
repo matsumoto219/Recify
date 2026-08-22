@@ -537,6 +537,75 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
+    it 'run開始gateをOCR proposal生成時に同じrun identityへbindする' do
+      setting = create(
+        :system_setting,
+        key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        value: SystemSettings.stored_value(true)
+      )
+      run = described_class.start(receipt:, source: 'upload').run
+      start_gate = run.metadata.fetch('reference_pricing_auto_adoption_gate')
+      described_class.record_ocr_snapshot(
+        run,
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      bound_gate = run.reload.metadata.fetch('reference_pricing_auto_adoption_gate')
+
+      aggregate_failures do
+        expect(start_gate['proposal_binding']).to be_nil
+        expect(start_gate['run_key']).to eq(run.run_key)
+        expect(start_gate['setting_generation']).to eq(
+          'kind' => 'row',
+          'id' => setting.id,
+          'lock_version' => setting.lock_version
+        )
+        expect(bound_gate.dig('proposal_binding', 'candidate_identity')).to eq(
+          'azure_line_group_p0_l1_l2_reference_pricing'
+        )
+        expect(bound_gate.dig('proposal_binding', 'destination_identity')).to eq(
+          'azure_line_group_destination_p0_name_l1_s13_e19_ref_l1_qty_l2'
+        )
+      end
+    end
+
+    it 'retry runはparent gateをコピーせずfresh start gateへcopied proposalを再bindする' do
+      create(
+        :system_setting,
+        key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        value: SystemSettings.stored_value(true)
+      )
+      parent_run = described_class.start(receipt:, source: 'upload').run
+      described_class.record_ocr_snapshot(
+        parent_run,
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      described_class.record_finalize_decision(parent_run, finalize_decision(:ocr_only))
+      parent_run.update!(status: 'succeeded', stage: 'completed')
+      retry_run = described_class.start(
+        receipt:,
+        source: 'admin_retry',
+        parent_run:
+      ).run
+
+      described_class.copy_retry_snapshots(
+        retry_run,
+        parent_run:,
+        include_ocr: true,
+        include_finalize_decision: true
+      )
+      parent_gate = parent_run.reload.metadata.fetch('reference_pricing_auto_adoption_gate')
+      retry_gate = retry_run.reload.metadata.fetch('reference_pricing_auto_adoption_gate')
+
+      aggregate_failures do
+        expect(retry_gate['run_key']).to eq(retry_run.run_key)
+        expect(retry_gate['run_source']).to eq('admin_retry')
+        expect(retry_gate['run_key']).not_to eq(parent_gate['run_key'])
+        expect(retry_gate['proposal_binding']).to eq(parent_gate['proposal_binding'])
+        expect(retry_run.metadata['finalize_decision']).to be_present
+        expect(retry_run.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+      end
+    end
+
     it 'typed adoption proposalをJSONB round-trip後もcanonical checksumでrehydrateする' do
       snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
         ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')

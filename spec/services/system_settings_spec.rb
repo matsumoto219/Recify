@@ -256,6 +256,34 @@ RSpec.describe SystemSettings do
     end
   end
 
+  describe '.fetch_for_update' do
+    it 'transaction内でcurrent rowをlockしgeneration sourceを返す' do
+      setting = create(
+        :system_setting,
+        key: described_class::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        value: described_class.stored_value(true)
+      )
+
+      entry = SystemSetting.transaction do
+        described_class.fetch_for_update(described_class::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+      end
+
+      aggregate_failures do
+        expect(entry.setting).to eq(setting)
+        expect(entry.current_value).to be(true)
+        expect(entry.source).to eq('db')
+      end
+    end
+
+    it 'transaction外ではlock APIを使用させない' do
+      allow(SystemSetting.connection).to receive(:transaction_open?).and_return(false)
+
+      expect {
+        described_class.fetch_for_update(described_class::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+      }.to raise_error(SystemSettings::ValidationError, 'transaction_required')
+    end
+  end
+
   describe '.value_for' do
     it 'DB値がない場合はdefaultを返す' do
       expect(described_class.value_for('feature.receipt_logo_display_enabled')).to eq(false)

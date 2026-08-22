@@ -220,15 +220,16 @@ module SystemSettings
       definition = definition_for(key)
       setting = SystemSetting.includes(:updated_by_user).find_by(key: definition.key)
 
-      Entry.new(
-        definition: definition,
-        setting: setting,
-        current_value: setting ? cast_stored_value(definition, setting.value) : definition.default,
-        default_value: definition.default,
-        source: setting ? "db" : "default",
-        updated_by_user: setting&.updated_by_user,
-        updated_at: setting&.updated_at
-      )
+      entry_for(definition, setting)
+    end
+
+    def fetch_for_update(key)
+      raise ValidationError, "transaction_required" unless SystemSetting.connection.transaction_open?
+
+      definition = definition_for(key)
+      setting = SystemSetting.lock.find_by(key: definition.key)
+
+      entry_for(definition, setting)
     end
 
     def value_for(key, user: nil, context: {})
@@ -361,6 +362,18 @@ module SystemSettings
     end
 
     private
+
+    def entry_for(definition, setting)
+      Entry.new(
+        definition: definition,
+        setting: setting,
+        current_value: setting ? cast_stored_value(definition, setting.value) : definition.default,
+        default_value: definition.default,
+        source: setting ? "db" : "default",
+        updated_by_user: setting&.updated_by_user,
+        updated_at: setting&.updated_at
+      )
+    end
 
     def normalize_key(key)
       key.to_s.strip
