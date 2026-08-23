@@ -1,4 +1,4 @@
-<% content_for :title, t("admin.system_settings.show.title", key: @record[:key]) %>
+<% content_for :title, t("admin.system_settings.show.title", key: @record[:display_name]) %>
 
 <%
   form_presenter = @form_presenter || Admin::SystemSettingFormPresenter.new(
@@ -51,6 +51,8 @@
       "external_service_tuning_note"
     elsif @record[:key].to_s == "amount_engine.tax_excluded_price_conversion_enabled"
       "amount_engine_tax_excluded_price_conversion_note"
+    elsif @record[:key].to_s == SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY
+      "reference_pricing_auto_adoption_note"
     elsif @record[:key].to_s == "security.user_reauth_window_minutes"
       "user_reauth_window_note"
     elsif amount_limit_keys.include?(@record[:key].to_s)
@@ -91,10 +93,11 @@
   <%= render "admin/shared/navigation" %>
 
   <%= render "shared/ui/layout/section_header",
-        title: @record[:key],
+        title: @record[:display_name],
         title_suffix: setting_key_copy_action,
         title_suffix_wrapper_class: "inline-flex items-center",
-        subtitle: t("admin.system_settings.show.subtitle"),
+        subtitle: @record[:display_name] == @record[:key] ?
+          t("admin.system_settings.show.subtitle") : @record[:key],
         title_size: "text-2xl md:text-3xl",
         subtitle_size: "text-sm md:text-base" %>
 

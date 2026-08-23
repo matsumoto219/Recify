@@ -11,6 +11,7 @@ RSpec.describe SystemSettings do
         'feature.receipt_logo_display',
         'operations.ocr_enabled',
         'operations.ai_enabled',
+        'amount_engine.reference_pricing_auto_adoption_enabled',
         'amount_engine.tax_excluded_price_conversion_enabled',
         'amount_engine.max_candidate_snapshot_count',
         'ui.maintenance_notice_enabled',
@@ -135,6 +136,14 @@ RSpec.describe SystemSettings do
       )
     end
 
+    it '全keyをASCII dotted lower_snake形式で定義する' do
+      invalid_keys = described_class.definitions.keys.reject do |key|
+        key.ascii_only? && key.match?(/\A[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+\z/)
+      end
+
+      expect(invalid_keys).to be_empty
+    end
+
     it 'ENV固定項目をdefinitionに含めない' do
       keys = described_class.definitions.keys.join("\n")
 
@@ -244,6 +253,34 @@ RSpec.describe SystemSettings do
           }.not_to raise_error, "#{key} default should satisfy its dependency group"
         end
       end
+    end
+  end
+
+  describe '.fetch_for_update' do
+    it 'transaction内でcurrent rowをlockしgeneration sourceを返す' do
+      setting = create(
+        :system_setting,
+        key: described_class::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        value: described_class.stored_value(true)
+      )
+
+      entry = SystemSetting.transaction do
+        described_class.fetch_for_update(described_class::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+      end
+
+      aggregate_failures do
+        expect(entry.setting).to eq(setting)
+        expect(entry.current_value).to be(true)
+        expect(entry.source).to eq('db')
+      end
+    end
+
+    it 'transaction外ではlock APIを使用させない' do
+      allow(SystemSetting.connection).to receive(:transaction_open?).and_return(false)
+
+      expect {
+        described_class.fetch_for_update(described_class::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+      }.to raise_error(SystemSettings::ValidationError, 'transaction_required')
     end
   end
 
@@ -2137,6 +2174,24 @@ RSpec.describe SystemSettings do
         risk_level: 'high',
         default: true
       )
+    end
+
+    it 'OCR基準価格候補の自動採用はdefault falseのhigh risk設定として扱う' do
+      expect(described_class.definition_for(described_class::REFERENCE_PRICING_AUTO_ADOPTION_KEY)).to have_attributes(
+        category: 'amount_engine',
+        value_type: 'boolean',
+        editable: true,
+        risk_level: 'high',
+        default: false,
+        requires_confirmation: true
+      )
+
+      aggregate_failures do
+        expect(described_class.enabled?(described_class::REFERENCE_PRICING_AUTO_ADOPTION_KEY)).to be(false)
+        expect(
+          described_class.dependency_lock_groups_for(described_class::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+        ).to eq([ 'reference_pricing_auto_adoption' ])
+      end
     end
 
     it 'Amount Engine候補snapshot保存件数はlow risk設定として扱う' do

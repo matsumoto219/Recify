@@ -30,6 +30,25 @@ RSpec.describe Admin::SystemSettingsQuery do
       end
     end
 
+    it '承認済みの全体ローカライズ方針がない間は全display_nameを実キーへ解決する' do
+      records = I18n.with_locale(:ja) { described_class.call.records }
+
+      expect(records.map { |record| record[:display_name] }).to eq(records.map { |record| record[:key] })
+    end
+
+    it 'OCR基準価格候補の実キー・default false・high risk契約を返す' do
+      record = described_class.find(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
+
+      expect(record).to include(
+        key: 'amount_engine.reference_pricing_auto_adoption_enabled',
+        display_name: 'amount_engine.reference_pricing_auto_adoption_enabled',
+        current_value: false,
+        default_value: false,
+        risk_level: 'high',
+        requires_confirmation: true
+      )
+    end
+
     it 'filterを適用できる' do
       result = described_class.call(category: 'soft_limit')
 

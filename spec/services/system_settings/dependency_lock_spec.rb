@@ -1,6 +1,30 @@
 require 'rails_helper'
 
-RSpec.describe SystemOperations::SystemSettingDependencyLock do
+RSpec.describe 'SystemSettings dependency lock' do
+  def queue_pop(queue)
+    Timeout.timeout(5) { queue.pop }
+  end
+
+  def join_threads(*threads)
+    Timeout.timeout(5) { threads.each(&:join) }
+  end
+
+  def wait_for_dependency_lock(thread)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
+    loop do
+      locations = Array(thread.backtrace_locations)
+      return if thread.status == 'sleep' && locations.any? do |location|
+        location.absolute_path&.end_with?('/app/services/system_settings/dependency_lock.rb')
+      end
+
+      raise 'dependency lock waiter terminated before blocking' unless thread.alive?
+      raise Timeout::Error, 'dependency lock waiter did not block' if
+        Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      Thread.pass
+    end
+  end
+
   it '相互依存する外部サービス設定を同じlock groupへまとめる' do
     ai_groups = SystemSettings.dependency_lock_groups_for(
       'external_services.ai.read_timeout_seconds'
@@ -38,35 +62,34 @@ RSpec.describe SystemOperations::SystemSettingDependencyLock do
     errors = Queue.new
 
     first = Thread.new do
-      described_class.call(groups: [ 'external_service_status' ]) do
+      SystemSettings.with_dependency_lock(key: 'external_services.down_failure_threshold') do
         first_entered << true
-        release_first.pop
+        queue_pop(release_first)
       end
     rescue StandardError => error
       errors << error
     end
-    first_entered.pop
+    queue_pop(first_entered)
 
     second = Thread.new do
-      described_class.call(groups: [ 'external_service_status' ]) do
+      SystemSettings.with_dependency_lock(key: 'external_services.down_failure_threshold') do
         second_entered << true
       end
     rescue StandardError => error
       errors << error
     end
+    wait_for_dependency_lock(second)
 
     begin
-      expect do
-        Timeout.timeout(0.05) { second_entered.pop }
-      end.to raise_error(Timeout::Error)
+      expect(second_entered).to be_empty
     ensure
       release_first << true
-      [ first, second ].each(&:join)
+      join_threads(first, second)
     end
 
-    raise errors.pop unless errors.empty?
+    raise queue_pop(errors) unless errors.empty?
 
-    expect(second_entered.pop).to eq(true)
+    expect(queue_pop(second_entered)).to eq(true)
   end
 
   it 'dependency groupごとにdatabase advisory lockを取得する' do
@@ -76,6 +99,6 @@ RSpec.describe SystemOperations::SystemSettingDependencyLock do
       .with(a_string_including('pg_advisory_xact_lock'))
       .and_call_original
 
-    described_class.call(groups: [ 'external_service_status' ]) { true }
+    SystemSettings.with_dependency_lock(key: 'external_services.down_failure_threshold') { true }
   end
 end

@@ -26,6 +26,36 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
     }
   end
 
+
+  it "OCR基準価格候補の自動採用をresetするとdefault falseへ戻して監査する" do
+    setting = create(
+      :system_setting,
+      key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+      value: SystemSettings.stored_value(true),
+      updated_by_user: actor
+    )
+
+    result = described_class.call(
+      key: setting.key,
+      actor: actor,
+      reason: "stop new automatic adoption",
+      request: request,
+      reauthentication: reauthentication,
+      confirmation: "1"
+    )
+
+    aggregate_failures do
+      expect(result).to be_success
+      expect(SystemSetting.find_by(key: setting.key)).to be_nil
+      expect(SystemSettings.enabled?(setting.key)).to be(false)
+      expect(AuditLog.last).to have_attributes(
+        action: "system_settings.reset",
+        outcome: "succeeded",
+        target_uid: setting.key
+      )
+    end
+  end
+
   around do |example|
     travel_to(Time.zone.parse("2026-07-11 12:00:00")) { example.run }
   end
@@ -102,7 +132,7 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
       value: SystemSettings.stored_value(300),
       updated_by_user: actor
     )
-    allow(SystemOperations::SystemSettingDependencyLock).to receive(:call).and_call_original
+    allow(SystemSettings).to receive(:with_dependency_lock).and_call_original
 
     result = described_class.call(
       key: "external_services.ai.max_elapsed_seconds",
@@ -117,8 +147,8 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
       expect(result).to be_failure
       expect(result.error_code).to eq("external_service_ai_elapsed_budget")
       expect(SystemSetting.find_by!(key: "external_services.ai.max_elapsed_seconds").value).to eq("value" => 1200)
-      expect(SystemOperations::SystemSettingDependencyLock).to have_received(:call)
-        .with(groups: [ "external_service_ai_runtime" ])
+      expect(SystemSettings).to have_received(:with_dependency_lock)
+        .with(key: "external_services.ai.max_elapsed_seconds")
     end
   end
 

@@ -1,5 +1,9 @@
 class Receipts::Processing::Pipeline
   LOG_TAG = "[ReceiptAnalysisPipeline]".freeze
+  TRANSIENT_FINALIZE_DATABASE_ERRORS = [
+    ActiveRecord::Deadlocked,
+    ActiveRecord::LockWaitTimeout
+  ].freeze
   FINALIZE_DECISION_SCHEMA_VERSION = Receipts::Processing::Contracts::FinalizeDecision::SCHEMA_VERSION
   FINALIZE_STRATEGIES = Receipts::Processing::Contracts::FinalizeDecision::STRATEGIES
 
@@ -119,18 +123,12 @@ class Receipts::Processing::Pipeline
     return skipped_result(:terminal_run) if terminal_run?
     return cancel_and_skip(:not_processing) unless receipt.processing?
 
-    with_run_failure do
-      return skipped_result(:stage_already_claimed) unless Receipts::Processing.claim_stage(run, "finalize")
-
-      decision = finalize_decision_from_run
-      return fail_missing_snapshot!("finalize_decision_missing", error_stage: "finalize") unless decision
-
-      persist_finalize_result!(decision)
-
-      Receipts::Processing::Result.new(
-        finalize_decision: decision,
-        next_step: :done
-      )
+    if Receipts::Processing::ReferencePricingAutoAdoptionFence.serialization_required?(run)
+      with_run_failure(retry_transient_database_errors: true) do
+        run_serialized_finalize
+      end
+    else
+      with_run_failure { run_standard_finalize }
     end
   end
 
@@ -138,13 +136,129 @@ class Receipts::Processing::Pipeline
 
   attr_reader :run, :receipt
 
-  def persist_finalize_result!(decision)
-    ReceiptAnalysisRun.transaction do
-      self.class.finalize(receipt: receipt, decision: decision, run: run)
-      receipt.reload
-      Receipts::Processing.record_final_result(run, receipt: receipt)
-      Receipts::Processing.succeed(run)
+  def run_standard_finalize
+    return skipped_result(:stage_already_claimed) unless Receipts::Processing.claim_stage(run, "finalize")
+
+    decision = finalize_decision_from_run
+    return fail_missing_snapshot!("finalize_decision_missing", error_stage: "finalize") unless decision
+
+    persist_finalize_result!(decision)
+
+    Receipts::Processing::Result.new(
+      finalize_decision: decision,
+      next_step: :done
+    )
+  end
+
+  def run_serialized_finalize
+    pipeline_result = nil
+    Receipts::Processing::ReferencePricingAutoAdoptionFence.with_serialized_run(run:) do |locked_run, gate_result|
+      unless locked_run && Receipts::Processing.claim_stage(locked_run, "finalize")
+        pipeline_result = skipped_result(:stage_already_claimed)
+        next false
+      end
+
+      decision = finalize_decision_from_run(locked_run)
+      unless decision
+        pipeline_result = fail_missing_snapshot!(
+          "finalize_decision_missing",
+          error_stage: "finalize",
+          run_record: locked_run
+        )
+        next false
+      end
+
+      locked_receipt, existing_children = lock_receipt_and_children(locked_run)
+      unless locked_receipt&.processing?
+        Receipts::Processing.cancel(locked_run) if locked_run.active?
+        pipeline_result = skipped_result(:not_processing)
+        next false
+      end
+      if stale_serialized_finalize?(locked_run, locked_receipt:, existing_children:)
+        pipeline_result = fail_stale_finalize!(locked_run)
+        next false
+      end
+
+      adopted = persist_finalize_result!(
+        decision,
+        run_record: locked_run,
+        receipt_record: locked_receipt,
+        gate_result:,
+        existing_items: existing_children.fetch(:items)
+      )
+      pipeline_result = Receipts::Processing::Result.new(
+        finalize_decision: decision,
+        next_step: :done
+      )
+      adopted
     end
+
+    pipeline_result || skipped_result(:terminal_run)
+  end
+
+  def lock_receipt_and_children(locked_run)
+    locked_receipt = Receipt.lock.find_by(id: locked_run.receipt_id)
+    return [ nil, {} ] unless locked_receipt
+
+    existing_children = {
+      items: ReceiptItem.where(receipt_id: locked_receipt.id).order(:id).lock.load.to_a,
+      adjustments: ReceiptAdjustment.where(receipt_id: locked_receipt.id).order(:id).lock.load.to_a,
+      payments: ReceiptPayment.where(receipt_id: locked_receipt.id).order(:id).lock.load.to_a,
+      tax_details: ReceiptTaxDetail.where(receipt_id: locked_receipt.id).order(:id).lock.load.to_a
+    }
+    [ locked_receipt, existing_children ]
+  end
+
+  def stale_serialized_finalize?(locked_run, locked_receipt:, existing_children:)
+    gate = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.from_snapshot(
+      locked_run.metadata.to_h[
+        Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot::METADATA_KEY
+      ],
+      run: locked_run,
+      require_binding: true
+    )
+    expected_receipt_lock_version = gate&.dig("proposal_binding", "receipt_lock_version")
+
+    !expected_receipt_lock_version.is_a?(Integer) ||
+      expected_receipt_lock_version != locked_receipt.lock_version ||
+      existing_children.values.any?(&:present?)
+  end
+
+  def fail_stale_finalize!(locked_run)
+    Receipts::Processing.fail(
+      locked_run,
+      error_stage: "finalize",
+      error_code: "analysis_stale_run",
+      error_message: "analysis_stale_run"
+    )
+    Receipts::Processing::Result.new(next_step: :skipped, skip_reason: :analysis_stale_run)
+  rescue Receipts::Processing::TerminalRunError
+    skipped_result(:terminal_run)
+  end
+
+  def persist_finalize_result!(decision, run_record: run, receipt_record: receipt, gate_result: nil, existing_items: [])
+    adopted = false
+    ReceiptAnalysisRun.transaction do
+      if gate_result
+        step = FinalizeStep.new(
+          receipt: receipt_record,
+          decision:,
+          run: run_record,
+          reference_pricing_auto_adoption: {
+            gate_result:,
+            existing_items:
+          }
+        )
+        step.call
+        adopted = step.reference_pricing_auto_adoption_applied?
+      else
+        self.class.finalize(receipt: receipt_record, decision:, run: run_record)
+      end
+      receipt_record.reload
+      Receipts::Processing.record_final_result(run_record, receipt: receipt_record)
+      Receipts::Processing.succeed(run_record)
+    end
+    adopted
   end
 
   def terminal_run?
@@ -175,8 +289,15 @@ class Receipts::Processing::Pipeline
     Receipts::Processing::Result.new(next_step: :skipped, skip_reason: reason)
   end
 
-  def with_run_failure
+  def with_run_failure(retry_transient_database_errors: false)
     yield
+  rescue *TRANSIENT_FINALIZE_DATABASE_ERRORS => e
+    if retry_transient_database_errors
+      raise Receipts::Processing::RetryableFinalizeError, "transient_finalize_database_error"
+    end
+
+    fail_run(e)
+    raise
   rescue => e
     fail_run(e)
     raise
@@ -328,8 +449,8 @@ class Receipts::Processing::Pipeline
     Receipts::Processing.record_finalize_decision(run, decision)
   end
 
-  def finalize_decision_from_run
-    Receipts::Processing.finalize_decision_from_snapshot(run.metadata.to_h["finalize_decision"])
+  def finalize_decision_from_run(run_record = run)
+    Receipts::Processing.finalize_decision_from_snapshot(run_record.metadata.to_h["finalize_decision"])
   end
 
   def ocr_result_from_snapshot
@@ -346,9 +467,9 @@ class Receipts::Processing::Pipeline
     }.compact
   end
 
-  def fail_missing_snapshot!(error_code, error_stage:)
+  def fail_missing_snapshot!(error_code, error_stage:, run_record: run)
     Receipts::Processing.fail(
-      run,
+      run_record,
       error_stage: error_stage,
       error_code: error_code,
       error_message: error_code

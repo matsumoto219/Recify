@@ -70,6 +70,73 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
 
       expect(result.map { |item| item[:quantity] }).to all(eq(BigDecimal('1')))
     end
+
+    it 'A1で検証済みのexact sourceだけをfractional値を変えずに保持する' do
+      source = {
+        raw_text: '検証明細',
+        price: nil,
+        quantity: BigDecimal('2.5'),
+        quantity_unit_code: 'liter',
+        quantity_unit_raw: nil,
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: '1.25',
+        reference_quantity: '0.5',
+        reference_quantity_unit_code: 'liter',
+        reference_quantity_unit_raw: nil,
+        reference_price_tax_inclusion: 'gross'
+      }
+
+      trusted = described_class.items(
+        [ source ],
+        trusted_reference_pricing_auto_adoption: true
+      ).sole
+      untrusted = described_class.items([ source ]).sole
+
+      aggregate_failures do
+        expect(trusted).to include(
+          price: nil,
+          quantity: BigDecimal('2.5'),
+          pricing_source_kind: 'reference_quantity_price',
+          reference_price_amount: BigDecimal('1.25'),
+          reference_quantity: BigDecimal('0.5'),
+          reference_quantity_unit_code: 'liter',
+          reference_price_tax_inclusion: 'gross'
+        )
+        expect(untrusted).not_to have_key(:pricing_source_kind)
+        expect(untrusted).not_to have_key(:reference_price_amount)
+      end
+    end
+
+    it 'trusted指定でもscientific・Float・alias unit・partial sourceをdefault補完しない' do
+      valid = {
+        raw_text: '検証明細',
+        quantity: '2.5',
+        quantity_unit_code: 'liter',
+        quantity_unit_raw: nil,
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: '120',
+        reference_quantity: '1',
+        reference_quantity_unit_code: 'liter',
+        reference_quantity_unit_raw: nil,
+        reference_price_tax_inclusion: 'gross'
+      }
+      invalid = [
+        valid.merge(reference_price_amount: '1e2'),
+        valid.merge(reference_price_amount: 120.0),
+        valid.merge(quantity_unit_code: 'L'),
+        valid.merge(reference_quantity: nil),
+        valid.merge(reference_quantity_unit_raw: 'L')
+      ]
+
+      invalid.each do |source|
+        expect(
+          described_class.items(
+            [ source ],
+            trusted_reference_pricing_auto_adoption: true
+          )
+        ).to be_empty
+      end
+    end
   end
 
   describe '.adjustments' do

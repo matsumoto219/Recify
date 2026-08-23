@@ -1,6 +1,6 @@
 class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
   class << self
-    def items(value)
+    def items(value, trusted_reference_pricing_auto_adoption: false)
       Array(value).filter_map.with_index do |item, index|
         symbolized = normalized_attributes(item)
         price = amount(symbolized[:price])
@@ -10,7 +10,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         next if [ price, original_line_total, line_total, discount_amount ].compact.any?(&:negative?)
         quantity_unit_code = ReceiptQuantityUnit.normalize(symbolized[:quantity_unit_code])
 
-        {
+        attributes = {
           raw_text: symbolized[:raw_text].to_s,
           suggested_name: symbolized[:suggested_name].presence,
           confirmed_name: symbolized[:confirmed_name].presence,
@@ -30,6 +30,13 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
           position_index: symbolized[:position_index] || index + 1,
           confidence: confidence(symbolized[:confidence])
         }
+        if trusted_reference_pricing_auto_adoption
+          reference_source = trusted_reference_source_attributes(symbolized)
+          next if reference_source.nil?
+
+          attributes.merge!(reference_source)
+        end
+        attributes
       end
     end
 
@@ -100,6 +107,80 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     end
 
     private
+
+    def trusted_reference_source_attributes(attributes)
+      return unless attributes[:pricing_source_kind] == "reference_quantity_price"
+      return unless attributes[:reference_price_tax_inclusion] == "gross"
+      return unless attributes[:quantity_unit_raw].nil? && attributes[:reference_quantity_unit_raw].nil?
+
+      reference_price = exact_decimal(
+        attributes[:reference_price_amount],
+        maximum: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX,
+        maximum_scale: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX_SCALE,
+        allow_zero: true
+      )
+      reference_quantity = exact_decimal(
+        attributes[:reference_quantity],
+        maximum: ReceiptItem::REFERENCE_QUANTITY_MAX,
+        maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+        allow_zero: false
+      )
+      purchased_quantity = exact_decimal(
+        attributes[:quantity],
+        maximum: ReceiptItem::REFERENCE_QUANTITY_MAX,
+        maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+        allow_zero: false
+      )
+      purchased_unit = canonical_unit(attributes[:quantity_unit_code])
+      reference_unit = canonical_unit(attributes[:reference_quantity_unit_code])
+      return if [ reference_price, reference_quantity, purchased_quantity, purchased_unit, reference_unit ].any?(&:nil?)
+      return unless ReceiptQuantityUnit.convertible?(from: purchased_unit, to: reference_unit)
+
+      {
+        price: nil,
+        quantity: purchased_quantity,
+        quantity_unit_code: purchased_unit,
+        quantity_unit_raw: nil,
+        pricing_source_kind: "reference_quantity_price",
+        reference_price_amount: reference_price,
+        reference_quantity: reference_quantity,
+        reference_quantity_unit_code: reference_unit,
+        reference_quantity_unit_raw: nil,
+        reference_price_tax_inclusion: "gross"
+      }
+    rescue ReceiptQuantityUnit::ConversionError
+      nil
+    end
+
+    def exact_decimal(value, maximum:, maximum_scale:, allow_zero:)
+      source = case value
+      when String
+        return unless value.match?(/\A(?:0|[1-9]\d*)(?:\.\d*[1-9])?\z/)
+
+        value
+      when Integer
+        value.to_s
+      when BigDecimal
+        return unless value.finite?
+
+        value.to_s("F").sub(/\.0+\z/, "").sub(/(\.\d*?)0+\z/, "\\1")
+      else
+        return
+      end
+
+      decimal = BigDecimal(source)
+      return if decimal.negative? || (!allow_zero && decimal.zero?) || decimal > maximum
+
+      scale = source.include?(".") ? source.length - source.index(".") - 1 : 0
+      decimal if scale <= maximum_scale
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def canonical_unit(value)
+      unit = ReceiptQuantityUnit.unit_for(value)
+      value if value.is_a?(String) && unit&.code == value
+    end
 
     def normalized_attributes(value)
       if value.respond_to?(:with_indifferent_access)

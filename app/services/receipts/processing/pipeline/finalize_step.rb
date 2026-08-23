@@ -35,10 +35,14 @@ class Receipts::Processing::Pipeline
       new(receipt: receipt, decision: decision, run: run).call
     end
 
-    def initialize(receipt:, decision:, run: nil)
+    def initialize(receipt:, decision:, run: nil, reference_pricing_auto_adoption: nil)
       @receipt = receipt
       @decision = decision
       @run = run
+      @reference_pricing_auto_adoption = reference_pricing_auto_adoption
+      @reference_pricing_auto_adoption_requested = false
+      @reference_pricing_auto_adoption_applied = false
+      @reference_pricing_auto_adoption_expected_item = nil
     end
 
     def call
@@ -67,9 +71,13 @@ class Receipts::Processing::Pipeline
       end
     end
 
+    def reference_pricing_auto_adoption_applied?
+      @reference_pricing_auto_adoption_applied == true
+    end
+
     private
 
-    attr_reader :receipt, :decision, :run
+    attr_reader :receipt, :decision, :run, :reference_pricing_auto_adoption
 
     def ocr_result_for_finalize
       return decision.ocr_result if decision.ocr_result.present?
@@ -95,6 +103,7 @@ class Receipts::Processing::Pipeline
       limit_validator.validate_source_structural_limits!(ocr_result: ocr_result, ai_result: ai_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: ai_result)
       params = Analysis.enforce_ownership_consistency(params: params)
+      params = apply_reference_pricing_auto_adoption(params)
       record_build_params_snapshot(params)
       limit_validator.validate_structural_limits!(params)
 
@@ -178,6 +187,7 @@ class Receipts::Processing::Pipeline
         tax_details_attributes: tax_details_attributes,
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
+      verify_reference_pricing_auto_adoption_persistence!
 
       Rails.logger.info(
         "[ReceiptAnalysis] completed receipt_id=#{receipt.id} status=#{final_status} items=#{items_attributes.size}"
@@ -190,6 +200,7 @@ class Receipts::Processing::Pipeline
       limit_validator.validate_source_structural_limits!(ocr_result: ocr_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
       params = Analysis.enforce_ownership_consistency(params: params)
+      params = apply_reference_pricing_auto_adoption(params)
       record_build_params_snapshot(params)
       limit_validator.validate_structural_limits!(params)
 
@@ -250,6 +261,7 @@ class Receipts::Processing::Pipeline
         tax_details_attributes: tax_details_attributes,
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
+      verify_reference_pricing_auto_adoption_persistence!
 
       Rails.logger.info(
         "[ReceiptAnalysis] ocr_only_completed receipt_id=#{receipt.id} status=#{final_status} items=#{items_attributes.size}"
@@ -262,6 +274,7 @@ class Receipts::Processing::Pipeline
       limit_validator.validate_source_structural_limits!(ocr_result: ocr_result)
       params = Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
       params = Analysis.enforce_ownership_consistency(params: params)
+      params = apply_reference_pricing_auto_adoption(params)
       record_build_params_snapshot(params)
       limit_validator.validate_structural_limits!(params)
 
@@ -320,6 +333,7 @@ class Receipts::Processing::Pipeline
         tax_details_attributes: tax_details_attributes,
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
+      verify_reference_pricing_auto_adoption_persistence!
 
       Rails.logger.warn(
         "[ReceiptAnalysis] fallback_saved receipt_id=#{receipt.id} error_code=#{mapped[:error_code]} items=#{items_attributes.size}"
@@ -415,7 +429,8 @@ class Receipts::Processing::Pipeline
         preserve_missing_amount = preserve_missing_ocr_item_amount?(source_item, normalized_calculated_item)
 
         item_attributes.merge(
-          price: safe_calculated_amount(normalized_calculated_item[:price]) || item_attributes[:price],
+          price: reference_formula_item?(source_item) ? item_attributes[:price] :
+            safe_calculated_amount(normalized_calculated_item[:price]) || item_attributes[:price],
           quantity: normalized_calculated_item[:quantity],
           tax_rate: calculated_tax_rate.nil? ? item_attributes[:tax_rate] : calculated_tax_rate,
           original_line_total: preserve_missing_amount ? item_attributes[:original_line_total] : safe_calculated_amount(normalized_calculated_item[:original_line_total]) || item_attributes[:original_line_total],
@@ -429,9 +444,71 @@ class Receipts::Processing::Pipeline
     def preserve_missing_ocr_item_amount?(source_item, calculated_item)
       return false unless source_item[:original_line_total].nil? && source_item[:line_total].nil?
       return false unless calculated_item[:amount_line_total_present] == false
+      return false if reference_formula_item?(source_item)
 
       source_item[:quantity_unit_status] == "unknown" ||
         !ReceiptQuantityUnit.countable?(source_item[:quantity_unit_code])
+    end
+
+    def reference_formula_item?(item)
+      normalized_hash(item)[:pricing_source_kind].to_s == "reference_quantity_price"
+    end
+
+    def apply_reference_pricing_auto_adoption(params)
+      return params unless reference_pricing_auto_adoption.is_a?(Hash)
+
+      result = Receipts::Processing::ReferencePricingAutoAdoptionWriter.call(
+        receipt:,
+        run:,
+        params:,
+        gate_result: reference_pricing_auto_adoption[:gate_result],
+        existing_items: reference_pricing_auto_adoption[:existing_items]
+      )
+      if result.applied?
+        @reference_pricing_auto_adoption_requested = true
+        @reference_pricing_auto_adoption_expected_item =
+          result.params.fetch(:receipt_items_attributes).sole.deep_dup
+      end
+      result.params
+    end
+
+    def verify_reference_pricing_auto_adoption_persistence!
+      return unless @reference_pricing_auto_adoption_requested == true
+
+      expected = normalized_hash(@reference_pricing_auto_adoption_expected_item)
+      projection = ReceiptAmountService.reference_item_extension_projection(
+        reference_price_amount: expected[:reference_price_amount],
+        reference_quantity: expected[:reference_quantity],
+        reference_unit_code: expected[:reference_quantity_unit_code],
+        purchased_quantity: expected[:quantity],
+        purchased_unit_code: expected[:quantity_unit_code]
+      )
+      persisted_items = receipt.receipt_items.reload.to_a
+      persisted = persisted_items.one? ? persisted_items.sole : nil
+      valid = persisted &&
+        persisted.pricing_source_kind == "reference_quantity_price" &&
+        persisted.price.nil? &&
+        persisted.reference_price_amount == BigDecimal(expected[:reference_price_amount].to_s) &&
+        persisted.reference_quantity == BigDecimal(expected[:reference_quantity].to_s) &&
+        persisted.reference_quantity_unit_code == expected[:reference_quantity_unit_code] &&
+        persisted.reference_price_tax_inclusion == "gross" &&
+        persisted.quantity == BigDecimal(expected[:quantity].to_s) &&
+        persisted.quantity_unit_code == expected[:quantity_unit_code] &&
+        persisted.original_line_total == projection.fetch(:projected_amount) &&
+        persisted.line_total == projection.fetch(:projected_amount) &&
+        receipt.total_amount == projection.fetch(:projected_amount)
+      raise_reference_pricing_auto_adoption_invariant! unless valid
+
+      @reference_pricing_auto_adoption_applied = true
+    rescue ReceiptAmountService::InvalidItemSourceError, ArgumentError, KeyError, TypeError
+      raise_reference_pricing_auto_adoption_invariant!
+    end
+
+    def raise_reference_pricing_auto_adoption_invariant!
+      raise Receipts::Processing::AnalysisError.new(
+        "unexpected_error",
+        "reference_pricing_auto_adoption_persistence_mismatch"
+      )
     end
 
     def determine_final_status(ocr_result:, receipt_attributes:, items_attributes:, ai_needs_review: nil, amount_needs_review: nil, build_review_reasons: [], ocr_review_reasons: [], detail_needs_review: nil, ocr_low_quality: nil)
@@ -1251,7 +1328,10 @@ class Receipts::Processing::Pipeline
     end
 
     def normalize_items_attributes(items)
-      AttributeNormalizer.items(items)
+      AttributeNormalizer.items(
+        items,
+        trusted_reference_pricing_auto_adoption: @reference_pricing_auto_adoption_requested == true
+      )
     end
 
     def normalize_adjustments_attributes(adjustments)

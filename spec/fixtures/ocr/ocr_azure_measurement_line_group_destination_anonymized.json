@@ -1,0 +1,140 @@
+{
+  "status": "succeeded",
+  "analyzeResult": {
+    "apiVersion": "2024-11-30",
+    "modelId": "prebuilt-receipt",
+    "stringIndexType": "textElements",
+    "content": "SYNTH-LAYOUT\n検証品A01 税込 120円/1 L\n計量 2.5 L\n合計 300円",
+    "pages": [
+      {
+        "pageNumber": 1,
+        "width": 300,
+        "height": 200,
+        "unit": "pixel",
+        "words": [
+          {
+            "content": "SYNTH-LAYOUT",
+            "polygon": [20, 10, 150, 10, 150, 25, 20, 25],
+            "confidence": 0.99,
+            "span": { "offset": 0, "length": 12 }
+          },
+          {
+            "content": "検証",
+            "polygon": [20, 50, 36, 50, 36, 66, 20, 66],
+            "confidence": 0.99,
+            "span": { "offset": 13, "length": 2 }
+          },
+          {
+            "content": "品",
+            "polygon": [39, 50, 47, 50, 47, 66, 39, 66],
+            "confidence": 0.99,
+            "span": { "offset": 15, "length": 1 }
+          },
+          {
+            "content": "A",
+            "polygon": [50, 50, 58, 50, 58, 66, 50, 66],
+            "confidence": 0.99,
+            "span": { "offset": 16, "length": 1 }
+          },
+          {
+            "content": "01",
+            "polygon": [61, 50, 70, 50, 70, 66, 61, 66],
+            "confidence": 0.99,
+            "span": { "offset": 17, "length": 2 }
+          },
+          {
+            "content": "税",
+            "polygon": [76, 50, 85, 50, 85, 66, 76, 66],
+            "confidence": 0.99,
+            "span": { "offset": 20, "length": 1 }
+          },
+          {
+            "content": "込",
+            "polygon": [89, 50, 98, 50, 98, 66, 89, 66],
+            "confidence": 0.99,
+            "span": { "offset": 21, "length": 1 }
+          },
+          {
+            "content": "120円/1",
+            "polygon": [116, 50, 184, 50, 184, 66, 116, 66],
+            "confidence": 0.99,
+            "span": { "offset": 23, "length": 6 }
+          },
+          {
+            "content": "L",
+            "polygon": [190, 50, 202, 50, 202, 66, 190, 66],
+            "confidence": 0.99,
+            "span": { "offset": 30, "length": 1 }
+          },
+          {
+            "content": "計量",
+            "polygon": [20, 72, 48, 72, 48, 88, 20, 88],
+            "confidence": 0.99,
+            "span": { "offset": 32, "length": 2 }
+          },
+          {
+            "content": "2.5",
+            "polygon": [54, 72, 84, 72, 84, 88, 54, 88],
+            "confidence": 0.99,
+            "span": { "offset": 35, "length": 3 }
+          },
+          {
+            "content": "L",
+            "polygon": [90, 72, 102, 72, 102, 88, 90, 88],
+            "confidence": 0.99,
+            "span": { "offset": 39, "length": 1 }
+          },
+          {
+            "content": "合計",
+            "polygon": [20, 130, 48, 130, 48, 146, 20, 146],
+            "confidence": 0.99,
+            "span": { "offset": 41, "length": 2 }
+          },
+          {
+            "content": "300円",
+            "polygon": [54, 130, 94, 130, 94, 146, 54, 146],
+            "confidence": 0.99,
+            "span": { "offset": 44, "length": 4 }
+          }
+        ],
+        "lines": [
+          {
+            "content": "SYNTH-LAYOUT",
+            "polygon": [20, 10, 150, 10, 150, 25, 20, 25],
+            "spans": [{ "offset": 0, "length": 12 }]
+          },
+          {
+            "content": "検証品A01 税込 120円/1 L",
+            "polygon": [20, 50, 202, 50, 202, 66, 20, 66],
+            "spans": [{ "offset": 13, "length": 18 }]
+          },
+          {
+            "content": "計量 2.5 L",
+            "polygon": [20, 72, 102, 72, 102, 88, 20, 88],
+            "spans": [{ "offset": 32, "length": 8 }]
+          },
+          {
+            "content": "合計 300円",
+            "polygon": [20, 130, 94, 130, 94, 146, 20, 146],
+            "spans": [{ "offset": 41, "length": 7 }]
+          }
+        ]
+      }
+    ],
+    "documents": [
+      {
+        "docType": "receipt.retailMeal",
+        "confidence": 0.99,
+        "fields": {
+          "Items": { "type": "array", "valueArray": [] },
+          "Total": {
+            "type": "currency",
+            "content": "300円",
+            "spans": [{ "offset": 44, "length": 4 }],
+            "valueCurrency": { "amount": 300, "currencyCode": "JPY" }
+          }
+        }
+      }
+    ]
+  }
+}

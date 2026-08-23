@@ -24,6 +24,55 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
   end
 
   describe '.call' do
+    it 'OCR基準価格候補の自動採用を明示確認付きで有効化し監査する' do
+      result = described_class.call(
+        key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        value: 'true',
+        actor: actor,
+        reason: 'enable bounded adoption after verification',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: '1'
+      )
+
+      aggregate_failures do
+        expect(result).to be_success
+        expect(SystemSettings.enabled?(SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)).to be(true)
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'succeeded',
+          target_uid: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY
+        )
+        expect(AuditLog.last.metadata).to include(
+          'category' => 'amount_engine',
+          'risk_level' => 'high'
+        )
+      end
+    end
+
+    it 'OCR基準価格候補の自動採用は確認なしで有効化せず失敗監査を残す' do
+      result = described_class.call(
+        key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        value: 'true',
+        actor: actor,
+        reason: 'missing explicit confirmation',
+        request: request,
+        reauthentication: reauthentication,
+        confirmation: '0'
+      )
+
+      aggregate_failures do
+        expect(result).to be_failure
+        expect(result.error_code).to eq('confirmation_required')
+        expect(SystemSetting.find_by(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)).to be_nil
+        expect(AuditLog.last).to have_attributes(
+          action: 'system_settings.update',
+          outcome: 'failed',
+          error_code: 'confirmation_required'
+        )
+      end
+    end
+
     it '既定値と同じ通常保存もDB overrideとして維持する' do
       result = described_class.call(
         key: 'feature.receipt_logo_display_enabled',
@@ -117,7 +166,7 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
     end
 
     it '依存設定を対応するdependency lock内で更新する' do
-      allow(SystemOperations::SystemSettingDependencyLock).to receive(:call).and_call_original
+      allow(SystemSettings).to receive(:with_dependency_lock).and_call_original
 
       result = described_class.call(
         key: 'external_services.ai.read_timeout_seconds',
@@ -131,8 +180,8 @@ RSpec.describe SystemOperations::SystemSettingUpdateExecutor do
 
       aggregate_failures do
         expect(result).to be_success
-        expect(SystemOperations::SystemSettingDependencyLock).to have_received(:call)
-          .with(groups: [ 'external_service_ai_runtime' ])
+        expect(SystemSettings).to have_received(:with_dependency_lock)
+          .with(key: 'external_services.ai.read_timeout_seconds')
       end
     end
 

@@ -4,6 +4,9 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingLineGroupExtractor do
   LINE_GROUP_EXTRACTOR_FIXTURE_PATH = Rails.root.join(
     'spec/fixtures/ocr/ocr_azure_measurement_line_group_anonymized.json'
   )
+  LINE_GROUP_DESTINATION_FIXTURE_PATH = Rails.root.join(
+    'spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json'
+  )
 
   def fixture_analyze_result
     JSON.parse(LINE_GROUP_EXTRACTOR_FIXTURE_PATH.read).fetch('analyzeResult')
@@ -15,6 +18,10 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingLineGroupExtractor do
       profile:,
       projection: ReceiptAmountService.method(:reference_item_extension_projection)
     )
+  end
+
+  def destination_fixture_analyze_result
+    JSON.parse(LINE_GROUP_DESTINATION_FIXTURE_PATH.read).fetch('analyzeResult')
   end
 
   def text_element_length(value)
@@ -115,6 +122,260 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingLineGroupExtractor do
         summary_total: '300',
         rounding_matches: %w[floor half_up ceil]
       )
+    end
+  end
+
+  it 'adds a deterministic new-item destination from an exact inline identifier only' do
+    candidate = extract(destination_fixture_analyze_result).sole
+
+    aggregate_failures do
+      expect(candidate[:destination_item_identity]).to eq(
+        contract_version: 'azure_line_group_destination_v1',
+        kind: 'reference_line_prefix',
+        identity: 'azure_line_group_destination_p0_name_l1_s13_e19_ref_l1_qty_l2',
+        page_index: 0,
+        name_line_index: 1,
+        reference_line_index: 1,
+        purchased_quantity_line_index: 2,
+        normalized_name_grapheme_length: 6,
+        evidence: {
+          source_provider: 'azure_line_group',
+          source_field_path: 'pages[0].lines[1]',
+          page_index: 0,
+          line_index: 1,
+          string_index_type: 'textElements',
+          provider_span_start: 13,
+          provider_span_end: 19,
+          word_spans: [
+            {
+              source_field_path: 'pages[0].words[1]',
+              word_index: 1,
+              provider_span_start: 13,
+              provider_span_end: 15
+            },
+            {
+              source_field_path: 'pages[0].words[2]',
+              word_index: 2,
+              provider_span_start: 15,
+              provider_span_end: 16
+            },
+            {
+              source_field_path: 'pages[0].words[3]',
+              word_index: 3,
+              provider_span_start: 16,
+              provider_span_end: 17
+            },
+            {
+              source_field_path: 'pages[0].words[4]',
+              word_index: 4,
+              provider_span_start: 17,
+              provider_span_end: 19
+            }
+          ],
+          tax_word_spans: [
+            {
+              source_field_path: 'pages[0].words[5]',
+              word_index: 5,
+              provider_span_start: 20,
+              provider_span_end: 21
+            },
+            {
+              source_field_path: 'pages[0].words[6]',
+              word_index: 6,
+              provider_span_start: 21,
+              provider_span_end: 22
+            }
+          ]
+        }
+      )
+      expect(candidate.to_json).not_to include('検証品A01')
+      expect(candidate).not_to have_key(:item_index)
+    end
+  end
+
+  it 'keeps a valid numeric candidate diagnostic-only when the inline item identity is absent' do
+    candidate = extract.sole
+
+    expect(candidate).not_to have_key(:destination_item_identity)
+  end
+
+  it 'does not use a merchant field, preceding line, or wrapped prefix as destination identity' do
+    merchant = destination_fixture_analyze_result.deep_dup
+    merchant_name = merchant.dig('pages', 0, 'lines', 1, 'content').split.first
+    merchant.dig('documents', 0, 'fields')['MerchantName'] = {
+      'type' => 'string',
+      'content' => merchant_name,
+      'spans' => [ { 'offset' => 13, 'length' => 6 } ],
+      'valueString' => merchant_name
+    }
+
+    wrapped = synthetic_analyze_result([
+      'SYNTH-WRAPPED-NAME',
+      '検証 品A01 税込 120円/1 L',
+      '計量 2.5 L'
+    ])
+
+    aggregate_failures do
+      expect(extract(merchant).sole).not_to have_key(:destination_item_identity)
+      expect(extract(wrapped)).to eq([])
+      expect(extract(synthetic_analyze_result([
+        '検証品A01',
+        '税込 120円/1 L',
+        '計量 2.5 L'
+      ])).sole).not_to have_key(:destination_item_identity)
+    end
+  end
+
+  it 'requires one bounded NFKC-stable identifier followed by exactly one horizontal separator' do
+    duplicate = synthetic_analyze_result([
+      '検証品A01',
+      '検証品A01 税込 120円/1 L',
+      '計量 2.5 L'
+    ])
+    tab_separator = synthetic_analyze_result([
+      'SYNTH-TAB',
+      "検証品A01\t税込 120円/1 L",
+      '計量 2.5 L'
+    ])
+    oversized = synthetic_analyze_result([
+      'SYNTH-OVERSIZED',
+      "検#{'証' * 22}A01 税込 120円/1 L",
+      '計量 2.5 L'
+    ])
+    non_nfkc = synthetic_analyze_result([
+      'SYNTH-NON-NFKC',
+      "検証品Ａ01 税込 120円/1 L",
+      '計量 2.5 L'
+    ])
+
+    [ duplicate, tab_separator, oversized, non_nfkc ].each do |analyze_result|
+      destinations = extract(analyze_result).filter_map { |candidate| candidate[:destination_item_identity] }
+
+      expect(destinations).to be_empty
+    end
+  end
+
+  it 'requires continuous word coverage and a left-to-right polygon relation to the tax marker' do
+    missing_word = destination_fixture_analyze_result.deep_dup
+    missing_word.dig('pages', 0, 'words').delete_at(2)
+
+    reversed_polygon = destination_fixture_analyze_result.deep_dup
+    reversed_polygon.dig('pages', 0, 'words').slice(1, 4).each_with_index do |word, index|
+      left = 120 + (index * 12)
+      word['polygon'] = [ left, 50, left + 10, 50, left + 10, 66, left, 66 ]
+    end
+
+    aggregate_failures do
+      expect(extract(missing_word).sole).not_to have_key(:destination_item_identity)
+      expect(extract(reversed_polygon).sole).not_to have_key(:destination_item_identity)
+    end
+  end
+
+  it 'uses only the vertical alignment and horizontal gap observed in provider evidence' do
+    vertically_shifted = destination_fixture_analyze_result.deep_dup
+    vertically_shifted.dig('pages', 0, 'words').slice(1, 4).each do |word|
+      left, _, right = word.fetch('polygon').values_at(0, 1, 2)
+      word['polygon'] = [ left, 51, right, 51, right, 65, left, 65 ]
+    end
+
+    too_close = destination_fixture_analyze_result.deep_dup
+    too_close.dig('pages', 0, 'words', 5)['polygon'] = [ 74, 50, 96, 50, 96, 66, 74, 66 ]
+
+    too_far = destination_fixture_analyze_result.deep_dup
+    too_far.dig('pages', 0, 'words', 5)['polygon'] = [ 79, 50, 101, 50, 101, 66, 79, 66 ]
+
+    split_identifier = destination_fixture_analyze_result.deep_dup
+    split_identifier.dig('pages', 0, 'words').slice(1, 2).each do |word|
+      left, _, right = word.fetch('polygon').values_at(0, 1, 2)
+      word['polygon'] = [ left, 51, right, 51, right, 65, left, 65 ]
+    end
+
+    reversed_identifier_words = destination_fixture_analyze_result.deep_dup
+    first_polygon = reversed_identifier_words.dig('pages', 0, 'words', 1, 'polygon')
+    last_polygon = reversed_identifier_words.dig('pages', 0, 'words', 4, 'polygon')
+    reversed_identifier_words.dig('pages', 0, 'words', 1)['polygon'] = last_polygon
+    reversed_identifier_words.dig('pages', 0, 'words', 4)['polygon'] = first_polygon
+
+    split_tax_marker = destination_fixture_analyze_result.deep_dup
+    split_tax_marker.dig('pages', 0, 'words').slice!(5, 1)
+    split_tax_marker.dig('pages', 0, 'words').insert(
+      5,
+      {
+        'content' => '税',
+        'polygon' => [ 76, 50, 85, 50, 85, 66, 76, 66 ],
+        'confidence' => 0.99,
+        'span' => { 'offset' => 20, 'length' => 1 }
+      },
+      {
+        'content' => '込',
+        'polygon' => [ 88, 51, 98, 51, 98, 65, 88, 65 ],
+        'confidence' => 0.99,
+        'span' => { 'offset' => 21, 'length' => 1 }
+      }
+    )
+
+    [
+      vertically_shifted,
+      too_close,
+      too_far,
+      split_identifier,
+      reversed_identifier_words,
+      split_tax_marker
+    ].each do |analyze_result|
+      destinations = extract(analyze_result).filter_map do |candidate|
+        candidate[:destination_item_identity]
+      end
+
+      expect(destinations).to be_empty
+    end
+  end
+
+  it 'rejects a destination identifier claimed by a non-item document field without exposing its text' do
+    header = destination_fixture_analyze_result.deep_dup
+    header.dig('documents', 0, 'fields')['Header'] = {
+      'type' => 'string',
+      'valueString' => '検証品A01'
+    }
+
+    candidate = extract(header).sole
+
+    aggregate_failures do
+      expect(candidate).not_to have_key(:destination_item_identity)
+      expect(candidate.to_json).not_to include('検証品A01')
+    end
+  end
+
+  it 'rejects unstructured merchant vocabulary and malformed non-item evidence' do
+    merchant = synthetic_analyze_result([
+      'SYNTH-MERCHANT',
+      '店舗名A01 税込 120円/1 L',
+      '計量 2.5 L'
+    ])
+    malformed_field = destination_fixture_analyze_result.deep_dup
+    malformed_field.dig('documents', 0, 'fields')['Header'] = {
+      'type' => 'string',
+      'content' => "識別\u0000子",
+      'spans' => [ { 'offset' => 13, 'length' => -1 } ]
+    }
+    malformed_array = destination_fixture_analyze_result.deep_dup
+    malformed_array.dig('documents', 0, 'fields')['Header'] = {
+      'type' => 'array',
+      'valueArray' => [ '検証品A01' ]
+    }
+    malformed_top_level = destination_fixture_analyze_result.deep_dup
+    malformed_top_level.dig('documents', 0, 'fields')['Header'] = '検証品A01'
+    greeting = synthetic_analyze_result([
+      'SYNTH-GREETING',
+      '毎度礼A01 税込 120円/1 L',
+      '計量 2.5 L'
+    ])
+
+    aggregate_failures do
+      expect(extract(merchant).filter_map { |candidate| candidate[:destination_item_identity] }).to be_empty
+      expect(extract(malformed_field).filter_map { |candidate| candidate[:destination_item_identity] }).to be_empty
+      expect(extract(malformed_array).filter_map { |candidate| candidate[:destination_item_identity] }).to be_empty
+      expect(extract(malformed_top_level).filter_map { |candidate| candidate[:destination_item_identity] }).to be_empty
+      expect(extract(greeting).filter_map { |candidate| candidate[:destination_item_identity] }).to be_empty
     end
   end
 
@@ -219,6 +480,26 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingLineGroupExtractor do
     end
 
     expect(results).to eq([ [], [] ])
+  end
+
+  it 'uses injected destination-only non-item vocabulary without changing numeric candidate extraction' do
+    profile = ReceiptAnalysisProfiles.fetch('JPN')
+    allow(profile).to receive(:ocr_reference_pricing_line_group_destination_conflict_pattern)
+      .and_return(/CUSTOM_DESTINATION/)
+
+    candidate = extract(
+      synthetic_analyze_result([
+        'SYNTH-CUSTOM-DESTINATION-CONFLICT',
+        '検証品A01CUSTOM_DESTINATION 税込120円/1 L',
+        '計量 2.5 L'
+      ]),
+      profile:
+    ).sole
+
+    aggregate_failures do
+      expect(candidate).to include(validation_state: 'valid')
+      expect(candidate).not_to have_key(:destination_item_identity)
+    end
   end
 
   it 'uses the injected strict receipt subtotal line' do

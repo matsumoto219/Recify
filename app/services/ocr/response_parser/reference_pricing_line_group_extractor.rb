@@ -13,6 +13,22 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
   MAX_ITEM_FIELD_ENTRIES = 100
   SUPPORTED_MODEL_ID = "prebuilt-receipt"
   SUPPORTED_API_VERSION = "2024-11-30"
+  VALIDATION_CONTRACT_VERSION = "azure_line_group_v1"
+  DESTINATION_CONTRACT_VERSION = "azure_line_group_destination_v1"
+  DESTINATION_KIND = "reference_line_prefix"
+  MIN_DESTINATION_NAME_GRAPHEMES = 3
+  MAX_DESTINATION_NAME_GRAPHEMES = 24
+  MAX_DESTINATION_NAME_BYTES = 96
+  MAX_DESTINATION_WORDS = 8
+  MIN_DESTINATION_WORD_VERTICAL_OVERLAP_RATIO = Rational(17, 18)
+  MAX_DESTINATION_WORD_TOP_DELTA_RATIO = Rational(1, 18)
+  MIN_DESTINATION_WORD_GAP_RATIO = Rational(1, 6)
+  MAX_DESTINATION_WORD_GAP_RATIO = Rational(3, 8)
+  DESTINATION_TAX_WORD_COUNT = 2
+  MIN_DESTINATION_TAX_WORD_GAP_RATIO = Rational(2, 9)
+  MAX_DESTINATION_TAX_WORD_GAP_RATIO = Rational(7, 16)
+  MIN_DESTINATION_TAX_HORIZONTAL_GAP_RATIO = Rational(1, 3)
+  MAX_DESTINATION_TAX_HORIZONTAL_GAP_RATIO = Rational(1, 2)
   MAX_VERTICAL_GAP_RATIO = Rational(7, 16)
   MAX_WORD_LINE_OVERHANG = 1
 
@@ -132,7 +148,7 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     words = page["words"]
     return unless words.is_a?(Array) && words.size.between?(1, MAX_WORDS)
 
-    validated_words = words.filter_map do |word|
+    validated_words = words.filter_map.with_index do |word, word_index|
       validated_layout_entry(
         word,
         content:,
@@ -140,6 +156,7 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
         page_width:,
         page_height:,
         max_content_bytes: MAX_WORD_CONTENT_BYTES,
+        word_index:,
         word: true
       )
     end
@@ -170,6 +187,7 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     page_height:,
     max_content_bytes:,
     line_index: nil,
+    word_index: nil,
     word: false
   )
     return unless entry.is_a?(Hash)
@@ -194,7 +212,8 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
       span_start: span.fetch(:offset),
       span_end: span.fetch(:offset) + span.fetch(:length),
       bounds:,
-      line_index:
+      line_index:,
+      word_index:
     }
   end
 
@@ -253,6 +272,23 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
       mapper:
     )
     return unless component_evidence_covered_by_words?(typed, words:, content:, mapper:)
+
+    destination_item_identity = destination_item_identity(
+      typed,
+      reference_line:,
+      purchased_line:,
+      page_index:,
+      reference_line_index:,
+      purchased_line_index:,
+      lines:,
+      words:,
+      content:,
+      mapper:
+    )
+    if destination_item_identity && (country_code = destination_profile_country_code)
+      typed[:destination_item_identity] = destination_item_identity
+      typed[:analysis_profile_country_code] = country_code
+    end
 
     summary = summary_total_corroboration(
       typed,
@@ -337,6 +373,9 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     typed[:reference_line_index] = reference_line_index
     typed[:purchased_quantity_line_index] = purchased_line_index
     typed[:string_index_type] = mapper.index_type
+    typed[:provider_model_id] = SUPPORTED_MODEL_ID
+    typed[:provider_api_version] = SUPPORTED_API_VERSION
+    typed[:validation_contract_version] = VALIDATION_CONTRACT_VERSION
     typed[:block_provider_span_start] = reference_line[:span_start]
     typed[:block_provider_span_end] = purchased_line[:span_end]
 
@@ -371,6 +410,303 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     return if typed[:tax_inclusion_evidence].nil?
 
     typed
+  end
+
+  def destination_item_identity(
+    candidate,
+    reference_line:,
+    purchased_line:,
+    page_index:,
+    reference_line_index:,
+    purchased_line_index:,
+    lines:,
+    words:,
+    content:,
+    mapper:
+  )
+    return unless page_index.zero?
+    return unless reference_line_index == reference_line[:line_index]
+    return unless purchased_line_index == purchased_line[:line_index]
+
+    tax_evidence = candidate[:tax_inclusion_evidence]
+    return unless tax_evidence.is_a?(Hash)
+
+    line_start = reference_line[:span_start]
+    tax_start = tax_evidence[:provider_span_start]
+    tax_end = tax_evidence[:provider_span_end]
+    return unless [ line_start, tax_start, tax_end ].all?(Integer)
+    return unless line_start < tax_start && tax_start < tax_end
+
+    prefix = mapper.slice(
+      reference_line[:content],
+      offset: 0,
+      length: tax_start - line_start
+    )
+    return unless prefix.is_a?(String)
+
+    match = prefix.match(/\A(?<name>[^\p{Zs}\t]+)(?<separator>[\p{Zs}])\z/u)
+    return if match.nil?
+
+    name = match[:name]
+    return unless name.unicode_normalize(:nfkc) == name
+    return unless name.bytesize <= MAX_DESTINATION_NAME_BYTES
+
+    grapheme_length = name.scan(/\X/).size
+    return unless grapheme_length.between?(MIN_DESTINATION_NAME_GRAPHEMES, MAX_DESTINATION_NAME_GRAPHEMES)
+    return unless name.match?(profile.ocr_reference_pricing_line_group_identifier_pattern)
+    return unless name.match?(/[\p{L}\p{N}]\z/u)
+    return if destination_identifier_conflict?(name)
+    return unless mapper.length(match[:separator]) == 1
+
+    name_span = mapper.span_for_bytes(
+      reference_line[:content],
+      byte_offset: 0,
+      byte_length: name.bytesize
+    )
+    return if name_span.nil?
+
+    name_start = line_start + name_span.fetch(:offset)
+    name_end = name_start + name_span.fetch(:length)
+    return unless name_start == line_start
+    return unless name_end + 1 == tax_start
+    return unless unique_destination_name?(name, lines:)
+    return unless provider_range_covered_by_words?(name_start, name_end, words:, content:, mapper:)
+    destination_word_evidence = destination_word_evidence(
+      name_start:,
+      name_end:,
+      tax_start:,
+      tax_end:,
+      page_index:,
+      words:
+    )
+    return if destination_word_evidence.nil?
+    return if destination_conflicts_with_non_item_fields?(
+      name:,
+      name_start:,
+      name_end:
+    )
+
+    {
+      contract_version: DESTINATION_CONTRACT_VERSION,
+      kind: DESTINATION_KIND,
+      identity: "azure_line_group_destination_p#{page_index}_name_l#{reference_line_index}_" \
+        "s#{name_start}_e#{name_end}_ref_l#{reference_line_index}_qty_l#{purchased_line_index}",
+      page_index:,
+      name_line_index: reference_line_index,
+      reference_line_index:,
+      purchased_quantity_line_index: purchased_line_index,
+      normalized_name_grapheme_length: grapheme_length,
+      evidence: {
+        source_provider: "azure_line_group",
+        source_field_path: "pages[#{page_index}].lines[#{reference_line_index}]",
+        page_index:,
+        line_index: reference_line_index,
+        string_index_type: mapper.index_type,
+        provider_span_start: name_start,
+        provider_span_end: name_end,
+        word_spans: destination_word_evidence.fetch(:name_word_spans),
+        tax_word_spans: destination_word_evidence.fetch(:tax_word_spans)
+      }
+    }
+  rescue EncodingError, ArgumentError, KeyError, TypeError
+    nil
+  end
+
+  def unique_destination_name?(name, lines:)
+    occurrence_count = Array(lines).sum do |line|
+      line[:content].to_s.scan(Regexp.new(Regexp.escape(name))).size
+    end
+
+    occurrence_count == 1
+  rescue EncodingError, ArgumentError, TypeError
+    false
+  end
+
+  def destination_identifier_conflict?(name)
+    normalized = name.unicode_normalize(:nfkc)
+    profile.ocr_reference_pricing_line_group_destination_identifier_conflict_patterns.any? do |pattern|
+      normalized.match?(pattern)
+    end
+  rescue EncodingError, ArgumentError, NoMethodError
+    true
+  end
+
+  def destination_profile_country_code
+    country_codes = Array(profile.country_codes).map(&:to_s).uniq
+    country_codes.sole if country_codes.one?
+  rescue NoMethodError
+    nil
+  end
+
+  def destination_word_evidence(name_start:, name_end:, tax_start:, tax_end:, page_index:, words:)
+    name_words = words.select do |word|
+      ranges_overlap?(word[:span_start], word[:span_end], name_start, name_end)
+    end
+    tax_words = words.select do |word|
+      ranges_overlap?(word[:span_start], word[:span_end], tax_start, tax_end)
+    end
+    return if name_words.empty? || tax_words.size != DESTINATION_TAX_WORD_COUNT
+    return if name_words.size > MAX_DESTINATION_WORDS
+    return unless exact_word_span_coverage?(name_words, range_start: name_start, range_end: name_end)
+    return unless exact_word_span_coverage?(tax_words, range_start: tax_start, range_end: tax_end)
+    return unless destination_word_layout_consistent?(name_words:, tax_words:)
+
+    {
+      name_word_spans: structural_word_evidence(name_words, page_index:),
+      tax_word_spans: structural_word_evidence(tax_words, page_index:)
+    }
+  rescue ArgumentError, NoMethodError, TypeError
+    nil
+  end
+
+  def exact_word_span_coverage?(words, range_start:, range_end:)
+    return false if words.empty?
+    return false unless words.first[:span_start] == range_start && words.last[:span_end] == range_end
+
+    words.each_cons(2).all? { |left, right| left[:span_end] == right[:span_start] }
+  end
+
+  def structural_word_evidence(words, page_index:)
+    words.map do |word|
+      {
+        source_field_path: "pages[#{page_index}].words[#{word.fetch(:word_index)}]",
+        word_index: word.fetch(:word_index),
+        provider_span_start: word.fetch(:span_start),
+        provider_span_end: word.fetch(:span_end)
+      }
+    end
+  end
+
+  def destination_word_layout_consistent?(name_words:, tax_words:)
+    name_bounds = aggregate_word_bounds(name_words)
+    tax_bounds = aggregate_word_bounds(tax_words)
+    return false if name_bounds.nil? || tax_bounds.nil?
+    return false unless name_bounds.values_at(:top, :bottom) == tax_bounds.values_at(:top, :bottom)
+
+    height = name_bounds.fetch(:bottom) - name_bounds.fetch(:top)
+    return false unless height.positive?
+    return false unless word_sequence_layout_consistent?(
+      name_words,
+      aggregate_bounds: tax_bounds,
+      height:,
+      min_gap_ratio: MIN_DESTINATION_WORD_GAP_RATIO,
+      max_gap_ratio: MAX_DESTINATION_WORD_GAP_RATIO
+    )
+    return false unless word_sequence_layout_consistent?(
+      tax_words,
+      aggregate_bounds: tax_bounds,
+      height:,
+      min_gap_ratio: MIN_DESTINATION_TAX_WORD_GAP_RATIO,
+      max_gap_ratio: MAX_DESTINATION_TAX_WORD_GAP_RATIO
+    )
+
+    horizontal_gap_ratio = (tax_bounds.fetch(:left) - name_bounds.fetch(:right)) / height
+    horizontal_gap_ratio.between?(
+      MIN_DESTINATION_TAX_HORIZONTAL_GAP_RATIO,
+      MAX_DESTINATION_TAX_HORIZONTAL_GAP_RATIO
+    )
+  rescue ArgumentError, KeyError, NoMethodError, TypeError, ZeroDivisionError
+    false
+  end
+
+  def word_sequence_layout_consistent?(words, aggregate_bounds:, height:, min_gap_ratio:, max_gap_ratio:)
+    return false unless words.all? do |word|
+      bounds = word.fetch(:bounds)
+      overlap = [ bounds.fetch(:bottom), aggregate_bounds.fetch(:bottom) ].min -
+        [ bounds.fetch(:top), aggregate_bounds.fetch(:top) ].max
+      overlap / height >= MIN_DESTINATION_WORD_VERTICAL_OVERLAP_RATIO &&
+        (bounds.fetch(:top) - aggregate_bounds.fetch(:top)).abs / height <=
+          MAX_DESTINATION_WORD_TOP_DELTA_RATIO &&
+        bounds.fetch(:bottom) == aggregate_bounds.fetch(:bottom)
+    end
+
+    words.each_cons(2).all? do |left_word, right_word|
+      gap_ratio = (
+        right_word.dig(:bounds, :left) - left_word.dig(:bounds, :right)
+      ) / height
+      gap_ratio.between?(min_gap_ratio, max_gap_ratio)
+    end
+  end
+
+  def aggregate_word_bounds(words)
+    bounds = words.map { |word| word[:bounds] }
+    return if bounds.empty? || bounds.any?(&:nil?)
+
+    {
+      left: bounds.map { |value| value.fetch(:left) }.min,
+      right: bounds.map { |value| value.fetch(:right) }.max,
+      top: bounds.map { |value| value.fetch(:top) }.min,
+      bottom: bounds.map { |value| value.fetch(:bottom) }.max
+    }
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    nil
+  end
+
+  def destination_conflicts_with_non_item_fields?(name:, name_start:, name_end:)
+    fields = analyze_result.dig("documents", 0, "fields")
+    return true unless fields.is_a?(Hash)
+
+    stack = fields.except("Items").values
+    return true unless stack.all?(Hash)
+    visited_nodes = 0
+    until stack.empty?
+      node = stack.pop
+      visited_nodes += 1
+      return true if visited_nodes > MAX_ITEM_FIELD_NODES
+
+      case node
+      when Hash
+        return true if node.size > MAX_ITEM_FIELD_ENTRIES
+
+        %w[content valueString].each do |text_key|
+          next unless node.key?(text_key)
+          next if node[text_key].nil?
+
+          field_text = bounded_text(node[text_key], max_bytes: MAX_LINE_CONTENT_BYTES, allow_newlines: true)
+          return true if field_text.nil?
+          return true if field_text.unicode_normalize(:nfkc).include?(name)
+        end
+
+        spans = node["spans"]
+        if node.key?("spans") && !spans.nil?
+          return true unless spans.is_a?(Array) && spans.size <= MAX_ITEM_FIELD_ENTRIES
+
+          spans.each do |span|
+            bounded = bounded_span(span)
+            return true if bounded.nil?
+
+            span_start = bounded.fetch(:offset)
+            span_end = span_start + bounded.fetch(:length)
+            return true if ranges_overlap?(span_start, span_end, name_start, name_end)
+          end
+        end
+
+        children = node.filter_map do |key, value|
+          next if %w[spans polygon].include?(key)
+          next unless value.is_a?(Hash) || value.is_a?(Array)
+          return true if value.is_a?(Array) && value.any? do |entry|
+            !entry.is_a?(Hash) && !entry.is_a?(Array)
+          end
+
+          value
+        end
+        return true if stack.size + children.size + visited_nodes > MAX_ITEM_FIELD_NODES
+
+        stack.concat(children)
+      when Array
+        return true if node.size > MAX_ITEM_FIELD_ENTRIES
+        return true if stack.size + node.size + visited_nodes > MAX_ITEM_FIELD_NODES
+        return true unless node.all? { |value| value.is_a?(Hash) || value.is_a?(Array) }
+
+        stack.concat(node)
+      else
+        return true
+      end
+    end
+
+    false
+  rescue EncodingError, ArgumentError, KeyError, TypeError
+    true
   end
 
   def typed_evidence(evidence, line:, mapper:, page_index:, line_index:, field_bases:)

@@ -1,6 +1,33 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptFinalizeJob, type: :job do
+  include ActiveJob::TestHelper
+
+  def reference_pricing_ocr_result
+    raw = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
+    )
+    Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+  end
+
+  def reference_pricing_finalize_decision
+    Receipts::Processing::Contracts::FinalizeDecision.new(
+      finalize_strategy: :ocr_only,
+      error_code: nil,
+      error_message: nil,
+      receipt_attributes: {},
+      ocr_result: nil,
+      ai_result: nil,
+      metadata: {}
+    )
+  end
+
+  def enqueued_finalize_jobs
+    ActiveJob::Base.queue_adapter.enqueued_jobs.select do |job|
+      (job[:job] || job['job']) == described_class
+    end
+  end
+
   describe '.queue_name' do
     it 'receipt_finalize queueを使う' do
       expect(described_class.queue_name).to eq('receipt_finalize')
@@ -61,6 +88,118 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
         expect(Receipts::Processing::Pipeline).to have_received(:finalize).once
         expect(receipt.reload.status).to eq('failed')
         expect(run.reload.status).to eq('succeeded')
+      end
+    end
+
+    it 'A1 serialized transactionのretryable errorだけをbounded retryへ送る' do
+      ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+      run = create(:receipt_analysis_run)
+      error = Receipts::Processing::RetryableFinalizeError.new('transient_finalize_database_error')
+      allow(Receipts::Processing).to receive(:run_finalize).with(run).and_raise(error)
+
+      expect do
+        described_class.perform_now(run_id: run.id)
+      end.to have_enqueued_job(described_class).with(run_id: run.id)
+
+      expect(run.reload).to be_active
+    end
+
+    it '通常Finalizeのraw DB errorはA1 retry queueへ広げない' do
+      ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+      run = create(:receipt_analysis_run)
+      error = ActiveRecord::Deadlocked.new('standard finalize database detail')
+      allow(Receipts::Processing).to receive(:run_finalize).with(run).and_raise(error)
+
+      expect { described_class.perform_now(run_id: run.id) }.to raise_error(error)
+      expect(enqueued_finalize_jobs).to be_empty
+    end
+
+    it 'A1 transactionのdeadlock後にJob retryしてもauthorityを1回だけ採用する' do
+      create(
+        :system_setting,
+        key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        value: SystemSettings.stored_value(true)
+      )
+
+      ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+      receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+      run = Receipts::Processing.start(receipt:, source: 'upload').run
+      Receipts::Processing.record_ocr_snapshot(run, reference_pricing_ocr_result)
+      Receipts::Processing.record_finalize_decision(run, reference_pricing_finalize_decision)
+      calls = 0
+      allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
+        calls += 1
+        raise ActiveRecord::Deadlocked if calls == 1
+
+        original.call(**kwargs)
+      end
+
+      expect do
+        described_class.perform_now(run_id: run.id)
+      end.to have_enqueued_job(described_class).with(run_id: run.id)
+      expect(run.reload).to be_active
+      expect(receipt.reload.receipt_items).to be_empty
+
+      perform_enqueued_jobs(only: described_class)
+      described_class.perform_now(run_id: run.id)
+
+      aggregate_failures do
+        expect(receipt.reload.receipt_items.count).to eq(1)
+        expect(receipt.receipt_items.sole.pricing_source_kind).to eq('reference_quantity_price')
+        expect(run.reload.status).to eq('succeeded')
+        expect(run.metadata).to have_key('reference_pricing_auto_adoption_claim')
+        expect(calls).to eq(2)
+        expect(enqueued_finalize_jobs).to be_empty
+      end
+    end
+
+    it 'transient DB retryを3回使い切るとsafe errorでterminal化して元例外を再送出する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      error = Receipts::Processing::RetryableFinalizeError.new('transient_finalize_database_error')
+      allow(Receipts::Processing).to receive(:run_finalize).with(run).and_raise(error)
+      job = described_class.new(run_id: run.id)
+      job.executions = 2
+      job.exception_executions = {
+        described_class::RETRYABLE_ERRORS.to_s => 2
+      }
+
+      expect { job.perform_now }.to raise_error(error)
+
+      aggregate_failures do
+        expect(run.reload.status).to eq('failed')
+        expect(run.error_code).to eq('unexpected_error')
+        expect(run.error_message).to be_nil
+        expect(receipt.reload.status).to eq('failed')
+        expect(receipt.processing_error_message.to_s).not_to include('transient_finalize_database_error')
+      end
+    end
+
+    it 'retry枯渇後のterminal化もDB競合した場合は成功扱いせず再送出する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      finalize_error = Receipts::Processing::RetryableFinalizeError.new(
+        'transient_finalize_database_error'
+      )
+      terminal_error = ActiveRecord::LockWaitTimeout.new('private terminal detail')
+      allow(Receipts::Processing).to receive(:run_finalize).with(run).and_raise(finalize_error)
+      allow(Receipts::Processing).to receive(:fail).with(
+        run,
+        error_stage: 'finalize',
+        error_code: 'unexpected_error',
+        error_message: nil
+      ).and_raise(terminal_error)
+      job = described_class.new(run_id: run.id)
+      job.executions = 2
+      job.exception_executions = {
+        described_class::RETRYABLE_ERRORS.to_s => 2
+      }
+
+      expect { job.perform_now }.to raise_error(terminal_error)
+
+      aggregate_failures do
+        expect(run.reload).to be_active
+        expect(receipt.reload.status).to eq('processing')
       end
     end
 

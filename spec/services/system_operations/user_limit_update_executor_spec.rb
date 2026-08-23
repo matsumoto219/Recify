@@ -28,7 +28,7 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
     it 'user limitの検証・保存・監査をSystemSettingsと同じdependency lock内で行う' do
       create(:system_setting, key: 'limits.snapshot_ocr_items_max', value: SystemSettings.stored_value(1500))
       create(:system_setting, key: 'limits.snapshot_ai_normalized_items_max', value: SystemSettings.stored_value(1500))
-      allow(SystemOperations::SystemSettingDependencyLock).to receive(:call).and_call_original
+      allow(SystemSettings).to receive(:with_dependency_lock).and_call_original
 
       result = described_class.call(
         user: target_user,
@@ -45,8 +45,8 @@ RSpec.describe SystemOperations::UserLimitUpdateExecutor do
 
       aggregate_failures do
         expect(result).to be_success
-        expect(SystemOperations::SystemSettingDependencyLock).to have_received(:call)
-          .with(groups: [ 'receipt_items_snapshot' ])
+        expect(SystemSettings).to have_received(:with_dependency_lock)
+          .with(key: 'receipt_items_per_receipt')
       end
     end
 

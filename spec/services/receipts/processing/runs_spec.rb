@@ -510,6 +510,117 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
+    it 'typed adoption proposalをretry snapshotへexactにコピーして再sanitizeする' do
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt:,
+        ocr_result_snapshot: snapshot
+      )
+      retry_run = create(
+        :receipt_analysis_run,
+        receipt:,
+        parent_run: parent_run,
+        attempt_number: 2
+      )
+
+      described_class.copy_retry_snapshots(retry_run, parent_run:, include_ocr: true)
+
+      aggregate_failures do
+        expect(retry_run.reload.ocr_result_snapshot.dig('adoption_proposals', 'reference_pricing')).to eq(
+          snapshot.dig('adoption_proposals', 'reference_pricing')
+        )
+        expect(retry_run.ocr_result_snapshot['schema_version']).to eq('receipt_analysis_run_ocr_result_v1')
+      end
+    end
+
+    it 'run開始gateをOCR proposal生成時に同じrun identityへbindする' do
+      setting = create(
+        :system_setting,
+        key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        value: SystemSettings.stored_value(true)
+      )
+      run = described_class.start(receipt:, source: 'upload').run
+      start_gate = run.metadata.fetch('reference_pricing_auto_adoption_gate')
+      described_class.record_ocr_snapshot(
+        run,
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      bound_gate = run.reload.metadata.fetch('reference_pricing_auto_adoption_gate')
+
+      aggregate_failures do
+        expect(start_gate['proposal_binding']).to be_nil
+        expect(start_gate['run_key']).to eq(run.run_key)
+        expect(start_gate['setting_generation']).to eq(
+          'kind' => 'row',
+          'id' => setting.id,
+          'lock_version' => setting.lock_version
+        )
+        expect(bound_gate.dig('proposal_binding', 'candidate_identity')).to eq(
+          'azure_line_group_p0_l1_l2_reference_pricing'
+        )
+        expect(bound_gate.dig('proposal_binding', 'destination_identity')).to eq(
+          'azure_line_group_destination_p0_name_l1_s13_e19_ref_l1_qty_l2'
+        )
+      end
+    end
+
+    it 'unsupportedなadmin retryはparent gateをコピーせずproposal-only境界を維持する' do
+      create(
+        :system_setting,
+        key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+        value: SystemSettings.stored_value(true)
+      )
+      parent_run = described_class.start(receipt:, source: 'upload').run
+      described_class.record_ocr_snapshot(
+        parent_run,
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      described_class.record_finalize_decision(parent_run, finalize_decision(:ocr_only))
+      parent_run.update!(status: 'succeeded', stage: 'completed')
+      retry_run = described_class.start(
+        receipt:,
+        source: 'admin_retry',
+        parent_run:
+      ).run
+
+      described_class.copy_retry_snapshots(
+        retry_run,
+        parent_run:,
+        include_ocr: true,
+        include_finalize_decision: true
+      )
+      parent_gate = parent_run.reload.metadata.fetch('reference_pricing_auto_adoption_gate')
+      retry_run.reload
+
+      aggregate_failures do
+        expect(parent_gate.dig('proposal_binding', 'candidate_identity')).to be_present
+        expect(retry_run.metadata).not_to have_key('reference_pricing_auto_adoption_gate')
+        expect(retry_run.ocr_result_snapshot.dig('adoption_proposals', 'reference_pricing')).to be_present
+        expect(retry_run.metadata['finalize_decision']).to be_present
+        expect(retry_run.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+      end
+    end
+
+    it 'typed adoption proposalをJSONB round-trip後もcanonical checksumでrehydrateする' do
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      stored_run = create(:receipt_analysis_run, receipt:, ocr_result_snapshot: snapshot)
+
+      persisted_snapshot = ReceiptAnalysisRun.find(stored_run.id).ocr_result_snapshot
+      rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(
+        persisted_snapshot
+      )
+
+      expect(rehydrated.dig(:adoption_proposals, 'reference_pricing')).to eq(
+        snapshot.dig('adoption_proposals', 'reference_pricing')
+      )
+    end
+
     it 'snapshot上限の設定可能最大値はreceipt_items_per_receiptの最大override値と同期する' do
       max_receipt_items = UserLimits.definition_for('receipt_items_per_receipt').max
 

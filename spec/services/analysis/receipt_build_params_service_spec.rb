@@ -183,6 +183,32 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       end
     end
 
+    it 'destination identity付きline-group candidateもReceiptItemへ自動変換しない' do
+      ocr_result = ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      candidate = ocr_result.dig(:candidates, :reference_pricing_candidates).sole
+
+      params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+      aggregate_failures do
+        expect(candidate[:destination_item_identity]).to include(
+          contract_version: 'azure_line_group_destination_v1',
+          kind: 'reference_line_prefix'
+        )
+        expect(params.fetch(:reference_pricing_candidates)).to eq([ candidate.deep_symbolize_keys ])
+        expect(params.fetch(:receipt_items_attributes)).to eq([])
+        expect(params.fetch(:receipt_attributes).keys).not_to include(
+          :pricing_source_kind,
+          :reference_price_amount,
+          :reference_quantity,
+          :reference_quantity_unit_code,
+          :reference_price_tax_inclusion,
+          :price,
+          :line_total,
+          :original_line_total
+        )
+      end
+    end
+
     it 'Azure line-groupと対応不能なAI明細を通常fallback明細へ位置合わせで適用しない' do
       ocr_result = ocr_fixture('ocr_azure_measurement_line_group_anonymized')
       ocr_result[:lines] << '通常明細 200円'

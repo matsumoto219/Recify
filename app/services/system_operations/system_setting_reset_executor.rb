@@ -33,7 +33,7 @@ module SystemOperations
       after_state = nil
       default_value = nil
 
-      SystemSettingDependencyLock.call(groups: SystemSettings.dependency_lock_groups_for(key)) do
+      SystemSettings.with_dependency_lock(key:) do
         setting = SystemSetting.lock.find_by(key: key)
         raise ValidationError, "setting_already_default" unless setting
 

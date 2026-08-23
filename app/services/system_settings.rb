@@ -15,6 +15,7 @@ module SystemSettings
   STORE_NAME_CASING_CONTEXT_LINES_KEY = "limits.store_name_casing_context_lines_max"
   OCR_RAW_RESPONSE_RETENTION_KEY = "analysis_artifact.ocr_raw_response_retention_days"
   OCR_RAW_RESPONSE_MAX_BYTES_KEY = "analysis_artifact.ocr_raw_response_max_bytes"
+  REFERENCE_PRICING_AUTO_ADOPTION_KEY = "amount_engine.reference_pricing_auto_adoption_enabled"
   ANALYSIS_RUNS_FAILED_RETENTION_KEY = "retention.analysis_runs_failed_days"
   RECEIPT_ITEMS_SNAPSHOT_LIMIT_ERROR = "receipt_items_snapshot_limit"
   STORE_NAME_CASING_SNAPSHOT_OCR_LINES_LIMIT_ERROR = "store_name_casing_snapshot_ocr_lines_limit"
@@ -149,7 +150,8 @@ module SystemSettings
     "security_event_retention" => SECURITY_EVENT_RETENTION_KEYS,
     "external_service_status" => EXTERNAL_SERVICE_FAILURE_THRESHOLD_KEYS,
     "external_service_ai_runtime" => AI_RUNTIME_TUNING_KEYS,
-    "external_service_ocr_runtime" => OCR_RUNTIME_TUNING_KEYS
+    "external_service_ocr_runtime" => OCR_RUNTIME_TUNING_KEYS,
+    "reference_pricing_auto_adoption" => [ REFERENCE_PRICING_AUTO_ADOPTION_KEY ].freeze
   }.freeze
 
   UnknownKeyError = Class.new(KeyError)
@@ -218,15 +220,16 @@ module SystemSettings
       definition = definition_for(key)
       setting = SystemSetting.includes(:updated_by_user).find_by(key: definition.key)
 
-      Entry.new(
-        definition: definition,
-        setting: setting,
-        current_value: setting ? cast_stored_value(definition, setting.value) : definition.default,
-        default_value: definition.default,
-        source: setting ? "db" : "default",
-        updated_by_user: setting&.updated_by_user,
-        updated_at: setting&.updated_at
-      )
+      entry_for(definition, setting)
+    end
+
+    def fetch_for_update(key)
+      raise ValidationError, "transaction_required" unless SystemSetting.connection.transaction_open?
+
+      definition = definition_for(key)
+      setting = SystemSetting.lock.find_by(key: definition.key)
+
+      entry_for(definition, setting)
     end
 
     def value_for(key, user: nil, context: {})
@@ -318,6 +321,10 @@ module SystemSettings
       end.sort
     end
 
+    def with_dependency_lock(key:, &operation)
+      DependencyLock.call(groups: dependency_lock_groups_for(key), &operation)
+    end
+
     def validate_stored_value!(key, value)
       definition = definition_for(key)
       raise ValidationError, "must_be_hash" unless value.is_a?(Hash)
@@ -359,6 +366,18 @@ module SystemSettings
     end
 
     private
+
+    def entry_for(definition, setting)
+      Entry.new(
+        definition: definition,
+        setting: setting,
+        current_value: setting ? cast_stored_value(definition, setting.value) : definition.default,
+        default_value: definition.default,
+        source: setting ? "db" : "default",
+        updated_by_user: setting&.updated_by_user,
+        updated_at: setting&.updated_at
+      )
+    end
 
     def normalize_key(key)
       key.to_s.strip

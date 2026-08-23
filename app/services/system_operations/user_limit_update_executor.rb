@@ -39,7 +39,7 @@ module SystemOperations
       before_state = nil
       after_state = nil
 
-      SystemSettingDependencyLock.call(groups: SystemSettings.dependency_lock_groups_for(key)) do
+      SystemSettings.with_dependency_lock(key:) do
         validate!
         before_state = current_state
         override = update_override!

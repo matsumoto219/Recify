@@ -307,6 +307,7 @@ module ReceiptAnalysisProfiles
     OCR_REFERENCE_PRICING_LINE_GROUP_DISCOUNT_CONFLICT_PATTERN = /(?:[0-9]+(?:\.[0-9]+)?[ \t]*%[ \t]*(?:off|引(?:き)?|割)|coupon|クーポン|値下げ|割戻)/i.freeze
     OCR_REFERENCE_PRICING_LINE_GROUP_SUMMARY_CONTEXT_PATTERN = /(?:総合計|商品小計|小計|現計|grand\s+total|subtotal|total)/i.freeze
     OCR_REFERENCE_PRICING_LINE_GROUP_IDENTIFIER_CONFLICT_PATTERN = /(?:非課税|不課税|免税|無税|課税対象外|税込対象外|対象外|税込|内税|税別|外税|税抜|非税込|返金|返品|返却|払(?:い)?戻し?|取消|取り消し|void|refund|return|cancel|taxfree|exempt)/i.freeze
+    OCR_REFERENCE_PRICING_LINE_GROUP_DESTINATION_CONFLICT_PATTERN = /(?:店舗|店名|加盟店|領収|レシート|お客様控|ありがとう|毎度|ご来店|支払|決済|現金|receipt|merchant|header|footer|thank\s*you|thanks|welcome|payment)/i.freeze
     OCR_REFERENCE_PRICING_LINE_GROUP_IDENTIFIER_PATTERN = /\A(?=.*\p{Han})(?=.*[A-Za-z])(?=.*\p{N})\p{L}[\p{L}\p{N}_-]*\z/u.freeze
     OCR_REFERENCE_PRICING_TAX_NEGATION_PREFIX_PATTERN = /(?:非|未|不|not)[\p{Zs}\t\r\n\p{P}]*\z/iu.freeze
     OCR_REFERENCE_PRICING_PACKAGE_QUANTITY_CONTEXT_BEFORE_PATTERN = /(?:約|およそ|[x×@＠]|[-–—〜～~]|gross|tare|風袋|総重量)\s*\z/i.freeze
@@ -833,6 +834,24 @@ module ReceiptAnalysisProfiles
 
       def ocr_reference_pricing_line_group_identifier_conflict_pattern
         OCR_REFERENCE_PRICING_LINE_GROUP_IDENTIFIER_CONFLICT_PATTERN
+      end
+
+      def ocr_reference_pricing_line_group_destination_conflict_pattern
+        OCR_REFERENCE_PRICING_LINE_GROUP_DESTINATION_CONFLICT_PATTERN
+      end
+
+      def ocr_reference_pricing_line_group_destination_identifier_conflict_patterns
+        [
+          ocr_reference_pricing_line_group_identifier_conflict_pattern,
+          ocr_reference_pricing_line_group_destination_conflict_pattern,
+          ocr_reference_pricing_line_group_summary_context_pattern,
+          ocr_merchant_anchor_pattern,
+          ocr_payment_anchor_pattern,
+          ocr_adjustment_discount_label_pattern,
+          ocr_adjustment_surcharge_label_pattern,
+          ocr_adjustment_excluded_line_pattern,
+          ocr_datetime_anchor_pattern
+        ]
       end
 
       def ocr_reference_pricing_line_group_identifier_pattern

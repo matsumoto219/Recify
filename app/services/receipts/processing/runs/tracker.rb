@@ -98,12 +98,14 @@ module Receipts::Processing::Runs
       snapshot = snapshot.to_h
 
       with_mutable_run do |locked_run|
+        metadata = metadata_with_adoption_gate_binding(locked_run, snapshot:)
         locked_run.update!(
           stage: advanced_stage(locked_run, "ocr_validation"),
           status: "running",
           started_at: locked_run.started_at || at,
           ocr_finished_at: locked_run.ocr_finished_at || at,
-          ocr_result_snapshot: snapshot
+          ocr_result_snapshot: snapshot,
+          metadata: metadata
         )
         locked_run
       end
@@ -207,12 +209,16 @@ module Receipts::Processing::Runs
       with_mutable_run do |locked_run|
         attrs = {}
         attrs[:ocr_summary] = ocr_summary.to_h if ocr_summary
-        attrs[:ocr_result_snapshot] = ocr_result_snapshot.to_h if ocr_result_snapshot
+        if ocr_result_snapshot
+          snapshot = ocr_result_snapshot.to_h
+          attrs[:ocr_result_snapshot] = snapshot
+          attrs[:metadata] = metadata_with_adoption_gate_binding(locked_run, snapshot:)
+        end
         attrs[:ai_result_summary] = ai_result_summary.to_h if ai_result_summary
         attrs[:ai_normalized_result_snapshot] = ai_normalized_result_snapshot.to_h if ai_normalized_result_snapshot
 
         if finalize_decision_snapshot
-          metadata = locked_run.metadata.to_h.deep_dup
+          metadata = attrs.fetch(:metadata, locked_run.metadata.to_h.deep_dup)
           metadata["finalize_decision"] = finalize_decision_snapshot.to_h
           attrs[:metadata] = metadata
         end
@@ -284,6 +290,25 @@ module Receipts::Processing::Runs
     private
 
     attr_reader :run
+
+    def metadata_with_adoption_gate_binding(locked_run, snapshot:)
+      metadata = locked_run.metadata.to_h.deep_dup
+      key = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot::METADATA_KEY
+      return metadata unless metadata.key?(key)
+
+      start_gate = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.from_snapshot(
+        metadata[key],
+        run: locked_run,
+        require_binding: false
+      )
+      bound = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.bind(
+        start_gate,
+        run: locked_run,
+        ocr_snapshot: snapshot
+      )
+      metadata[key] = bound if bound
+      metadata
+    end
 
     def with_mutable_run
       run.with_lock do

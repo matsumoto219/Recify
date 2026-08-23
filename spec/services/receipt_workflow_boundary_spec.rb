@@ -24,6 +24,7 @@ RSpec.describe "Receipt workflow dependency boundary" do
         Receipts::Processing::Error
         Receipts::Processing::InvalidTransition
         Receipts::Processing::Result
+        Receipts::Processing::RetryableFinalizeError
         Receipts::Processing::StartResult
         Receipts::Processing::TerminalRunError
       ]

@@ -25,12 +25,14 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator 
       )
 
       expect(result).to eq(
+        schema_version: 'receipt_analysis_run_ocr_result_v1',
         success: true,
         lines: [ 'line', '2' ],
         case_preserved_lines: [ 'Line', '2' ],
         candidates: { 'store_name' => 'Store' },
         candidate_counts: { 'items' => { 'snapshot_count' => 2 } },
-        meta: { 'provider' => 'fixture' }
+        meta: { 'provider' => 'fixture' },
+        truncated: { 'items' => true }
       )
     end
 
@@ -107,6 +109,42 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator 
         build_params = Analysis.build_receipt_params(ocr_result: result, ai_result: nil)
         expect(build_params[:reference_pricing_candidates]).to eq([ candidate.deep_symbolize_keys ])
         expect(build_params.fetch(:receipt_items_attributes)).to be_empty
+      end
+    end
+
+    it 'valid typed adoption proposalだけをFinalize専用OCR resultへ復元する' do
+      raw_json = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
+      )
+      ocr_result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(ocr_result)
+
+      result = described_class.ocr(JSON.parse(JSON.generate(snapshot)))
+
+      aggregate_failures do
+        expect(result[:schema_version]).to eq('receipt_analysis_run_ocr_result_v1')
+        expect(result.dig(:adoption_proposals, 'reference_pricing')).to eq(
+          snapshot.dig('adoption_proposals', 'reference_pricing')
+        )
+        expect(result.dig(:adoption_proposals, 'reference_pricing').to_json).not_to include(
+          '検証品A01',
+          'polygon',
+          'provider_raw_response'
+        )
+      end
+    end
+
+    it 'malformed adoption proposalを除外しold snapshot absenceを維持する' do
+      raw_json = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
+      )
+      ocr_result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(ocr_result)
+      snapshot.dig('adoption_proposals', 'reference_pricing')['schema_version'] = 'unknown'
+
+      aggregate_failures do
+        expect(described_class.ocr(snapshot)).not_to have_key(:adoption_proposals)
+        expect(described_class.ocr('success' => true)).not_to have_key(:adoption_proposals)
       end
     end
   end
