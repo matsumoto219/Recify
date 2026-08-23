@@ -28,6 +28,7 @@ module Receipts::Processing::Contracts
     MAX_DESTINATION_ID_BYTES = 160
     MAX_HANDLE_ID_BYTES = 128
     MAX_SOURCE_PATH_BYTES = 256
+    MAX_CONTEXT_LINE_BYTES = 500
     MAX_LINE_INDEX = 149
     MAX_PROVIDER_SPAN = 10_000_000
 
@@ -65,23 +66,32 @@ module Receipts::Processing::Contracts
       provider_span_end
     ].freeze
 
-    CANDIDATE_ID_PATTERN = /\Aazure_line_group_evidence_v1_[0-9a-f]{64}\z/.freeze
+    CANDIDATE_ID_NAMESPACE = "azure_line_group_evidence_v1"
+    CANDIDATE_ID_PREFIX = "#{CANDIDATE_ID_NAMESPACE}_"
+    CANDIDATE_ID_PATTERN = /\A#{Regexp.escape(CANDIDATE_ID_PREFIX)}[0-9a-f]{64}\z/.freeze
     DESTINATION_ID_PATTERN =
       /\Aazure_line_group_destination_p(?<page>\d+)_name_l(?<name_line>\d+)_s(?<start>\d+)_e(?<end>\d+)_ref_l(?<reference_line>\d+)_qty_l(?<purchased_line>\d+)\z/.freeze
-    HANDLE_ID_PATTERN = /\Areference_pricing_handle_v1_[0-9a-f]{64}\z/.freeze
+    HANDLE_ID_PREFIX = "reference_pricing_handle_v1_"
+    HANDLE_ID_PATTERN = /\A#{Regexp.escape(HANDLE_ID_PREFIX)}[0-9a-f]{64}\z/.freeze
     LINE_PATH_PATTERN = /\Apages\[(?<page>\d+)\]\.lines\[(?<line>\d+)\]\z/.freeze
     CHECKSUM_PATTERN = /\A[0-9a-f]{64}\z/.freeze
     CONTROL_CHARACTER_PATTERN =
       /[\u0000-\u001F\u007F-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
 
     class << self
-      def build(options:, ocr_snapshot:)
+      def build(options:, ocr_snapshot:, source_lines:, source_case_preserved_lines:)
         context = snapshot_context(ocr_snapshot)
+        return nil unless source_lines_lossless?(
+          context,
+          source_lines:,
+          source_case_preserved_lines:
+        )
+
         normalized_options = normalize_options(options, context:)
         return nil if normalized_options.nil?
 
-        ledger_for(normalized_options)
-      rescue EncodingError, ArgumentError, KeyError, TypeError
+        ledger_for(normalized_options, context:)
+      rescue EncodingError, ArgumentError, KeyError, SystemStackError, TypeError
         nil
       end
 
@@ -104,15 +114,15 @@ module Receipts::Processing::Contracts
         return nil unless root["option_count"] == options.size
         return nil unless root["handle_count"] == options.sum { |option| option.fetch("handles").size }
 
-        canonical = ledger_for(options)
+        canonical = ledger_for(options, context:)
         canonical if canonical == root
-      rescue EncodingError, ArgumentError, KeyError, TypeError
+      rescue EncodingError, ArgumentError, KeyError, SystemStackError, TypeError
         nil
       end
 
       private
 
-      def ledger_for(options)
+      def ledger_for(options, context:)
         payload = {
           "schema_version" => SCHEMA_VERSION,
           "creation_stage" => CREATION_STAGE,
@@ -120,7 +130,16 @@ module Receipts::Processing::Contracts
           "handle_count" => options.sum { |option| option.fetch("handles").size },
           "options" => options
         }
-        ledger = payload.merge("integrity_checksum" => checksum(payload))
+        integrity_context = {
+          "lines" => context.fetch(:lines),
+          "case_preserved_lines" => context.fetch(:case_preserved_lines)
+        }
+        ledger = payload.merge(
+          "integrity_checksum" => checksum(
+            "ledger" => payload,
+            "ocr_context" => integrity_context
+          )
+        )
         return nil if JSON.generate(ledger).bytesize > MAX_SERIALIZED_BYTES
 
         ledger
@@ -202,6 +221,7 @@ module Receipts::Processing::Contracts
           product_handle: handles.fetch(0)
         )
         return unless component_spans_ordered?(handles)
+        return unless candidate_id == canonical_candidate_id(destination_id, handles)
 
         {
           "candidate_id" => candidate_id,
@@ -278,7 +298,7 @@ module Receipts::Processing::Contracts
         return unless Integer(path_match[:page], 10) == page_index
         return unless Integer(path_match[:line], 10) == line_index
 
-        {
+        normalized = {
           "handle_id" => handle_id,
           "role" => role,
           "source_field_path" => path,
@@ -288,6 +308,7 @@ module Receipts::Processing::Contracts
           "provider_span_start" => span_start,
           "provider_span_end" => span_end
         }
+        normalized if handle_id == canonical_handle_id(normalized)
       rescue ArgumentError
         nil
       end
@@ -333,20 +354,93 @@ module Receipts::Processing::Contracts
       end
 
       def snapshot_context(value)
-        snapshot = indifferent_hash(value)
+        snapshot = bounded_hash_values(
+          value,
+          required_keys: %w[schema_version success lines case_preserved_lines truncated],
+          maximum_entries: 24
+        )
         return unless snapshot
-        return unless snapshot[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
-        return unless snapshot[:success] == true
+        return unless snapshot.fetch("schema_version").to_s == OCR_RESULT_SCHEMA_VERSION
+        return unless snapshot.fetch("success") == true
 
-        lines = snapshot[:lines]
-        case_preserved_lines = snapshot[:case_preserved_lines]
-        truncated = indifferent_hash(snapshot[:truncated])
+        lines = snapshot.fetch("lines")
+        case_preserved_lines = snapshot.fetch("case_preserved_lines")
+        truncated = bounded_hash_values(
+          snapshot.fetch("truncated"),
+          required_keys: %w[lines case_preserved_lines],
+          maximum_entries: 16
+        )
         return unless lines.is_a?(Array) && lines.size.between?(1, MAX_LINE_INDEX + 1)
         return unless case_preserved_lines.is_a?(Array) && case_preserved_lines.size == lines.size
         return unless truncated
-        return unless truncated[:lines] == false && truncated[:case_preserved_lines] == false
+        return unless truncated.fetch("lines") == false && truncated.fetch("case_preserved_lines") == false
 
-        { line_count: lines.size }
+        normalized_lines = bounded_context_lines(lines)
+        normalized_case_preserved_lines = bounded_context_lines(case_preserved_lines)
+        return unless normalized_lines && normalized_case_preserved_lines
+
+        {
+          line_count: normalized_lines.size,
+          lines: normalized_lines,
+          case_preserved_lines: normalized_case_preserved_lines
+        }
+      end
+
+      def source_lines_lossless?(context, source_lines:, source_case_preserved_lines:)
+        return false unless context
+
+        bounded_context_lines(source_lines) == context.fetch(:lines) &&
+          bounded_context_lines(source_case_preserved_lines) == context.fetch(:case_preserved_lines)
+      end
+
+      def bounded_context_lines(value)
+        return unless value.is_a?(Array) && value.size.between?(1, MAX_LINE_INDEX + 1)
+
+        lines = value.map { |line| bounded_context_line(line) }
+        lines unless lines.any?(&:nil?)
+      end
+
+      def bounded_context_line(value)
+        return unless value.is_a?(String) && value.valid_encoding?
+        return unless value.encoding == Encoding::UTF_8 || value.ascii_only?
+        return if value.bytesize > MAX_CONTEXT_LINE_BYTES
+        return if value.match?(CONTROL_CHARACTER_PATTERN)
+
+        value.dup.freeze
+      rescue Encoding::CompatibilityError
+        nil
+      end
+
+      def canonical_handle_id(handle)
+        material = handle.values_at(
+          "role",
+          "source_field_path",
+          "page_index",
+          "line_index",
+          "string_index_type",
+          "provider_span_start",
+          "provider_span_end"
+        )
+        "#{HANDLE_ID_PREFIX}#{Digest::SHA256.hexdigest(material.join("\0"))}"
+      end
+
+      def canonical_candidate_id(destination_id, handles)
+        material = [
+          CANDIDATE_ID_NAMESPACE,
+          destination_id,
+          *handles.flat_map do |handle|
+            handle.values_at(
+              "role",
+              "source_field_path",
+              "page_index",
+              "line_index",
+              "string_index_type",
+              "provider_span_start",
+              "provider_span_end"
+            )
+          end
+        ]
+        "#{CANDIDATE_ID_PREFIX}#{Digest::SHA256.hexdigest(material.join("\0"))}"
       end
 
       def exact_hash(value, allowed_keys)
@@ -365,8 +459,17 @@ module Receipts::Processing::Contracts
         normalized if normalized.keys.sort == allowed_keys.sort
       end
 
-      def indifferent_hash(value)
-        value.with_indifferent_access if value.respond_to?(:with_indifferent_access)
+      def bounded_hash_values(value, required_keys:, maximum_entries:)
+        return unless value.is_a?(Hash) && value.size <= maximum_entries
+
+        required_keys.to_h do |expected_key|
+          matching_keys = value.keys.select do |key|
+            (key.is_a?(String) || key.is_a?(Symbol)) && key.to_s == expected_key
+          end
+          return unless matching_keys.one?
+
+          [ expected_key, value.fetch(matching_keys.sole) ]
+        end
       end
 
       def enum_string(value, allowed)

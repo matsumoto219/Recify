@@ -657,7 +657,9 @@ module Receipts::Processing::Runs
         options = normalized_hash(result[:evidence_options])[:reference_pricing]
         Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedger.build(
           options:,
-          ocr_snapshot:
+          ocr_snapshot:,
+          source_lines: result[:lines],
+          source_case_preserved_lines: result[:case_preserved_lines]
         )
       end
       return nil if ledger.nil?

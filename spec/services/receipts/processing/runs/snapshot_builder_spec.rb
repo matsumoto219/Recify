@@ -572,6 +572,20 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     end
   end
 
+  it 'OCR line文字列がbyte上限でtruncateされる場合もledger全体を保存しない' do
+    result = destination_ocr_result.deep_dup
+    result[:lines][0] = 'x' * (described_class::STRING_MAX_BYTES + 1)
+    result[:case_preserved_lines][0] = result[:lines][0]
+
+    snapshot = described_class.ocr_result_snapshot(result)
+
+    aggregate_failures do
+      expect(snapshot.fetch('lines').first.bytesize).to eq(described_class::STRING_MAX_BYTES)
+      expect(snapshot).not_to have_key('evidence_ledgers')
+      expect(snapshot.dig('candidates', 'reference_pricing_candidates')).to be_present
+    end
+  end
+
   it '自動採用設定OFFでもcandidate extractionとtyped proposal保存を継続する' do
     create(
       :system_setting,

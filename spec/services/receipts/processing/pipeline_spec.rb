@@ -981,8 +981,13 @@ RSpec.describe Receipts::Processing::Pipeline do
       stored_ledger = run.reload.ocr_result_snapshot.dig('evidence_ledgers', 'reference_pricing')
 
       allow(ReceiptAiEnrichmentService).to receive(:call) do |rehydrated_ocr_result, **kwargs|
+        without_ledger = rehydrated_ocr_result.deep_dup
+        without_ledger.delete(:evidence_ledgers)
         aggregate_failures do
           expect(rehydrated_ocr_result.dig(:evidence_ledgers, 'reference_pricing')).to eq(stored_ledger)
+          expect(Ai::PromptBuilder.build(rehydrated_ocr_result)).to eq(
+            Ai::PromptBuilder.build(without_ledger)
+          )
           expect(kwargs.keys).to contain_exactly(
             :ai_name_completion_enabled,
             :runtime_config,
@@ -998,10 +1003,6 @@ RSpec.describe Receipts::Processing::Pipeline do
       aggregate_failures do
         expect(ReceiptAiEnrichmentService).to have_received(:call).once
         expect(result.next_step).to eq(:finalize)
-        expect(run.reload.ai_input_snapshot.to_json).not_to include(
-          'reference_pricing_ocr_evidence_ledger_v1',
-          'azure_line_group_evidence_v1_'
-        )
       end
     end
 

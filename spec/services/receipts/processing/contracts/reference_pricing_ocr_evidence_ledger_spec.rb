@@ -30,7 +30,44 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedge
   end
 
   def build(options = [ first_option ], ocr_snapshot: base_snapshot)
-    described_class.build(options:, ocr_snapshot:)
+    described_class.build(
+      options:,
+      ocr_snapshot:,
+      source_lines: ocr_snapshot.fetch('lines'),
+      source_case_preserved_lines: ocr_snapshot.fetch('case_preserved_lines')
+    )
+  end
+
+  def refresh_identities(option)
+    option[:handles].each do |handle|
+      identity_material = handle.values_at(
+        :role,
+        :source_field_path,
+        :page_index,
+        :line_index,
+        :string_index_type,
+        :provider_span_start,
+        :provider_span_end
+      )
+      handle[:handle_id] = "reference_pricing_handle_v1_#{Digest::SHA256.hexdigest(identity_material.join("\0"))}"
+    end
+    candidate_material = [
+      'azure_line_group_evidence_v1',
+      option.fetch(:destination_id),
+      *option.fetch(:handles).flat_map do |handle|
+        handle.values_at(
+          :role,
+          :source_field_path,
+          :page_index,
+          :line_index,
+          :string_index_type,
+          :provider_span_start,
+          :provider_span_end
+        )
+      end
+    ]
+    option[:candidate_id] = "azure_line_group_evidence_v1_#{Digest::SHA256.hexdigest(candidate_material.join("\0"))}"
+    option
   end
 
   def shifted_option(ordinal = 1)
@@ -40,20 +77,18 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedge
     span_delta = ordinal * 50
     name_start = 13 + span_delta
     name_end = 19 + span_delta
-    option[:candidate_id] = "azure_line_group_evidence_v1_#{Digest::SHA256.hexdigest("candidate-#{ordinal}")}"
     option[:destination_id] = "azure_line_group_destination_p0_name_l#{reference_line_index}_" \
       "s#{name_start}_e#{name_end}_ref_l#{reference_line_index}_qty_l#{purchased_line_index}"
     option[:reference_line_index] = reference_line_index
     option[:purchased_quantity_line_index] = purchased_line_index
     option[:handles].each_with_index do |handle, index|
       line_index = handle[:role] == 'purchased_quantity' ? purchased_line_index : reference_line_index
-      handle[:handle_id] = "reference_pricing_handle_v1_#{Digest::SHA256.hexdigest("handle-#{ordinal}-#{index}")}"
       handle[:source_field_path] = "pages[0].lines[#{line_index}]"
       handle[:line_index] = line_index
       handle[:provider_span_start] += span_delta
       handle[:provider_span_end] += span_delta
     end
-    option
+    refresh_identities(option)
   end
 
   it 'builds a deterministic, value-free, versioned ledger from bounded structural options' do
@@ -88,6 +123,64 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedge
     parsed = JSON.parse(JSON.generate(ledger))
 
     expect(described_class.from_snapshot(parsed, ocr_snapshot: base_snapshot)).to eq(ledger)
+  end
+
+  it 'binds the checksum to the complete stored OCR line context' do
+    ledger = build
+    changed = base_snapshot
+    changed['lines'][1] = 'CHANGED-1'
+    changed['case_preserved_lines'][1] = 'CHANGED-1'
+
+    expect(described_class.from_snapshot(ledger, ocr_snapshot: changed)).to be_nil
+  end
+
+  it 'rejects source lines that were truncated while the OCR snapshot was built' do
+    source = base_snapshot
+    stored = source.deep_dup
+    source['lines'][1] = 'x' * 101
+    source['case_preserved_lines'][1] = 'x' * 101
+    stored['lines'][1] = 'x' * 100
+    stored['case_preserved_lines'][1] = 'x' * 100
+
+    result = described_class.build(
+      options: [ first_option ],
+      ocr_snapshot: stored,
+      source_lines: source.fetch('lines'),
+      source_case_preserved_lines: source.fetch('case_preserved_lines')
+    )
+
+    expect(result).to be_nil
+  end
+
+  it 'reads only bounded required snapshot keys without recursively normalizing unrelated data' do
+    cyclic = base_snapshot
+    cyclic['unused'] = cyclic
+    colliding = base_snapshot.merge(lines: [ 'COLLISION' ])
+    oversized = base_snapshot.merge(
+      (1..30).to_h { |index| [ "unused_#{index}", index ] }
+    )
+
+    aggregate_failures do
+      expect(build(ocr_snapshot: cyclic)).to be_present
+      expect(build(ocr_snapshot: colliding)).to be_nil
+      expect(build(ocr_snapshot: oversized)).to be_nil
+    end
+  end
+
+  it 'recomputes candidate and handle identities from the canonical structural evidence' do
+    stale_candidate = first_option
+    stale_candidate[:candidate_id] = "azure_line_group_evidence_v1_#{'0' * 64}"
+    stale_handle = first_option
+    stale_handle[:handles][1][:handle_id] = "reference_pricing_handle_v1_#{'0' * 64}"
+    changed_span = first_option
+    changed_span[:handles][1][:provider_span_start] += 1
+    changed_span[:handles][1][:provider_span_end] += 1
+
+    expect([
+      build([ stale_candidate ]),
+      build([ stale_handle ]),
+      build([ changed_span ])
+    ]).to all(be_nil)
   end
 
   it 'accepts the complete configured option bound without truncation' do
@@ -209,18 +302,14 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedge
   end
 
   it 'rejects the whole ledger above option or serialized byte bounds' do
-    too_many = Array.new(described_class::MAX_OPTIONS + 1) do |index|
-      option = first_option
-      digest = Digest::SHA256.hexdigest("candidate-#{index}")
-      option[:candidate_id] = "azure_line_group_evidence_v1_#{digest}"
-      option[:destination_id] = "azure_line_group_destination_p0_name_l1_s13_e19_ref_l1_qty_l2_#{index}"
-      option
-    end
+    too_many = [ first_option ] +
+      (1..described_class::MAX_OPTIONS).map { |ordinal| shifted_option(ordinal) }
+    large_context = base_snapshot(line_count: 36)
 
     stub_const("#{described_class}::MAX_SERIALIZED_BYTES", 100)
 
     aggregate_failures do
-      expect(build(too_many)).to be_nil
+      expect(build(too_many, ocr_snapshot: large_context)).to be_nil
       expect(build).to be_nil
     end
   end
@@ -232,9 +321,24 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedge
     control[:candidate_id] = "bad\0identity"
 
     expect([
-      described_class.build(options: [], ocr_snapshot: base_snapshot),
-      described_class.build(options: {}, ocr_snapshot: base_snapshot),
-      described_class.build(options: [ nil ], ocr_snapshot: base_snapshot),
+      described_class.build(
+        options: [],
+        ocr_snapshot: base_snapshot,
+        source_lines: base_snapshot.fetch('lines'),
+        source_case_preserved_lines: base_snapshot.fetch('case_preserved_lines')
+      ),
+      described_class.build(
+        options: {},
+        ocr_snapshot: base_snapshot,
+        source_lines: base_snapshot.fetch('lines'),
+        source_case_preserved_lines: base_snapshot.fetch('case_preserved_lines')
+      ),
+      described_class.build(
+        options: [ nil ],
+        ocr_snapshot: base_snapshot,
+        source_lines: base_snapshot.fetch('lines'),
+        source_case_preserved_lines: base_snapshot.fetch('case_preserved_lines')
+      ),
       build([ invalid_utf8 ]),
       build([ control ])
     ]).to all(be_nil)
