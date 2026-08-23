@@ -202,7 +202,7 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingLineGroupExtractor do
     expect(extractor.evidence_options).to eq([])
   end
 
-  it 'rejects duplicate destination names through the precomputed occurrence index' do
+  it 'rejects duplicate destination names within the bounded evidence search' do
     analyze_result = multi_block_analyze_result
     analyze_result['content'].sub!('検証品B02', '検証品A01')
     analyze_result.dig('pages', 0, 'lines', 3)['content'].sub!('検証品B02', '検証品A01')
