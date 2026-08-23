@@ -33,16 +33,21 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedge
     described_class.build(options:, ocr_snapshot:)
   end
 
-  def shifted_option
+  def shifted_option(ordinal = 1)
     option = first_option
-    option[:candidate_id] = "azure_line_group_evidence_v1_#{Digest::SHA256.hexdigest('second')}"
-    option[:destination_id] = 'azure_line_group_destination_p0_name_l3_s63_e69_ref_l3_qty_l4'
-    option[:reference_line_index] = 3
-    option[:purchased_quantity_line_index] = 4
+    reference_line_index = 1 + (ordinal * 2)
+    purchased_line_index = reference_line_index + 1
+    span_delta = ordinal * 50
+    name_start = 13 + span_delta
+    name_end = 19 + span_delta
+    option[:candidate_id] = "azure_line_group_evidence_v1_#{Digest::SHA256.hexdigest("candidate-#{ordinal}")}"
+    option[:destination_id] = "azure_line_group_destination_p0_name_l#{reference_line_index}_" \
+      "s#{name_start}_e#{name_end}_ref_l#{reference_line_index}_qty_l#{purchased_line_index}"
+    option[:reference_line_index] = reference_line_index
+    option[:purchased_quantity_line_index] = purchased_line_index
     option[:handles].each_with_index do |handle, index|
-      line_index = handle[:role] == 'purchased_quantity' ? 4 : 3
-      span_delta = 50
-      handle[:handle_id] = "reference_pricing_handle_v1_#{Digest::SHA256.hexdigest("second-#{index}")}"
+      line_index = handle[:role] == 'purchased_quantity' ? purchased_line_index : reference_line_index
+      handle[:handle_id] = "reference_pricing_handle_v1_#{Digest::SHA256.hexdigest("handle-#{ordinal}-#{index}")}"
       handle[:source_field_path] = "pages[0].lines[#{line_index}]"
       handle[:line_index] = line_index
       handle[:provider_span_start] += span_delta
@@ -83,6 +88,17 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedge
     parsed = JSON.parse(JSON.generate(ledger))
 
     expect(described_class.from_snapshot(parsed, ocr_snapshot: base_snapshot)).to eq(ledger)
+  end
+
+  it 'accepts the complete configured option bound without truncation' do
+    options = [ first_option ] + (1...described_class::MAX_OPTIONS).map { |ordinal| shifted_option(ordinal) }
+    ledger = build(options, ocr_snapshot: base_snapshot(line_count: 34))
+
+    aggregate_failures do
+      expect(ledger.fetch('option_count')).to eq(16)
+      expect(ledger.fetch('handle_count')).to eq(80)
+      expect(JSON.generate(ledger).bytesize).to be <= described_class::MAX_SERIALIZED_BYTES
+    end
   end
 
   it 'does not persist OCR text, numeric authority, units, tax decisions, polygons, or arbitrary metadata' do
