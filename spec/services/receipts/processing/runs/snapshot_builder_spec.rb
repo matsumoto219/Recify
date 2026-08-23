@@ -511,6 +511,67 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     end
   end
 
+  it '複数選択用の構造evidenceをA1 proposalとは別のbounded ledgerへ保存する' do
+    snapshot = described_class.ocr_result_snapshot(destination_ocr_result)
+    ledger = snapshot.dig('evidence_ledgers', 'reference_pricing')
+
+    aggregate_failures do
+      expect(ledger).to include(
+        'schema_version' => 'reference_pricing_ocr_evidence_ledger_v1',
+        'creation_stage' => 'ocr_validation',
+        'option_count' => 1,
+        'handle_count' => 5,
+        'integrity_checksum' => match(/\A[0-9a-f]{64}\z/)
+      )
+      expect(ledger.dig('options', 0)).to include(
+        'candidate_id' => match(/\Aazure_line_group_evidence_v1_[0-9a-f]{64}\z/),
+        'destination_id' => 'azure_line_group_destination_p0_name_l1_s13_e19_ref_l1_qty_l2',
+        'source_kind' => 'azure_line_group',
+        'validation_state' => 'valid'
+      )
+      expect(snapshot.dig('adoption_proposals', 'reference_pricing')).to be_present
+      expect(ledger.to_json).not_to include(
+        '検証品A01',
+        '120円',
+        '2.5 L',
+        'polygon',
+        'provider_raw_response'
+      )
+    end
+  end
+
+  it 'stored ledgerをexactに再sanitizeし改変時はledgerだけを除外する' do
+    initial = described_class.ocr_result_snapshot(destination_ocr_result)
+    copied = described_class.ocr_result_snapshot(initial)
+    tampered = initial.deep_dup
+    tampered.dig('evidence_ledgers', 'reference_pricing', 'options', 0)['raw_text'] = '保存禁止'
+    rejected = described_class.ocr_result_snapshot(tampered)
+
+    aggregate_failures do
+      expect(copied.dig('evidence_ledgers', 'reference_pricing')).to eq(
+        initial.dig('evidence_ledgers', 'reference_pricing')
+      )
+      expect(rejected).not_to have_key('evidence_ledgers')
+      expect(rejected.dig('candidates', 'reference_pricing_candidates')).to be_present
+      expect(rejected.dig('adoption_proposals', 'reference_pricing')).to be_present
+      expect(rejected.to_json).not_to include('保存禁止')
+    end
+  end
+
+  it 'OCR line snapshotがtruncateされる場合は不完全なledgerを保存しない' do
+    result = destination_ocr_result.deep_dup
+    result[:lines] = Array.new(described_class::MAX_OCR_LINES + 1) { |index| "SYNTH-#{index}" }
+    result[:case_preserved_lines] = result[:lines].dup
+
+    snapshot = described_class.ocr_result_snapshot(result)
+
+    aggregate_failures do
+      expect(snapshot.dig('truncated', 'lines')).to be(true)
+      expect(snapshot).not_to have_key('evidence_ledgers')
+      expect(snapshot.dig('candidates', 'reference_pricing_candidates')).to be_present
+    end
+  end
+
   it '自動採用設定OFFでもcandidate extractionとtyped proposal保存を継続する' do
     create(
       :system_setting,

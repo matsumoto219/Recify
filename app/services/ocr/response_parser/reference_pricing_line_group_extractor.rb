@@ -1019,7 +1019,9 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
       provider_model_id: SUPPORTED_MODEL_ID,
       provider_api_version: SUPPORTED_API_VERSION,
       string_index_type: candidate[:string_index_type],
+      validation_state: candidate[:validation_state],
       validation_contract_version: VALIDATION_CONTRACT_VERSION,
+      analysis_profile_country_code: candidate[:analysis_profile_country_code],
       page_index: candidate[:page_index],
       reference_line_index: candidate[:reference_line_index],
       purchased_quantity_line_index: candidate[:purchased_quantity_line_index],
@@ -1055,7 +1057,7 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     return unless provider_span_start < provider_span_end
 
     {
-      handle_id: "reference_pricing_evidence_handle_v1_#{Digest::SHA256.hexdigest(values.join("\0"))}",
+      handle_id: "reference_pricing_handle_v1_#{Digest::SHA256.hexdigest(values.join("\0"))}",
       role:,
       source_field_path:,
       page_index:,

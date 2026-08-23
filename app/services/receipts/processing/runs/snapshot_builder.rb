@@ -352,6 +352,7 @@ module Receipts::Processing::Runs
         }
       }.compact
       snapshot[:adoption_proposals] = reference_pricing_adoption_proposals_snapshot(result, snapshot).presence
+      snapshot[:evidence_ledgers] = reference_pricing_evidence_ledgers_snapshot(result, snapshot).presence
 
       sanitize_hash(snapshot.compact)
     end
@@ -641,6 +642,27 @@ module Receipts::Processing::Runs
       return nil if proposal.nil?
 
       { reference_pricing: proposal }
+    end
+
+    def reference_pricing_evidence_ledgers_snapshot(result, ocr_snapshot)
+      ledger = if result.key?(:schema_version)
+        return nil unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+        stored = normalized_hash(result[:evidence_ledgers])[:reference_pricing]
+        Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedger.from_snapshot(
+          stored,
+          ocr_snapshot:
+        )
+      else
+        options = normalized_hash(result[:evidence_options])[:reference_pricing]
+        Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedger.build(
+          options:,
+          ocr_snapshot:
+        )
+      end
+      return nil if ledger.nil?
+
+      { reference_pricing: ledger }
     end
 
     def reference_pricing_candidate_snapshot(value)
