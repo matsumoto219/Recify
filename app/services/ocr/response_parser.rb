@@ -60,17 +60,19 @@ class Ocr::ResponseParser
         ReceiptAmountService.reference_item_extension_projection(**attributes)
       }
     )
+    line_group_extractor = Ocr::ResponseParser::ReferencePricingLineGroupExtractor.new(
+      analyze_result: extract_analyze_result(parsed_response),
+      profile: profile,
+      projection: ->(**attributes) {
+        ReceiptAmountService.reference_item_extension_projection(**attributes)
+      }
+    )
     line_group_reference_pricing_candidates = if structured_reference_pricing_candidates.empty?
-      Ocr::ResponseParser::ReferencePricingLineGroupExtractor.call(
-        analyze_result: extract_analyze_result(parsed_response),
-        profile: profile,
-        projection: ->(**attributes) {
-          ReceiptAmountService.reference_item_extension_projection(**attributes)
-        }
-      )
+      line_group_extractor.call
     else
       []
     end
+    reference_pricing_evidence_options = line_group_extractor.evidence_options
     reference_pricing_candidates = if structured_reference_pricing_candidates.any?
       structured_reference_pricing_candidates
     else
@@ -126,6 +128,9 @@ class Ocr::ResponseParser
         items: extract_items(authority_response, authority_lines),
         review_reasons: extract_review_reasons(authority_response),
         confidence_summary: extract_confidence_summary(authority_response)
+      },
+      evidence_options: {
+        reference_pricing: reference_pricing_evidence_options
       },
       error_code: nil,
       meta: {

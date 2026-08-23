@@ -1,3 +1,5 @@
+require "digest"
+
 class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
   MAX_PAGES = 1
   MAX_LINES = 150
@@ -11,6 +13,7 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
   MAX_PAGE_DIMENSION = 10_000
   MAX_ITEM_FIELD_NODES = 512
   MAX_ITEM_FIELD_ENTRIES = 100
+  MAX_EVIDENCE_OPTIONS = 16
   SUPPORTED_MODEL_ID = "prebuilt-receipt"
   SUPPORTED_API_VERSION = "2024-11-30"
   VALIDATION_CONTRACT_VERSION = "azure_line_group_v1"
@@ -53,6 +56,10 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     new(analyze_result:, profile:, projection:).call
   end
 
+  def self.evidence_options(analyze_result:, profile:, projection: nil)
+    new(analyze_result:, profile:, projection:).evidence_options
+  end
+
   def initialize(analyze_result:, profile:, projection: nil)
     @analyze_result = analyze_result
     @profile = profile
@@ -62,26 +69,13 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
   end
 
   def call
-    return [] unless analyze_result.is_a?(Hash)
-    return [] unless analyze_result["modelId"] == SUPPORTED_MODEL_ID
-    return [] unless analyze_result["apiVersion"] == SUPPORTED_API_VERSION
+    context = validated_context
+    return [] if context.nil?
 
-    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(
-      index_type: analyze_result["stringIndexType"]
-    )
-    return [] if mapper.nil?
-
-    content = bounded_text(analyze_result["content"], max_bytes: MAX_CONTENT_BYTES, allow_newlines: true)
-    return [] if content.nil?
-
-    pages = analyze_result["pages"]
-    return [] unless pages.is_a?(Array) && pages.size == 1 && pages.size <= MAX_PAGES
-
-    page = pages.sole
-    lines = validated_lines(page, content:, mapper:)
-    return [] if lines.nil?
-    words = validated_words(page, lines:, content:, mapper:)
-    return [] if words.nil?
+    content = context.fetch(:content)
+    mapper = context.fetch(:mapper)
+    lines = context.fetch(:lines)
+    words = context.fetch(:words)
     return [] unless lines.count { |line| purchased_quantity_line?(line[:content]) } == 1
     return [] unless lines.sum { |line| reference_expression_marker_count(line[:content]) } == 1
 
@@ -108,9 +102,85 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     []
   end
 
+  def evidence_options
+    context = validated_context
+    return [] if context.nil?
+
+    candidates = []
+    context.fetch(:lines).each_cons(2).with_index do |(reference_line, purchased_line), reference_line_index|
+      candidate = candidate_for_pair(
+        reference_line:,
+        purchased_line:,
+        page_index: 0,
+        reference_line_index:,
+        content: context.fetch(:content),
+        mapper: context.fetch(:mapper),
+        lines: context.fetch(:lines),
+        words: context.fetch(:words),
+        enforce_nearby_conflict: false,
+        include_summary_corroboration: false
+      )
+      next if candidate.nil?
+
+      candidates << candidate
+      return [] if candidates.size > MAX_EVIDENCE_OPTIONS
+    end
+    candidate_pair_indexes = candidates.to_h do |candidate|
+      [
+        [ candidate.fetch(:reference_line_index), candidate.fetch(:purchased_quantity_line_index) ],
+        true
+      ]
+    end
+    candidates.select! do |candidate|
+      evidence_neighbors_safe?(
+        candidate,
+        lines: context.fetch(:lines),
+        candidate_pair_indexes:
+      )
+    end
+    return [] if candidates.empty?
+
+    options = candidates.filter_map { |candidate| evidence_option(candidate) }
+    return [] unless options.size == candidates.size
+    return [] unless options.pluck(:candidate_id).uniq.size == options.size
+    return [] unless options.pluck(:destination_id).uniq.size == options.size
+
+    options
+  rescue EncodingError, ArgumentError, KeyError, TypeError
+    []
+  end
+
   private
 
   attr_reader :analyze_result, :profile, :projection
+
+  def validated_context
+    return @validated_context if defined?(@validated_context)
+
+    @validated_context = nil
+    return unless analyze_result.is_a?(Hash)
+    return unless analyze_result["modelId"] == SUPPORTED_MODEL_ID
+    return unless analyze_result["apiVersion"] == SUPPORTED_API_VERSION
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(
+      index_type: analyze_result["stringIndexType"]
+    )
+    return if mapper.nil?
+
+    content = bounded_text(analyze_result["content"], max_bytes: MAX_CONTENT_BYTES, allow_newlines: true)
+    return if content.nil?
+
+    pages = analyze_result["pages"]
+    return unless pages.is_a?(Array) && pages.size == 1 && pages.size <= MAX_PAGES
+
+    page = pages.sole
+    lines = validated_lines(page, content:, mapper:)
+    return if lines.nil?
+    words = validated_words(page, lines:, content:, mapper:)
+    return if words.nil?
+
+    @validated_context = { content:, mapper:, lines:, words: }.freeze
+  end
 
   def validated_lines(page, content:, mapper:)
     return unless page.is_a?(Hash)
@@ -225,13 +295,15 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     content:,
     mapper:,
     lines:,
-    words:
+    words:,
+    enforce_nearby_conflict: true,
+    include_summary_corroboration: true
   )
     return unless strict_pair_layout?(reference_line, purchased_line, content:, mapper:)
     return unless purchased_quantity_line?(purchased_line[:content])
     return if package_or_uncertain?(reference_line[:content]) || package_or_uncertain?(purchased_line[:content])
     return if discount_adjustment_text?(reference_line[:content]) || discount_adjustment_text?(purchased_line[:content])
-    return if nearby_conflict?(lines, reference_line_index:)
+    return if enforce_nearby_conflict && nearby_conflict?(lines, reference_line_index:)
     return if block_overlaps_existing_item?(
       content:,
       mapper:,
@@ -290,15 +362,17 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
       typed[:analysis_profile_country_code] = country_code
     end
 
-    summary = summary_total_corroboration(
-      typed,
-      lines:,
-      content:,
-      mapper:,
-      block_start: reference_line[:span_start],
-      block_end: purchased_line[:span_end]
-    )
-    typed[:summary_total_corroboration] = summary if summary
+    if include_summary_corroboration
+      summary = summary_total_corroboration(
+        typed,
+        lines:,
+        content:,
+        mapper:,
+        block_start: reference_line[:span_start],
+        block_end: purchased_line[:span_end]
+      )
+      typed[:summary_total_corroboration] = summary if summary
+    end
     typed
   rescue NoMethodError
     nil
@@ -882,6 +956,114 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     return true if neighboring_line_conflict?(following[:content], allow_summary_total: true)
 
     false
+  end
+
+  def evidence_neighbors_safe?(candidate, lines:, candidate_pair_indexes:)
+    reference_line_index = candidate[:reference_line_index]
+    purchased_line_index = candidate[:purchased_quantity_line_index]
+    return false unless reference_line_index.is_a?(Integer)
+    return false unless purchased_line_index == reference_line_index + 1
+
+    preceding_index = reference_line_index - 1
+    if preceding_index >= 0 && neighboring_line_conflict?(lines.fetch(preceding_index)[:content])
+      return false unless candidate_pair_indexes[[ preceding_index - 1, preceding_index ]]
+    end
+
+    following_index = purchased_line_index + 1
+    if following_index < lines.size &&
+        neighboring_line_conflict?(lines.fetch(following_index)[:content], allow_summary_total: true)
+      return false unless candidate_pair_indexes[[ following_index, following_index + 1 ]]
+    end
+
+    true
+  rescue IndexError, NoMethodError, TypeError
+    false
+  end
+
+  def evidence_option(candidate)
+    destination = candidate[:destination_item_identity]
+    return unless destination.is_a?(Hash)
+
+    handles = [
+      structural_handle("product_destination", destination[:evidence]),
+      structural_handle("reference_price", candidate.dig(:reference_price, :evidence)),
+      structural_handle("reference_quantity", candidate.dig(:reference_quantity, :evidence)),
+      structural_handle("purchased_quantity", candidate.dig(:purchased_quantity, :evidence)),
+      structural_handle("tax_inclusion", candidate[:tax_inclusion_evidence])
+    ]
+    return if handles.any?(&:nil?)
+
+    destination_id = destination[:identity]
+    return unless destination_id.is_a?(String)
+
+    identity_material = [
+      "azure_line_group_evidence_v1",
+      destination_id,
+      *handles.flat_map do |handle|
+        handle.values_at(
+          :role,
+          :source_field_path,
+          :page_index,
+          :line_index,
+          :string_index_type,
+          :provider_span_start,
+          :provider_span_end
+        )
+      end
+    ]
+
+    {
+      candidate_id: "azure_line_group_evidence_v1_#{Digest::SHA256.hexdigest(identity_material.join("\0"))}",
+      destination_id:,
+      source_kind: "azure_line_group",
+      provider_model_id: SUPPORTED_MODEL_ID,
+      provider_api_version: SUPPORTED_API_VERSION,
+      string_index_type: candidate[:string_index_type],
+      validation_contract_version: VALIDATION_CONTRACT_VERSION,
+      page_index: candidate[:page_index],
+      reference_line_index: candidate[:reference_line_index],
+      purchased_quantity_line_index: candidate[:purchased_quantity_line_index],
+      handles:
+    }
+  rescue ArgumentError, NoMethodError, TypeError
+    nil
+  end
+
+  def structural_handle(role, evidence)
+    return unless evidence.is_a?(Hash)
+
+    source_field_path = evidence[:source_field_path]
+    page_index = evidence[:page_index]
+    line_index = evidence[:line_index]
+    string_index_type = evidence[:string_index_type]
+    provider_span_start = evidence[:provider_span_start]
+    provider_span_end = evidence[:provider_span_end]
+    values = [
+      role,
+      source_field_path,
+      page_index,
+      line_index,
+      string_index_type,
+      provider_span_start,
+      provider_span_end
+    ]
+    return unless role.is_a?(String)
+    return unless source_field_path.is_a?(String)
+    return unless page_index.is_a?(Integer) && line_index.is_a?(Integer)
+    return unless string_index_type.is_a?(String)
+    return unless provider_span_start.is_a?(Integer) && provider_span_end.is_a?(Integer)
+    return unless provider_span_start < provider_span_end
+
+    {
+      handle_id: "reference_pricing_evidence_handle_v1_#{Digest::SHA256.hexdigest(values.join("\0"))}",
+      role:,
+      source_field_path:,
+      page_index:,
+      line_index:,
+      string_index_type:,
+      provider_span_start:,
+      provider_span_end:
+    }
   end
 
   def neighboring_line_conflict?(text, allow_summary_total: false)
