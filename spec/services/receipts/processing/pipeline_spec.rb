@@ -973,6 +973,65 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
+    it 'OCR evidence ledgerを再検証してAI jobへ運ぶがprovider input contractは変更しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      ocr_result = ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+      stored_ledger = run.reload.ocr_result_snapshot.dig('evidence_ledgers', 'reference_pricing')
+
+      allow(ReceiptAiEnrichmentService).to receive(:call) do |rehydrated_ocr_result, **kwargs|
+        aggregate_failures do
+          expect(rehydrated_ocr_result.dig(:evidence_ledgers, 'reference_pricing')).to eq(stored_ledger)
+          expect(kwargs.keys).to contain_exactly(
+            :ai_name_completion_enabled,
+            :runtime_config,
+            :capture_input,
+            :before_provider_call
+          )
+        end
+        successful_ai_result
+      end
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentService).to have_received(:call).once
+        expect(result.next_step).to eq(:finalize)
+        expect(run.reload.ai_input_snapshot.to_json).not_to include(
+          'reference_pricing_ocr_evidence_ledger_v1',
+          'azure_line_group_evidence_v1_'
+        )
+      end
+    end
+
+    it '改変されたoptional evidence ledgerを除外して既存AI経路を継続する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = create(:receipt_analysis_run, receipt:)
+      Receipts::Processing.record_ocr_snapshot(
+        run,
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      snapshot = run.reload.ocr_result_snapshot.deep_dup
+      snapshot.dig('evidence_ledgers', 'reference_pricing')['integrity_checksum'] = '0' * 64
+      run.update!(ocr_result_snapshot: snapshot)
+
+      allow(ReceiptAiEnrichmentService).to receive(:call) do |rehydrated_ocr_result, **_kwargs|
+        aggregate_failures do
+          expect(rehydrated_ocr_result).not_to have_key(:evidence_ledgers)
+          expect(rehydrated_ocr_result.dig(:candidates, 'reference_pricing_candidates')).to be_present
+        end
+        successful_ai_result
+      end
+
+      result = described_class.run_ai(run)
+
+      aggregate_failures do
+        expect(ReceiptAiEnrichmentService).to have_received(:call).once
+        expect(result.next_step).to eq(:finalize)
+      end
+    end
+
     it 'runtime config取得失敗時はAI providerを呼ばずrunを失敗させる' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
@@ -2292,7 +2351,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
-    it 'rehydrated typed proposalがあってもReceiptItem/Amount authorityへ永続化しない' do
+    it 'rehydrated typed proposalとevidence ledgerがあってもgate OFFならReceiptItem/Amount authorityへ永続化しない' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
       snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(ocr_result)
@@ -2323,6 +2382,9 @@ RSpec.describe Receipts::Processing::Pipeline do
         expect(result).to eq(receipt)
         expect(captured_ocr_result.dig(:adoption_proposals, 'reference_pricing')).to eq(
           snapshot.dig('adoption_proposals', 'reference_pricing')
+        )
+        expect(captured_ocr_result.dig(:evidence_ledgers, 'reference_pricing')).to eq(
+          snapshot.dig('evidence_ledgers', 'reference_pricing')
         )
         expect(captured_amount_items).to eq([])
         expect(receipt.reload.receipt_items).to be_empty

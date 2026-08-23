@@ -134,6 +134,48 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator 
       end
     end
 
+    it 'valid evidence ledgerだけをFinalize専用OCR resultへ復元する' do
+      raw_json = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
+      )
+      ocr_result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(ocr_result)
+
+      result = described_class.ocr(JSON.parse(JSON.generate(snapshot)))
+
+      aggregate_failures do
+        expect(result.dig(:evidence_ledgers, 'reference_pricing')).to eq(
+          snapshot.dig('evidence_ledgers', 'reference_pricing')
+        )
+        expect(result.dig(:evidence_ledgers, 'reference_pricing').to_json).not_to include(
+          '検証品A01',
+          '120円',
+          '2.5 L',
+          'polygon',
+          'provider_raw_response'
+        )
+      end
+    end
+
+    it 'malformed evidence ledgerだけを除外しold snapshot absenceを維持する' do
+      raw_json = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
+      )
+      ocr_result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(ocr_result)
+      snapshot.dig('evidence_ledgers', 'reference_pricing')['schema_version'] = 'unknown'
+
+      aggregate_failures do
+        malformed = described_class.ocr(snapshot)
+        old = described_class.ocr('success' => true)
+
+        expect(malformed).not_to have_key(:evidence_ledgers)
+        expect(malformed.dig(:candidates, 'reference_pricing_candidates')).to be_present
+        expect(malformed.dig(:adoption_proposals, 'reference_pricing')).to be_present
+        expect(old).not_to have_key(:evidence_ledgers)
+      end
+    end
+
     it 'malformed adoption proposalを除外しold snapshot absenceを維持する' do
       raw_json = JSON.parse(
         Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read

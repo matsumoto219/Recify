@@ -8,6 +8,10 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         snapshot.dig(:adoption_proposals, :reference_pricing),
         ocr_snapshot: snapshot
       )
+      evidence_ledger = Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedger.from_snapshot(
+        snapshot.dig(:evidence_ledgers, :reference_pricing),
+        ocr_snapshot: snapshot
+      )
 
       {
         schema_version: snapshot[:schema_version] ==
@@ -21,7 +25,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         error_code: snapshot[:error_code].presence,
         meta: normalized_hash(snapshot[:meta]).to_h,
         truncated: rehydrate_ocr_truncation(snapshot[:truncated]),
-        adoption_proposals: proposal ? { "reference_pricing" => proposal } : nil
+        adoption_proposals: proposal ? { "reference_pricing" => proposal } : nil,
+        evidence_ledgers: evidence_ledger ? { "reference_pricing" => evidence_ledger } : nil
       }.compact
     end
 

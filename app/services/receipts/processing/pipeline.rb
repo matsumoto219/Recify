@@ -457,13 +457,19 @@ class Receipts::Processing::Pipeline
     snapshot = normalized_hash(run.ocr_result_snapshot)
     return nil if snapshot.blank?
 
+    evidence_ledger = Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedger.from_snapshot(
+      snapshot.dig(:evidence_ledgers, :reference_pricing),
+      ocr_snapshot: snapshot
+    )
+
     {
       success: snapshot[:success] == true,
       lines: Array(snapshot[:lines]).map(&:to_s),
       case_preserved_lines: Array(snapshot[:case_preserved_lines]).map(&:to_s),
       candidates: normalized_hash(snapshot[:candidates]).to_h,
       error_code: snapshot[:error_code].presence,
-      meta: normalized_hash(snapshot[:meta]).to_h
+      meta: normalized_hash(snapshot[:meta]).to_h,
+      evidence_ledgers: evidence_ledger ? { "reference_pricing" => evidence_ledger } : nil
     }.compact
   end
 
