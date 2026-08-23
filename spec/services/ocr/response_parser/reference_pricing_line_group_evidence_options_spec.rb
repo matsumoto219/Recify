@@ -163,6 +163,55 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingLineGroupExtractor do
     end
   end
 
+  it 'keeps the established OCR candidate when optional evidence collection fails' do
+    response = JSON.parse(DESTINATION_FIXTURE_PATH.read)
+    allow_any_instance_of(described_class).to receive(:evidence_options).and_raise(StandardError)
+    expect(Rails.logger).to receive(:warn).with(
+      '[OCR::ResponseParser] reference_pricing_evidence_options_failed class=StandardError'
+    )
+
+    result = Ocr::ResponseParser.new(
+      response:,
+      provider: 'azure_document_intelligence'
+    ).call
+
+    aggregate_failures do
+      expect(result[:success]).to be(true)
+      expect(result.dig(:candidates, :reference_pricing_candidates)).to contain_exactly(
+        include(source_kind: 'azure_line_group', validation_state: 'valid')
+      )
+      expect(result.dig(:evidence_options, :reference_pricing)).to eq([])
+      expect(result[:error_code]).to be_nil
+    end
+  end
+
+  it 'bounds expensive pair validation even when an earlier plausible block is rejected' do
+    analyze_result = multi_block_analyze_result
+    analyze_result['content'].sub!('検証品A01 税込', '検証品A01 値引')
+    analyze_result.dig('pages', 0, 'lines', 1)['content'].sub!('税込', '値引')
+    analyze_result.dig('pages', 0, 'words', 5)['content'] = '値'
+    analyze_result.dig('pages', 0, 'words', 6)['content'] = '引'
+    stub_const("#{described_class}::MAX_EVIDENCE_OPTIONS", 1)
+    extractor = described_class.new(
+      analyze_result:,
+      profile: ReceiptAnalysisProfiles.fetch('JPN'),
+      projection: ReceiptAmountService.method(:reference_item_extension_projection)
+    )
+
+    expect(extractor).to receive(:candidate_for_pair).once.and_call_original
+    expect(extractor.evidence_options).to eq([])
+  end
+
+  it 'rejects duplicate destination names through the precomputed occurrence index' do
+    analyze_result = multi_block_analyze_result
+    analyze_result['content'].sub!('検証品B02', '検証品A01')
+    analyze_result.dig('pages', 0, 'lines', 3)['content'].sub!('検証品B02', '検証品A01')
+    analyze_result.dig('pages', 0, 'words', 14)['content'] = 'A'
+    analyze_result.dig('pages', 0, 'words', 15)['content'] = '01'
+
+    expect(evidence_options(analyze_result)).to eq([])
+  end
+
   it 'emits only bounded structural handles and never carries numeric or text authority' do
     option = evidence_options.first
 

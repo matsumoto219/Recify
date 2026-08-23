@@ -107,7 +107,18 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
     return [] if context.nil?
 
     candidates = []
+    attempted_pairs = 0
     context.fetch(:lines).each_cons(2).with_index do |(reference_line, purchased_line), reference_line_index|
+      next unless potential_evidence_pair?(
+        reference_line,
+        purchased_line,
+        content: context.fetch(:content),
+        mapper: context.fetch(:mapper)
+      )
+
+      attempted_pairs += 1
+      return [] if attempted_pairs > MAX_EVIDENCE_OPTIONS
+
       candidate = candidate_for_pair(
         reference_line:,
         purchased_line:,
@@ -153,6 +164,13 @@ class Ocr::ResponseParser::ReferencePricingLineGroupExtractor
   private
 
   attr_reader :analyze_result, :profile, :projection
+
+  def potential_evidence_pair?(reference_line, purchased_line, content:, mapper:)
+    strict_pair_layout?(reference_line, purchased_line, content:, mapper:) &&
+      purchased_quantity_line?(purchased_line[:content])
+  rescue EncodingError, ArgumentError, KeyError, TypeError
+    false
+  end
 
   def validated_context
     return @validated_context if defined?(@validated_context)

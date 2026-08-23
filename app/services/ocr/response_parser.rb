@@ -72,7 +72,7 @@ class Ocr::ResponseParser
     else
       []
     end
-    reference_pricing_evidence_options = line_group_extractor.evidence_options
+    reference_pricing_evidence_options = reference_pricing_evidence_options(line_group_extractor)
     reference_pricing_candidates = if structured_reference_pricing_candidates.any?
       structured_reference_pricing_candidates
     else
@@ -184,6 +184,15 @@ class Ocr::ResponseParser
   end
 
   private
+
+  def reference_pricing_evidence_options(extractor)
+    extractor.evidence_options
+  rescue StandardError => e
+    Rails.logger.warn(
+      "[OCR::ResponseParser] reference_pricing_evidence_options_failed class=#{e.class}"
+    )
+    []
+  end
 
   attr_reader :response, :provider, :profile
 
