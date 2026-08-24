@@ -156,6 +156,26 @@ RSpec.describe Ai::ReferencePricingSelection do
     end
   end
 
+  it 'rejects decision and reason combinations from another decision without retaining model IDs' do
+    outputs = [
+      valid_output(reason_code: 'insufficient_evidence'),
+      valid_output(decision: 'reject', reason_code: 'matched_reference_pricing'),
+      valid_output(decision: 'ambiguous', reason_code: 'discount')
+    ]
+
+    results = outputs.map do |output|
+      described_class.sanitize(output:, input: selection_input)
+    end
+
+    expect(results).to all(
+      eq(
+        'ledger_checksum' => selection_input.fetch('ledger_checksum'),
+        'validation_state' => 'rejected',
+        'validation_reason' => 'invalid_reason'
+      )
+    )
+  end
+
   it 'accepts at most 16 deterministic options without truncation' do
     base = selected_option
     options = 16.times.map do |index|

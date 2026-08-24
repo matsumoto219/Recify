@@ -306,6 +306,10 @@ module Ai
         - Its keys are exactly: decision, candidate_id, destination_id, reason_code.
         - Select only an exact candidate_id and destination_id pair from reference_pricing_options.
         - Use null IDs for reject and ambiguous decisions.
+        - decision = select requires reason_code = matched_reference_pricing.
+        - decision = reject requires reason_code = package_content, discount, or not_reference_pricing.
+        - decision = ambiguous requires reason_code = multiple_plausible_options or insufficient_evidence.
+        - Do not reject or rank options based on numeric plausibility; deterministic server validation owns numeric bounds and calculations.
         - Do NOT output or infer new amounts, quantities, units, tax decisions, line totals, pricing sources, or confidence.
         - This shadow decision MUST NOT change needs_review or review_reasons.
       RULES

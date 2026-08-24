@@ -305,6 +305,10 @@ RSpec.describe Ai::PromptTemplate do
           'Reference pricing selection extension:',
           'The output has one additional top-level key: reference_pricing_selection.',
           'Select only an exact candidate_id and destination_id pair',
+          'decision = select requires reason_code = matched_reference_pricing.',
+          'decision = reject requires reason_code = package_content, discount, or not_reference_pricing.',
+          'decision = ambiguous requires reason_code = multiple_plausible_options or insufficient_evidence.',
+          'Do not reject or rank options based on numeric plausibility; deterministic server validation owns numeric bounds and calculations.',
           'Do NOT output or infer new amounts, quantities, units, tax decisions, line totals, pricing sources, or confidence.'
         )
         expect(prompt[:user]).to include(
