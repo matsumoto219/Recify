@@ -973,7 +973,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
-    it 'OCR evidence ledgerを再検証してAI jobへ運ぶがprovider input contractは変更しない' do
+    it 'OCR evidence ledgerを再検証して既存AI入力へbounded selection optionsを追加する' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
       ocr_result = ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
@@ -983,10 +983,22 @@ RSpec.describe Receipts::Processing::Pipeline do
       allow(ReceiptAiEnrichmentService).to receive(:call) do |rehydrated_ocr_result, **kwargs|
         without_ledger = rehydrated_ocr_result.deep_dup
         without_ledger.delete(:evidence_ledgers)
+        ai_input = Ai::PromptBuilder.build(rehydrated_ocr_result)
+        control_input = Ai::PromptBuilder.build(without_ledger)
+        options = ai_input.delete(:reference_pricing_options)
         aggregate_failures do
           expect(rehydrated_ocr_result.dig(:evidence_ledgers, 'reference_pricing')).to eq(stored_ledger)
-          expect(Ai::PromptBuilder.build(rehydrated_ocr_result)).to eq(
-            Ai::PromptBuilder.build(without_ledger)
+          expect(ai_input).to eq(control_input)
+          expect(options).to include(
+            'ledger_checksum' => stored_ledger.fetch('integrity_checksum')
+          )
+          expect(options.dig('options', 0).keys).to contain_exactly(
+            'candidate_id',
+            'destination_id',
+            'evidence_lines'
+          )
+          expect(options.to_json).not_to include(
+            'amount', 'quantity_unit', 'line_total', 'raw_text', 'product_name'
           )
           expect(kwargs.keys).to contain_exactly(
             :ai_name_completion_enabled,
@@ -1021,6 +1033,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         aggregate_failures do
           expect(rehydrated_ocr_result).not_to have_key(:evidence_ledgers)
           expect(rehydrated_ocr_result.dig(:candidates, 'reference_pricing_candidates')).to be_present
+          expect(Ai::PromptBuilder.build(rehydrated_ocr_result)).not_to have_key(:reference_pricing_options)
         end
         successful_ai_result
       end
