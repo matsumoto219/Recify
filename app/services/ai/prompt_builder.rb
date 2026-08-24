@@ -41,9 +41,10 @@ module Ai
     def build
       raise ArgumentError, "ocr_result must be successful" unless success?
 
-      {
+      full_context_lines = build_full_context_lines
+      payload = {
         filtered_content: filtered_content,
-        full_context_lines: build_full_context_lines,
+        full_context_lines: full_context_lines,
         store: build_store_payload,
         purchase: build_purchase_payload,
         payment: build_payment_payload,
@@ -54,6 +55,9 @@ module Ai
         profile_hints: build_profile_hints,
         meta: build_meta
       }
+      options = reference_pricing_options(context_line_count: full_context_lines.size)
+      payload[:reference_pricing_options] = options if options
+      payload
     end
 
     private
@@ -799,6 +803,12 @@ module Ai
 
     def meta_hash
       @meta_hash ||= fetch(ocr_result, :meta) || {}
+    end
+
+    def reference_pricing_options(context_line_count:)
+      ledgers = fetch(ocr_result, :evidence_ledgers)
+      ledger = fetch(ledgers, :reference_pricing)
+      Ai::ReferencePricingSelection.input_from_ledger(ledger, context_line_count:)
     end
 
     def build_profile_hints

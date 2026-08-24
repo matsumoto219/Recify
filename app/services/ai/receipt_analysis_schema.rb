@@ -1,8 +1,8 @@
 module Ai
   class ReceiptAnalysisSchema
     class << self
-      def to_json_schema
-        {
+      def to_json_schema(reference_pricing_selection: false)
+        schema = {
           "type" => "object",
           "additionalProperties" => false,
           "required" => top_level_keys,
@@ -35,12 +35,42 @@ module Ai
             }
           }
         }
+        return schema unless reference_pricing_selection
+
+        schema["required"] += [ "reference_pricing_selection" ]
+        schema["properties"] = schema.fetch("properties").merge(
+          "reference_pricing_selection" => reference_pricing_selection_schema
+        )
+        schema
       end
 
       private
 
       def top_level_keys
         Ai::ResponseParser::REQUIRED_KEYS + [ "is_receipt_confidence" ]
+      end
+
+      def reference_pricing_selection_schema
+        object_schema(
+          "decision" => {
+            "type" => "string",
+            "enum" => Ai::ReferencePricingSelection::DECISIONS
+          },
+          "candidate_id" => {
+            "type" => [ "string", "null" ],
+            "maxLength" => Ai::ReferencePricingSelection::MAX_CANDIDATE_ID_BYTES,
+            "pattern" => "^azure_line_group_evidence_v1_[0-9a-f]{64}$"
+          },
+          "destination_id" => {
+            "type" => [ "string", "null" ],
+            "maxLength" => Ai::ReferencePricingSelection::MAX_DESTINATION_ID_BYTES,
+            "pattern" => "^azure_line_group_destination_p[0-9]+_name_l[0-9]+_s[0-9]+_e[0-9]+_ref_l[0-9]+_qty_l[0-9]+$"
+          },
+          "reason_code" => {
+            "type" => "string",
+            "enum" => Ai::ReferencePricingSelection::REASON_CODES
+          }
+        )
       end
 
       def store_schema

@@ -55,6 +55,25 @@ RSpec.describe Ai::Providers::Openai::Client do
     )
   end
 
+  def reference_pricing_options
+    {
+      'ledger_checksum' => 'a' * 64,
+      'options' => [
+        {
+          'candidate_id' => "azure_line_group_evidence_v1_#{'b' * 64}",
+          'destination_id' => 'azure_line_group_destination_p0_name_l1_s1_e2_ref_l1_qty_l2',
+          'evidence_lines' => {
+            'product_destination' => 1,
+            'reference_price' => 1,
+            'reference_quantity' => 1,
+            'purchased_quantity' => 2,
+            'tax_inclusion' => 1
+          }
+        }
+      ]
+    }
+  end
+
   def valid_openai_response(response_id: 'resp_metrics', model: 'gpt-test', usage: nil)
     {
       'id' => response_id,
@@ -119,6 +138,28 @@ RSpec.describe Ai::Providers::Openai::Client do
       aggregate_failures do
         expect(result).to be_a(Ai::ProviderResult)
         expect(client).to have_received(:post_request).with(request_body, before_provider_call: callback)
+      end
+    end
+
+    it '同じprovider call内でselection contextをresponse sanitizerへ渡す' do
+      selection_input = input.merge(reference_pricing_options: reference_pricing_options)
+      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build)
+        .with(selection_input)
+        .and_return(request_body)
+      allow(client).to receive(:post_request).with(request_body).and_return({ 'id' => 'resp_123' })
+      allow(Ai::Providers::Openai::ResponseParser).to receive(:parse)
+        .with(
+          parsed_response_with_metrics('resp_123', model: 'gpt-test', provider_status: '200'),
+          reference_pricing_options: reference_pricing_options
+        )
+        .and_return(parsed_response)
+
+      result = client.call(selection_input)
+
+      aggregate_failures do
+        expect(result).to be_a(Ai::ProviderResult)
+        expect(client).to have_received(:post_request).once
+        expect(Ai::Providers::Openai::ResponseParser).to have_received(:parse).once
       end
     end
 

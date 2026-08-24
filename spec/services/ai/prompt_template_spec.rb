@@ -2,6 +2,25 @@ require 'rails_helper'
 
 RSpec.describe Ai::PromptTemplate do
   describe '.build' do
+    def reference_pricing_options
+      {
+        'ledger_checksum' => 'a' * 64,
+        'options' => [
+          {
+            'candidate_id' => "azure_line_group_evidence_v1_#{'b' * 64}",
+            'destination_id' => 'azure_line_group_destination_p0_name_l1_s1_e2_ref_l1_qty_l2',
+            'evidence_lines' => {
+              'product_destination' => 1,
+              'reference_price' => 1,
+              'reference_quantity' => 1,
+              'purchased_quantity' => 2,
+              'tax_inclusion' => 1
+            }
+          }
+        ]
+      }
+    end
+
     let(:input) do
       {
         meta: {
@@ -275,6 +294,35 @@ RSpec.describe Ai::PromptTemplate do
           expect(item_output_section).not_to include(prohibited_key)
         end
         expect(system_prompt).not_to include('selected_reference_pricing_candidate')
+      end
+    end
+
+    it '既存AI解析へbounded ID pairのshadow選択だけを追加する' do
+      prompt = described_class.build(input.merge(reference_pricing_options: reference_pricing_options))
+
+      aggregate_failures do
+        expect(prompt[:system]).to include(
+          'Reference pricing selection extension:',
+          'The output has one additional top-level key: reference_pricing_selection.',
+          'Select only an exact candidate_id and destination_id pair',
+          'Do NOT output or infer new amounts, quantities, units, tax decisions, line totals, pricing sources, or confidence.'
+        )
+        expect(prompt[:user]).to include(
+          'Evaluate reference_pricing_options using the referenced full_context_lines',
+          'Use decision = select only when exactly one supplied pair'
+        )
+        expect(prompt[:user]).to include('evidence_lines')
+      end
+    end
+
+    it '候補がない場合と不正な候補の場合は既存promptを変更しない' do
+      control = described_class.build(input)
+      invalid = described_class.build(input.merge(reference_pricing_options: { 'unknown' => true }))
+
+      aggregate_failures do
+        expect(invalid).to eq(control)
+        expect(control.values.join).not_to include('Reference pricing selection extension')
+        expect(control.values.join).not_to include('reference_pricing_selection')
       end
     end
   end

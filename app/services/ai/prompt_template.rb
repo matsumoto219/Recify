@@ -13,6 +13,9 @@ module Ai
         else
           {}.with_indifferent_access
         end
+      unless Ai::ReferencePricingSelection.input?(@input[:reference_pricing_options])
+        @input.delete(:reference_pricing_options)
+      end
     end
 
     def build
@@ -27,7 +30,7 @@ module Ai
     attr_reader :input
 
     def system_prompt
-      <<~PROMPT
+      prompt = <<~PROMPT
         Output JSON data for a receipt processing system.
         You MUST output only a valid JSON object and follow all rules exactly.
         Do NOT include data that is not explicitly requested.
@@ -153,10 +156,14 @@ module Ai
 
         You MUST NOT output keys or enum values outside of the above definitions.
       PROMPT
+
+      return prompt unless reference_pricing_selection_enabled?
+
+      "#{prompt}\n#{reference_pricing_selection_system_addendum}"
     end
 
     def user_prompt
-      <<~PROMPT
+      prompt = <<~PROMPT
         For document classification:
         - Before completing OCR candidate values, decide whether the Input JSON represents a receipt.
         - Product lists, memos, articles, advertisements, and screenshots without checkout or payment context are not receipts.
@@ -278,10 +285,40 @@ module Ai
         Input JSON:
         #{JSON.pretty_generate(input.to_h)}
       PROMPT
+
+      return prompt unless reference_pricing_selection_enabled?
+
+      "#{prompt}\n#{reference_pricing_selection_user_addendum}"
     end
 
     def ai_name_completion_enabled?
       input.dig(:meta, :ai_name_completion_enabled) == true
+    end
+
+    def reference_pricing_selection_enabled?
+      Ai::ReferencePricingSelection.input?(input[:reference_pricing_options])
+    end
+
+    def reference_pricing_selection_system_addendum
+      <<~RULES.chomp
+        Reference pricing selection extension:
+        - The output has one additional top-level key: reference_pricing_selection.
+        - Its keys are exactly: decision, candidate_id, destination_id, reason_code.
+        - Select only an exact candidate_id and destination_id pair from reference_pricing_options.
+        - Use null IDs for reject and ambiguous decisions.
+        - Do NOT output or infer new amounts, quantities, units, tax decisions, line totals, pricing sources, or confidence.
+        - This shadow decision MUST NOT change needs_review or review_reasons.
+      RULES
+    end
+
+    def reference_pricing_selection_user_addendum
+      <<~RULES.chomp
+        Evaluate reference_pricing_options using the referenced full_context_lines:
+        - Use decision = select only when exactly one supplied pair represents reference pricing for its destination.
+        - Use decision = reject for package content, discount, or non-reference-pricing evidence.
+        - Use decision = ambiguous when more than one option remains plausible or evidence is insufficient.
+        - Return only a supplied pair and an allowed reason_code.
+      RULES
     end
 
     def system_item_name_rule

@@ -111,5 +111,30 @@ RSpec.describe Ai::ReceiptAnalysisSchema do
         expect(schema.dig('properties', 'items', 'items', 'additionalProperties')).to be(false)
       end
     end
+
+    it '候補がある既存schemaへbounded selection欄だけを追加する' do
+      extended = described_class.to_json_schema(reference_pricing_selection: true)
+      selection = extended.dig('properties', 'reference_pricing_selection')
+
+      aggregate_failures do
+        expect(extended.fetch('required')).to eq(schema.fetch('required') + [ 'reference_pricing_selection' ])
+        expect(selection.fetch('required')).to match_array(selection.fetch('properties').keys)
+        expect(selection.fetch('additionalProperties')).to be(false)
+        expect(selection.dig('properties', 'decision', 'enum')).to match_array(%w[select reject ambiguous])
+        expect(selection.dig('properties', 'candidate_id')).to include(
+          'type' => [ 'string', 'null' ],
+          'maxLength' => 128,
+          'pattern' => '^azure_line_group_evidence_v1_[0-9a-f]{64}$'
+        )
+        expect(selection.dig('properties', 'destination_id')).to include(
+          'type' => [ 'string', 'null' ],
+          'maxLength' => 160
+        )
+        expect(selection.fetch('properties').keys & %w[
+          amount price quantity unit tax tax_rate line_total pricing_source_kind confidence
+        ]).to be_empty
+        expect(schema.fetch('properties')).not_to have_key('reference_pricing_selection')
+      end
+    end
   end
 end

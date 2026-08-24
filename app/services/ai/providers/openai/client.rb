@@ -23,7 +23,13 @@ module Ai
               post_request(body)
             end
 
-          payload = ResponseParser.parse(attach_response_metrics(response, request_body: body))
+          parsed_response = attach_response_metrics(response, request_body: body)
+          selection_options = reference_pricing_options(input)
+          payload = if selection_options
+            ResponseParser.parse(parsed_response, reference_pricing_options: selection_options)
+          else
+            ResponseParser.parse(parsed_response)
+          end
           Ai::ProviderResult.new(
             provider: PROVIDER_NAME,
             model: payload.dig(:meta, :model),
@@ -66,6 +72,13 @@ module Ai
         private
 
         attr_reader :runtime_config
+
+        def reference_pricing_options(input)
+          return unless input.respond_to?(:with_indifferent_access)
+
+          normalized = input.with_indifferent_access[:reference_pricing_options]
+          normalized if Ai::ReferencePricingSelection.input?(normalized)
+        end
 
         def post_request(body, before_provider_call: nil)
           uri = URI.parse(ENDPOINT)

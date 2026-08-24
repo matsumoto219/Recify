@@ -87,12 +87,24 @@ module Ai
         end
 
         def structured_output_format
+          selection_enabled = Ai::ReferencePricingSelection.input?(
+            normalized_input[:reference_pricing_options]
+          )
+
           {
             type: "json_schema",
             name: "recify_receipt_analysis_v1",
             strict: true,
-            schema: Ai::ReceiptAnalysisSchema.to_json_schema
+            schema: Ai::ReceiptAnalysisSchema.to_json_schema(
+              reference_pricing_selection: selection_enabled
+            )
           }
+        end
+
+        def normalized_input
+          return input.with_indifferent_access if input.respond_to?(:with_indifferent_access)
+
+          {}.with_indifferent_access
         end
       end
     end

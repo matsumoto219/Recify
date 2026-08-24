@@ -5,24 +5,26 @@ module Ai
     module Openai
       class ResponseParser
         class << self
-          def parse(response)
-            new(response).parse
+          def parse(response, reference_pricing_options: nil)
+            new(response, reference_pricing_options:).parse
           end
         end
 
-        def initialize(response)
+        def initialize(response, reference_pricing_options: nil)
           @response = response || {}
+          @reference_pricing_options = reference_pricing_options
         end
 
         def parse
           parsed_body = normalized_response_body
           payload = extract_json_payload(parsed_body)
 
-          Ai::ResponseParser.parse(
-            payload,
+          options = {
             provider: "openai",
             meta: build_meta(parsed_body)
-          )
+          }
+          options[:reference_pricing_options] = reference_pricing_options if reference_pricing_options
+          Ai::ResponseParser.parse(payload, **options)
         rescue JSON::ParserError => e
           raise Ai::Errors::InvalidResponseError.new(
             message: "Failed to parse OpenAI JSON payload",
@@ -43,7 +45,7 @@ module Ai
 
         private
 
-        attr_reader :response
+        attr_reader :response, :reference_pricing_options
 
         def normalized_response_body
           return response if response.is_a?(Hash)

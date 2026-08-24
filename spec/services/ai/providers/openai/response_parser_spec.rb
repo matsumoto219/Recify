@@ -86,6 +86,20 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
           expect(result).to eq(parsed_result)
         end
       end
+
+      it 'selection contextを共通sanitizerへそのまま渡す' do
+        selection_options = { 'ledger_checksum' => 'a' * 64 }
+        allow(Ai::ResponseParser).to receive(:parse).and_return(parsed_result)
+
+        described_class.parse(response, reference_pricing_options: selection_options)
+
+        expect(Ai::ResponseParser).to have_received(:parse).with(
+          hash_including('store' => hash_including('store_name' => 'AI補正ストア')),
+          provider: provider,
+          meta: { provider: 'openai', response_id: 'resp_123', model: 'gpt-test' },
+          reference_pricing_options: selection_options
+        )
+      end
     end
 
     context 'Recify内部のAI metricsがある場合' do

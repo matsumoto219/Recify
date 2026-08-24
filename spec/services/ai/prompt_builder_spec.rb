@@ -846,6 +846,46 @@ RSpec.describe Ai::PromptBuilder do
         expect(texts).to include('After hours surcharge', '$3.00', 'Manual adjustment', '-$2.00')
       end
     end
+
+    it 'rehydrate済みledgerを既存context lineへ結び付くvalue-free selection optionsへ変換する' do
+      raw = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
+      )
+      parsed = Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(parsed)
+      rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+      result = described_class.build(rehydrated)
+      options = result.fetch(:reference_pricing_options)
+
+      aggregate_failures do
+        expect(options).to include(
+          'ledger_checksum' => snapshot.dig('evidence_ledgers', 'reference_pricing', 'integrity_checksum')
+        )
+        expect(options.dig('options', 0, 'evidence_lines')).to eq(
+          'product_destination' => 1,
+          'reference_price' => 1,
+          'reference_quantity' => 1,
+          'purchased_quantity' => 2,
+          'tax_inclusion' => 1
+        )
+        expect(options.to_json).not_to include(
+          'amount', 'quantity_unit', 'line_total', 'raw_text', 'source_field_path', 'provider_span_start'
+        )
+      end
+    end
+
+    it '改変されたledgerをrehydrateできない場合はv1入力を維持する' do
+      raw = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read
+      )
+      parsed = Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(parsed)
+      snapshot.dig('evidence_ledgers', 'reference_pricing')['integrity_checksum'] = '0' * 64
+      rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+      expect(described_class.build(rehydrated)).not_to have_key(:reference_pricing_options)
+    end
   end
 
   describe '#build' do

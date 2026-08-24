@@ -30,15 +30,16 @@ module Ai
     ].freeze
 
     class << self
-      def parse(payload, provider:, meta: {})
-        new(payload, provider:, meta:).parse
+      def parse(payload, provider:, meta: {}, reference_pricing_options: nil)
+        new(payload, provider:, meta:, reference_pricing_options:).parse
       end
     end
 
-    def initialize(payload, provider:, meta: {})
+    def initialize(payload, provider:, meta: {}, reference_pricing_options: nil)
       @payload = payload || {}
       @provider = provider
       @meta = meta || {}
+      @reference_pricing_options = reference_pricing_options
     end
 
     def parse
@@ -49,8 +50,9 @@ module Ai
       validate_items!(normalized_payload)
       validate_receipt_adjustments!(normalized_payload)
       validate_values!(normalized_payload)
+      reference_pricing_selection = sanitized_reference_pricing_selection(normalized_payload)
 
-      return not_receipt_result(normalized_payload) unless normalized_payload["is_receipt"]
+      return not_receipt_result(normalized_payload, reference_pricing_selection:) unless normalized_payload["is_receipt"]
 
       receipt_items_attributes = Analysis.normalize_receipt_items(normalized_payload["items"])
       review_reasons = normalize_review_reasons(normalized_payload["review_reasons"])
@@ -63,7 +65,8 @@ module Ai
         receipt_adjustments_attributes: normalize_receipt_adjustments(normalized_payload["receipt_adjustments"]),
         needs_review: normalized_payload["needs_review"] == true || review_reasons.any?,
         review_reasons: review_reasons,
-        meta: build_meta(normalized_payload)
+        meta: build_meta(normalized_payload),
+        reference_pricing_selection: reference_pricing_selection
       )
     rescue Ai::Errors::ProviderError
       raise
@@ -77,7 +80,7 @@ module Ai
 
     private
 
-    attr_reader :payload, :provider, :meta
+    attr_reader :payload, :provider, :meta, :reference_pricing_options
 
     def normalize_payload(value)
       return value.deep_stringify_keys if value.is_a?(Hash)
@@ -248,7 +251,7 @@ module Ai
       normalized_meta.compact
     end
 
-    def not_receipt_result(normalized_payload)
+    def not_receipt_result(normalized_payload, reference_pricing_selection:)
       Ai::ResultTemplate.error(
         error_code: "ai_not_receipt",
         needs_review: false,
@@ -256,7 +259,17 @@ module Ai
         meta: build_meta(normalized_payload).merge(
           document_type: normalized_payload["document_type"],
           rejection_reason: normalize_rejection_reason(normalized_payload["rejection_reason"])
-        ).compact
+        ).compact,
+        reference_pricing_selection: reference_pricing_selection
+      )
+    end
+
+    def sanitized_reference_pricing_selection(normalized_payload)
+      return unless Ai::ReferencePricingSelection.input?(reference_pricing_options)
+
+      Ai::ReferencePricingSelection.sanitize(
+        output: normalized_payload["reference_pricing_selection"],
+        input: reference_pricing_options
       )
     end
 
