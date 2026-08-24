@@ -82,7 +82,10 @@ module Receipts::Processing::Runs
 
     def record_ai_normalized_result(run, ai_result, at: Time.current)
       Tracker.new(run).record_ai_normalized_result(
-        SnapshotBuilder.ai_normalized_result_snapshot(ai_result),
+        SnapshotBuilder.ai_normalized_result_snapshot(
+          ai_result,
+          run.ocr_result_snapshot
+        ),
         at: at
       )
     end
@@ -117,11 +120,17 @@ module Receipts::Processing::Runs
     end
 
     def copy_retry_snapshots(run, parent_run:, include_ocr: false, include_ai: false, include_finalize_decision: false)
+      ocr_result_snapshot = if include_ocr
+        SnapshotBuilder.ocr_result_snapshot(parent_run.ocr_result_snapshot)
+      end
       Tracker.new(run).copy_retry_snapshots(
         ocr_summary: include_ocr ? SnapshotBuilder.sanitized_stored_snapshot(parent_run.ocr_summary) : nil,
-        ocr_result_snapshot: include_ocr ? SnapshotBuilder.ocr_result_snapshot(parent_run.ocr_result_snapshot) : nil,
+        ocr_result_snapshot: ocr_result_snapshot,
         ai_result_summary: include_ai ? SnapshotBuilder.sanitized_stored_snapshot(parent_run.ai_result_summary) : nil,
-        ai_normalized_result_snapshot: include_ai ? SnapshotBuilder.ai_normalized_result_snapshot(parent_run.ai_normalized_result_snapshot) : nil,
+        ai_normalized_result_snapshot: include_ai ? SnapshotBuilder.ai_normalized_result_snapshot(
+          parent_run.ai_normalized_result_snapshot,
+          ocr_result_snapshot
+        ) : nil,
         finalize_decision_snapshot: include_finalize_decision ? sanitized_finalize_decision_snapshot(parent_run) : nil
       )
     end

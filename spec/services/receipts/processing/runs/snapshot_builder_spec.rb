@@ -9,6 +9,141 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  def destination_ocr_snapshot
+    @destination_ocr_snapshot ||= described_class.ocr_result_snapshot(destination_ocr_result)
+  end
+
+  def accepted_reference_pricing_selection
+    ledger = destination_ocr_snapshot.dig('evidence_ledgers', 'reference_pricing')
+    option = ledger.fetch('options').sole
+    {
+      ledger_checksum: ledger.fetch('integrity_checksum'),
+      decision: 'select',
+      candidate_id: option.fetch('candidate_id'),
+      destination_id: option.fetch('destination_id'),
+      reason_code: 'matched_reference_pricing',
+      validation_state: 'accepted',
+      validation_reason: 'accepted'
+    }
+  end
+
+  it '検証済みshadow selectionだけをAI normalized snapshotへ保存する' do
+    snapshot = described_class.ai_normalized_result_snapshot(
+      {
+        success: true,
+        needs_review: false,
+        reference_pricing_selection: accepted_reference_pricing_selection
+      },
+      destination_ocr_snapshot
+    )
+
+    aggregate_failures do
+      expect(snapshot.fetch('reference_pricing_selection')).to eq(
+        accepted_reference_pricing_selection.deep_stringify_keys
+      )
+      expect(snapshot).to include('success' => true, 'needs_review' => false)
+      expect(snapshot.to_json).not_to include(
+        'amount', 'quantity', 'unit', 'tax', 'line_total', 'confidence', 'raw_response'
+      )
+    end
+  end
+
+  it 'sanitizer rejectionはbounded reasonだけを保存する' do
+    snapshot = described_class.ai_normalized_result_snapshot(
+      {
+        success: true,
+        reference_pricing_selection: {
+          ledger_checksum: accepted_reference_pricing_selection.fetch(:ledger_checksum),
+          validation_state: 'rejected',
+          validation_reason: 'unknown_pair'
+        }
+      },
+      destination_ocr_snapshot
+    )
+
+    expect(snapshot.fetch('reference_pricing_selection')).to eq(
+      'ledger_checksum' => accepted_reference_pricing_selection.fetch(:ledger_checksum),
+      'validation_state' => 'rejected',
+      'validation_reason' => 'unknown_pair'
+    )
+  end
+
+  it 'accepted rejectとambiguousはIDなしで保存する' do
+    results = {
+      'reject' => 'package_content',
+      'ambiguous' => 'insufficient_evidence'
+    }.to_h do |decision, reason_code|
+      result = described_class.ai_normalized_result_snapshot(
+        {
+          success: true,
+          reference_pricing_selection: {
+            ledger_checksum: accepted_reference_pricing_selection.fetch(:ledger_checksum),
+            decision: decision,
+            reason_code: reason_code,
+            validation_state: 'accepted',
+            validation_reason: 'accepted'
+          }
+        },
+        destination_ocr_snapshot
+      )
+      [ decision, result.fetch('reference_pricing_selection') ]
+    end
+
+    aggregate_failures do
+      expect(results.fetch('reject')).to include(
+        'decision' => 'reject',
+        'reason_code' => 'package_content'
+      )
+      expect(results.fetch('ambiguous')).to include(
+        'decision' => 'ambiguous',
+        'reason_code' => 'insufficient_evidence'
+      )
+      expect(results.to_json).not_to include('candidate_id', 'destination_id')
+    end
+  end
+
+  it 'OCR ledgerなし・checksum不一致・unknown pairではselectionだけを保存しない' do
+    inputs = [
+      [ accepted_reference_pricing_selection, nil ],
+      [ accepted_reference_pricing_selection.merge(ledger_checksum: '0' * 64), destination_ocr_snapshot ],
+      [
+        accepted_reference_pricing_selection.merge(
+          candidate_id: "azure_line_group_evidence_v1_#{'0' * 64}"
+        ),
+        destination_ocr_snapshot
+      ]
+    ]
+
+    inputs.each do |selection, ocr_snapshot|
+      snapshot = described_class.ai_normalized_result_snapshot(
+        { success: true, reference_pricing_selection: selection },
+        ocr_snapshot
+      )
+
+      aggregate_failures do
+        expect(snapshot).to include('success' => true)
+        expect(snapshot).not_to have_key('reference_pricing_selection')
+      end
+    end
+  end
+
+  it 'unknown fieldやraw model outputを含むselectionは部分保存しない' do
+    snapshot = described_class.ai_normalized_result_snapshot(
+      {
+        success: true,
+        reference_pricing_selection: accepted_reference_pricing_selection.merge(
+          raw_response: 'RAW MODEL RESPONSE MUST NOT BE STORED'
+        )
+      },
+      destination_ocr_snapshot
+    )
+
+    aggregate_failures do
+      expect(snapshot).not_to have_key('reference_pricing_selection')
+      expect(snapshot.to_json).not_to include('RAW MODEL RESPONSE MUST NOT BE STORED')
+    end
+  end
+
   it 'invalid categoryを保存せず未分類の確認状態だけをsnapshotへ残す' do
     snapshot = described_class.ai_normalized_result_snapshot(
       success: true,

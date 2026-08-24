@@ -49,6 +49,20 @@ RSpec.describe Receipts::Processing::Runs do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  def accepted_reference_pricing_selection(ocr_snapshot)
+    ledger = ocr_snapshot.dig('evidence_ledgers', 'reference_pricing')
+    option = ledger.fetch('options').sole
+    {
+      ledger_checksum: ledger.fetch('integrity_checksum'),
+      decision: 'select',
+      candidate_id: option.fetch('candidate_id'),
+      destination_id: option.fetch('destination_id'),
+      reason_code: 'matched_reference_pricing',
+      validation_state: 'accepted',
+      validation_reason: 'accepted'
+    }
+  end
+
   let(:receipt) { create(:receipt) }
 
   around do |example|
@@ -562,6 +576,79 @@ RSpec.describe Receipts::Processing::Runs do
         )
         expect(retry_run.ocr_result_snapshot.dig('adoption_proposals', 'reference_pricing')).to eq(
           snapshot.dig('adoption_proposals', 'reference_pricing')
+        )
+      end
+    end
+
+    it 'AI shadow selectionを同じrunのOCR ledgerへbindして保存する' do
+      run = described_class.start(receipt:, source: 'upload').run
+      described_class.record_ocr_snapshot(
+        run,
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      selection = accepted_reference_pricing_selection(run.reload.ocr_result_snapshot)
+
+      described_class.record_ai_normalized_result(
+        run,
+        {
+          success: true,
+          needs_review: false,
+          reference_pricing_selection: selection
+        }
+      )
+
+      aggregate_failures do
+        expect(run.reload.ai_normalized_result_snapshot.fetch('reference_pricing_selection')).to eq(
+          selection.deep_stringify_keys
+        )
+        expect(run.ai_normalized_result_snapshot).to include(
+          'success' => true,
+          'needs_review' => false
+        )
+      end
+    end
+
+    it 'AI shadow selectionをfinalize retry snapshotへexactにコピーする' do
+      ocr_snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+        ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')
+      )
+      selection = accepted_reference_pricing_selection(ocr_snapshot)
+      ai_snapshot = Receipts::Processing::Runs::SnapshotBuilder.ai_normalized_result_snapshot(
+        {
+          success: true,
+          needs_review: false,
+          reference_pricing_selection: selection
+        },
+        ocr_snapshot
+      )
+      parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt:,
+        ocr_result_snapshot: ocr_snapshot,
+        ai_normalized_result_snapshot: ai_snapshot
+      )
+      retry_run = create(
+        :receipt_analysis_run,
+        receipt:,
+        parent_run: parent_run,
+        attempt_number: 2
+      )
+
+      described_class.copy_retry_snapshots(
+        retry_run,
+        parent_run:,
+        include_ocr: true,
+        include_ai: true
+      )
+
+      aggregate_failures do
+        expect(retry_run.reload.ai_normalized_result_snapshot.fetch('reference_pricing_selection')).to eq(
+          ai_snapshot.fetch('reference_pricing_selection')
+        )
+        expect(retry_run.ai_normalized_result_snapshot).to include(
+          'success' => true,
+          'needs_review' => false
         )
       end
     end

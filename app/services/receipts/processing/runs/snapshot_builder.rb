@@ -71,6 +71,22 @@ module Receipts::Processing::Runs
     REFERENCE_PRICING_EXACT_NUMBER_MAX_BYTES = 64
     REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES = 256
     REFERENCE_PRICING_DESTINATION_ID_MAX_BYTES = 160
+    REFERENCE_PRICING_SELECTION_MAX_BYTES = 1024
+    REFERENCE_PRICING_SELECTION_DECISIONS = %w[select reject ambiguous].freeze
+    REFERENCE_PRICING_SELECTION_REASONS_BY_DECISION = {
+      "select" => %w[matched_reference_pricing],
+      "reject" => %w[package_content discount not_reference_pricing],
+      "ambiguous" => %w[multiple_plausible_options insufficient_evidence]
+    }.freeze
+    REFERENCE_PRICING_SELECTION_VALIDATION_REASONS = %w[
+      selection_missing
+      selection_oversized
+      malformed_selection
+      invalid_decision
+      invalid_reason
+      unknown_pair
+      decision_field_mismatch
+    ].freeze
     REFERENCE_PRICING_SOURCE_PROVIDERS = %w[azure_structured].freeze
     REFERENCE_PRICING_LINE_SOURCE_PROVIDERS = %w[azure_line_group].freeze
     REFERENCE_PRICING_SOURCE_KINDS = %w[azure_line_group].freeze
@@ -162,8 +178,8 @@ module Receipts::Processing::Runs
         new.ai_result_summary(ai_result)
       end
 
-      def ai_normalized_result_snapshot(ai_result)
-        new.ai_normalized_result_snapshot(ai_result)
+      def ai_normalized_result_snapshot(ai_result, ocr_snapshot = nil)
+        new.ai_normalized_result_snapshot(ai_result, ocr_snapshot)
       end
 
       def finalize_decision_snapshot(decision, at: Time.current)
@@ -390,7 +406,7 @@ module Receipts::Processing::Runs
       )
     end
 
-    def ai_normalized_result_snapshot(ai_result)
+    def ai_normalized_result_snapshot(ai_result, ocr_snapshot = nil)
       result = normalized_hash(ai_result)
       receipt_items_snapshot = limited_ai_normalized_items(result[:receipt_items_attributes])
       receipt_adjustments_snapshot = limited_ai_normalized_adjustments(result[:receipt_adjustments_attributes])
@@ -410,6 +426,10 @@ module Receipts::Processing::Runs
           receipt_attributes: normalized_receipt_attributes_snapshot(result[:receipt_attributes]),
           receipt_items_attributes: receipt_items_snapshot,
           receipt_adjustments_attributes: receipt_adjustments_snapshot,
+          reference_pricing_selection: reference_pricing_selection_snapshot(
+            result[:reference_pricing_selection],
+            ocr_snapshot:
+          ),
           attribute_counts: ai_normalized_attribute_counts(
             result,
             receipt_items_snapshot: receipt_items_snapshot,
@@ -1377,6 +1397,100 @@ module Receipts::Processing::Runs
         rejection_reason: safe_string(meta[:rejection_reason]),
         is_receipt_confidence: safe_value(meta[:is_receipt_confidence])
       }.compact
+    end
+
+    def reference_pricing_selection_snapshot(value, ocr_snapshot:)
+      selection = normalized_hash(value)
+      return if selection.blank?
+
+      normalized_ocr_snapshot = normalized_hash(ocr_snapshot)
+      ledger = Receipts::Processing::Contracts::ReferencePricingOcrEvidenceLedger.from_snapshot(
+        normalized_ocr_snapshot.dig(:evidence_ledgers, :reference_pricing),
+        ocr_snapshot: normalized_ocr_snapshot
+      )
+      return unless ledger
+
+      ledger_checksum = bounded_string(
+        selection[:ledger_checksum],
+        max_bytes: 64,
+        pattern: /\A[0-9a-f]{64}\z/
+      )
+      validation_state = enum_string(selection[:validation_state], %w[accepted rejected])
+      return unless ledger_checksum && validation_state
+      return unless ledger_checksum == ledger["integrity_checksum"]
+
+      snapshot = if validation_state == "accepted"
+        accepted_reference_pricing_selection_snapshot(selection, ledger_checksum:, ledger:)
+      else
+        rejected_reference_pricing_selection_snapshot(selection, ledger_checksum:)
+      end
+      return unless snapshot
+      return if JSON.generate(snapshot).bytesize > REFERENCE_PRICING_SELECTION_MAX_BYTES
+
+      snapshot
+    rescue JSON::GeneratorError, SystemStackError
+      nil
+    end
+
+    def accepted_reference_pricing_selection_snapshot(selection, ledger_checksum:, ledger:)
+      decision = enum_string(selection[:decision], REFERENCE_PRICING_SELECTION_DECISIONS)
+      return unless decision
+      return unless selection[:validation_reason].to_s == "accepted"
+      return unless REFERENCE_PRICING_SELECTION_REASONS_BY_DECISION.fetch(decision).include?(
+        selection[:reason_code]
+      )
+
+      snapshot = {
+        "ledger_checksum" => ledger_checksum,
+        "decision" => decision,
+        "reason_code" => selection[:reason_code],
+        "validation_state" => "accepted",
+        "validation_reason" => "accepted"
+      }
+      expected_keys = snapshot.keys
+
+      if decision == "select"
+        candidate_id = bounded_string(
+          selection[:candidate_id],
+          max_bytes: REFERENCE_PRICING_CANDIDATE_ID_MAX_BYTES,
+          pattern: /\Aazure_line_group_evidence_v1_[0-9a-f]{64}\z/
+        )
+        destination_id = bounded_string(
+          selection[:destination_id],
+          max_bytes: REFERENCE_PRICING_DESTINATION_ID_MAX_BYTES,
+          pattern: /\Aazure_line_group_destination_p\d+_name_l\d+_s\d+_e\d+_ref_l\d+_qty_l\d+\z/
+        )
+        return unless candidate_id && destination_id
+        return unless ledger.fetch("options").any? do |option|
+          option["candidate_id"] == candidate_id && option["destination_id"] == destination_id
+        end
+
+        snapshot["candidate_id"] = candidate_id
+        snapshot["destination_id"] = destination_id
+        expected_keys += %w[candidate_id destination_id]
+      end
+      return unless exact_string_keys?(selection, expected_keys)
+
+      snapshot
+    end
+
+    def rejected_reference_pricing_selection_snapshot(selection, ledger_checksum:)
+      validation_reason = enum_string(
+        selection[:validation_reason],
+        REFERENCE_PRICING_SELECTION_VALIDATION_REASONS
+      )
+      return unless validation_reason
+
+      snapshot = {
+        "ledger_checksum" => ledger_checksum,
+        "validation_state" => "rejected",
+        "validation_reason" => validation_reason
+      }
+      snapshot if exact_string_keys?(selection, snapshot.keys)
+    end
+
+    def exact_string_keys?(value, expected)
+      value.keys.map(&:to_s).sort == expected.sort
     end
 
     def provider_error_detail_snapshot(value)

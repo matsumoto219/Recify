@@ -192,6 +192,29 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator 
   end
 
   describe '.ai' do
+    it 'shadow selectionをFinalize入力へ昇格しない' do
+      result = described_class.ai(
+        'success' => true,
+        'needs_review' => false,
+        'review_reasons' => [],
+        'reference_pricing_selection' => {
+          'ledger_checksum' => 'a' * 64,
+          'decision' => 'select',
+          'candidate_id' => "azure_line_group_evidence_v1_#{'b' * 64}",
+          'destination_id' => 'azure_line_group_destination_p0_name_l1_s1_e2_ref_l1_qty_l2',
+          'reason_code' => 'matched_reference_pricing',
+          'validation_state' => 'accepted',
+          'validation_reason' => 'accepted'
+        }
+      )
+
+      aggregate_failures do
+        expect(result).to include(success: true, needs_review: false, review_reasons: [])
+        expect(result).not_to have_key(:reference_pricing_selection)
+        expect(result.to_json).not_to include('azure_line_group_evidence_v1')
+      end
+    end
+
     it 'restores the existing AI result fields and collection shapes' do
       result = described_class.ai(
         'schema_version' => 'receipt_analysis_run_ai_normalized_result_v1',
