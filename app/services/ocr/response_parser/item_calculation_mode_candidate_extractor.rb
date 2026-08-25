@@ -53,6 +53,14 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       item_index = normalized[:item_index]
       item_index if item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
     end.to_set
+    @valid_reference_pricing_item_indexes = Array(reference_pricing_candidates).filter_map do |candidate|
+      normalized = normalized_hash(candidate)
+      item_index = normalized[:item_index]
+      next unless normalized[:validation_state] == "valid"
+      next unless Array(normalized[:rejection_reasons]).empty?
+
+      item_index if item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
+    end.to_set
     @discount_item_indexes = Array(discount_item_indexes).select do |item_index|
       item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
     end.to_set
@@ -85,7 +93,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   private
 
   attr_reader :analyze_result, :content, :destination_item_indexes, :discount_item_indexes,
-    :items, :mapper, :profile, :reference_pricing_item_indexes
+    :items, :mapper, :profile, :reference_pricing_item_indexes, :valid_reference_pricing_item_indexes
 
   def provider_context_valid?
     return false unless analyze_result.is_a?(Hash)
@@ -134,7 +142,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       count_option = nil
     end
     options = [ count_option, explicit_option ].compact
-    return if options.empty?
+    return if options.empty? && !valid_reference_pricing_item_indexes.include?(item_index)
 
     {
       candidate_id: "azure_items_#{item_index}_item_calculation_mode",

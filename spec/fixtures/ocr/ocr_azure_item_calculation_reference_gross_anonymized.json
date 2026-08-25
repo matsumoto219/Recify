@@ -1,0 +1,108 @@
+{
+  "status": "succeeded",
+  "analyzeResult": {
+    "apiVersion": "2024-11-30",
+    "modelId": "prebuilt-receipt",
+    "stringIndexType": "utf16CodeUnit",
+    "content": "検証品\n税込 ¥498/100g\n342g\n¥1,703",
+    "pages": [
+      {
+        "pageNumber": 1,
+        "angle": 0,
+        "width": 1000,
+        "height": 1000,
+        "unit": "pixel",
+        "words": [],
+        "lines": [
+          {
+            "content": "検証品",
+            "polygon": [100, 100, 300, 100, 300, 130, 100, 130],
+            "spans": [{ "offset": 0, "length": 3 }]
+          },
+          {
+            "content": "税込 ¥498/100g",
+            "polygon": [100, 140, 500, 140, 500, 170, 100, 170],
+            "spans": [{ "offset": 4, "length": 12 }]
+          },
+          {
+            "content": "342g",
+            "polygon": [100, 180, 220, 180, 220, 210, 100, 210],
+            "spans": [{ "offset": 17, "length": 4 }]
+          },
+          {
+            "content": "¥1,703",
+            "polygon": [700, 100, 900, 100, 900, 130, 700, 130],
+            "spans": [{ "offset": 22, "length": 6 }]
+          }
+        ],
+        "spans": [{ "offset": 0, "length": 28 }]
+      }
+    ],
+    "documents": [
+      {
+        "docType": "receipt.retailMeal",
+        "boundingRegions": [
+          {
+            "pageNumber": 1,
+            "polygon": [0, 0, 1000, 0, 1000, 1000, 0, 1000]
+          }
+        ],
+        "fields": {
+          "Items": {
+            "type": "array",
+            "valueArray": [
+              {
+                "type": "object",
+                "content": "検証品\n税込 ¥498/100g\n342g\n¥1,703",
+                "spans": [{ "offset": 0, "length": 28 }],
+                "valueObject": {
+                  "Description": {
+                    "type": "string",
+                    "valueString": "検証品",
+                    "content": "検証品",
+                    "spans": [{ "offset": 0, "length": 3 }]
+                  },
+                  "Price": {
+                    "type": "currency",
+                    "valueCurrency": {
+                      "currencySymbol": "¥",
+                      "amount": 498,
+                      "currencyCode": "JPY"
+                    },
+                    "content": "税込 ¥498/100g",
+                    "spans": [{ "offset": 4, "length": 12 }]
+                  },
+                  "Quantity": {
+                    "type": "number",
+                    "valueNumber": 342,
+                    "content": "342g",
+                    "spans": [{ "offset": 17, "length": 4 }]
+                  },
+                  "QuantityUnit": {
+                    "type": "string",
+                    "valueString": "g",
+                    "content": "g",
+                    "spans": [{ "offset": 20, "length": 1 }]
+                  },
+                  "TotalPrice": {
+                    "type": "currency",
+                    "valueCurrency": {
+                      "currencySymbol": "¥",
+                      "amount": 1703,
+                      "currencyCode": "JPY"
+                    },
+                    "content": "¥1,703",
+                    "spans": [{ "offset": 22, "length": 6 }]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "confidence": 0.99,
+        "spans": [{ "offset": 0, "length": 28 }]
+      }
+    ],
+    "contentFormat": "text"
+  }
+}

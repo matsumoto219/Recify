@@ -16,6 +16,28 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
+  def parsed_structured_reference_result(with_total: true, string_index_type: 'utf16CodeUnit')
+    raw = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
+    )
+    raw.dig('analyzeResult')['stringIndexType'] = string_index_type
+    unless with_total
+      analyze_result = raw.fetch('analyzeResult')
+      document = analyze_result.fetch('documents').sole
+      item = document.dig('fields', 'Items', 'valueArray').sole
+      content = "検証品\n税込 ¥498/100g\n342g"
+      analyze_result['content'] = content
+      analyze_result.fetch('pages').sole.fetch('lines').pop
+      analyze_result.fetch('pages').sole.fetch('spans').sole['length'] = content.length
+      document.fetch('spans').sole['length'] = content.length
+      item['content'] = content
+      item.fetch('spans').sole['length'] = content.length
+      item.fetch('valueObject').delete('TotalPrice')
+    end
+
+    Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+  end
+
   def snapshot_without_proposals(result)
     result = result.deep_dup
     result[:candidates] = result.fetch(:candidates).deep_dup
@@ -32,7 +54,11 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       success: true,
       candidates: candidates,
       candidate_counts: candidate_counts,
-      truncated: { items: false, item_calculation_mode_candidates: false }
+      truncated: {
+        items: false,
+        reference_pricing_candidates: false,
+        item_calculation_mode_candidates: false
+      }
     }
   end
 
@@ -62,6 +88,85 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
         'quantity_unit_code' => 'item'
       )
       expect(JSON.generate(proposals)).not_to include('ノート A5')
+    end
+
+    it 'same-itemのvalid structured referenceをexact optionとしてexplicitと合成する' do
+      result = parsed_structured_reference_result
+      snapshot = snapshot_without_proposals(result)
+
+      proposal = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      ).sole
+
+      aggregate_failures do
+        expect(proposal.fetch('options').map { |option| option.fetch('pricing_source_kind') }).to eq(%w[
+          reference_quantity_price
+          explicit_line_total
+        ])
+        expect(proposal.dig('options', 0, 'source_candidate_id')).to eq(
+          'azure_items_0_reference_pricing'
+        )
+        expect(proposal.dig('options', 0, 'source')).to eq(
+          'reference_price_amount' => '498',
+          'reference_quantity' => '100',
+          'reference_quantity_unit_code' => 'gram',
+          'reference_quantity_origin' => 'explicit',
+          'purchased_quantity' => '342',
+          'purchased_quantity_unit_code' => 'gram',
+          'reference_price_tax_inclusion' => 'gross'
+        )
+        expect(JSON.generate(proposal)).not_to include('検証品')
+      end
+    end
+
+    it 'TotalPriceなしでもsame-itemのvalid structured referenceだけをtyped proposalにする' do
+      result = parsed_structured_reference_result(with_total: false)
+      snapshot = snapshot_without_proposals(result)
+
+      proposal = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      ).sole
+
+      aggregate_failures do
+        expect(proposal.fetch('options').map { |option| option.fetch('pricing_source_kind') }).to eq(
+          [ 'reference_quantity_price' ]
+        )
+        expect(proposal['printed_line_total']).to be_nil
+      end
+    end
+
+    it 'structured reference evidenceはUTF-16 indexに限定しtextElementsではfail-closedにする' do
+      result = parsed_structured_reference_result(string_index_type: 'textElements')
+      snapshot = snapshot_without_proposals(result)
+
+      expect(described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      )).to be_nil
+    end
+
+    it 'valid optionにunknownまたはkind欠損optionが混在する場合は部分採用しない' do
+      result = parsed_ocr_result
+      snapshot = snapshot_without_proposals(result)
+      candidates = result.dig(:candidates, :item_calculation_mode_candidates)
+      unknown = candidates.deep_dup
+      unknown.first.fetch(:options) << {
+        pricing_source_kind: 'invented',
+        source: {},
+        evidence: {}
+      }
+      missing_kind = candidates.deep_dup
+      missing_kind.first.fetch(:options) << {
+        source: {},
+        evidence: {}
+      }
+
+      aggregate_failures do
+        expect(described_class.build_all(candidates: unknown, ocr_snapshot: snapshot)).to be_nil
+        expect(described_class.build_all(candidates: missing_kind, ocr_snapshot: snapshot)).to be_nil
+      end
     end
 
     it 'canonicalizes finite integral provider numbers without losing exact source binding' do
@@ -205,6 +310,80 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       aggregate_failures do
         expect(described_class.from_snapshot(proposals, ocr_snapshot: mutated)).to be_nil
         expect(described_class.from_snapshot(proposals, ocr_snapshot: explicit_mutated)).to be_nil
+      end
+    end
+
+    it 'structured referenceのsource candidate・exact source・evidence改変を再構築時に拒否する' do
+      result = parsed_structured_reference_result
+      snapshot = snapshot_without_proposals(result)
+      proposals = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      )
+      candidate_id_mutated = snapshot.deep_dup
+      candidate_id_mutated.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0
+      )[:candidate_id] = 'azure_items_0_reference_pricing_changed'
+      exact_source_mutated = snapshot.deep_dup
+      exact_source_mutated.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :reference_quantity
+      )[:amount] = '101'
+      evidence_mutated = snapshot.deep_dup
+      evidence_mutated.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :tax_inclusion_evidence
+      )[:provider_span_start] = 3
+      printed_total_span_mutated = snapshot.deep_dup
+      printed_total_span_mutated.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :printed_line_total,
+        :evidence
+      )[:provider_span_start] = 4
+
+      aggregate_failures do
+        expect(described_class.from_snapshot(proposals, ocr_snapshot: candidate_id_mutated)).to be_nil
+        expect(described_class.from_snapshot(proposals, ocr_snapshot: exact_source_mutated)).to be_nil
+        expect(described_class.from_snapshot(proposals, ocr_snapshot: evidence_mutated)).to be_nil
+        expect(described_class.from_snapshot(proposals, ocr_snapshot: printed_total_span_mutated)).to be_nil
+      end
+    end
+
+    it 'structured referenceのduplicate、count mismatch、truncationを部分採用しない' do
+      result = parsed_structured_reference_result
+      snapshot = snapshot_without_proposals(result)
+      candidates = result.dig(:candidates, :item_calculation_mode_candidates)
+      duplicated = snapshot.deep_dup
+      duplicated.dig(:candidates, :reference_pricing_candidates) <<
+        duplicated.dig(:candidates, :reference_pricing_candidates, 0).deep_dup
+      duplicated.dig(:candidate_counts, :reference_pricing_candidates).merge!(
+        actual_count: 2,
+        snapshot_count: 2
+      )
+      missing_id = snapshot.deep_dup
+      missing_id.dig(:candidates, :reference_pricing_candidates) << {}
+      missing_id.dig(:candidate_counts, :reference_pricing_candidates).merge!(
+        actual_count: 2,
+        snapshot_count: 2
+      )
+      mismatched = snapshot.deep_dup
+      mismatched.dig(:candidate_counts, :reference_pricing_candidates)[:snapshot_count] = 0
+      truncated = snapshot.deep_dup
+      truncated.dig(:truncated)[:reference_pricing_candidates] = true
+
+      aggregate_failures do
+        expect(described_class.build_all(candidates: candidates, ocr_snapshot: duplicated)).to be_nil
+        expect(described_class.build_all(candidates: candidates, ocr_snapshot: missing_id)).to be_nil
+        expect(described_class.build_all(candidates: candidates, ocr_snapshot: mismatched)).to be_nil
+        expect(described_class.build_all(candidates: candidates, ocr_snapshot: truncated)).to be_nil
       end
     end
 

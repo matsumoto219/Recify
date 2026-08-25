@@ -132,6 +132,68 @@ RSpec.describe ReceiptAmountService do
     end
   end
 
+  describe '.count_item_extension_projection' do
+    it 'count sourceをexactのまま既存Amount計算へ委譲する' do
+      result = described_class.count_item_extension_projection(
+        price_amount: '220',
+        purchased_quantity: '3',
+        purchased_unit_code: 'item'
+      )
+
+      expect(result).to eq(
+        exact_amount: Rational(660, 1),
+        projected_amount: 660
+      )
+      expect(result).to be_frozen
+    end
+
+    it '明示count以外・小数数量・Float・上限外sourceを拒否する' do
+      invalid_sources = [
+        { price_amount: '220', purchased_quantity: '3', purchased_unit_code: 'gram' },
+        { price_amount: '220', purchased_quantity: '1.5', purchased_unit_code: 'item' },
+        { price_amount: 220.0, purchased_quantity: '3', purchased_unit_code: 'item' },
+        { price_amount: '1000000000000', purchased_quantity: '3', purchased_unit_code: 'item' },
+        { price_amount: '220', purchased_quantity: '10000', purchased_unit_code: 'item' }
+      ]
+
+      invalid_sources.each do |source|
+        expect {
+          described_class.count_item_extension_projection(**source)
+        }.to raise_error(described_class::InvalidItemSourceError)
+      end
+    end
+
+    it '価格と数量の上限ちょうどを保ち、最初の超過だけを拒否する' do
+      aggregate_failures do
+        expect(described_class.count_item_extension_projection(
+          price_amount: '999999999999',
+          purchased_quantity: '1',
+          purchased_unit_code: 'item'
+        )).to include(projected_amount: 999_999_999_999)
+        expect(described_class.count_item_extension_projection(
+          price_amount: '1',
+          purchased_quantity: '9999',
+          purchased_unit_code: 'item'
+        )).to include(projected_amount: 9_999)
+      end
+    end
+
+    it 'DBやSystemSettingを参照しない' do
+      expect(SystemSettings).not_to receive(:fetch)
+      expect(SystemSettings).not_to receive(:limit_for)
+      expect(SystemSettings).not_to receive(:limits_for)
+
+      expect(described_class.count_item_extension_projection(
+        price_amount: '0',
+        purchased_quantity: '1',
+        purchased_unit_code: 'item'
+      )).to eq(
+        exact_amount: Rational(0, 1),
+        projected_amount: 0
+      )
+    end
+  end
+
   describe 'amount limit facade' do
     it 'exposes configured limits through the Amount Engine public entry point' do
       aggregate_failures do

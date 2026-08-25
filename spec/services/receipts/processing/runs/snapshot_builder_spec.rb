@@ -24,6 +24,14 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  def structured_reference_ocr_result
+    raw_json = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
+    )
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
   def discount_heavy_ocr_result
     raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/discount_heavy_receipt.json').read)
 
@@ -587,6 +595,23 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     end
   end
 
+  it 'structured reference proposalをJSON round-tripとretry再sanitizeでexactに維持する' do
+    initial = described_class.ocr_result_snapshot(structured_reference_ocr_result)
+    stored = initial.dig('adoption_proposals', 'item_calculation_modes')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(copied)
+
+    aggregate_failures do
+      expect(stored.sole.fetch('options').pluck('pricing_source_kind')).to eq(
+        %w[reference_quantity_price explicit_line_total]
+      )
+      expect(JSON.generate(stored.sole).bytesize).to be <= 4096
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(stored)
+      expect(rehydrated.dig(:adoption_proposals, 'item_calculation_modes')).to eq(stored)
+      expect(stored.to_json).not_to include('raw_text', 'provider_raw_response', 'polygon')
+    end
+  end
+
   it 'adjustment-only provider Itemをdestinationから除外し通常Itemのproposalを維持する' do
     result = discount_heavy_ocr_result
     snapshot = described_class.ocr_result_snapshot(result)
@@ -648,6 +673,74 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
         'snapshot_count' => 0
       )
       expect(copied.dig('truncated', 'item_calculation_mode_candidates')).to be(true)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+    end
+  end
+
+  it 'reference candidateの上限超過countとtruncationをretry再sanitizeでも維持する' do
+    initial = {
+      'schema_version' => described_class::OCR_RESULT_SCHEMA_VERSION,
+      'success' => true,
+      'candidates' => {
+        'items' => [],
+        'reference_pricing_candidates' => Array.new(100) do |index|
+          { 'candidate_id' => "azure_items_#{index}_reference_pricing" }
+        end
+      },
+      'candidate_counts' => {
+        'items' => { 'actual_count' => 0, 'snapshot_count' => 0 },
+        'reference_pricing_candidates' => { 'actual_count' => 101, 'snapshot_count' => 100 },
+        'item_calculation_mode_candidates' => { 'actual_count' => 0, 'snapshot_count' => 0 }
+      },
+      'truncated' => {
+        'items' => false,
+        'reference_pricing_candidates' => true,
+        'item_calculation_mode_candidates' => false
+      }
+    }
+
+    copied = described_class.ocr_result_snapshot(initial)
+
+    aggregate_failures do
+      expect(copied.dig('candidate_counts', 'reference_pricing_candidates')).to eq(
+        'actual_count' => 101,
+        'snapshot_count' => 100
+      )
+      expect(copied.dig('truncated', 'reference_pricing_candidates')).to be(true)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+    end
+  end
+
+  it 'stored metadataが未truncateを主張してもreference candidate配列の上限超過を隠さない' do
+    initial = {
+      'schema_version' => described_class::OCR_RESULT_SCHEMA_VERSION,
+      'success' => true,
+      'candidates' => {
+        'items' => [],
+        'reference_pricing_candidates' => Array.new(101) do |index|
+          { 'candidate_id' => "azure_items_#{index}_reference_pricing" }
+        end
+      },
+      'candidate_counts' => {
+        'items' => { 'actual_count' => 0, 'snapshot_count' => 0 },
+        'reference_pricing_candidates' => { 'actual_count' => 100, 'snapshot_count' => 100 },
+        'item_calculation_mode_candidates' => { 'actual_count' => 0, 'snapshot_count' => 0 }
+      },
+      'truncated' => {
+        'items' => false,
+        'reference_pricing_candidates' => false,
+        'item_calculation_mode_candidates' => false
+      }
+    }
+
+    copied = described_class.ocr_result_snapshot(initial)
+
+    aggregate_failures do
+      expect(copied.dig('candidate_counts', 'reference_pricing_candidates')).to eq(
+        'actual_count' => 0,
+        'snapshot_count' => 0
+      )
+      expect(copied.dig('truncated', 'reference_pricing_candidates')).to be(true)
       expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
     end
   end

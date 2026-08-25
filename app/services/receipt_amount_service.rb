@@ -42,6 +42,8 @@ class ReceiptAmountService
   class InvalidItemSourceError < ArgumentError; end
 
   MAX_NUMERIC_SOURCE_BYTES = 512
+  COUNT_ITEM_PRICE_ABSOLUTE_MAX = BigDecimal("999999999999")
+  COUNT_ITEM_QUANTITY_ABSOLUTE_MAX = BigDecimal("9999")
   ITEM_NUMERIC_SOURCE_ATTRIBUTES = %i[
     price
     quantity
@@ -56,6 +58,8 @@ class ReceiptAmountService
     amount_persisted_line_total
   ].freeze
   private_constant :MAX_NUMERIC_SOURCE_BYTES
+  private_constant :COUNT_ITEM_PRICE_ABSOLUTE_MAX
+  private_constant :COUNT_ITEM_QUANTITY_ABSOLUTE_MAX
   private_constant :ITEM_NUMERIC_SOURCE_ATTRIBUTES
 
   INVALID_ITEM_SOURCE_ERRORS = [
@@ -213,6 +217,49 @@ class ReceiptAmountService
     {
       exact_amount: result.exact_amount,
       projected_amount: result.projected_amount
+    }.freeze
+  rescue *INVALID_ITEM_SOURCE_ERRORS
+    raise InvalidItemSourceError, "Invalid item pricing source"
+  end
+
+  def self.count_item_extension_projection(price_amount:, purchased_quantity:, purchased_unit_code:)
+    exact_price = Amounts::ExactBoundedDecimal.call(
+      price_amount,
+      minimum: 0,
+      maximum: COUNT_ITEM_PRICE_ABSOLUTE_MAX.to_r,
+      maximum_scale: 0,
+      minimum_inclusive: true
+    )
+    exact_quantity = Amounts::ExactBoundedDecimal.call(
+      purchased_quantity,
+      minimum: 0,
+      maximum: COUNT_ITEM_QUANTITY_ABSOLUTE_MAX.to_r,
+      maximum_scale: 0,
+      minimum_inclusive: false
+    )
+    unless exact_price && exact_quantity
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "count projection requires bounded exact integer sources"
+    end
+
+    item = {
+      pricing_source_kind: "count_unit_price",
+      price: exact_price.to_i,
+      quantity: exact_quantity.to_i,
+      quantity_unit_code: purchased_unit_code
+    }
+    projected_amount = Amounts::ItemTotalAggregator.new(items: [ item ], context: :analysis)
+      .call
+      .dig(:items, 0, :original_line_total)
+    exact_amount = exact_price * exact_quantity
+    unless projected_amount.is_a?(Integer) && projected_amount == exact_amount
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "count projection must preserve the exact integer extension"
+    end
+
+    {
+      exact_amount: exact_amount,
+      projected_amount: projected_amount
     }.freeze
   rescue *INVALID_ITEM_SOURCE_ERRORS
     raise InvalidItemSourceError, "Invalid item pricing source"

@@ -354,7 +354,7 @@ module Receipts::Processing::Runs
           payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
           tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,
           adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit,
-          reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).size > MAX_REFERENCE_PRICING_CANDIDATES,
+          reference_pricing_candidates: reference_pricing_source_truncated?(result, candidates),
           item_calculation_mode_candidates: item_calculation_mode_source_truncated?(result, candidates)
         }
       }.compact
@@ -614,15 +614,69 @@ module Receipts::Processing::Runs
         payments: count_metadata(candidates[:payments], snapshot[:payments]),
         tax_details: count_metadata(candidates[:tax_details], snapshot[:tax_details]),
         adjustment_candidates: count_metadata(candidates[:adjustment_candidates], snapshot[:adjustment_candidates]),
-        reference_pricing_candidates: count_metadata(
-          candidates[:reference_pricing_candidates],
-          snapshot[:reference_pricing_candidates]
+        reference_pricing_candidates: reference_pricing_candidate_counts(
+          candidates,
+          snapshot: snapshot,
+          stored_result: stored_result
         ),
         item_calculation_mode_candidates: item_calculation_mode_candidate_counts(
           candidates,
           stored_result: stored_result
         )
       }
+    end
+
+    def reference_pricing_candidate_counts(candidates, snapshot:, stored_result:)
+      if stored_reference_pricing_metadata?(stored_result)
+        counts = normalized_hash(stored_result[:candidate_counts])[:reference_pricing_candidates]
+        counts = normalized_hash(counts)
+        actual_count = counts[:actual_count]
+        snapshot_count = counts[:snapshot_count]
+        source_count = Array(candidates[:reference_pricing_candidates]).size
+        if actual_count.is_a?(Integer) && snapshot_count.is_a?(Integer) &&
+            actual_count.between?(0, MAX_OCR_ITEMS) &&
+            snapshot_count.between?(0, MAX_REFERENCE_PRICING_CANDIDATES) &&
+            source_count <= MAX_REFERENCE_PRICING_CANDIDATES &&
+            actual_count >= snapshot_count && snapshot_count == source_count
+          return { actual_count: actual_count, snapshot_count: snapshot_count }
+        end
+
+        return { actual_count: 0, snapshot_count: 0 }
+      end
+
+      count_metadata(candidates[:reference_pricing_candidates], snapshot[:reference_pricing_candidates])
+    end
+
+    def reference_pricing_source_truncated?(result, candidates)
+      if stored_reference_pricing_metadata?(result)
+        source_count = Array(candidates[:reference_pricing_candidates]).size
+        return true if source_count > MAX_REFERENCE_PRICING_CANDIDATES
+
+        counts = normalized_hash(normalized_hash(result[:candidate_counts])[:reference_pricing_candidates])
+        actual_count = counts[:actual_count]
+        snapshot_count = counts[:snapshot_count]
+        return true unless actual_count.is_a?(Integer) && snapshot_count.is_a?(Integer)
+        return true unless actual_count.between?(0, MAX_OCR_ITEMS)
+        return true unless snapshot_count.between?(0, MAX_REFERENCE_PRICING_CANDIDATES)
+        return true unless actual_count >= snapshot_count && snapshot_count == source_count
+
+        truncated = normalized_hash(result[:truncated])
+        return true unless truncated.key?(:reference_pricing_candidates)
+
+        return true if truncated[:reference_pricing_candidates] != false
+
+        return actual_count != snapshot_count
+      end
+
+      Array(candidates[:reference_pricing_candidates]).size > MAX_REFERENCE_PRICING_CANDIDATES
+    end
+
+    def stored_reference_pricing_metadata?(result)
+      return false unless result.is_a?(Hash)
+      return false unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+      normalized_hash(result[:candidate_counts]).key?(:reference_pricing_candidates) ||
+        normalized_hash(result[:truncated]).key?(:reference_pricing_candidates)
     end
 
     def item_calculation_mode_candidate_counts(candidates, stored_result:)

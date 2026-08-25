@@ -335,6 +335,32 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
         expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
       end
 
+      it 'keeps a destination carrier for a valid structured reference without TotalPrice' do
+        items.first.fetch('valueObject').delete('TotalPrice')
+        reference_pricing_candidates << {
+          item_index: 0,
+          validation_state: 'valid',
+          rejection_reasons: []
+        }
+
+        aggregate_failures do
+          expect(extract.sole[:item_identity]).to eq('azure_structured_item_i0_s100_e115')
+          expect(extract.sole[:options]).to be_empty
+          expect(extract.sole[:conflicts]).to eq([ 'reference_expression' ])
+        end
+      end
+
+      it 'does not create an empty carrier for an ambiguous structured reference' do
+        items.first.fetch('valueObject').delete('TotalPrice')
+        reference_pricing_candidates << {
+          item_index: 0,
+          validation_state: 'ambiguous',
+          rejection_reasons: [ 'tax_basis_unknown' ]
+        }
+
+        expect(extract).to be_empty
+      end
+
       it 'does not adopt a package-content quantity as purchased quantity' do
         append_item_content!(items.first, '10個入')
 
