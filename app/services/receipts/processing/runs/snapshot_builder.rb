@@ -34,6 +34,8 @@ module Receipts::Processing::Runs
     MAX_TAX_DETAILS = 10
     MAX_REVIEW_REASONS = 20
     MAX_REFERENCE_PRICING_CANDIDATES = 100
+    MAX_ITEM_CALCULATION_MODE_CANDIDATES = Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_SETS
+    ITEM_CALCULATION_MODE_ITEM_IDENTITY_MAX_BYTES = Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
     MAX_REFERENCE_PRICING_ITEM_INDEX = MAX_REFERENCE_PRICING_CANDIDATES - 1
     MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET = 10_000_000
     MAX_REFERENCE_PRICING_PROJECTED_AMOUNT = 999_999_999
@@ -338,7 +340,11 @@ module Receipts::Processing::Runs
         lines: lines,
         case_preserved_lines: case_preserved_lines.presence,
         candidates: candidates_snapshot,
-        candidate_counts: ocr_candidate_counts(candidates, candidates_snapshot),
+        candidate_counts: ocr_candidate_counts(
+          candidates,
+          candidates_snapshot,
+          stored_result: result
+        ),
         error_code: safe_string(result[:error_code]),
         meta: ocr_meta_snapshot(result[:meta]),
         truncated: {
@@ -348,10 +354,12 @@ module Receipts::Processing::Runs
           payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
           tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,
           adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit,
-          reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).size > MAX_REFERENCE_PRICING_CANDIDATES
+          reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).size > MAX_REFERENCE_PRICING_CANDIDATES,
+          item_calculation_mode_candidates: item_calculation_mode_source_truncated?(result, candidates)
         }
       }.compact
-      snapshot[:adoption_proposals] = reference_pricing_adoption_proposals_snapshot(result, snapshot).presence
+      snapshot[:adoption_proposals] = adoption_proposals_snapshot(result, snapshot).presence
+      snapshot[:candidate_counts][:item_calculation_mode_candidates][:snapshot_count] = Array(snapshot.dig(:adoption_proposals, :item_calculation_modes)).size
 
       sanitize_hash(snapshot.compact)
     end
@@ -600,7 +608,7 @@ module Receipts::Processing::Runs
       }.compact
     end
 
-    def ocr_candidate_counts(candidates, snapshot)
+    def ocr_candidate_counts(candidates, snapshot, stored_result: nil)
       {
         items: count_metadata(candidates[:items], snapshot[:items]),
         payments: count_metadata(candidates[:payments], snapshot[:payments]),
@@ -609,8 +617,76 @@ module Receipts::Processing::Runs
         reference_pricing_candidates: count_metadata(
           candidates[:reference_pricing_candidates],
           snapshot[:reference_pricing_candidates]
+        ),
+        item_calculation_mode_candidates: item_calculation_mode_candidate_counts(
+          candidates,
+          stored_result: stored_result
         )
       }
+    end
+
+    def item_calculation_mode_candidate_counts(candidates, stored_result:)
+      if stored_item_calculation_mode_metadata?(stored_result)
+        stored = normalized_hash(stored_result[:candidate_counts])[:item_calculation_mode_candidates]
+        counts = normalized_hash(stored)
+        actual_count = counts[:actual_count]
+        snapshot_count = counts[:snapshot_count]
+        if actual_count.is_a?(Integer) && snapshot_count.is_a?(Integer) &&
+            actual_count.between?(0, MAX_OCR_ITEMS) &&
+            snapshot_count.between?(0, MAX_ITEM_CALCULATION_MODE_CANDIDATES)
+          return { actual_count: actual_count, snapshot_count: snapshot_count }
+        end
+
+        return { actual_count: 0, snapshot_count: 0 }
+      end
+
+      values = Array(candidates[:item_calculation_mode_candidates])
+      count_metadata(values, values.first(MAX_ITEM_CALCULATION_MODE_CANDIDATES))
+    end
+
+    def item_calculation_mode_source_truncated?(result, candidates)
+      if stored_item_calculation_mode_metadata?(result)
+        truncated = normalized_hash(result[:truncated])
+        return true unless truncated.key?(:item_calculation_mode_candidates)
+
+        return truncated[:item_calculation_mode_candidates] != false
+      end
+
+      candidates[:item_calculation_mode_source_truncated] == true ||
+        Array(candidates[:item_calculation_mode_candidates]).size > MAX_ITEM_CALCULATION_MODE_CANDIDATES
+    end
+
+    def stored_item_calculation_mode_metadata?(result)
+      return false unless result.is_a?(Hash)
+      return false unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+      normalized_hash(result[:candidate_counts]).key?(:item_calculation_mode_candidates) ||
+        normalized_hash(result[:truncated]).key?(:item_calculation_mode_candidates) ||
+        normalized_hash(result[:adoption_proposals]).key?(:item_calculation_modes)
+    end
+
+    def adoption_proposals_snapshot(result, ocr_snapshot)
+      proposals = reference_pricing_adoption_proposals_snapshot(result, ocr_snapshot) || {}
+      item_calculation_modes = item_calculation_mode_proposals_snapshot(result, ocr_snapshot)
+      proposals[:item_calculation_modes] = item_calculation_modes if item_calculation_modes.present?
+      proposals
+    end
+
+    def item_calculation_mode_proposals_snapshot(result, ocr_snapshot)
+      if result.key?(:schema_version)
+        return nil unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+        stored = normalized_hash(result[:adoption_proposals])[:item_calculation_modes]
+        Receipts::Processing::Contracts::ItemCalculationModeProposalSet.from_snapshot(
+          stored,
+          ocr_snapshot: ocr_snapshot
+        )
+      else
+        Receipts::Processing::Contracts::ItemCalculationModeProposalSet.build_all(
+          candidates: Array(normalized_hash(result[:candidates])[:item_calculation_mode_candidates]),
+          ocr_snapshot: ocr_snapshot
+        )
+      end
     end
 
     def limited_reference_pricing_candidates(value)
@@ -1190,6 +1266,11 @@ module Receipts::Processing::Runs
           quantity_unit_code: safe_string(item[:quantity_unit_code]),
           quantity_unit_status: quantity_unit_status,
           quantity_unit_raw: safe_quantity_unit_raw(item[:quantity_unit_raw], status: quantity_unit_status),
+          ocr_item_identity: bounded_string(
+            item[:ocr_item_identity],
+            max_bytes: ITEM_CALCULATION_MODE_ITEM_IDENTITY_MAX_BYTES,
+            pattern: /\Aazure_structured_item_i\d+_s\d+_e\d+\z/
+          ),
           product_code: safe_string(item[:product_code]),
           line_total: safe_value(item[:line_total]),
           original_line_total: safe_value(item[:original_line_total]),

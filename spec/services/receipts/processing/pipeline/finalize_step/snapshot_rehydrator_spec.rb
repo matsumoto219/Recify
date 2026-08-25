@@ -134,6 +134,23 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator 
       end
     end
 
+    it 'item calculation proposalをexact identity付きで復元する' do
+      raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
+      ocr_result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(ocr_result)
+
+      result = described_class.ocr(JSON.parse(JSON.generate(snapshot)))
+
+      aggregate_failures do
+        expect(result.dig(:adoption_proposals, 'item_calculation_modes')).to eq(
+          snapshot.dig('adoption_proposals', 'item_calculation_modes')
+        )
+        expect(result.dig(:candidates, 'items', 0, 'ocr_item_identity')).to eq(
+          snapshot.dig('candidates', 'items', 0, 'ocr_item_identity')
+        )
+      end
+    end
+
     it 'malformed adoption proposalを除外しold snapshot absenceを維持する' do
       raw_json = JSON.parse(
         Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read

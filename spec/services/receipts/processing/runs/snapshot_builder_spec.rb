@@ -9,6 +9,27 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  def structured_count_ocr_result
+    raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
+  def structured_count_without_totals_ocr_result
+    raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
+    raw_json.dig('analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray').each do |item|
+      item.fetch('valueObject').delete('TotalPrice')
+    end
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
+  def discount_heavy_ocr_result
+    raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/discount_heavy_receipt.json').read)
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
   it 'invalid categoryを保存せず未分類の確認状態だけをsnapshotへ残す' do
     snapshot = described_class.ai_normalized_result_snapshot(
       success: true,
@@ -508,6 +529,126 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
         'polygon',
         'provider_raw_response'
       )
+    end
+  end
+
+  it 'structured Itemの計算方式候補をraw textと分離したtyped proposalへ保存する' do
+    snapshot = described_class.ocr_result_snapshot(structured_count_ocr_result)
+    proposals = snapshot.dig('adoption_proposals', 'item_calculation_modes')
+
+    aggregate_failures do
+      expect(proposals.size).to eq(4)
+      expect(proposals).to all(include(
+        'schema_version' => 'item_calculation_mode_proposal_set_v1',
+        'source_provider' => 'azure_structured',
+        'integrity_checksum' => match(/\A[0-9a-f]{64}\z/)
+      ))
+      expect(snapshot.dig('candidates', 'items', 0, 'ocr_item_identity')).to eq(
+        proposals.first['item_identity']
+      )
+      expect(snapshot.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 4,
+        'snapshot_count' => 4
+      )
+      expect(proposals.to_json).not_to include('ノート A5', 'raw_text', 'provider_raw_response')
+    end
+  end
+
+  it 'structured Item proposalをretry用snapshotへexactに再sanitizeする' do
+    initial = described_class.ocr_result_snapshot(structured_count_ocr_result)
+    copied = described_class.ocr_result_snapshot(initial)
+
+    aggregate_failures do
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(
+        initial.dig('adoption_proposals', 'item_calculation_modes')
+      )
+      expect(copied.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 4,
+        'snapshot_count' => 4
+      )
+      expect(copied.dig('truncated', 'item_calculation_mode_candidates')).to be(false)
+    end
+  end
+
+  it '印字明細合計なしのcount proposalをJSON round-tripとretry再sanitizeで維持する' do
+    initial = described_class.ocr_result_snapshot(structured_count_without_totals_ocr_result)
+    stored = initial.dig('adoption_proposals', 'item_calculation_modes')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(copied)
+
+    aggregate_failures do
+      expect(stored).to be_present
+      expect(stored).to all(satisfy do |proposal|
+        proposal.fetch('options').pluck('pricing_source_kind') == [ 'count_unit_price' ] &&
+          !proposal.key?('printed_line_total')
+      end)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(stored)
+      expect(rehydrated.dig(:adoption_proposals, 'item_calculation_modes')).to eq(stored)
+    end
+  end
+
+  it 'adjustment-only provider Itemをdestinationから除外し通常Itemのproposalを維持する' do
+    result = discount_heavy_ocr_result
+    snapshot = described_class.ocr_result_snapshot(result)
+
+    aggregate_failures do
+      expect(result.dig(:candidates, :item_calculation_mode_candidates).map do |candidate|
+        candidate[:item_index]
+      end).to eq([ 0, 1, 2 ])
+      expect(snapshot.dig('adoption_proposals', 'item_calculation_modes').map do |proposal|
+        proposal['item_index']
+      end).to eq([ 0, 1, 2 ])
+      expect(result.dig(:candidates, :adjustment_candidates)).to be_present
+    end
+  end
+
+  it 'source item truncationを隠さずproposal全体をfail closedに除外する' do
+    result = structured_count_ocr_result.deep_dup
+    result[:candidates][:item_calculation_mode_source_truncated] = true
+
+    snapshot = described_class.ocr_result_snapshot(result)
+
+    aggregate_failures do
+      expect(snapshot.dig('truncated', 'item_calculation_mode_candidates')).to be(true)
+      expect(snapshot.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+      expect(snapshot.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 4,
+        'snapshot_count' => 0
+      )
+    end
+
+    copied = described_class.ocr_result_snapshot(snapshot)
+    aggregate_failures do
+      expect(copied.dig('truncated', 'item_calculation_mode_candidates')).to be(true)
+      expect(copied.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 4,
+        'snapshot_count' => 0
+      )
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+    end
+  end
+
+  it '上限超過のactual candidate countをretry再sanitizeでも維持する' do
+    initial = {
+      'schema_version' => described_class::OCR_RESULT_SCHEMA_VERSION,
+      'success' => true,
+      'candidates' => { 'items' => [] },
+      'candidate_counts' => {
+        'items' => { 'actual_count' => 0, 'snapshot_count' => 0 },
+        'item_calculation_mode_candidates' => { 'actual_count' => 101, 'snapshot_count' => 0 }
+      },
+      'truncated' => { 'items' => false, 'item_calculation_mode_candidates' => true }
+    }
+
+    copied = described_class.ocr_result_snapshot(initial)
+
+    aggregate_failures do
+      expect(copied.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 101,
+        'snapshot_count' => 0
+      )
+      expect(copied.dig('truncated', 'item_calculation_mode_candidates')).to be(true)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
     end
   end
 

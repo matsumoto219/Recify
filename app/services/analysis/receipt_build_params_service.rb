@@ -438,6 +438,7 @@ module Analysis
             review_reasons: review_reasons,
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
             confidence: normalize_confidence(normalized_item[:confidence]),
+            ocr_item_identity: normalize_ocr_item_identity(normalized_item[:ocr_item_identity]),
             **Analysis::SourceEvidenceAttributeExtractor.call(normalized_item)
           }
         end
@@ -2027,6 +2028,7 @@ module Analysis
           tax_rate_reason: name_item[:tax_rate_reason].presence || amount_item[:tax_rate_reason],
           position_index: amount_item[:position_index] || amount_item[:index] || name_item[:position_index] || name_item[:index],
           index: amount_item[:index] || amount_item[:position_index] || name_item[:index] || name_item[:position_index],
+          ocr_item_identity: nil,
           confidence: confidence,
           needs_review: review_reasons.present?,
           review_reasons: review_reasons
@@ -2219,6 +2221,13 @@ module Analysis
         value.to_s.strip.upcase.presence
       end
 
+      def normalize_ocr_item_identity(value)
+        identity = value.to_s
+        return nil if identity.bytesize > 160
+
+        identity if identity.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
+      end
+
       def normalize_currency_code(value)
         value.to_s.strip.upcase.presence
       end
@@ -2286,6 +2295,7 @@ module Analysis
             original_line_total: candidate_item[:original_line_total],
             discount_amount: candidate_item[:discount_amount],
             discount_rate: candidate_item[:discount_rate],
+            ocr_item_identity: normalize_ocr_item_identity(candidate_item[:ocr_item_identity]),
             position_index: normalize_item_index(candidate_item[:position_index] || candidate_item["position_index"]) || candidate_index
           )
         end

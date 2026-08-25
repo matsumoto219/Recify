@@ -400,6 +400,22 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         )
       end
 
+      it 'structured itemのopaque identityをFinalize前まで保持する' do
+        snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+          ocr_fixture('single_tax_receipt')
+        )
+        rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+        item = described_class.call(ocr_result: rehydrated, ai_result: nil)
+          .fetch(:receipt_items_attributes).first
+
+        aggregate_failures do
+          expect(item[:ocr_item_identity]).to eq('azure_structured_item_i0_s99_e118')
+          expect(item[:ocr_item_identity]).not_to include('ノート A5')
+          expect(item).not_to have_key(:item_calculation_mode_candidates)
+        end
+      end
+
       it 'OCR TotalPriceとreference basisがないmeasurementをpriceとquantityだけでformula化しない' do
         ocr_result[:candidates][:items] = [
           {

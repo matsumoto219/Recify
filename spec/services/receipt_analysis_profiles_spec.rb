@@ -297,6 +297,24 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
+    it 'owns item calculation package-quantity vocabulary' do
+      aggregate_failures do
+        expect('検証商品 10個入').to match(profile.ocr_item_calculation_package_quantity_pattern)
+        expect('検証商品 2箱パック').to match(profile.ocr_item_calculation_package_quantity_pattern)
+        expect('検証商品 2個').not_to match(profile.ocr_item_calculation_package_quantity_pattern)
+        expect('検証商品 500ml入り').to match(profile.ocr_item_calculation_package_capacity_pattern)
+        expect('検証商品 2袋 x 100g').to match(profile.ocr_item_calculation_package_capacity_pattern)
+        expect('検証商品 2個').not_to match(profile.ocr_item_calculation_package_capacity_pattern)
+        expect('検証商品 約2個').to match(profile.ocr_item_calculation_count_uncertain_pattern)
+        expect('検証商品 2〜3個').to match(profile.ocr_item_calculation_count_uncertain_pattern)
+        expect('検証商品 2個で300円').to match(profile.ocr_item_calculation_count_uncertain_pattern)
+        expect('検証商品 2個').not_to match(profile.ocr_item_calculation_count_uncertain_pattern)
+        expect('*120').to match(profile.ocr_item_calculation_tax_marker_prefix_pattern)
+        expect('＊120').to match(profile.ocr_item_calculation_tax_marker_prefix_pattern)
+        expect('120').not_to match(profile.ocr_item_calculation_tax_marker_prefix_pattern)
+      end
+    end
+
     it 'owns discount, summary, identifier, and subtotal vocabulary' do
       destination_conflicts = profile.ocr_reference_pricing_line_group_destination_identifier_conflict_patterns
 

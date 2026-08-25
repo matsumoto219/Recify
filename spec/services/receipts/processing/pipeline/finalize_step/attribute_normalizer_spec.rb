@@ -48,6 +48,20 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       expect(item).to eq(original)
     end
 
+    it 'typed proposalのOCR identityをtrusted applicator接続前のReceiptItem属性へ通さない' do
+      result = described_class.items(
+        [
+          {
+            raw_text: '検証明細',
+            line_total: 200,
+            ocr_item_identity: 'azure_structured_item_i0_s100_e115'
+          }
+        ]
+      ).sole
+
+      expect(result).not_to have_key(:ocr_item_identity)
+    end
+
     it 'rejects an item with any negative amount but keeps a zero-yen item' do
       result = described_class.items(
         [

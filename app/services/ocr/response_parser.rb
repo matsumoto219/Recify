@@ -53,8 +53,9 @@ class Ocr::ResponseParser
     normalized_raw_text = normalize_text(raw_text)
     normalized_lines = normalized_lines(parsed_response)
     case_preserved_lines = case_preserved_lines(parsed_response)
+    structured_items = extract_fields(parsed_response).dig("Items", "valueArray")
     structured_reference_pricing_candidates = Ocr::ResponseParser::ReferencePricingCandidateExtractor.call(
-      items: extract_fields(parsed_response).dig("Items", "valueArray"),
+      items: structured_items,
       profile: profile,
       projection: ->(**attributes) {
         ReceiptAmountService.reference_item_extension_projection(**attributes)
@@ -83,6 +84,19 @@ class Ocr::ResponseParser
     authority_lines = lines_without_reference_pricing_line_groups(
       normalized_lines,
       reference_pricing_candidates
+    )
+    retained_item_indexes = retained_structured_item_indexes(structured_items)
+    discount_details_by_item_index = if structured_items.is_a?(Array) && structured_items.all?(Hash)
+      extract_discount_details_by_item_index(structured_items, authority_lines)
+    else
+      {}
+    end
+    item_calculation_mode_candidates = Ocr::ResponseParser::ItemCalculationModeCandidateExtractor.call(
+      analyze_result: extract_analyze_result(parsed_response),
+      profile: profile,
+      reference_pricing_candidates: structured_reference_pricing_candidates,
+      discount_item_indexes: discount_details_by_item_index.keys,
+      destination_item_indexes: retained_item_indexes
     )
     authority_raw_text = authority_lines.reject(&:blank?).join("\n")
 
@@ -123,7 +137,16 @@ class Ocr::ResponseParser
         tax_details: extract_tax_details(authority_response, authority_lines),
         adjustment_candidates: extract_adjustment_candidates(authority_response, authority_lines),
         reference_pricing_candidates: reference_pricing_candidates,
-        items: extract_items(authority_response, authority_lines),
+        item_calculation_mode_candidates: item_calculation_mode_candidates,
+        item_calculation_mode_source_truncated:
+          structured_items.is_a?(Array) &&
+            structured_items.size > Ocr::ResponseParser::ItemCalculationModeCandidateExtractor::MAX_ITEMS,
+        items: extract_items(
+          authority_response,
+          authority_lines,
+          item_calculation_mode_candidates: item_calculation_mode_candidates,
+          retained_item_indexes: retained_item_indexes
+        ),
         review_reasons: extract_review_reasons(authority_response),
         confidence_summary: extract_confidence_summary(authority_response)
       },
@@ -1804,14 +1827,30 @@ class Ocr::ResponseParser
     percentage.frac.zero? ? percentage.to_i.to_s : percentage.to_s("F")
   end
 
-  def extract_items(parsed_response, lines = [])
+  def extract_items(
+    parsed_response,
+    lines = [],
+    item_calculation_mode_candidates: [],
+    retained_item_indexes: nil
+  )
     fields = extract_fields(parsed_response)
     items = fields.dig("Items", "valueArray")
     return [] unless items.is_a?(Array)
 
     discount_details_by_index = extract_discount_details_by_item_index(items, lines)
+    retained_item_indexes ||= retained_structured_item_indexes(items)
+    retained_item_index_lookup = Array(retained_item_indexes).index_with(true)
+    item_identities_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, identities|
+      next unless candidate.is_a?(Hash)
+
+      item_index = candidate[:item_index]
+      identity = candidate[:item_identity]
+      identities[item_index] = identity if item_index.is_a?(Integer) && identity.is_a?(String)
+    end
 
     items.filter_map.with_index do |item, index|
+      next unless retained_item_index_lookup[index]
+
       value_object = item["valueObject"] || {}
       amount_field_name = value_object["TotalPrice"].present? ? "TotalPrice" : "Price"
       amount_field = value_object[amount_field_name]
@@ -1820,8 +1859,6 @@ class Ocr::ResponseParser
         value_object.dig("Description", "content") ||
         item["content"]
       raw_text = clean_item_raw_text(raw_text, item)
-      next if adjustment_only_item?(item, raw_text:, total_price:)
-
       discount_amount = discount_details_by_index.dig(index, :amount).to_i
       original_line_total = discount_details_by_index.dig(index, :original_line_total).presence || total_price
       line_total =
@@ -1847,6 +1884,7 @@ class Ocr::ResponseParser
         discount_rate: discount_details_by_index.dig(index, :rate),
         tax_rate: extract_item_tax_rate(item, value_object),
         confidence: item["confidence"],
+        ocr_item_identity: item_identities_by_index[index],
         **structured_source_metadata(
           parsed_response,
           amount_field,
@@ -1856,6 +1894,27 @@ class Ocr::ResponseParser
     end
   rescue NoMethodError, TypeError
     []
+  end
+
+  def retained_structured_item_indexes(items)
+    return [] unless items.is_a?(Array)
+
+    items.filter_map.with_index do |item, index|
+      next unless item.is_a?(Hash)
+
+      value_object = item["valueObject"]
+      next unless value_object.is_a?(Hash)
+
+      total_price = value_object.dig("TotalPrice", "valueCurrency", "amount") ||
+        value_object.dig("TotalPrice", "valueNumber")
+      raw_text = value_object.dig("Description", "valueString") ||
+        value_object.dig("Description", "content") ||
+        item["content"]
+      raw_text = clean_item_raw_text(raw_text, item)
+      index unless adjustment_only_item?(item, raw_text:, total_price:)
+    rescue EncodingError, NoMethodError, TypeError
+      nil
+    end
   end
 
   def unknown_quantity_unit_diagnostic(resolution)

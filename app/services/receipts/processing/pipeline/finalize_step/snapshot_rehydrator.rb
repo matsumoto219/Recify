@@ -8,6 +8,13 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         snapshot.dig(:adoption_proposals, :reference_pricing),
         ocr_snapshot: snapshot
       )
+      item_calculation_modes = Receipts::Processing::Contracts::ItemCalculationModeProposalSet.from_snapshot(
+        snapshot.dig(:adoption_proposals, :item_calculation_modes),
+        ocr_snapshot: snapshot
+      )
+      adoption_proposals = {}
+      adoption_proposals["reference_pricing"] = proposal if proposal
+      adoption_proposals["item_calculation_modes"] = item_calculation_modes if item_calculation_modes.present?
 
       {
         schema_version: snapshot[:schema_version] ==
@@ -21,7 +28,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         error_code: snapshot[:error_code].presence,
         meta: normalized_hash(snapshot[:meta]).to_h,
         truncated: rehydrate_ocr_truncation(snapshot[:truncated]),
-        adoption_proposals: proposal ? { "reference_pricing" => proposal } : nil
+        adoption_proposals: adoption_proposals.presence
       }.compact
     end
 
@@ -55,7 +62,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
       normalized = normalized_hash(value)
       %w[
         lines case_preserved_lines items payments tax_details adjustment_candidates
-        reference_pricing_candidates
+        reference_pricing_candidates item_calculation_mode_candidates
       ].each_with_object({}) do |key, snapshot|
         snapshot[key] = normalized[key] == true if normalized.key?(key)
       end

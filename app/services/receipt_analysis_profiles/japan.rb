@@ -301,6 +301,10 @@ module ReceiptAnalysisProfiles
     OCR_TAX_AMOUNT_DESCRIPTION_PATTERN = /消費税|税額|tax/i.freeze
     OCR_TAX_CONTEXT_LABEL_PATTERN = /小\s*計|対象|消費税|税額|内税|外税|税抜|税込|tax/i.freeze
     OCR_ITEM_DISCOUNT_KEYWORD_PATTERN = /値引|割引|discount/i.freeze
+    OCR_ITEM_CALCULATION_PACKAGE_QUANTITY_PATTERN = /[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)\s*(?:入(?:り)?|詰|パック)/i.freeze
+    OCR_ITEM_CALCULATION_PACKAGE_CAPACITY_PATTERN = /(?:[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)\s*(?:セット|[x×]\s*[0-9０-９]+(?:[.．][0-9０-９]+)?\s*\p{L}+)|[0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:mg|g|kg|ml|l|cc)\s*(?:入(?:り)?|詰|パック|セット))/iu.freeze
+    OCR_ITEM_CALCULATION_COUNT_UNCERTAIN_PATTERN = /(?:(?:約|およそ|概算|目安|approx(?:imately)?|about)\s*[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)|[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)?\s*[〜～~\-–—]\s*[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)|[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)\s*(?:前後|程度|目安|以上|以下|未満|超(?:過)?|で|なら)\s*(?:[¥￥]\s*)?[0-9０-９]*(?:\s*円)?|まとめ買い|よりどり|mix\s*&?\s*match)/i.freeze
+    OCR_ITEM_CALCULATION_TAX_MARKER_PREFIX_PATTERN = /\A[*＊]\s*/.freeze
     OCR_POST_DISCOUNT_PRICE_BASIS_PATTERN = /(?:値引|割引)(?:き)?(?:後|済み?)|discounted/i.freeze
     OCR_REFERENCE_PRICING_LINE_GROUP_PURCHASED_QUANTITY_LINE_PATTERN = /\A[ \t]*計量[ \t:：]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})[ \t]*\z/u.freeze
     OCR_REFERENCE_PRICING_LINE_GROUP_PACKAGE_OR_UNCERTAIN_PATTERN = /(?:内容量|正味量|入(?:り)?|詰|パック|セット|約|およそ|前後|程度|目安|(?:く|ぐ)らい|以上|以下|未満|超(?:過)?|概算|暫定|予定|参考|推定|見込(?:み)?|仮(?:値|価格)|試算|通常|希望|定価|メーカー希望|[〜～~±]|プラスマイナス|風袋|総重量|tare|gross\s*weight|approx(?:imately)?|about|at\s+least|at\s+most|up\s+to|estimated?|provisional|tentative)/i.freeze
@@ -810,6 +814,22 @@ module ReceiptAnalysisProfiles
 
       def ocr_item_discount_keyword_pattern
         OCR_ITEM_DISCOUNT_KEYWORD_PATTERN
+      end
+
+      def ocr_item_calculation_package_quantity_pattern
+        OCR_ITEM_CALCULATION_PACKAGE_QUANTITY_PATTERN
+      end
+
+      def ocr_item_calculation_package_capacity_pattern
+        OCR_ITEM_CALCULATION_PACKAGE_CAPACITY_PATTERN
+      end
+
+      def ocr_item_calculation_count_uncertain_pattern
+        OCR_ITEM_CALCULATION_COUNT_UNCERTAIN_PATTERN
+      end
+
+      def ocr_item_calculation_tax_marker_prefix_pattern
+        OCR_ITEM_CALCULATION_TAX_MARKER_PREFIX_PATTERN
       end
 
       def ocr_post_discount_price_basis_pattern

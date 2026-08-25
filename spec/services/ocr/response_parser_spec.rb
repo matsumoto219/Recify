@@ -226,6 +226,30 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it 'Azure Itemのexact componentを同一明細の計算方式候補として分離する' do
+      fixture_response = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read
+      )
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      candidates = result.dig(:candidates, :item_calculation_mode_candidates)
+
+      aggregate_failures do
+        expect(candidates.size).to eq(4)
+        expect(candidates).to all(include(
+          source_provider: 'azure_structured',
+          options: contain_exactly(
+            include(pricing_source_kind: 'count_unit_price'),
+            include(pricing_source_kind: 'explicit_line_total')
+          )
+        ))
+        expect(result.dig(:candidates, :items, 0, :ocr_item_identity)).to eq(
+          candidates.first[:item_identity]
+        )
+        expect(candidates.to_s).not_to include('ノート A5')
+      end
+    end
+
     it '匿名化した実レシート回帰fixtureで数量付き袋商品をadjustment候補にしない' do
       fixture_response = JSON.parse(
         Rails.root.join('spec/fixtures/ocr/item_owned_bag_quantity_receipt.json').read

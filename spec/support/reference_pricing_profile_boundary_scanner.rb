@@ -3,6 +3,7 @@ require "prism"
 
 module ReferencePricingProfileBoundary
   TARGET_GLOBS = %w[
+    app/services/ocr/response_parser/item_calculation_mode_candidate_extractor.rb
     app/services/ocr/response_parser/reference_pricing*_extractor.rb
   ].freeze
   JAPANESE_SCRIPT_PATTERN = /[\p{Hiragana}\p{Katakana}\p{Han}]/u.freeze
