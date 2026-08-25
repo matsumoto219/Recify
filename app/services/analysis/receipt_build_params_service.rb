@@ -710,10 +710,12 @@ module Analysis
         end
         return normalize_structured_payments_with_settlement(structured_payments, lines, total, tax_details: candidates[:tax_details]) if structured_payments.present?
 
+        payment_amount_max = ReceiptAmountService.receipt_payment_amount_max
         explicit_fallback_payments = fallback_payments_from_lines(
           lines,
           receipt_total: total,
-          fallback_method: candidates[:payment_method_text]
+          fallback_method: candidates[:payment_method_text],
+          payment_amount_max:
         )
         return explicit_fallback_payments if payment_sum_matches_total?(explicit_fallback_payments, total)
 
@@ -729,7 +731,8 @@ module Analysis
         fallback_payments_from_lines(
           lines,
           receipt_total: total,
-          fallback_method: candidates[:payment_method_text]
+          fallback_method: candidates[:payment_method_text],
+          payment_amount_max:
         )
       end
 
@@ -846,7 +849,7 @@ module Analysis
         joined.match?(label_pattern)
       end
 
-      def fallback_payments_from_lines(lines, receipt_total: nil, fallback_method: nil)
+      def fallback_payments_from_lines(lines, receipt_total: nil, fallback_method: nil, payment_amount_max:)
         total = normalize_amount(receipt_total)&.to_i
         payments = Array(lines).each_with_index.filter_map do |line, index|
           point_payment = point_payment_from_payment_block(lines, index)
@@ -857,6 +860,7 @@ module Analysis
           amount_info = fallback_payment_context_amount_with_source(lines, index, receipt_total: total)
           amount = amount_info&.fetch(:amount, nil)
           next unless amount&.positive?
+          next unless amount <= payment_amount_max
 
           method = cash_total_payment_line?(line) ? "cash" : fallback_payment_method_text(line)
           method = nil if fallback_payment_amount_label_line?(line)
@@ -1004,7 +1008,14 @@ module Analysis
         amount = fallback_payment_amount(neighbor_line, receipt_total: receipt_total)
         return nil if amount.blank?
 
-        source = fallback_payment_amount_label_line?(line) ? :amount_label_neighbor : :neighbor
+        source =
+          if fallback_payment_amount_label_line?(line)
+            :amount_label_neighbor
+          elsif explicit_money_amount_from_text(neighbor_line).present?
+            :neighbor
+          else
+            :bare_neighbor
+          end
         { amount: amount, source: source }
       end
 
@@ -1131,11 +1142,18 @@ module Analysis
                 candidates.all? { |payment| reliable_total_match_payment_candidate?(payment) }
             candidates
           elsif total&.positive?
-            candidates.select { |payment| payment[:transaction_context] || voucher_payment_text?(payment[:method]) }
+            candidates.select do |payment|
+              !bare_neighbor_payment_candidate?(payment) &&
+                (payment[:transaction_context] || voucher_payment_text?(payment[:method]))
+            end
           else
-            candidates
+            candidates.reject { |payment| bare_neighbor_payment_candidate?(payment) }
           end
         selected.map { |payment| payment.except(:source_index, :transaction_context, :amount_source) }
+      end
+
+      def bare_neighbor_payment_candidate?(payment)
+        payment[:amount_source] == :bare_neighbor
       end
 
       def reliable_total_match_payment_candidate?(payment)

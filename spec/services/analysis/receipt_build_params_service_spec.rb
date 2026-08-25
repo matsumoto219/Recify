@@ -835,6 +835,97 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '支払行の次にある裸の識別番号をreceipt total不一致のpayment amountとして扱わない' do
+        [ '123', '1234567890123', '１２３４５６７８９０１２３' ].each do |identifier|
+          ocr_result[:candidates][:payment_method_text] = 'iD'
+          ocr_result[:candidates][:payments] = []
+          ocr_result[:candidates][:total_amount] = 500
+          ocr_result[:lines] = [
+            '合計 ¥500',
+            'iD支払',
+            identifier
+          ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          aggregate_failures(identifier) do
+            expect(params[:receipt_attributes][:payment_method]).to eq('e_money')
+            expect(params[:receipt_payments_attributes]).to eq([])
+          end
+        end
+      end
+
+      it '支払行の次にある裸の金額はreceipt totalと完全一致する場合だけ補完する' do
+        ocr_result[:candidates][:payment_method_text] = 'iD'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 500
+        ocr_result[:lines] = [
+          '合計 ¥500',
+          'iD支払',
+          '500'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_payments_attributes]).to contain_exactly(
+          include(method: 'iD支払', amount: 500)
+        )
+      end
+
+      it 'receipt totalがない場合は支払行の次にある裸の数字を補完しない' do
+        ocr_result[:candidates][:payment_method_text] = 'iD'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = nil
+        ocr_result[:lines] = [
+          'iD支払',
+          '500'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_payments_attributes]).to eq([])
+      end
+
+      it '複数支払行の裸の金額は合計がreceipt totalと完全一致する場合だけ補完する' do
+        ocr_result[:candidates][:payment_method_text] = 'PayPay'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 500
+        ocr_result[:lines] = [
+          '合計 ¥500',
+          'PayPay支払',
+          '300',
+          'iD支払',
+          '200'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_payments_attributes]).to contain_exactly(
+          include(method: 'PayPay支払', amount: 300),
+          include(method: 'iD支払', amount: 200)
+        )
+      end
+
+      it 'fallback payment amountを保存上限内に限定する' do
+        create(:system_setting, key: 'limits.receipt_payment_amount_max', value: SystemSettings.stored_value(500))
+
+        [
+          { amount: 500, expected: [ include(method: 'iD', amount: 500) ] },
+          { amount: 501, expected: [] }
+        ].each do |example|
+          ocr_result[:candidates][:payment_method_text] = 'iD'
+          ocr_result[:candidates][:payments] = []
+          ocr_result[:candidates][:total_amount] = example[:amount]
+          ocr_result[:lines] = [ "合計 ¥#{example[:amount]}", "iD #{example[:amount]}" ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          aggregate_failures(example[:amount]) do
+            expect(params[:receipt_payments_attributes]).to match_array(example[:expected])
+          end
+        end
+      end
+
       it 'OCRノイズと店名数字で偽paymentを作らずキャッシュレス還元とPayPay支払を分けて保存する' do
         ocr_result[:candidates][:payment_method_text] = 'paypay'
         ocr_result[:candidates][:payments] = []
