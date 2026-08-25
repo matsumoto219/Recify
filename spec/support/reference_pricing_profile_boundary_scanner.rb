@@ -105,7 +105,7 @@ module ReferencePricingProfileBoundary
         kind: :direct_country_profile_reference,
         source: node.location.slice
       )
-    rescue Prism::DynamicPartsInConstantPathError
+    rescue Prism::ConstantPathNode::DynamicPartsInConstantPathError
       nil
     end
 
@@ -153,7 +153,7 @@ module ReferencePricingProfileBoundary
       when Prism::ConstantPathNode
         node.full_name.to_s.delete_prefix("::")
       end
-    rescue Prism::DynamicPartsInConstantPathError
+    rescue Prism::ConstantPathNode::DynamicPartsInConstantPathError
       nil
     end
   end

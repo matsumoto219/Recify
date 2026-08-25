@@ -427,7 +427,7 @@ module LayerEffectBoundary
       return unless node.respond_to?(:full_name)
 
       node.full_name.to_s.delete_prefix("::")
-    rescue Prism::DynamicPartsInConstantPathError
+    rescue Prism::ConstantPathNode::DynamicPartsInConstantPathError
       nil
     end
   end

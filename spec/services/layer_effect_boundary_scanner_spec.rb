@@ -123,6 +123,17 @@ RSpec.describe LayerEffectBoundary::Scanner do
     end
   end
 
+  it "実行時に決まるconstant pathを副作用へ誤帰属せず解析を継続する" do
+    with_scanner(
+      "app/queries/runtime_constant_query.rb" => "owner = Object\nowner::Unknown.call\n"
+    ) do |scanner|
+      aggregate_failures do
+        expect(scanner.analysis_issues).to be_empty
+        expect(scanner.layer_effects).to be_empty
+      end
+    end
+  end
+
   it "Admin controllerの直接mutationとservice renderingを検知する" do
     with_scanner(
       "app/controllers/admin/users_controller.rb" => "@user.update!(admin: true)\n",

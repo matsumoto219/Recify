@@ -166,7 +166,7 @@ module ServiceLayerBoundary
 
     def full_name(node)
       node.full_name
-    rescue Prism::DynamicPartsInConstantPathError
+    rescue Prism::ConstantPathNode::DynamicPartsInConstantPathError
       issues << Issue.new(
         source_path: source_path,
         line: adjusted_line(node.location.start_line),

@@ -538,8 +538,7 @@ class Receipts::Processing::Pipeline
     def apply_reference_pricing_auto_adoption(params)
       return params unless reference_pricing_auto_adoption.is_a?(Hash)
 
-      gate_contract = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot
-      return params if reference_pricing_auto_adoption_gate_result&.binding_kind == gate_contract::STRUCTURED_ITEM_BINDING_KIND
+      return params if reference_pricing_auto_adoption_gate_result&.binding_kind == Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot::STRUCTURED_ITEM_BINDING_KIND
 
       result = Receipts::Processing::ReferencePricingAutoAdoptionWriter.call(
         receipt:,

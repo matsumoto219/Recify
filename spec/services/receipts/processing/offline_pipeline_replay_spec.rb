@@ -105,10 +105,11 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       tax_detail_count: 1,
       item_rows: [
         [ '国産豚こま切れ肉 200g', 1, 398, 348, 398, 50, BigDecimal('0.08') ],
-        [ 'きゅうり 1本', 1, 258, 258, 258, nil, BigDecimal('0.08') ],
-        [ "トマト (大玉)\n1個", 1, 198, 198, 198, nil, BigDecimal('0.08') ],
+        [ 'きゅうり 1本', 1, nil, 258, 258, nil, BigDecimal('0.08') ],
+        [ "トマト (大玉)\n1個", 1, nil, 198, 198, nil, BigDecimal('0.08') ],
         [ 'たまご Mサイズ 6個入', 1, 128, 98, 128, 30, BigDecimal('0.08') ]
       ],
+      pricing_source_kinds: [ nil, 'explicit_line_total', 'explicit_line_total', nil ],
       adjustment_rows: [
         [ 'receipt_discount', 100, 'discount' ],
         [ 'coupon', 200, 'discount' ],
@@ -359,6 +360,11 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
         :discount_amount,
         :tax_rate
       )).to eq(case_config.fetch(:item_rows))
+      if case_config[:pricing_source_kinds]
+        expect(receipt.receipt_items.order(:position_index, :id).pluck(:pricing_source_kind)).to eq(
+          case_config.fetch(:pricing_source_kinds)
+        )
+      end
       expect(receipt.receipt_adjustments.order(:position_index, :id).pluck(:kind, :amount, :sign)).to eq(
         case_config.fetch(:adjustment_rows)
       )

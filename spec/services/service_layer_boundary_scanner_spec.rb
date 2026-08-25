@@ -120,6 +120,23 @@ RSpec.describe ServiceLayerBoundary::Scanner do
     end
   end
 
+  it "実行時に決まるconstant pathを未検査のまま許可しない" do
+    with_scanner(
+      files: {
+        "app/controllers/reports_controller.rb" => "owner = Analysis\nowner::PrivateWorker.call\n"
+      }
+    ) do |scanner|
+      issue = scanner.analysis_issues.sole
+
+      expect(issue.to_h).to include(
+        source_path: "app/controllers/reports_controller.rb",
+        line: 2,
+        message: "dynamic constant path cannot be checked"
+      )
+      expect(scanner.violations).to be_empty
+    end
+  end
+
   it "別service namespaceからprivate childへの直接参照を検知する" do
     registry = analysis_registry.merge(
       "admin" => registry_entry("admin", "Admin")

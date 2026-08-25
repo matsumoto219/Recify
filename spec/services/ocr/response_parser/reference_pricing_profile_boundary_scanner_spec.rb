@@ -75,6 +75,21 @@ RSpec.describe ReferencePricingProfileBoundary::Scanner do
     end
   end
 
+  it "実行時に決まるprofile constant pathを直接profile参照へ誤帰属せず解析を継続する" do
+    with_scanner(
+      "app/services/ocr/response_parser/reference_pricing_candidate_extractor.rb" => <<~RUBY
+        profile_owner = Object
+        PROFILE_PATTERN = profile_owner::Japan::PATTERN
+        profile_owner::Registry.fetch("JPN")
+      RUBY
+    ) do |scanner|
+      aggregate_failures do
+        expect(scanner.issues).to be_empty
+        expect(scanner.violations).to be_empty
+      end
+    end
+  end
+
   it "対象extractorが0件ならissueにする" do
     with_scanner("unrelated.rb" => "VALUE = 1\n") do |scanner|
       aggregate_failures do
