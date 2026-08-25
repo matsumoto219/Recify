@@ -9,7 +9,15 @@ RSpec.describe Receipts::Processing::ReferencePricingAutoAdoptionFence do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
-  def prepared_run(setting_enabled: true, source: 'upload')
+  def structured_reference_ocr_result
+    raw_json = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
+    )
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
+  def prepared_run(setting_enabled: true, source: 'upload', ocr_result: destination_ocr_result)
     if setting_enabled
       setting = SystemSetting.find_or_initialize_by(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
       setting.value = SystemSettings.stored_value(true)
@@ -18,8 +26,35 @@ RSpec.describe Receipts::Processing::ReferencePricingAutoAdoptionFence do
       SystemSetting.where(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY).delete_all
     end
     run = Receipts::Processing::Runs.start(receipt: create(:receipt), source:).run
-    Receipts::Processing::Runs.record_ocr_snapshot(run, destination_ocr_result)
+    Receipts::Processing::Runs.record_ocr_snapshot(run, ocr_result)
     run.reload
+  end
+
+  it 'structured Itemのexact reference bindingも同じsetting generationとclaim境界で直列化する' do
+    run = prepared_run(ocr_result: structured_reference_ocr_result)
+    proposal = run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+    writes = 0
+
+    result = described_class.with_locked_run(run:) do |_locked_run|
+      writes += 1
+      true
+    end
+
+    aggregate_failures do
+      expect(result).to be_enabled
+      expect(result).to have_attributes(
+        reason: 'enabled',
+        binding_kind: 'azure_structured_item_reference',
+        candidate_identity: proposal.fetch('candidate_id'),
+        destination_identity: proposal.fetch('item_identity'),
+        selected_proposal_identity: 'azure_items_0_reference_quantity_price',
+        proposal_checksum: proposal.fetch('integrity_checksum')
+      )
+      expect(writes).to eq(1)
+      expect(run.reload.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to eq(
+        proposal.fetch('integrity_checksum')
+      )
+    end
   end
 
   it 'current setting generation・proposal bindingが一致するrunだけをyieldする' do

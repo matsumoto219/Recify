@@ -10,7 +10,16 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
   end
 
-  it 'run開始時のsetting state・generation・Receipt versionをbounded v2 snapshotへ固定する' do
+  def structured_reference_ocr_snapshot
+    raw_json = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
+    )
+    result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+
+    Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
+  end
+
+  it 'run開始時のsetting state・generation・Receipt versionをbounded v3 snapshotへ固定する' do
     setting = create(
       :system_setting,
       key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
@@ -26,12 +35,12 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
 
     aggregate_failures do
       expect(snapshot).to include(
-        'schema_version' => 'reference_pricing_auto_adoption_gate_v2',
+        'schema_version' => 'reference_pricing_auto_adoption_gate_v3',
         'capture_stage' => 'run_start',
         'setting_key' => SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
         'setting_enabled' => true,
         'eligibility_contract_version' => 'reference_pricing_auto_adoption_eligibility_v1',
-        'writer_contract_version' => 'reference_pricing_auto_adoption_writer_v1',
+        'writer_contract_version' => 'reference_pricing_auto_adoption_writer_v2',
         'run_key' => run_key,
         'run_source' => 'upload',
         'receipt_lock_version_at_start' => 7,
@@ -87,6 +96,7 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
 
     aggregate_failures do
       expect(bound.fetch('proposal_binding')).to eq(
+        'binding_kind' => 'azure_line_group',
         'candidate_identity' => proposal.fetch('candidate_id'),
         'destination_identity' => proposal.dig('destination', 'identity'),
         'proposal_checksum' => proposal.fetch('integrity_checksum'),
@@ -104,6 +114,54 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     end
   end
 
+  it 'confirmedなstructured Itemのreference optionをline-groupへ偽装せずbindする' do
+    run = create(:receipt_analysis_run)
+    start_snapshot = described_class.capture_start(
+      run_key: run.run_key,
+      run_source: run.source,
+      receipt_lock_version: run.receipt.lock_version
+    )
+    ocr_snapshot = structured_reference_ocr_snapshot
+    proposal = ocr_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+
+    bound = described_class.bind(start_snapshot, run:, ocr_snapshot:)
+
+    aggregate_failures do
+      expect(bound.fetch('proposal_binding')).to eq(
+        'binding_kind' => 'azure_structured_item_reference',
+        'candidate_identity' => proposal.fetch('candidate_id'),
+        'destination_identity' => proposal.fetch('item_identity'),
+        'selected_proposal_identity' => 'azure_items_0_reference_quantity_price',
+        'decision_contract_version' => 'item_calculation_mode_decision_v1',
+        'proposal_checksum' => proposal.fetch('integrity_checksum'),
+        'receipt_lock_version' => run.receipt.lock_version
+      )
+      expect(bound.to_json).not_to include(
+        '検証品',
+        'reference_price_amount',
+        '498',
+        '342',
+        'polygon'
+      )
+    end
+  end
+
+  it '既存v2 line-group gateはlegacy contractのまま読み戻す' do
+    run = create(:receipt_analysis_run)
+    start_snapshot = described_class.capture_start(
+      run_key: run.run_key,
+      run_source: run.source,
+      receipt_lock_version: run.receipt.lock_version
+    )
+    bound = described_class.bind(start_snapshot, run:, ocr_snapshot: destination_ocr_snapshot)
+    legacy = bound.deep_dup
+    legacy['schema_version'] = 'reference_pricing_auto_adoption_gate_v2'
+    legacy['writer_contract_version'] = 'reference_pricing_auto_adoption_writer_v1'
+    legacy['proposal_binding'].delete('binding_kind')
+
+    expect(described_class.from_snapshot(legacy, run:, require_binding: true)).to eq(legacy)
+  end
+
   it 'unknown version・型違い・過大値・run不一致・proposal改変をfail-closedにする' do
     run = create(:receipt_analysis_run)
     start_snapshot = described_class.capture_start(
@@ -119,7 +177,7 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     )
     mutations = [
       bound.merge('schema_version' => 'reference_pricing_auto_adoption_gate_v1'),
-      bound.merge('schema_version' => 'reference_pricing_auto_adoption_gate_v3'),
+      bound.merge('schema_version' => 'reference_pricing_auto_adoption_gate_v4'),
       bound.merge('unknown' => true),
       bound.merge('setting_enabled' => 'true'),
       bound.deep_merge('setting_generation' => { 'id' => -1 }),
