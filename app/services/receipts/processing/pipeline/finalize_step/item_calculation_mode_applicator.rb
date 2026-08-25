@@ -1,7 +1,12 @@
 class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicator
   DECISION_CONTRACT = Receipts::Processing::Contracts::ItemCalculationModeDecision
   PROPOSAL_CONTRACT = Receipts::Processing::Contracts::ItemCalculationModeProposalSet
-  SUPPORTED_PRICING_SOURCE_KINDS = %w[count_unit_price explicit_line_total].freeze
+  GATE_CONTRACT = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot
+  SUPPORTED_PRICING_SOURCE_KINDS = %w[
+    count_unit_price
+    reference_quantity_price
+    explicit_line_total
+  ].freeze
   REFERENCE_SOURCE_FIELDS = %i[
     reference_price_amount
     reference_quantity
@@ -47,6 +52,30 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     discount_rate
     tax_rate
   ].freeze
+  COMPUTED_ITEM_INVARIANT_FIELDS = (COMPUTED_ITEM_FIELDS + [ :price ]).freeze
+  NO_TOTAL_STABLE_COMPUTED_RECEIPT_FIELDS = %i[
+    adjustment_discount_total
+    adjustment_surcharge_total
+    payment_adjustment_total
+    adjustment_tax_rate_missing_total
+    tax_rate
+    item_amount_basis
+    tax_detail_amount_basis
+    purchase_adjustment_total
+    payment_amount_sum
+  ].freeze
+  NO_TOTAL_STABLE_SELECTED_ITEM_FIELDS = %i[
+    discount_amount
+    discount_rate
+    tax_rate
+  ].freeze
+  NO_TOTAL_ALLOWED_REMOVED_REVIEW_VALUES = {
+    inconsistencies: %w[insufficient_data].freeze,
+    blocking_inconsistencies: %w[insufficient_data].freeze,
+    mismatch_codes: %w[INSUFFICIENT_DATA].freeze,
+    blocking_mismatch_codes: %w[INSUFFICIENT_DATA].freeze,
+    review_reasons: %w[insufficient_data].freeze
+  }.freeze
   SKIPPED_SELECTION = Object.new.freeze
   private_constant :SKIPPED_SELECTION
 
@@ -59,7 +88,12 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     :price,
     :quantity,
     :quantity_unit_code,
+    :reference_price_amount,
+    :reference_quantity,
+    :reference_quantity_unit_code,
+    :reference_price_tax_inclusion,
     :explicit_line_total,
+    :printed_line_total,
     :projected_line_total
   ) do
     def initialize(
@@ -71,7 +105,12 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       price: nil,
       quantity: nil,
       quantity_unit_code: nil,
+      reference_price_amount: nil,
+      reference_quantity: nil,
+      reference_quantity_unit_code: nil,
+      reference_price_tax_inclusion: nil,
       explicit_line_total: nil,
+      printed_line_total: nil,
       projected_line_total:
     )
       super(
@@ -83,7 +122,12 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         price: price,
         quantity: quantity,
         quantity_unit_code: quantity_unit_code&.dup&.freeze,
+        reference_price_amount: reference_price_amount,
+        reference_quantity: reference_quantity,
+        reference_quantity_unit_code: reference_quantity_unit_code&.dup&.freeze,
+        reference_price_tax_inclusion: reference_price_tax_inclusion&.dup&.freeze,
         explicit_line_total: explicit_line_total,
+        printed_line_total: printed_line_total,
         projected_line_total: projected_line_total
       )
     end
@@ -101,6 +145,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       ocr_result:,
       preliminary_amount_result:,
       automatic_application_allowed:,
+      reference_pricing_gate_result: nil,
       item_price_limit:,
       item_line_total_limit:,
       &amount_calculator
@@ -110,6 +155,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         ocr_result:,
         preliminary_amount_result:,
         automatic_application_allowed:,
+        reference_pricing_gate_result:,
         item_price_limit:,
         item_line_total_limit:,
         amount_calculator:
@@ -122,6 +168,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     ocr_result:,
     preliminary_amount_result:,
     automatic_application_allowed:,
+    reference_pricing_gate_result:,
     item_price_limit:,
     item_line_total_limit:,
     amount_calculator:
@@ -130,6 +177,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     @ocr_result = ocr_result
     @preliminary_amount_result = preliminary_amount_result
     @automatic_application_allowed = automatic_application_allowed == true
+    @reference_pricing_gate_result = reference_pricing_gate_result
     @item_price_limit = item_price_limit
     @item_line_total_limit = item_line_total_limit
     @amount_calculator = amount_calculator
@@ -177,6 +225,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     :ocr_result,
     :preliminary_amount_result,
     :automatic_application_allowed,
+    :reference_pricing_gate_result,
     :item_price_limit,
     :item_line_total_limit,
     :amount_calculator
@@ -262,9 +311,90 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     case decision.selected_pricing_source_kind
     when "count_unit_price"
       count_selection(decision, option, attributes, item_index:)
+    when "reference_quantity_price"
+      return SKIPPED_SELECTION unless reference_selection_authorized?(decision, proposal)
+
+      reference_selection(decision, proposal, option, attributes, item_index:)
     when "explicit_line_total"
       explicit_selection(decision, option, attributes, item_index:)
     end
+  end
+
+  def reference_selection_authorized?(decision, proposal)
+    gate = reference_pricing_gate_result
+    gate.is_a?(Receipts::Processing::ReferencePricingAutoAdoptionFence::Result) &&
+      gate.enabled? &&
+      gate.binding_kind == GATE_CONTRACT::STRUCTURED_ITEM_BINDING_KIND &&
+      gate.candidate_identity == decision.candidate_id &&
+      gate.destination_identity == decision.item_identity &&
+      gate.selected_proposal_identity == decision.selected_proposal_id &&
+      gate.proposal_checksum == proposal["integrity_checksum"]
+  end
+
+  def reference_selection(decision, proposal, option, attributes, item_index:)
+    source = option.fetch("source")
+    reference_price = exact_decimal(
+      source.fetch("reference_price_amount"),
+      maximum: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX,
+      maximum_scale: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX_SCALE,
+      allow_zero: true
+    )
+    reference_quantity = exact_decimal(
+      source.fetch("reference_quantity"),
+      maximum: ReceiptItem::REFERENCE_QUANTITY_MAX,
+      maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+      allow_zero: false
+    )
+    purchased_quantity = exact_decimal(
+      source.fetch("purchased_quantity"),
+      maximum: ReceiptItem::REFERENCE_QUANTITY_MAX,
+      maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+      allow_zero: false
+    )
+    reference_unit = canonical_unit(source.fetch("reference_quantity_unit_code"))
+    purchased_unit = canonical_unit(source.fetch("purchased_quantity_unit_code"))
+    return if [ reference_price, reference_quantity, purchased_quantity, reference_unit, purchased_unit ].any?(&:nil?)
+    return unless ReceiptQuantityUnit.convertible?(from: purchased_unit, to: reference_unit)
+    return unless source["reference_price_tax_inclusion"] == "gross"
+    return unless exact_decimal_matches?(attributes[:price], reference_price)
+    return unless exact_decimal_matches?(attributes[:quantity], purchased_quantity)
+    return unless attributes[:quantity_unit_code] == purchased_unit
+    return unless attributes[:quantity_unit_raw].nil?
+
+    printed_line_total = exact_printed_line_total(proposal, projected: decision.projected_line_total)
+    return if proposal["printed_line_total"] && printed_line_total.nil?
+    if printed_line_total
+      return unless exact_integer_matches?(attributes[:original_line_total], printed_line_total)
+      return unless exact_integer_matches?(attributes[:line_total], printed_line_total)
+    else
+      return unless attributes[:original_line_total].nil? && attributes[:line_total].nil?
+    end
+
+    Selection.new(
+      item_identity: decision.item_identity,
+      item_index:,
+      position_index: attributes[:position_index],
+      proposal_id: decision.selected_proposal_id,
+      pricing_source_kind: decision.selected_pricing_source_kind,
+      quantity: purchased_quantity,
+      quantity_unit_code: purchased_unit,
+      reference_price_amount: reference_price,
+      reference_quantity:,
+      reference_quantity_unit_code: reference_unit,
+      reference_price_tax_inclusion: "gross",
+      printed_line_total:,
+      projected_line_total: decision.projected_line_total
+    )
+  rescue ReceiptQuantityUnit::ConversionError
+    nil
+  end
+
+  def exact_printed_line_total(proposal, projected:)
+    printed = proposal["printed_line_total"]
+    return if printed.nil?
+
+    amount = exact_integer(printed["amount"])
+    amount if amount == projected
   end
 
   def count_selection(decision, option, attributes, item_index:)
@@ -329,6 +459,16 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         item[:quantity] = selection.quantity
         item[:quantity_unit_code] = selection.quantity_unit_code
         item[:quantity_unit_raw] = nil
+      elsif selection.pricing_source_kind == "reference_quantity_price"
+        item[:price] = nil
+        item[:quantity] = selection.quantity
+        item[:quantity_unit_code] = selection.quantity_unit_code
+        item[:quantity_unit_raw] = nil
+        item[:reference_price_amount] = selection.reference_price_amount
+        item[:reference_quantity] = selection.reference_quantity
+        item[:reference_quantity_unit_code] = selection.reference_quantity_unit_code
+        item[:reference_quantity_unit_raw] = nil
+        item[:reference_price_tax_inclusion] = selection.reference_price_tax_inclusion
       else
         item[:price] = nil
       end
@@ -341,11 +481,11 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
 
   def final_result_valid?(candidate_params, final_amount_result, selections)
     return false unless final_amount_result.is_a?(Hash)
-    return false unless Array(candidate_params[:receipt_items_attributes]).size ==
-      Array(params[:receipt_items_attributes]).size
-    return false unless financial_result_signature(final_amount_result) ==
-      financial_result_signature(preliminary_amount_result)
-    return false unless unselected_computed_prices_unchanged?(final_amount_result, selections)
+
+    candidate_items = Array(candidate_params[:receipt_items_attributes])
+    return false unless candidate_items.size == Array(params[:receipt_items_attributes]).size
+    return false unless financial_transition_valid?(candidate_params, final_amount_result, selections)
+    return false unless unselected_computed_items_unchanged?(final_amount_result, selections)
 
     computed_items = Array(final_amount_result.dig(:computed, :items))
     selections.all? do |selection|
@@ -353,17 +493,157 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       next false unless exact_integer_matches?(item[:original_line_total], selection.projected_line_total)
       next false unless exact_integer_matches?(item[:line_total], selection.projected_line_total)
 
-      if selection.pricing_source_kind == "count_unit_price"
+      case selection.pricing_source_kind
+      when "count_unit_price"
         exact_integer_matches?(item[:price], selection.price) &&
           exact_integer_matches?(item[:quantity], selection.quantity.to_i) &&
           item[:quantity_unit_code] == selection.quantity_unit_code
+      when "reference_quantity_price"
+        reference_computed_item_valid?(item, selection)
       else
         item[:price].nil?
       end
     end
   end
 
-  def unselected_computed_prices_unchanged?(final_amount_result, selections)
+  def reference_computed_item_valid?(item, selection)
+    preliminary_item = normalized_hash(
+      Array(preliminary_amount_result.dig(:computed, :items))[selection.item_index]
+    )
+    final_context = item.slice(*NO_TOTAL_STABLE_SELECTED_ITEM_FIELDS)
+    preliminary_context = preliminary_item.slice(*NO_TOTAL_STABLE_SELECTED_ITEM_FIELDS)
+
+    item[:price].nil? &&
+      exact_decimal_matches?(item[:quantity], selection.quantity) &&
+      item[:quantity_unit_code] == selection.quantity_unit_code &&
+      final_context == preliminary_context
+  end
+
+  def financial_transition_valid?(candidate_params, final_amount_result, selections)
+    return true if financial_result_signature(final_amount_result) ==
+      financial_result_signature(preliminary_amount_result)
+
+    no_total_reference_transition_valid?(candidate_params, final_amount_result, selections)
+  end
+
+  def no_total_reference_transition_valid?(candidate_params, final_amount_result, selections)
+    no_total_selections = selections.select do |selection|
+      selection.pricing_source_kind == "reference_quantity_price" && selection.printed_line_total.nil?
+    end
+    return false unless no_total_selections.one?
+
+    selection = no_total_selections.sole
+    return false unless no_total_candidate_params_valid?(candidate_params, selection)
+    return false unless no_total_result_context_unchanged?(final_amount_result)
+    return false unless no_total_amount_result_safe?(final_amount_result)
+    return false unless no_total_review_transition_valid?(final_amount_result)
+    return false unless non_no_total_computed_items_unchanged?(final_amount_result, selection)
+    return false unless no_total_aggregate_valid?(final_amount_result)
+
+    true
+  end
+
+  def no_total_candidate_params_valid?(candidate_params, selection)
+    return false unless non_item_params_unchanged?(candidate_params)
+
+    source_item = normalized_hash(Array(params[:receipt_items_attributes])[selection.item_index])
+    candidate_item = normalized_hash(Array(candidate_params[:receipt_items_attributes])[selection.item_index])
+    preliminary_item = normalized_hash(Array(preliminary_amount_result.dig(:computed, :items))[selection.item_index])
+
+    source_item[:original_line_total].nil? &&
+      source_item[:line_total].nil? &&
+      candidate_item[:original_line_total].nil? &&
+      candidate_item[:line_total].nil? &&
+      preliminary_item[:amount_line_total_present] == false &&
+      other_items_have_amount_source?(selection.item_index)
+  end
+
+  def other_items_have_amount_source?(selected_index)
+    Array(preliminary_amount_result.dig(:computed, :items)).each_with_index.all? do |item, index|
+      index == selected_index || normalized_hash(item)[:amount_line_total_present] == true
+    end
+  end
+
+  def non_item_params_unchanged?(candidate_params)
+    %i[
+      receipt_attributes
+      receipt_tax_details_attributes
+      receipt_adjustments_attributes
+      receipt_payments_attributes
+    ].all? { |key| candidate_params[key] == params[key] }
+  end
+
+  def no_total_result_context_unchanged?(final_amount_result)
+    preliminary_computed = normalized_hash(preliminary_amount_result[:computed])
+    final_computed = normalized_hash(final_amount_result[:computed])
+    preliminary_engine = normalized_hash(preliminary_amount_result[:amount_engine])
+    final_engine = normalized_hash(final_amount_result[:amount_engine])
+
+    normalized_hash(final_amount_result[:calculation_profile]) ==
+      normalized_hash(preliminary_amount_result[:calculation_profile]) &&
+      final_amount_result[:tax_details] == preliminary_amount_result[:tax_details] &&
+      final_computed.slice(*NO_TOTAL_STABLE_COMPUTED_RECEIPT_FIELDS) ==
+        preliminary_computed.slice(*NO_TOTAL_STABLE_COMPUTED_RECEIPT_FIELDS) &&
+      final_engine.slice(:selected_candidate_id, :selected_basis) ==
+        preliminary_engine.slice(:selected_candidate_id, :selected_basis)
+  end
+
+  def no_total_amount_result_safe?(final_amount_result)
+    final_amount_result[:selected_candidate_status].to_s == "accepted" &&
+      normalized_hash(final_amount_result[:amount_engine])[:no_safe_candidate] == false &&
+      final_amount_result[:safe_to_auto_complete] == true &&
+      final_amount_result[:needs_review] == false
+  end
+
+  def no_total_review_transition_valid?(final_amount_result)
+    AMOUNT_REVIEW_FIELDS.all? do |field|
+      case field
+      when :needs_review
+        final_amount_result[field] != true
+      else
+        preliminary_values = Array(preliminary_amount_result[field]).map(&:to_s)
+        final_values = Array(final_amount_result[field]).map(&:to_s)
+        removed = preliminary_values - final_values
+        added = final_values - preliminary_values
+
+        allowed_removed = NO_TOTAL_ALLOWED_REMOVED_REVIEW_VALUES.fetch(field, [])
+        added.empty? && (removed - allowed_removed).empty?
+      end
+    end
+  end
+
+  def non_no_total_computed_items_unchanged?(final_amount_result, no_total_selection)
+    preliminary_items = Array(preliminary_amount_result.dig(:computed, :items))
+    final_items = Array(final_amount_result.dig(:computed, :items))
+    return false unless preliminary_items.size == final_items.size
+
+    preliminary_items.each_index.all? do |index|
+      index == no_total_selection.item_index ||
+        computed_item_signature(preliminary_items[index]) == computed_item_signature(final_items[index])
+    end
+  end
+
+  def no_total_aggregate_valid?(final_amount_result)
+    resolved = normalized_hash(final_amount_result[:resolved])
+    computed = normalized_hash(final_amount_result[:computed])
+    source_receipt = normalized_hash(params[:receipt_attributes])
+    resolved_amounts = resolved.slice(:subtotal, :tax, :total, :tax_rate)
+    computed_amounts = computed.slice(:subtotal, :tax, :total, :tax_rate)
+    return false unless resolved_amounts == computed_amounts
+    return false unless exact_integer_matches?(computed[:purchase_total], resolved[:total])
+    return false unless exact_integer_matches?(computed[:final_payment_total], resolved[:total])
+    return false unless receipt_amount_matches?(source_receipt[:subtotal_amount], resolved[:subtotal])
+    return false unless receipt_amount_matches?(source_receipt[:tax_amount], resolved[:tax])
+    return false unless receipt_amount_matches?(source_receipt[:total_amount], resolved[:total])
+
+    true
+  end
+
+  def receipt_amount_matches?(source, resolved)
+    source.nil? || exact_integer_matches?(source, resolved)
+  end
+
+  def unselected_computed_items_unchanged?(final_amount_result, selections)
     preliminary_items = Array(preliminary_amount_result.dig(:computed, :items))
     final_items = Array(final_amount_result.dig(:computed, :items))
     return false unless preliminary_items.size == final_items.size
@@ -371,8 +651,12 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     selected_indexes = selections.to_h { |selection| [ selection.item_index, true ] }
     preliminary_items.each_index.all? do |index|
       selected_indexes[index] ||
-        normalized_hash(preliminary_items[index])[:price] == normalized_hash(final_items[index])[:price]
+        computed_item_signature(preliminary_items[index]) == computed_item_signature(final_items[index])
     end
+  end
+
+  def computed_item_signature(item)
+    normalized_hash(item).slice(*COMPUTED_ITEM_INVARIANT_FIELDS)
   end
 
   def financial_result_signature(result)
@@ -412,6 +696,27 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     integer if integer&.positive? && integer <= PROPOSAL_CONTRACT::MAX_QUANTITY
   end
 
+  def exact_decimal(value, maximum:, maximum_scale:, allow_zero:)
+    return unless value.is_a?(String)
+    return unless value.bytesize <= PROPOSAL_CONTRACT::MAX_EXACT_NUMBER_BYTES
+    return unless value.match?(PROPOSAL_CONTRACT::EXACT_DECIMAL_PATTERN)
+
+    decimal = BigDecimal(value)
+    return if decimal.negative? || (!allow_zero && decimal.zero?) || decimal > maximum
+
+    scale = value.include?(".") ? value.length - value.index(".") - 1 : 0
+    decimal if scale <= maximum_scale
+  rescue ArgumentError
+    nil
+  end
+
+  def exact_decimal_matches?(value, expected)
+    decimal = BigDecimal(value.to_s)
+    decimal.finite? && decimal == expected
+  rescue ArgumentError, TypeError
+    false
+  end
+
   def exact_integer_matches?(value, expected)
     decimal = BigDecimal(value.to_s)
     decimal.finite? && decimal.frac.zero? && decimal.to_i == expected
@@ -422,6 +727,11 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
   def canonical_countable_unit(value)
     unit = ReceiptQuantityUnit.unit_for(value)
     value if value.is_a?(String) && unit&.code == value && unit.kind == :countable
+  end
+
+  def canonical_unit(value)
+    unit = ReceiptQuantityUnit.unit_for(value)
+    value if value.is_a?(String) && unit&.code == value
   end
 
   def normalized_hash(value)

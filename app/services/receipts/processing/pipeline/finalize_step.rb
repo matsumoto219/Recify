@@ -43,10 +43,12 @@ class Receipts::Processing::Pipeline
       @reference_pricing_auto_adoption_requested = false
       @reference_pricing_auto_adoption_applied = false
       @reference_pricing_auto_adoption_expected_item = nil
+      @structured_reference_pricing_auto_adoption_requested = false
       @item_calculation_mode_selections = [].freeze
       @item_calculation_mode_item_price_limit = nil
       @item_calculation_mode_item_line_total_limit = nil
       @item_calculation_mode_expected_item_count = nil
+      @item_calculation_mode_expected_receipt_total = nil
     end
 
     def call
@@ -466,6 +468,7 @@ class Receipts::Processing::Pipeline
         ocr_result:,
         preliminary_amount_result:,
         automatic_application_allowed: true,
+        reference_pricing_gate_result: reference_pricing_auto_adoption_gate_result,
         item_price_limit:,
         item_line_total_limit:
       ) do |candidate_params|
@@ -475,6 +478,7 @@ class Receipts::Processing::Pipeline
       return [ params, preliminary_amount_result ] unless item_calculation_mode_normalization_valid?(
         result.params,
         result.selections,
+        amount_result: result.amount_result,
         item_price_limit:,
         item_line_total_limit:
       )
@@ -483,6 +487,12 @@ class Receipts::Processing::Pipeline
       @item_calculation_mode_item_price_limit = item_price_limit
       @item_calculation_mode_item_line_total_limit = item_line_total_limit
       @item_calculation_mode_expected_item_count = Array(result.params[:receipt_items_attributes]).size
+      @structured_reference_pricing_auto_adoption_requested = result.selections.any? do |selection|
+        selection.pricing_source_kind == "reference_quantity_price"
+      end
+      if @structured_reference_pricing_auto_adoption_requested
+        @item_calculation_mode_expected_receipt_total = normalized_hash(result.amount_result[:resolved])[:total]
+      end
 
       [ result.params, result.amount_result ]
     end
@@ -490,10 +500,14 @@ class Receipts::Processing::Pipeline
     def item_calculation_mode_normalization_valid?(
       params,
       selections,
+      amount_result:,
       item_price_limit:,
       item_line_total_limit:
     )
-      source_items = Array(params[:receipt_items_attributes])
+      source_items = apply_amount_item_totals(
+        params[:receipt_items_attributes],
+        amount_result.dig(:computed, :items)
+      )
       normalized_items = AttributeNormalizer.items(
         source_items,
         trusted_item_calculation_mode_sources: selections,
@@ -523,6 +537,9 @@ class Receipts::Processing::Pipeline
     def apply_reference_pricing_auto_adoption(params)
       return params unless reference_pricing_auto_adoption.is_a?(Hash)
 
+      gate_contract = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot
+      return params if reference_pricing_auto_adoption_gate_result&.binding_kind == gate_contract::STRUCTURED_ITEM_BINDING_KIND
+
       result = Receipts::Processing::ReferencePricingAutoAdoptionWriter.call(
         receipt:,
         run:,
@@ -536,6 +553,12 @@ class Receipts::Processing::Pipeline
           result.params.fetch(:receipt_items_attributes).sole.deep_dup
       end
       result.params
+    end
+
+    def reference_pricing_auto_adoption_gate_result
+      return unless reference_pricing_auto_adoption.is_a?(Hash)
+
+      reference_pricing_auto_adoption[:gate_result]
     end
 
     def verify_reference_pricing_auto_adoption_persistence!
@@ -587,27 +610,50 @@ class Receipts::Processing::Pipeline
           matches = persisted_items_by_position[selection.position_index]
           matches&.one? && item_calculation_mode_persistence_matches?(matches.sole, selection)
         end
+      if @structured_reference_pricing_auto_adoption_requested
+        valid &&= receipt.total_amount == @item_calculation_mode_expected_receipt_total
+      end
       raise_item_calculation_mode_persistence_invariant! unless valid
+
+      @reference_pricing_auto_adoption_applied = true if @structured_reference_pricing_auto_adoption_requested
     rescue ArgumentError, TypeError
       raise_item_calculation_mode_persistence_invariant!
     end
 
     def item_calculation_mode_persistence_matches?(item, selection)
       return false unless item.pricing_source_kind == selection.pricing_source_kind
-      return false unless item.reference_price_amount.nil?
-      return false unless item.reference_quantity.nil?
-      return false unless item.reference_quantity_unit_code.nil?
-      return false unless item.reference_quantity_unit_raw.nil?
-      return false unless item.reference_price_tax_inclusion.nil?
       return false unless item.discount_amount.nil? && item.discount_rate.nil?
       return false unless item.original_line_total == selection.projected_line_total
       return false unless item.line_total == selection.projected_line_total
 
-      if selection.pricing_source_kind == "count_unit_price"
+      case selection.pricing_source_kind
+      when "count_unit_price"
+        return false unless item.reference_price_amount.nil?
+        return false unless item.reference_quantity.nil?
+        return false unless item.reference_quantity_unit_code.nil?
+        return false unless item.reference_quantity_unit_raw.nil?
+        return false unless item.reference_price_tax_inclusion.nil?
+
         item.price == selection.price &&
           item.quantity == selection.quantity &&
           item.quantity_unit_code == selection.quantity_unit_code
+      when "reference_quantity_price"
+        item.price.nil? &&
+          item.reference_price_amount == selection.reference_price_amount &&
+          item.reference_quantity == selection.reference_quantity &&
+          item.reference_quantity_unit_code == selection.reference_quantity_unit_code &&
+          item.reference_quantity_unit_raw.nil? &&
+          item.reference_price_tax_inclusion == selection.reference_price_tax_inclusion &&
+          item.quantity == selection.quantity &&
+          item.quantity_unit_code == selection.quantity_unit_code &&
+          item.quantity_unit_raw.nil?
       else
+        return false unless item.reference_price_amount.nil?
+        return false unless item.reference_quantity.nil?
+        return false unless item.reference_quantity_unit_code.nil?
+        return false unless item.reference_quantity_unit_raw.nil?
+        return false unless item.reference_price_tax_inclusion.nil?
+
         item.price.nil? && item.original_line_total == selection.explicit_line_total
       end
     end

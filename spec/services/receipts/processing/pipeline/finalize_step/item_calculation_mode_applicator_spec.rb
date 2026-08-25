@@ -37,9 +37,26 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
       ocr_result: overrides.fetch(:ocr_result, context.fetch(:ocr_result)),
       preliminary_amount_result: overrides.fetch(:amount_result, context.fetch(:amount_result)),
       automatic_application_allowed: overrides.fetch(:automatic_application_allowed, true),
+      reference_pricing_gate_result: overrides[:reference_pricing_gate_result],
       item_price_limit: overrides.fetch(:item_price_limit, 999_999_999),
       item_line_total_limit: overrides.fetch(:item_line_total_limit, 999_999_999),
       &(amount_calculator || method(:amount_for))
+    )
+  end
+
+  def structured_reference_gate_result(context, **overrides)
+    proposal = context.dig(:ocr_result, :adoption_proposals, 'item_calculation_modes').sole
+    Receipts::Processing::ReferencePricingAutoAdoptionFence::Result.new(
+      enabled: overrides.fetch(:enabled, true),
+      reason: overrides.fetch(:reason, 'enabled'),
+      binding_kind: 'azure_structured_item_reference',
+      candidate_identity: overrides.fetch(:candidate_identity, proposal.fetch('candidate_id')),
+      destination_identity: overrides.fetch(:destination_identity, proposal.fetch('item_identity')),
+      selected_proposal_identity: overrides.fetch(
+        :selected_proposal_identity,
+        'azure_items_0_reference_quantity_price'
+      ),
+      proposal_checksum: overrides.fetch(:proposal_checksum, proposal.fetch('integrity_checksum'))
     )
   end
 
@@ -59,6 +76,20 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
       total['content'] = content
       total.fetch('valueCurrency')['amount'] = replacement
     end
+  end
+
+  def remove_structured_reference_total(raw)
+    analyze_result = raw.fetch('analyzeResult')
+    document = analyze_result.fetch('documents').sole
+    item = document.dig('fields', 'Items', 'valueArray').sole
+    content = "検証品\n税込 ¥498/100g\n342g"
+    analyze_result['content'] = content
+    analyze_result.fetch('pages').sole.fetch('lines').pop
+    analyze_result.fetch('pages').sole.fetch('spans').sole['length'] = content.length
+    document.fetch('spans').sole['length'] = content.length
+    item['content'] = content
+    item.fetch('spans').sole['length'] = content.length
+    item.fetch('valueObject').delete('TotalPrice')
   end
 
   it '同一Itemの単価×明示数量が印字額と一致する場合は現在金額を変えずcount authorityを適用する' do
@@ -164,6 +195,182 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     end
   end
 
+  it 'Fenceが認証したexact bindingだけstructured reference sourceへ適用する' do
+    context = fixture_context('ocr_azure_item_calculation_reference_gross_anonymized')
+    gate_result = structured_reference_gate_result(context)
+
+    result = result_for(context, reference_pricing_gate_result: gate_result)
+
+    aggregate_failures do
+      expect(result).to be_applied
+      expect(result.selections.sole).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: BigDecimal('498'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'gross',
+        quantity: BigDecimal('342'),
+        quantity_unit_code: 'gram',
+        projected_line_total: 1703
+      )
+      expect(result.params.fetch(:receipt_items_attributes).sole).to include(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('498'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'gross'
+      )
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+    end
+  end
+
+  it '印字明細額なしのexact structured referenceだけはAmountの不足額解消を限定的に許可する' do
+    context = fixture_context(
+      'ocr_azure_item_calculation_reference_gross_anonymized',
+      mutate_raw: method(:remove_structured_reference_total)
+    )
+    gate_result = structured_reference_gate_result(context)
+    candidate_params = nil
+
+    result = result_for(context, reference_pricing_gate_result: gate_result) do |params|
+      candidate_params = params.deep_dup
+      amount_for(params)
+    end
+
+    aggregate_failures do
+      expect(result).to be_applied
+      expect(candidate_params.fetch(:receipt_items_attributes).sole).to include(
+        pricing_source_kind: 'reference_quantity_price',
+        original_line_total: nil,
+        line_total: nil
+      )
+      expect(result.amount_result).to include(
+        selected_candidate_status: 'accepted',
+        safe_to_auto_complete: true,
+        needs_review: false
+      )
+      expect(result.amount_result.dig(:resolved, :total)).to eq(1703)
+      expect(result.amount_result.dig(:computed, :items).sole).to include(
+        price: nil,
+        original_line_total: 1703,
+        line_total: 1703
+      )
+    end
+  end
+
+  it 'no-total Amount結果に集計driftまたは新しいreview理由があればreferenceを適用しない' do
+    context = fixture_context(
+      'ocr_azure_item_calculation_reference_gross_anonymized',
+      mutate_raw: method(:remove_structured_reference_total)
+    )
+    gate_result = structured_reference_gate_result(context)
+    invalid_results = [
+      lambda do |params|
+        amount_for(params).deep_dup.tap { |result| result[:resolved][:total] += 1 }
+      end,
+      lambda do |params|
+        amount_for(params).deep_dup.tap do |result|
+          result.dig(:computed, :items).sole[:tax_rate] = BigDecimal('0.1')
+        end
+      end,
+      lambda do |params|
+        amount_for(params).deep_dup.tap do |result|
+          result[:warning_inconsistencies] = [ :unexpected_amount_warning ]
+        end
+      end
+    ]
+
+    invalid_results.each do |calculator|
+      result = result_for(context, reference_pricing_gate_result: gate_result, &calculator)
+
+      aggregate_failures do
+        expect(result).not_to be_applied
+        expect(result.params.fetch(:receipt_items_attributes).sole[:pricing_source_kind]).to be_nil
+      end
+    end
+  end
+
+  it '別の未完Itemが残る場合はno-total formulaだけで不足解消とみなさない' do
+    context = fixture_context(
+      'ocr_azure_item_calculation_reference_gross_anonymized',
+      mutate_raw: method(:remove_structured_reference_total)
+    )
+    params = context.fetch(:params).deep_dup
+    params.fetch(:receipt_items_attributes) << {
+      raw_text: '補助品',
+      suggested_name: '補助品',
+      price: nil,
+      quantity: BigDecimal('1'),
+      quantity_unit_code: 'unknown',
+      original_line_total: nil,
+      line_total: nil,
+      needs_review: true,
+      review_reasons: [ 'insufficient_data' ],
+      position_index: 2,
+      ocr_item_identity: 'azure_structured_item_i1_s22_e25'
+    }
+    amount_result = amount_for(params)
+    gate_result = structured_reference_gate_result(context)
+
+    result = result_for(
+      context,
+      params:,
+      amount_result:,
+      reference_pricing_gate_result: gate_result
+    )
+
+    aggregate_failures do
+      expect(result).not_to be_applied
+      expect(result.params).to equal(params)
+      expect(result.params.fetch(:receipt_items_attributes).first[:pricing_source_kind]).to be_nil
+    end
+  end
+
+  it 'no-total formulaが印字receipt totalと1円でも違えばreferenceを適用しない' do
+    context = fixture_context(
+      'ocr_azure_item_calculation_reference_gross_anonymized',
+      mutate_raw: method(:remove_structured_reference_total)
+    )
+    params = context.fetch(:params).deep_dup
+    params.fetch(:receipt_attributes)[:total_amount] = 1702
+    amount_result = amount_for(params)
+    gate_result = structured_reference_gate_result(context)
+
+    result = result_for(
+      context,
+      params:,
+      amount_result:,
+      reference_pricing_gate_result: gate_result
+    )
+
+    aggregate_failures do
+      expect(result).not_to be_applied
+      expect(result.params).to equal(params)
+      expect(result.params.fetch(:receipt_items_attributes).sole[:pricing_source_kind]).to be_nil
+    end
+  end
+
+  it 'candidate・destination・selected proposal・checksumのどれかが違えばreferenceだけを適用しない' do
+    context = fixture_context('ocr_azure_item_calculation_reference_gross_anonymized')
+    invalid_results = [
+      structured_reference_gate_result(context, candidate_identity: 'azure_items_9_item_calculation_mode'),
+      structured_reference_gate_result(context, destination_identity: 'azure_structured_item_i9_s0_e28'),
+      structured_reference_gate_result(context, selected_proposal_identity: 'azure_items_9_reference_quantity_price'),
+      structured_reference_gate_result(context, proposal_checksum: '0' * 64),
+      structured_reference_gate_result(context, enabled: false, reason: 'current_setting_disabled')
+    ]
+
+    invalid_results.each do |gate_result|
+      result = result_for(context, reference_pricing_gate_result: gate_result)
+
+      aggregate_failures do
+        expect(result).not_to be_applied
+        expect(result.params.fetch(:receipt_items_attributes).sole[:pricing_source_kind]).to be_nil
+      end
+    end
+  end
+
   it '対象Itemにdiscount sourceがあるexplicit proposalは自動適用しない' do
     context = fixture_context('receipt_sample')
     params = context.fetch(:params).deep_dup
@@ -249,22 +456,31 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     end
   end
 
-  it '非選択Itemのcomputed priceだけが変わる場合も全適用を破棄する' do
+  it '非選択Itemのcomputed source・derived値が1つでも変わる場合は全適用を破棄する' do
     context = fixture_context('receipt_sample')
     params = context.fetch(:params).deep_dup
     params.fetch(:receipt_items_attributes).first.merge!(discount_amount: 1, line_total: 579)
     amount_result = amount_for(params)
+    mutations = {
+      price: ->(item) { item[:price] += 1 },
+      quantity: ->(item) { item[:quantity] += 1 },
+      line_total: ->(item) { item[:line_total] += 1 },
+      discount_amount: ->(item) { item[:discount_amount] += 1 },
+      tax_rate: ->(item) { item[:tax_rate] = BigDecimal('0.1') }
+    }
 
-    result = result_for(context, params:, amount_result:) do |candidate_params|
-      amount_for(candidate_params).deep_dup.tap do |drifted|
-        drifted.dig(:computed, :items).first[:price] += 1
+    mutations.each_value do |mutation|
+      result = result_for(context, params:, amount_result:) do |candidate_params|
+        amount_for(candidate_params).deep_dup.tap do |drifted|
+          mutation.call(drifted.dig(:computed, :items).first)
+        end
       end
-    end
 
-    aggregate_failures do
-      expect(result).not_to be_applied
-      expect(result.params).to equal(params)
-      expect(result.amount_result).to equal(amount_result)
+      aggregate_failures do
+        expect(result).not_to be_applied
+        expect(result.params).to equal(params)
+        expect(result.amount_result).to equal(amount_result)
+      end
     end
   end
 

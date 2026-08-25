@@ -29,15 +29,113 @@ RSpec.describe 'OCR item calculation mode persistence' do
     }
   end
 
-  def build_ready_run(receipt, fixture:, strategy:, source: 'upload', parent_run: nil)
+  def build_ready_run(receipt, fixture: nil, ocr_result: nil, strategy:, source: 'upload', parent_run: nil)
     run = Receipts::Processing.start(receipt: receipt, source: source, parent_run: parent_run).run
-    Receipts::Processing.record_ocr_snapshot(run, ocr_fixture(fixture))
+    Receipts::Processing.record_ocr_snapshot(run, ocr_result || ocr_fixture(fixture))
     Receipts::Processing.record_ai_normalized_result(run, ai_result) if strategy == :ai_success
     Receipts::Processing.record_finalize_decision(
       run,
       finalize_decision(strategy, error_code: strategy == :ai_fallback ? 'ai_unavailable' : nil)
     )
     run.reload
+  end
+
+  def structured_reference_without_total_ocr_result
+    raw = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
+    )
+    analyze_result = raw.fetch('analyzeResult')
+    document = analyze_result.fetch('documents').sole
+    item = document.dig('fields', 'Items', 'valueArray').sole
+    content = "検証品\n税込 ¥498/100g\n342g"
+    analyze_result['content'] = content
+    analyze_result.fetch('pages').sole.fetch('lines').pop
+    analyze_result.fetch('pages').sole.fetch('spans').sole['length'] = content.length
+    document.fetch('spans').sole['length'] = content.length
+    item['content'] = content
+    item.fetch('spans').sole['length'] = content.length
+    item.fetch('valueObject').delete('TotalPrice')
+
+    Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+  end
+
+  def mixed_structured_reference_count_ocr_result
+    raw = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
+    )
+    analyze_result = raw.fetch('analyzeResult')
+    document = analyze_result.fetch('documents').sole
+    second_item_content = "確認品\n¥220 x 2個\n¥440"
+    second_item_start = analyze_result.fetch('content').length + 1
+    analyze_result['content'] = "#{analyze_result.fetch('content')}\n#{second_item_content}"
+    analyze_result.fetch('pages').sole.fetch('lines').concat(
+      [
+        {
+          'content' => '確認品',
+          'polygon' => [ 100, 240, 300, 240, 300, 270, 100, 270 ],
+          'spans' => [ { 'offset' => second_item_start, 'length' => 3 } ]
+        },
+        {
+          'content' => '¥220 x 2個',
+          'polygon' => [ 100, 280, 500, 280, 500, 310, 100, 310 ],
+          'spans' => [ { 'offset' => second_item_start + 4, 'length' => 9 } ]
+        },
+        {
+          'content' => '¥440',
+          'polygon' => [ 700, 240, 900, 240, 900, 270, 700, 270 ],
+          'spans' => [ { 'offset' => second_item_start + 14, 'length' => 4 } ]
+        }
+      ]
+    )
+    analyze_result.fetch('pages').sole.fetch('spans').sole['length'] = analyze_result.fetch('content').length
+    document.fetch('spans').sole['length'] = analyze_result.fetch('content').length
+    document.dig('fields', 'Items', 'valueArray') << {
+      'type' => 'object',
+      'content' => second_item_content,
+      'spans' => [ { 'offset' => second_item_start, 'length' => second_item_content.length } ],
+      'valueObject' => {
+        'Description' => {
+          'type' => 'string',
+          'valueString' => '確認品',
+          'content' => '確認品',
+          'spans' => [ { 'offset' => second_item_start, 'length' => 3 } ]
+        },
+        'Price' => {
+          'type' => 'currency',
+          'valueCurrency' => { 'currencySymbol' => '¥', 'amount' => 220, 'currencyCode' => 'JPY' },
+          'content' => '¥220',
+          'spans' => [ { 'offset' => second_item_start + 4, 'length' => 4 } ]
+        },
+        'Quantity' => {
+          'type' => 'number',
+          'valueNumber' => 2,
+          'content' => '2',
+          'spans' => [ { 'offset' => second_item_start + 11, 'length' => 1 } ]
+        },
+        'QuantityUnit' => {
+          'type' => 'string',
+          'valueString' => '個',
+          'content' => '個',
+          'spans' => [ { 'offset' => second_item_start + 12, 'length' => 1 } ]
+        },
+        'TotalPrice' => {
+          'type' => 'currency',
+          'valueCurrency' => { 'currencySymbol' => '¥', 'amount' => 440, 'currencyCode' => 'JPY' },
+          'content' => '¥440',
+          'spans' => [ { 'offset' => second_item_start + 14, 'length' => 4 } ]
+        }
+      }
+    }
+
+    Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+  end
+
+  def create_reference_pricing_setting(value)
+    create(
+      :system_setting,
+      key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+      value: SystemSettings.stored_value(value)
+    )
   end
 
   it 'OCR-onlyでconfirmed count sourceを現在金額を変えず保存し、statusは従来どおりreview_neededにする' do
@@ -99,6 +197,159 @@ RSpec.describe 'OCR item calculation mode persistence' do
         [ 580, 200, 250, 100, 0 ].map { |amount| [ amount, amount ] }
       )
       expect(run.reload.status).to eq('succeeded')
+    end
+  end
+
+  it 'SystemSetting有効時だけconfirmed structured referenceを同じItemへexact sourceとして保存する' do
+    create_reference_pricing_setting(true)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      fixture: 'ocr_azure_item_calculation_reference_gross_anonymized',
+      strategy: :ocr_only
+    )
+    proposal_before = run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').deep_dup
+
+    result = Receipts::Processing.run_finalize(run)
+
+    item = receipt.reload.receipt_items.sole
+    aggregate_failures do
+      expect(result.next_step).to eq(:done)
+      expect(receipt).to have_attributes(status: 'review_needed', total_amount: 1703)
+      expect(item).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('498'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'gross',
+        quantity: BigDecimal('342'),
+        quantity_unit_code: 'gram',
+        original_line_total: 1703,
+        line_total: 1703
+      )
+      expect(run.reload.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to be_present
+      expect(run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes')).to eq(proposal_before)
+    end
+  end
+
+  it 'SystemSetting無効時もstructured proposalと印字額を維持するがreference authorityは作らない' do
+    create_reference_pricing_setting(false)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      fixture: 'ocr_azure_item_calculation_reference_gross_anonymized',
+      strategy: :ocr_only
+    )
+
+    Receipts::Processing.run_finalize(run)
+
+    item = receipt.reload.receipt_items.sole
+    aggregate_failures do
+      expect(receipt.total_amount).to eq(1703)
+      expect(item).to have_attributes(
+        pricing_source_kind: nil,
+        reference_price_amount: nil,
+        reference_quantity: nil,
+        reference_quantity_unit_code: nil,
+        reference_price_tax_inclusion: nil,
+        original_line_total: 1703,
+        line_total: 1703
+      )
+      expect(run.reload.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes')).to be_present
+      expect(run.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+    end
+  end
+
+  it 'structured referenceのrun開始後にSystemSetting世代が変われば再度ONでも採用しない' do
+    setting = create_reference_pricing_setting(true)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      fixture: 'ocr_azure_item_calculation_reference_gross_anonymized',
+      strategy: :ocr_only
+    )
+    setting.update!(value: SystemSettings.stored_value(false))
+    setting.update!(value: SystemSettings.stored_value(true))
+
+    Receipts::Processing.run_finalize(run)
+
+    item = receipt.reload.receipt_items.sole
+    aggregate_failures do
+      expect(receipt.total_amount).to eq(1703)
+      expect(item).to have_attributes(
+        pricing_source_kind: nil,
+        reference_price_amount: nil,
+        reference_quantity: nil,
+        reference_quantity_unit_code: nil,
+        reference_price_tax_inclusion: nil,
+        original_line_total: 1703,
+        line_total: 1703
+      )
+      expect(run.reload.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+    end
+  end
+
+  it '印字明細額なしでもcompleteなgross structured formulaだけを既存Amountで投影して保存する' do
+    create_reference_pricing_setting(true)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      ocr_result: structured_reference_without_total_ocr_result,
+      strategy: :ocr_only
+    )
+
+    Receipts::Processing.run_finalize(run)
+
+    item = receipt.reload.receipt_items.sole
+    aggregate_failures do
+      expect(receipt.total_amount).to eq(1703)
+      expect(item).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: BigDecimal('498'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'gross',
+        quantity: BigDecimal('342'),
+        quantity_unit_code: 'gram',
+        original_line_total: 1703,
+        line_total: 1703
+      )
+      expect(run.reload.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to be_present
+    end
+  end
+
+  it 'structured reference 1件とconfirmed countが混在しても同じAmount transactionで両方式を保存する' do
+    create_reference_pricing_setting(true)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      ocr_result: mixed_structured_reference_count_ocr_result,
+      strategy: :ocr_only
+    )
+
+    Receipts::Processing.run_finalize(run)
+
+    reference_item, count_item = receipt.reload.receipt_items.order(:position_index)
+    aggregate_failures do
+      expect(receipt.total_amount).to eq(2143)
+      expect(reference_item).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: BigDecimal('498'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        quantity: BigDecimal('342'),
+        quantity_unit_code: 'gram',
+        line_total: 1703
+      )
+      expect(count_item).to have_attributes(
+        pricing_source_kind: 'count_unit_price',
+        price: 220,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'each',
+        line_total: 440
+      )
+      expect(run.reload.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to be_present
     end
   end
 
@@ -187,6 +438,29 @@ RSpec.describe 'OCR item calculation mode persistence' do
       expect(receipt.total_amount).to eq(original_total)
       expect(receipt.status).to eq('failed')
       expect(run.reload.status).to eq('failed')
+      expect(run.final_result_summary).to be_blank
+    end
+  end
+
+  it 'structured referenceのfinal result保存失敗時もauthority・claim・明細を一体でrollbackする' do
+    create_reference_pricing_setting(true)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      fixture: 'ocr_azure_item_calculation_reference_gross_anonymized',
+      strategy: :ocr_only
+    )
+    original_total = receipt.total_amount
+    allow(Receipts::Processing).to receive(:record_final_result).and_raise('summary write failed')
+
+    expect { Receipts::Processing.run_finalize(run) }.to raise_error('summary write failed')
+
+    aggregate_failures do
+      expect(receipt.reload.receipt_items).to be_empty
+      expect(receipt).to have_attributes(status: 'failed', total_amount: original_total)
+      expect(run.reload).to have_attributes(status: 'failed')
+      expect(run.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+      expect(run.metadata.dig('stage_execution_claims', 'finalize')).to be_nil
       expect(run.final_result_summary).to be_blank
     end
   end

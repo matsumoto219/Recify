@@ -40,6 +40,60 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     )
   end
 
+  def reference_selection(
+    identity: 'azure_structured_item_i0_s100_e115',
+    item_index: 0,
+    position_index: 1,
+    reference_price: BigDecimal('498'),
+    reference_quantity: BigDecimal('100'),
+    reference_unit: 'gram',
+    quantity: BigDecimal('342'),
+    quantity_unit: 'gram',
+    tax_inclusion: 'gross',
+    price: nil,
+    explicit_line_total: nil,
+    projected_line_total: 1703
+  )
+    Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicator::Selection.new(
+      item_identity: identity,
+      item_index: item_index,
+      position_index: position_index,
+      proposal_id: "azure_items_#{item_index}_reference_quantity_price",
+      pricing_source_kind: 'reference_quantity_price',
+      price: price,
+      quantity: quantity,
+      quantity_unit_code: quantity_unit,
+      reference_price_amount: reference_price,
+      reference_quantity: reference_quantity,
+      reference_quantity_unit_code: reference_unit,
+      reference_price_tax_inclusion: tax_inclusion,
+      explicit_line_total: explicit_line_total,
+      projected_line_total: projected_line_total
+    )
+  end
+
+  def reference_source(selection = reference_selection, **overrides)
+    {
+      raw_text: '検証明細',
+      ocr_item_identity: selection.item_identity,
+      pricing_source_kind: 'reference_quantity_price',
+      price: nil,
+      quantity: selection.quantity,
+      quantity_unit_code: selection.quantity_unit_code,
+      quantity_unit_raw: nil,
+      reference_price_amount: selection.reference_price_amount,
+      reference_quantity: selection.reference_quantity,
+      reference_quantity_unit_code: selection.reference_quantity_unit_code,
+      reference_quantity_unit_raw: nil,
+      reference_price_tax_inclusion: selection.reference_price_tax_inclusion,
+      original_line_total: selection.projected_line_total,
+      line_total: selection.projected_line_total,
+      discount_amount: nil,
+      discount_rate: nil,
+      position_index: selection.position_index
+    }.merge(overrides)
+  end
+
   def trusted_items(items, selections)
     described_class.items(
       items,
@@ -229,6 +283,62 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         )
         expect(result).not_to have_key(:ocr_item_identity)
         expect(result[:reference_price_amount]).to be_nil
+      end
+    end
+
+    it 'Fence後のexact structured reference sourceだけをfractional値を変えず保持する' do
+      selection = reference_selection(
+        reference_price: BigDecimal('1.25'),
+        reference_quantity: BigDecimal('0.5'),
+        reference_unit: 'liter',
+        quantity: BigDecimal('2.5'),
+        quantity_unit: 'liter',
+        projected_line_total: 6
+      )
+
+      result = trusted_items([ reference_source(selection) ], [ selection ]).sole
+
+      expect(result).to include(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('1.25'),
+        reference_quantity: BigDecimal('0.5'),
+        reference_quantity_unit_code: 'liter',
+        reference_price_tax_inclusion: 'gross',
+        quantity: BigDecimal('2.5'),
+        quantity_unit_code: 'liter',
+        original_line_total: BigDecimal('6'),
+        line_total: BigDecimal('6')
+      )
+    end
+
+    it 'structured referenceの余分なsource・raw unit・net・unit不一致・数値境界違反をauthorityにしない' do
+      cases = []
+      cases << [ reference_selection(price: 498), reference_source ]
+      cases << [ reference_selection(explicit_line_total: 1703), reference_source ]
+      cases << [ reference_selection, reference_source(quantity_unit_raw: 'g') ]
+
+      net_selection = reference_selection(tax_inclusion: 'net')
+      cases << [ net_selection, reference_source(net_selection) ]
+
+      dimension_mismatch = reference_selection(quantity_unit: 'liter')
+      cases << [ dimension_mismatch, reference_source(dimension_mismatch) ]
+
+      alias_unit = reference_selection(reference_unit: 'g')
+      cases << [ alias_unit, reference_source(alias_unit) ]
+
+      over_limit = reference_selection(
+        reference_price: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX + BigDecimal('1')
+      )
+      cases << [ over_limit, reference_source(over_limit) ]
+
+      non_finite = reference_selection(reference_price: BigDecimal('NaN'))
+      cases << [ non_finite, reference_source(non_finite) ]
+
+      cases.each do |selection, source|
+        result = trusted_items([ source ], [ selection ]).sole
+
+        expect(result).not_to have_key(:pricing_source_kind)
       end
     end
 

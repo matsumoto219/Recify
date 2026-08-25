@@ -180,13 +180,18 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       return false unless selection.projected_line_total.is_a?(Integer)
       return false unless selection.projected_line_total.between?(0, item_line_total_limit)
       return false unless item[:pricing_source_kind] == selection.pricing_source_kind
-      return false unless reference_source_absent?(item)
       return false unless item[:discount_amount].nil? && item[:discount_rate].nil?
 
       case selection.pricing_source_kind
       when "count_unit_price"
+        return false unless reference_source_absent?(item)
+
         trusted_count_source_valid?(item, selection, item_price_limit:)
+      when "reference_quantity_price"
+        trusted_reference_item_calculation_source_valid?(item, selection)
       when "explicit_line_total"
+        return false unless reference_source_absent?(item)
+
         trusted_explicit_source_valid?(item, selection)
       else
         false
@@ -213,6 +218,43 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         selection.explicit_line_total == selection.projected_line_total &&
         item[:price].nil? &&
         exact_item_total_matches?(item, selection.explicit_line_total)
+    end
+
+    def trusted_reference_item_calculation_source_valid?(item, selection)
+      reference_unit = ReceiptQuantityUnit.unit_for(selection.reference_quantity_unit_code)
+      purchased_unit = ReceiptQuantityUnit.unit_for(selection.quantity_unit_code)
+      return false unless reference_unit&.code == selection.reference_quantity_unit_code
+      return false unless purchased_unit&.code == selection.quantity_unit_code
+      return false unless reference_unit.allows_pricing_role?(:reference)
+      return false unless purchased_unit.allows_pricing_role?(:purchased)
+      return false unless ReceiptQuantityUnit.convertible?(from: purchased_unit.code, to: reference_unit.code)
+
+      selection.reference_price_amount.is_a?(BigDecimal) &&
+        selection.reference_price_amount.finite? &&
+        selection.reference_price_amount.between?(0, ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX) &&
+        selection.reference_quantity.is_a?(BigDecimal) &&
+        selection.reference_quantity.finite? &&
+        selection.reference_quantity.positive? &&
+        selection.reference_quantity <= ReceiptItem::REFERENCE_QUANTITY_MAX &&
+        selection.quantity.is_a?(BigDecimal) &&
+        selection.quantity.finite? &&
+        selection.quantity.positive? &&
+        selection.quantity <= ReceiptItem::REFERENCE_QUANTITY_MAX &&
+        selection.price.nil? &&
+        selection.explicit_line_total.nil? &&
+        selection.reference_price_tax_inclusion == "gross" &&
+        item[:price].nil? &&
+        item[:quantity] == selection.quantity &&
+        item[:quantity_unit_code] == purchased_unit.code &&
+        item[:quantity_unit_raw].nil? &&
+        item[:reference_price_amount] == selection.reference_price_amount &&
+        item[:reference_quantity] == selection.reference_quantity &&
+        item[:reference_quantity_unit_code] == reference_unit.code &&
+        item[:reference_quantity_unit_raw].nil? &&
+        item[:reference_price_tax_inclusion] == "gross" &&
+        exact_item_total_matches?(item, selection.projected_line_total)
+    rescue ReceiptQuantityUnit::ConversionError
+      false
     end
 
     def exact_count_quantity?(value)
@@ -267,11 +309,23 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         reference_quantity_unit_raw: nil,
         reference_price_tax_inclusion: nil
       }
-      if selection.pricing_source_kind == "count_unit_price"
+      case selection.pricing_source_kind
+      when "count_unit_price"
         attributes.merge!(
           quantity: selection.quantity,
           quantity_unit_code: selection.quantity_unit_code,
           quantity_unit_raw: nil
+        )
+      when "reference_quantity_price"
+        attributes.merge!(
+          quantity: selection.quantity,
+          quantity_unit_code: selection.quantity_unit_code,
+          quantity_unit_raw: nil,
+          reference_price_amount: selection.reference_price_amount,
+          reference_quantity: selection.reference_quantity,
+          reference_quantity_unit_code: selection.reference_quantity_unit_code,
+          reference_quantity_unit_raw: nil,
+          reference_price_tax_inclusion: selection.reference_price_tax_inclusion
         )
       else
         attributes.merge!(
