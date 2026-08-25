@@ -762,9 +762,12 @@ class Receipts::Processing::Pipeline
   end
 
   def fail_run(error)
+    failure_run = ReceiptAnalysisRun.find_by(id: run.id)
+    return unless failure_run
+
     Receipts::Processing.fail(
-      run,
-      error_stage: run.stage.presence || "ocr",
+      failure_run,
+      error_stage: failure_run.stage.presence || "ocr",
       error_code: error_code_for(error),
       error_message: error.message,
       error_metadata: error_metadata_for(error)
