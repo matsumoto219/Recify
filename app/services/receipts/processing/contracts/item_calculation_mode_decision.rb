@@ -63,6 +63,12 @@ module Receipts::Processing::Contracts
       end
     end
 
+    BatchResult = Data.define(:proposals, :decisions) do
+      def initialize(proposals:, decisions:)
+        super(proposals: proposals.freeze, decisions: decisions.freeze)
+      end
+    end
+
     class << self
       def call(
         item_identity:,
@@ -72,15 +78,69 @@ module Receipts::Processing::Contracts
         item_price_limit:,
         item_line_total_limit:
       )
+        decisions = call_all(
+          item_proposals:,
+          ocr_snapshot:,
+          count_tax_semantics:,
+          item_price_limit:,
+          item_line_total_limit:
+        )
+        return unresolved("proposal_invalid") unless decisions.is_a?(Array)
+
+        matches = decisions.select { |decision| decision.item_identity == item_identity }
+        matches.one? ? matches.sole : unresolved("proposal_invalid")
+      end
+
+      def call_all(
+        item_proposals:,
+        ocr_snapshot:,
+        count_tax_semantics:,
+        item_price_limit:,
+        item_line_total_limit:
+      )
+        evaluate_all(
+          item_proposals:,
+          ocr_snapshot:,
+          count_tax_semantics:,
+          item_price_limit:,
+          item_line_total_limit:
+        )&.decisions
+      end
+
+      def evaluate_all(
+        item_proposals:,
+        ocr_snapshot:,
+        count_tax_semantics:,
+        item_price_limit:,
+        item_line_total_limit:
+      )
         proposals = PROPOSAL_CONTRACT.from_snapshot(item_proposals, ocr_snapshot:)
-        proposal = proposal_for_item(proposals, item_identity:)
-        return unresolved("proposal_invalid") if proposal.nil?
-        unless COUNT_TAX_SEMANTICS.include?(count_tax_semantics)
-          return unresolved("proposal_invalid", proposal:)
+        return nil unless proposals.is_a?(Array)
+
+        proposals = proposals.sort_by { |proposal| proposal.fetch("item_identity") }
+        decisions = if !COUNT_TAX_SEMANTICS.include?(count_tax_semantics)
+          proposals.map { |proposal| unresolved("proposal_invalid", proposal:) }
+        elsif !valid_limit?(item_price_limit) || !valid_limit?(item_line_total_limit)
+          proposals.map { |proposal| unresolved("source_out_of_bounds", proposal:) }
+        else
+          proposals.map do |proposal|
+            decision_for(
+              proposal,
+              count_tax_semantics:,
+              item_price_limit:,
+              item_line_total_limit:
+            )
+          end
         end
-        unless valid_limit?(item_price_limit) && valid_limit?(item_line_total_limit)
-          return unresolved("source_out_of_bounds", proposal:)
-        end
+
+        BatchResult.new(proposals:, decisions:)
+      rescue EncodingError, ArgumentError, KeyError, TypeError
+        nil
+      end
+
+      private
+
+      def decision_for(proposal, count_tax_semantics:, item_price_limit:, item_line_total_limit:)
         if unsupported_reference_tax_semantics?(proposal)
           explicit = proposal.fetch("options").find do |option|
             option.fetch("pricing_source_kind") == "explicit_line_total"
@@ -135,17 +195,7 @@ module Receipts::Processing::Contracts
 
         unresolved("proposal_invalid", proposal:)
       rescue EncodingError, ArgumentError, KeyError, TypeError
-        unresolved("proposal_invalid")
-      end
-
-      private
-
-      def proposal_for_item(proposals, item_identity:)
-        return unless proposals.is_a?(Array)
-        return unless item_identity.is_a?(String)
-
-        matches = proposals.select { |proposal| proposal["item_identity"] == item_identity }
-        matches.sole if matches.one?
+        unresolved("proposal_invalid", proposal:)
       end
 
       def projected_options(proposal, item_price_limit:, item_line_total_limit:)

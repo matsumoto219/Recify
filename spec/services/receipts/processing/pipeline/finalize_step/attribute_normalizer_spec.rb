@@ -1,6 +1,54 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer do
+  def count_selection(
+    identity: 'azure_structured_item_i0_s100_e115',
+    item_index: 0,
+    position_index: 1,
+    price: 120,
+    quantity: BigDecimal('2'),
+    unit: 'item',
+    projected_line_total: 240
+  )
+    Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicator::Selection.new(
+      item_identity: identity,
+      item_index: item_index,
+      position_index: position_index,
+      proposal_id: "azure_items_#{item_index}_count_unit_price",
+      pricing_source_kind: 'count_unit_price',
+      price: price,
+      quantity: quantity,
+      quantity_unit_code: unit,
+      projected_line_total: projected_line_total
+    )
+  end
+
+  def explicit_selection(
+    identity: 'azure_structured_item_i0_s100_e115',
+    item_index: 0,
+    position_index: 1,
+    line_total: 240
+  )
+    Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicator::Selection.new(
+      item_identity: identity,
+      item_index: item_index,
+      position_index: position_index,
+      proposal_id: "azure_items_#{item_index}_explicit_line_total",
+      pricing_source_kind: 'explicit_line_total',
+      explicit_line_total: line_total,
+      projected_line_total: line_total
+    )
+  end
+
+  def trusted_items(items, selections)
+    described_class.items(
+      items,
+      trusted_item_calculation_mode_sources: selections,
+      item_price_limit: 999_999_999,
+      item_line_total_limit: 999_999_999
+    )
+  end
+
   describe '.items' do
     it 'normalizes receipt item attributes without changing names or the input' do
       item = {
@@ -149,6 +197,235 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
             trusted_reference_pricing_auto_adoption: true
           )
         ).to be_empty
+      end
+    end
+
+    it 'item identityとexact sourceが一致するcount authorityだけを保持する' do
+      source = {
+        raw_text: '検証明細',
+        ocr_item_identity: 'azure_structured_item_i0_s100_e115',
+        pricing_source_kind: 'count_unit_price',
+        price: 120,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'item',
+        quantity_unit_raw: nil,
+        original_line_total: 240,
+        line_total: 240,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1
+      }
+
+      result = trusted_items([ source ], [ count_selection ]).sole
+
+      aggregate_failures do
+        expect(result).to include(
+          pricing_source_kind: 'count_unit_price',
+          price: BigDecimal('120'),
+          quantity: BigDecimal('2'),
+          quantity_unit_code: 'item',
+          original_line_total: BigDecimal('240'),
+          line_total: BigDecimal('240')
+        )
+        expect(result).not_to have_key(:ocr_item_identity)
+        expect(result[:reference_price_amount]).to be_nil
+      end
+    end
+
+    it '全8種のcanonical countable unitと数量境界1を保持する' do
+      results = ReceiptQuantityUnit.countable_codes.map do |unit|
+        identity = 'azure_structured_item_i0_s100_e115'
+        trusted_items(
+          [
+            {
+              raw_text: unit,
+              ocr_item_identity: identity,
+              pricing_source_kind: 'count_unit_price',
+              price: 0,
+              quantity: BigDecimal('1'),
+              quantity_unit_code: unit,
+              quantity_unit_raw: nil,
+              original_line_total: 0,
+              line_total: 0,
+              discount_amount: nil,
+              discount_rate: nil,
+              position_index: 1
+            }
+          ],
+          [
+            count_selection(
+              identity: identity,
+              item_index: 0,
+              position_index: 1,
+              price: 0,
+              quantity: BigDecimal('1'),
+              unit: unit,
+              projected_line_total: 0
+            )
+          ]
+        ).sole
+      end
+
+      expect(results).to all(include(pricing_source_kind: 'count_unit_price', price: 0, quantity: 1))
+    end
+
+    it '明示0円をmissingと区別してexplicit authorityとして保持する' do
+      source = {
+        raw_text: '無料明細',
+        ocr_item_identity: 'azure_structured_item_i0_s100_e115',
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: 0,
+        line_total: 0,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1
+      }
+
+      result = trusted_items([ source ], [ explicit_selection(line_total: 0) ]).sole
+
+      expect(result).to include(
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        original_line_total: BigDecimal('0'),
+        line_total: BigDecimal('0')
+      )
+    end
+
+    it 'Float・scientific・小数count・alias・measurement unit・raw unitをauthorityにしない' do
+      valid = {
+        raw_text: '検証明細',
+        ocr_item_identity: 'azure_structured_item_i0_s100_e115',
+        pricing_source_kind: 'count_unit_price',
+        price: 120,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'item',
+        quantity_unit_raw: nil,
+        original_line_total: 240,
+        line_total: 240,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1
+      }
+      invalid = [
+        valid.merge(price: 120.0),
+        valid.merge(price: '1.2e2'),
+        valid.merge(quantity: BigDecimal('2.5')),
+        valid.merge(quantity_unit_code: '個'),
+        valid.merge(quantity_unit_code: 'gram'),
+        valid.merge(quantity_unit_raw: '個')
+      ]
+
+      invalid.each do |source|
+        result = trusted_items([ source ], [ count_selection ]).sole
+
+        expect(result).not_to have_key(:pricing_source_kind)
+      end
+    end
+
+    it 'source上限ちょうどを許可し、最初の超過をauthorityにしない' do
+      source = {
+        raw_text: '境界明細',
+        ocr_item_identity: 'azure_structured_item_i0_s100_e115',
+        pricing_source_kind: 'count_unit_price',
+        price: 100,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'item',
+        quantity_unit_raw: nil,
+        original_line_total: 200,
+        line_total: 200,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1
+      }
+      selection = count_selection(price: 100, projected_line_total: 200)
+
+      at_limit = described_class.items(
+        [ source ],
+        trusted_item_calculation_mode_sources: [ selection ],
+        item_price_limit: 100,
+        item_line_total_limit: 200
+      ).sole
+      over_price = described_class.items(
+        [ source ],
+        trusted_item_calculation_mode_sources: [ selection ],
+        item_price_limit: 99,
+        item_line_total_limit: 200
+      ).sole
+      over_total = described_class.items(
+        [ source ],
+        trusted_item_calculation_mode_sources: [ selection ],
+        item_price_limit: 100,
+        item_line_total_limit: 199
+      ).sole
+
+      aggregate_failures do
+        expect(at_limit[:pricing_source_kind]).to eq('count_unit_price')
+        expect(over_price).not_to have_key(:pricing_source_kind)
+        expect(over_total).not_to have_key(:pricing_source_kind)
+      end
+    end
+
+    it '部分source・discount・source tuple不一致はitemを落とさずauthorityだけを破棄する' do
+      valid = {
+        raw_text: '検証明細',
+        ocr_item_identity: 'azure_structured_item_i0_s100_e115',
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: 240,
+        line_total: 240,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1
+      }
+      invalid = [
+        valid.merge(original_line_total: nil),
+        valid.merge(line_total: 239),
+        valid.merge(price: 240),
+        valid.merge(discount_amount: 0),
+        valid.merge(reference_price_amount: 240)
+      ]
+
+      invalid.each do |source|
+        result = trusted_items([ source ], [ explicit_selection ]).sole
+
+        aggregate_failures do
+          expect(result[:raw_text]).to eq('検証明細')
+          expect(result).not_to have_key(:pricing_source_kind)
+        end
+      end
+    end
+
+    it 'identityの欠損・重複・selection重複時は全itemを維持しつつauthorityを一部適用しない' do
+      source = {
+        raw_text: '検証明細',
+        ocr_item_identity: 'azure_structured_item_i0_s100_e115',
+        pricing_source_kind: 'count_unit_price',
+        price: 120,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'item',
+        quantity_unit_raw: nil,
+        original_line_total: 240,
+        line_total: 240,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1
+      }
+      missing = trusted_items([ source.except(:ocr_item_identity) ], [ count_selection ])
+      duplicate_items = trusted_items([ source, source.merge(raw_text: '重複') ], [ count_selection ])
+      duplicate_selections = trusted_items([ source ], [ count_selection, count_selection ])
+
+      aggregate_failures do
+        expect(missing.size).to eq(1)
+        expect(duplicate_items.size).to eq(2)
+        expect(duplicate_selections.size).to eq(1)
+        expect(missing + duplicate_items + duplicate_selections).to all(
+          satisfy { |item| !item.key?(:pricing_source_kind) }
+        )
       end
     end
   end

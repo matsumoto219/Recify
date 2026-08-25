@@ -43,6 +43,10 @@ class Receipts::Processing::Pipeline
       @reference_pricing_auto_adoption_requested = false
       @reference_pricing_auto_adoption_applied = false
       @reference_pricing_auto_adoption_expected_item = nil
+      @item_calculation_mode_selections = [].freeze
+      @item_calculation_mode_item_price_limit = nil
+      @item_calculation_mode_item_line_total_limit = nil
+      @item_calculation_mode_expected_item_count = nil
     end
 
     def call
@@ -108,15 +112,8 @@ class Receipts::Processing::Pipeline
       limit_validator.validate_structural_limits!(params)
 
       # === AmountService integration ===
-      amount_result = ReceiptAmountService.call(
-        receipt: params[:receipt_attributes],
-        receipt_items: params[:receipt_items_attributes],
-        receipt_tax_details: params[:receipt_tax_details_attributes],
-        receipt_adjustments: params[:receipt_adjustments_attributes],
-        receipt_payments: params[:receipt_payments_attributes],
-        context: :analysis
-      )
-      amount_result = amount_result_with_receipt_amount_overrides(params, amount_result)
+      amount_result = calculate_analysis_amount_result(params)
+      params, amount_result = apply_item_calculation_modes(params, amount_result, ocr_result:)
 
       # 金額を補正（通常はresolvedを採用。預り差額から復元したtotalだけは支払一致時に保護する）
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
@@ -205,15 +202,8 @@ class Receipts::Processing::Pipeline
       limit_validator.validate_structural_limits!(params)
 
       # === AmountService integration point (OCR only) ===
-      amount_result = ReceiptAmountService.call(
-        receipt: params[:receipt_attributes],
-        receipt_items: params[:receipt_items_attributes],
-        receipt_tax_details: params[:receipt_tax_details_attributes],
-        receipt_adjustments: params[:receipt_adjustments_attributes],
-        receipt_payments: params[:receipt_payments_attributes],
-        context: :analysis
-      )
-      amount_result = amount_result_with_receipt_amount_overrides(params, amount_result)
+      amount_result = calculate_analysis_amount_result(params)
+      params, amount_result = apply_item_calculation_modes(params, amount_result, ocr_result:)
 
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
 
@@ -279,15 +269,8 @@ class Receipts::Processing::Pipeline
       limit_validator.validate_structural_limits!(params)
 
       # === AmountService integration point (fallback) ===
-      amount_result = ReceiptAmountService.call(
-        receipt: params[:receipt_attributes],
-        receipt_items: params[:receipt_items_attributes],
-        receipt_tax_details: params[:receipt_tax_details_attributes],
-        receipt_adjustments: params[:receipt_adjustments_attributes],
-        receipt_payments: params[:receipt_payments_attributes],
-        context: :analysis
-      )
-      amount_result = amount_result_with_receipt_amount_overrides(params, amount_result)
+      amount_result = calculate_analysis_amount_result(params)
+      params, amount_result = apply_item_calculation_modes(params, amount_result, ocr_result:)
 
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
 
@@ -386,6 +369,8 @@ class Receipts::Processing::Pipeline
         Array(tax_details_attributes).each do |attrs|
           receipt.receipt_tax_details.create!(attrs)
         end
+
+        verify_item_calculation_mode_persistence!
       end
     end
 
@@ -454,6 +439,87 @@ class Receipts::Processing::Pipeline
       normalized_hash(item)[:pricing_source_kind].to_s == "reference_quantity_price"
     end
 
+    def calculate_analysis_amount_result(params)
+      result = ReceiptAmountService.call(
+        receipt: params[:receipt_attributes],
+        receipt_items: params[:receipt_items_attributes],
+        receipt_tax_details: params[:receipt_tax_details_attributes],
+        receipt_adjustments: params[:receipt_adjustments_attributes],
+        receipt_payments: params[:receipt_payments_attributes],
+        context: :analysis
+      )
+
+      amount_result_with_receipt_amount_overrides(params, result)
+    end
+
+    def apply_item_calculation_modes(params, preliminary_amount_result, ocr_result:)
+      return [ params, preliminary_amount_result ] unless item_calculation_mode_run_eligible?
+
+      adoption_proposals = normalized_hash(normalized_hash(ocr_result)[:adoption_proposals])
+      return [ params, preliminary_amount_result ] unless adoption_proposals[:item_calculation_modes].present?
+      return [ params, preliminary_amount_result ] if receipt.receipt_items.exists?
+
+      item_price_limit = ReceiptAmountService.receipt_item_price_max
+      item_line_total_limit = ReceiptAmountService.receipt_item_line_total_max
+      result = ItemCalculationModeApplicator.call(
+        params:,
+        ocr_result:,
+        preliminary_amount_result:,
+        automatic_application_allowed: true,
+        item_price_limit:,
+        item_line_total_limit:
+      ) do |candidate_params|
+        calculate_analysis_amount_result(candidate_params)
+      end
+      return [ params, preliminary_amount_result ] unless result.applied?
+      return [ params, preliminary_amount_result ] unless item_calculation_mode_normalization_valid?(
+        result.params,
+        result.selections,
+        item_price_limit:,
+        item_line_total_limit:
+      )
+
+      @item_calculation_mode_selections = result.selections
+      @item_calculation_mode_item_price_limit = item_price_limit
+      @item_calculation_mode_item_line_total_limit = item_line_total_limit
+      @item_calculation_mode_expected_item_count = Array(result.params[:receipt_items_attributes]).size
+
+      [ result.params, result.amount_result ]
+    end
+
+    def item_calculation_mode_normalization_valid?(
+      params,
+      selections,
+      item_price_limit:,
+      item_line_total_limit:
+    )
+      source_items = Array(params[:receipt_items_attributes])
+      normalized_items = AttributeNormalizer.items(
+        source_items,
+        trusted_item_calculation_mode_sources: selections,
+        item_price_limit:,
+        item_line_total_limit:
+      )
+      return false unless normalized_items.size == source_items.size
+
+      items_by_position = normalized_items.group_by { |item| item[:position_index] }
+      selections.all? do |selection|
+        matches = items_by_position[selection.position_index]
+        matches&.one? && matches.sole[:pricing_source_kind] == selection.pricing_source_kind
+      end
+    end
+
+    def item_calculation_mode_run_eligible?
+      return false if @reference_pricing_auto_adoption_requested == true
+      return false unless run
+      return false if decision.ocr_result.present?
+      return false unless %w[upload batch_upload].include?(run.source)
+      return false unless run.attempt_number == 1
+      return false unless run.parent_run_id.nil?
+
+      true
+    end
+
     def apply_reference_pricing_auto_adoption(params)
       return params unless reference_pricing_auto_adoption.is_a?(Hash)
 
@@ -508,6 +574,48 @@ class Receipts::Processing::Pipeline
       raise Receipts::Processing::AnalysisError.new(
         "unexpected_error",
         "reference_pricing_auto_adoption_persistence_mismatch"
+      )
+    end
+
+    def verify_item_calculation_mode_persistence!
+      return if @item_calculation_mode_selections.empty?
+
+      persisted_items = receipt.receipt_items.reload.to_a
+      persisted_items_by_position = persisted_items.group_by(&:position_index)
+      valid = persisted_items.size == @item_calculation_mode_expected_item_count &&
+        @item_calculation_mode_selections.all? do |selection|
+          matches = persisted_items_by_position[selection.position_index]
+          matches&.one? && item_calculation_mode_persistence_matches?(matches.sole, selection)
+        end
+      raise_item_calculation_mode_persistence_invariant! unless valid
+    rescue ArgumentError, TypeError
+      raise_item_calculation_mode_persistence_invariant!
+    end
+
+    def item_calculation_mode_persistence_matches?(item, selection)
+      return false unless item.pricing_source_kind == selection.pricing_source_kind
+      return false unless item.reference_price_amount.nil?
+      return false unless item.reference_quantity.nil?
+      return false unless item.reference_quantity_unit_code.nil?
+      return false unless item.reference_quantity_unit_raw.nil?
+      return false unless item.reference_price_tax_inclusion.nil?
+      return false unless item.discount_amount.nil? && item.discount_rate.nil?
+      return false unless item.original_line_total == selection.projected_line_total
+      return false unless item.line_total == selection.projected_line_total
+
+      if selection.pricing_source_kind == "count_unit_price"
+        item.price == selection.price &&
+          item.quantity == selection.quantity &&
+          item.quantity_unit_code == selection.quantity_unit_code
+      else
+        item.price.nil? && item.original_line_total == selection.explicit_line_total
+      end
+    end
+
+    def raise_item_calculation_mode_persistence_invariant!
+      raise Receipts::Processing::AnalysisError.new(
+        "unexpected_error",
+        "item_calculation_mode_persistence_mismatch"
       )
     end
 
@@ -1328,10 +1436,16 @@ class Receipts::Processing::Pipeline
     end
 
     def normalize_items_attributes(items)
-      AttributeNormalizer.items(
-        items,
+      options = {
         trusted_reference_pricing_auto_adoption: @reference_pricing_auto_adoption_requested == true
-      )
+      }
+      if @item_calculation_mode_selections.any?
+        options[:trusted_item_calculation_mode_sources] = @item_calculation_mode_selections
+        options[:item_price_limit] = @item_calculation_mode_item_price_limit
+        options[:item_line_total_limit] = @item_calculation_mode_item_line_total_limit
+      end
+
+      AttributeNormalizer.items(items, **options)
     end
 
     def normalize_adjustments_attributes(adjustments)

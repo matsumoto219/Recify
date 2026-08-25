@@ -1,6 +1,20 @@
 class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
   class << self
-    def items(value, trusted_reference_pricing_auto_adoption: false)
+    def items(
+      value,
+      trusted_reference_pricing_auto_adoption: false,
+      trusted_item_calculation_mode_sources: [],
+      item_price_limit: nil,
+      item_line_total_limit: nil
+    )
+      trusted_sources = trusted_item_calculation_mode_source_map(
+        value,
+        trusted_item_calculation_mode_sources,
+        item_price_limit:,
+        item_line_total_limit:
+      )
+      trusted_sources = {} if trusted_reference_pricing_auto_adoption
+
       Array(value).filter_map.with_index do |item, index|
         symbolized = normalized_attributes(item)
         price = amount(symbolized[:price])
@@ -35,6 +49,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
           next if reference_source.nil?
 
           attributes.merge!(reference_source)
+        elsif (selection = trusted_sources[symbolized[:ocr_item_identity]])
+          attributes.merge!(trusted_item_calculation_mode_source_attributes(selection))
         end
         attributes
       end
@@ -107,6 +123,164 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     end
 
     private
+
+    def trusted_item_calculation_mode_source_map(
+      items,
+      selections,
+      item_price_limit:,
+      item_line_total_limit:
+    )
+      selections = Array(selections)
+      return {} if selections.empty?
+      return {} unless selections.size <= Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_SETS
+      return {} unless valid_item_calculation_mode_limit?(item_price_limit)
+      return {} unless valid_item_calculation_mode_limit?(item_line_total_limit)
+
+      selection_class = Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicator::Selection
+      return {} unless selections.all? { |selection| selection.is_a?(selection_class) }
+
+      identities = selections.map(&:item_identity)
+      return {} unless identities.uniq.size == identities.size
+
+      normalized_items = Array(items).map { |item| normalized_attributes(item) }
+      items_by_identity = normalized_items.each_with_index.each_with_object({}) do |(item, index), result|
+        identity = item[:ocr_item_identity]
+        next if identity.blank?
+
+        (result[identity] ||= []) << [ item, index ]
+      end
+      selection_map = selections.each_with_object({}) do |selection, result|
+        matches = items_by_identity[selection.item_identity]
+        return {} unless matches&.one?
+
+        item, index = matches.sole
+        return {} unless index == selection.item_index
+        return {} unless item[:position_index] == selection.position_index
+        return {} unless trusted_item_calculation_mode_source_valid?(
+          item,
+          selection,
+          item_price_limit:,
+          item_line_total_limit:
+        )
+
+        result[selection.item_identity] = selection
+      end
+
+      selection_map.freeze
+    end
+
+    def trusted_item_calculation_mode_source_valid?(
+      item,
+      selection,
+      item_price_limit:,
+      item_line_total_limit:
+    )
+      return false unless valid_item_calculation_mode_identity?(selection.item_identity)
+      return false unless valid_item_calculation_mode_proposal_id?(selection)
+      return false unless selection.projected_line_total.is_a?(Integer)
+      return false unless selection.projected_line_total.between?(0, item_line_total_limit)
+      return false unless item[:pricing_source_kind] == selection.pricing_source_kind
+      return false unless reference_source_absent?(item)
+      return false unless item[:discount_amount].nil? && item[:discount_rate].nil?
+
+      case selection.pricing_source_kind
+      when "count_unit_price"
+        trusted_count_source_valid?(item, selection, item_price_limit:)
+      when "explicit_line_total"
+        trusted_explicit_source_valid?(item, selection)
+      else
+        false
+      end
+    end
+
+    def trusted_count_source_valid?(item, selection, item_price_limit:)
+      unit = ReceiptQuantityUnit.unit_for(selection.quantity_unit_code)
+
+      selection.price.is_a?(Integer) &&
+        selection.price.between?(0, item_price_limit) &&
+        exact_count_quantity?(selection.quantity) &&
+        unit&.kind == :countable &&
+        unit.code == selection.quantity_unit_code &&
+        item[:price].is_a?(Integer) && item[:price] == selection.price &&
+        item[:quantity].is_a?(BigDecimal) && item[:quantity] == selection.quantity &&
+        item[:quantity_unit_code] == selection.quantity_unit_code &&
+        item[:quantity_unit_raw].nil? &&
+        exact_item_total_matches?(item, selection.projected_line_total)
+    end
+
+    def trusted_explicit_source_valid?(item, selection)
+      selection.explicit_line_total.is_a?(Integer) &&
+        selection.explicit_line_total == selection.projected_line_total &&
+        item[:price].nil? &&
+        exact_item_total_matches?(item, selection.explicit_line_total)
+    end
+
+    def exact_count_quantity?(value)
+      value.is_a?(BigDecimal) &&
+        value.finite? &&
+        value.frac.zero? &&
+        value.between?(1, Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_QUANTITY)
+    end
+
+    def exact_item_total_matches?(item, expected)
+      item[:original_line_total].is_a?(Integer) &&
+        item[:line_total].is_a?(Integer) &&
+        item[:original_line_total] == expected &&
+        item[:line_total] == expected
+    end
+
+    def reference_source_absent?(item)
+      %i[
+        reference_price_amount
+        reference_quantity
+        reference_quantity_unit_code
+        reference_quantity_unit_raw
+        reference_price_tax_inclusion
+      ].all? { |field| item[field].nil? }
+    end
+
+    def valid_item_calculation_mode_identity?(value)
+      value.is_a?(String) &&
+        value.bytesize <= Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES &&
+        value.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
+    end
+
+    def valid_item_calculation_mode_proposal_id?(selection)
+      value = selection.proposal_id
+      value.is_a?(String) &&
+        value.bytesize <= Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES &&
+        value.match?(/\Aazure_items_\d+_#{Regexp.escape(selection.pricing_source_kind)}\z/)
+    end
+
+    def valid_item_calculation_mode_limit?(value)
+      value.is_a?(Integer) &&
+        value.between?(0, Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_AMOUNT)
+    end
+
+    def trusted_item_calculation_mode_source_attributes(selection)
+      attributes = {
+        price: selection.price,
+        pricing_source_kind: selection.pricing_source_kind,
+        reference_price_amount: nil,
+        reference_quantity: nil,
+        reference_quantity_unit_code: nil,
+        reference_quantity_unit_raw: nil,
+        reference_price_tax_inclusion: nil
+      }
+      if selection.pricing_source_kind == "count_unit_price"
+        attributes.merge!(
+          quantity: selection.quantity,
+          quantity_unit_code: selection.quantity_unit_code,
+          quantity_unit_raw: nil
+        )
+      else
+        attributes.merge!(
+          original_line_total: selection.explicit_line_total,
+          line_total: selection.projected_line_total
+        )
+      end
+      attributes
+    end
 
     def trusted_reference_source_attributes(attributes)
       return unless attributes[:pricing_source_kind] == "reference_quantity_price"

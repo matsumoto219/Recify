@@ -521,4 +521,44 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeDecision do
       end
     end
   end
+
+  describe '.call_all' do
+    it 'canonical proposal集合を1回だけ検証し、全itemの判定を返す' do
+      context = proposal_context_for
+      allow(described_class::PROPOSAL_CONTRACT).to receive(:from_snapshot).and_call_original
+
+      decisions = described_class.call_all(
+        item_proposals: context.fetch(:proposals),
+        ocr_snapshot: context.fetch(:snapshot),
+        count_tax_semantics: 'reproducible_as_recorded',
+        item_price_limit: 999_999_999,
+        item_line_total_limit: 999_999_999
+      )
+
+      aggregate_failures do
+        expect(decisions.size).to eq(4)
+        expect(decisions).to all(be_confirmed)
+        expect(decisions.map(&:item_identity)).to eq(
+          context.fetch(:proposals).map { |proposal| proposal.fetch('item_identity') }.sort
+        )
+        expect(described_class::PROPOSAL_CONTRACT).to have_received(:from_snapshot).once
+      end
+    end
+
+    it 'proposal集合が改変されている場合は一部判定を返さない' do
+      context = proposal_context_for
+      malformed = context.fetch(:proposals).deep_dup
+      malformed.first['integrity_checksum'] = '0' * 64
+
+      expect(
+        described_class.call_all(
+          item_proposals: malformed,
+          ocr_snapshot: context.fetch(:snapshot),
+          count_tax_semantics: 'reproducible_as_recorded',
+          item_price_limit: 999_999_999,
+          item_line_total_limit: 999_999_999
+        )
+      ).to be_nil
+    end
+  end
 end
