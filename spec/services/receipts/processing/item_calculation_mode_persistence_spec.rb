@@ -29,10 +29,10 @@ RSpec.describe 'OCR item calculation mode persistence' do
     }
   end
 
-  def build_ready_run(receipt, fixture: nil, ocr_result: nil, strategy:, source: 'upload', parent_run: nil)
+  def build_ready_run(receipt, fixture: nil, ocr_result: nil, normalized_ai_result: nil, strategy:, source: 'upload', parent_run: nil)
     run = Receipts::Processing.start(receipt: receipt, source: source, parent_run: parent_run).run
     Receipts::Processing.record_ocr_snapshot(run, ocr_result || ocr_fixture(fixture))
-    Receipts::Processing.record_ai_normalized_result(run, ai_result) if strategy == :ai_success
+    Receipts::Processing.record_ai_normalized_result(run, normalized_ai_result || ai_result) if strategy == :ai_success
     Receipts::Processing.record_finalize_decision(
       run,
       finalize_decision(strategy, error_code: strategy == :ai_fallback ? 'ai_unavailable' : nil)
@@ -201,6 +201,42 @@ RSpec.describe 'OCR item calculation mode persistence' do
       expect(receipt.reload.total_amount).to eq(770)
       expect(receipt.receipt_items.order(:position_index).pluck(:pricing_source_kind).uniq).to eq(
         [ 'count_unit_price' ]
+      )
+      expect(run.reload.status).to eq('succeeded')
+    end
+  end
+
+  it 'AIの0始まりitem indexを保存先positionに使っても先頭Itemのcount authorityを保存する' do
+    ocr_result = ocr_fixture('single_tax_receipt')
+    normalized_ai_result = ai_result.merge(
+      receipt_items_attributes: Array(ocr_result.dig(:candidates, :items)).each_with_index.map do |_item, index|
+        {
+          index: index,
+          suggested_name: "AI商品#{index + 1}",
+          category: 'other',
+          needs_review: false
+        }
+      end
+    )
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      ocr_result:,
+      normalized_ai_result:,
+      strategy: :ai_success
+    )
+
+    Receipts::Processing.run_finalize(run)
+
+    items = receipt.reload.receipt_items.order(:position_index)
+    aggregate_failures do
+      expect(items.pluck(:position_index)).to eq([ 0, 1, 2, 3 ])
+      expect(items.pluck(:pricing_source_kind).uniq).to eq([ 'count_unit_price' ])
+      expect(items.first).to have_attributes(
+        suggested_name: 'AI商品1',
+        price: 220,
+        original_line_total: 220,
+        line_total: 220
       )
       expect(run.reload.status).to eq('succeeded')
     end

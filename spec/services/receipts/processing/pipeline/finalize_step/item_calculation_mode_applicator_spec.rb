@@ -439,6 +439,45 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     end
   end
 
+  it 'AI merge経路の0始まりpositionでも先頭Itemを含む計算方式を適用する' do
+    context = fixture_context('single_tax_receipt')
+    params = context.fetch(:params).deep_dup
+    params.fetch(:receipt_items_attributes).each_with_index do |item, index|
+      item[:position_index] = index
+    end
+
+    result = result_for(context, params:)
+
+    aggregate_failures do
+      expect(result).to be_applied
+      expect(result.selections.map(&:position_index)).to eq([ 0, 1, 2, 3 ])
+      expect(result.params.fetch(:receipt_items_attributes)).to all(
+        include(pricing_source_kind: 'count_unit_price')
+      )
+    end
+  end
+
+  it '保存先positionは0と既存上限を許可し範囲外や型違いをfail-neutralにする' do
+    [
+      { position: 0, applied: true },
+      { position: described_class::PROPOSAL_CONTRACT::MAX_SETS, applied: true },
+      { position: -1, applied: false },
+      { position: described_class::PROPOSAL_CONTRACT::MAX_SETS + 1, applied: false },
+      { position: nil, applied: false },
+      { position: '0', applied: false }
+    ].each do |example|
+      context = fixture_context('single_tax_receipt')
+      params = context.fetch(:params).deep_dup
+      params.fetch(:receipt_items_attributes).first[:position_index] = example[:position]
+
+      result = result_for(context, params:)
+
+      aggregate_failures(example[:position]) do
+        expect(result.applied?).to eq(example[:applied])
+      end
+    end
+  end
+
   it 'typed sourceとBuildParamsが一致しない場合は部分適用せずfail-neutralにする' do
     context = fixture_context('single_tax_receipt')
     params = context.fetch(:params).deep_dup

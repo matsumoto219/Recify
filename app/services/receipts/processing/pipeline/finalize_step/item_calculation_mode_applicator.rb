@@ -306,7 +306,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     positions = selections.map(&:position_index)
 
     positions.all? do |position|
-      position.is_a?(Integer) && position.between?(1, PROPOSAL_CONTRACT::MAX_SETS)
+      position.is_a?(Integer) && position.between?(0, PROPOSAL_CONTRACT::MAX_SETS)
     end && positions.uniq.size == positions.size
   end
 
