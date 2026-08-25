@@ -581,6 +581,95 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     expect_browser_console_clean
   end
 
+  it "要確認の計算方式だけを展開して強調し、同じsourceの通常保存で確認済みにする" do
+    user = create_system_test_user
+    receipt = create_editable_receipt(user: user, store_name: "計算方式確認店")
+    item = receipt.receipt_items.sole
+    item.update!(
+      needs_review: true,
+      review_reasons: [ "item_pricing_mode_uncertain" ]
+    )
+    receipt.update!(
+      status: "review_needed",
+      review_reasons: %w[ocr_unreadable item_pricing_mode_uncertain]
+    )
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    row = item_row_named("既存商品")
+    pricing_details = pricing_source_details(row)
+    pricing_mode = row.find("[data-receipt-form-target='pricingSourceModeInput']", visible: true)
+    quantity = row.find("[data-receipt-form-target='quantityInput']", visible: true)
+    expect(row).to have_css(
+      "details[data-receipt-pricing-source-details][data-collapsible-open='true']",
+      visible: :all
+    )
+
+    aggregate_failures "要確認の対象controlだけを初期表示で案内する" do
+      expect(row).to have_css(
+        "[data-receipt-form-target='itemDetailsToggle'][aria-expanded='true']",
+        count: 2,
+        visible: :all
+      )
+      expect(row).to have_css(
+        "[data-receipt-form-target='itemDetailsPanel'].is-open[aria-hidden='false']:not([inert])",
+        visible: :all
+      )
+      expect(page.evaluate_script("arguments[0].open", pricing_details)).to be(true)
+      expect(pricing_details["data-collapsible-open"]).to eq("true")
+      expect(pricing_mode[:class].to_s.split).to include("input-field-error")
+      expect(quantity[:class].to_s.split).not_to include("input-field-error")
+      expect(row.all(".input-field-error", visible: :all).map { |field| field[:id] }).to eq([ pricing_mode[:id] ])
+      expect(pricing_mode.find("option[value='explicit_line_total']", visible: :all)).to have_text(
+        I18n.t("receipts.item_fields.pricing_modes.explicit_line_total")
+      )
+    end
+    expect_mobile_viewport_without_horizontal_overflow
+
+    set_viewport(width: 1280, height: 900, mobile: false)
+    wait_for_pricing_layout(row)
+    expect(page.evaluate_script("document.documentElement.scrollWidth <= window.innerWidth")).to be(true)
+    set_viewport(width: 390, height: 844, mobile: true)
+
+    save_receipt
+
+    expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    aggregate_failures "通常保存を明示確認として扱いsourceと金額を変えない" do
+      expect(item.reload).to have_attributes(
+        pricing_source_kind: "count_unit_price",
+        price: 100,
+        quantity: BigDecimal("1"),
+        quantity_unit_code: "each",
+        original_line_total: 100,
+        line_total: 100,
+        needs_review: false,
+        review_reasons: []
+      )
+      expect(receipt.reload).to have_attributes(
+        subtotal_amount: 100,
+        tax_amount: 0,
+        total_amount: 100,
+        status: "review_needed",
+        review_reasons: [ "ocr_unreadable" ]
+      )
+    end
+
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    row = item_row_named("既存商品")
+    panel = row.find("[data-receipt-form-target='itemDetailsPanel']", visible: :all)
+    pricing_mode = row.find("[data-receipt-form-target='pricingSourceModeInput']", visible: :all)
+
+    aggregate_failures "確認後は通常の閉じた表示へ戻す" do
+      expect(panel["aria-hidden"]).to eq("true")
+      expect(page.evaluate_script("arguments[0].inert", panel)).to be(true)
+      expect(pricing_mode[:class].to_s.split).not_to include("input-field-error")
+    end
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
   it "3モードと計算根拠を段階表示し、exact previewとsource不変の検証後に税込基準価格を保存する" do
     user = create_system_test_user
     receipt = create_editable_receipt(user: user, store_name: "基準価格UI確認店")

@@ -7,8 +7,19 @@ class Receipts::Editing::ReviewState
     "item_name_uncertain" => %w[confirmed_name],
     "item_category_uncertain" => %w[category],
     "item_quantity_uncertain" => %w[quantity quantity_unit_code],
+    "item_pricing_mode_uncertain" => %w[pricing_source_kind],
     "item_tax_rate_uncertain" => %w[tax_rate]
   }.freeze
+  ITEM_PRICING_MODE_REVIEW_REASON = "item_pricing_mode_uncertain"
+  ITEM_PRICING_MODE_REQUIRED_FIELDS = {
+    "count_unit_price" => %w[pricing_source_kind price quantity quantity_unit_code],
+    "reference_quantity_price" => %w[
+      pricing_source_kind reference_price_amount reference_quantity
+      reference_quantity_unit_code reference_price_tax_inclusion quantity quantity_unit_code
+    ],
+    "explicit_line_total" => %w[pricing_source_kind original_line_total]
+  }.freeze
+  ITEM_PRICING_SOURCE_FIELDS = ITEM_PRICING_MODE_REQUIRED_FIELDS.values.flatten.uniq.freeze
   ITEM_DECIMAL_FIELDS = %w[quantity tax_rate].freeze
   ADJUSTMENT_REVIEW_REASON = "adjustment_uncertain"
 
@@ -84,6 +95,8 @@ class Receipts::Editing::ReviewState
       ITEM_REVIEW_FIELD_RULES.keys.select do |reason|
         reviewed_items = item_review_candidates(receipt, reason)
         if reviewed_items.empty?
+          next false if reason == ITEM_PRICING_MODE_REVIEW_REASON
+
           next attributes.any? do |submitted_attributes|
             item = existing_items[submitted_attributes["id"].to_s]
             !destroyed_attributes?(submitted_attributes) &&
@@ -131,9 +144,41 @@ class Receipts::Editing::ReviewState
       return false if fields.blank?
 
       attributes = submitted_attributes.to_h.stringify_keys
+      return item_pricing_mode_review_resolved?(item, attributes) if reason == ITEM_PRICING_MODE_REVIEW_REASON
       return false unless fields.any? { |field| item_review_field_changed?(item, attributes, field) }
 
       item_review_fields_valid?(item, attributes, fields)
+    end
+
+    def item_pricing_mode_review_resolved?(item, attributes)
+      pricing_source_kind = attributes["pricing_source_kind"].presence
+      required_fields = ITEM_PRICING_MODE_REQUIRED_FIELDS[pricing_source_kind]
+      return false if required_fields.blank?
+      return false unless required_fields.all? { |field| attributes.key?(field) && attributes[field].present? }
+
+      candidate = item ? item.dup : ReceiptItem.new
+      candidate.assign_attributes(cleared_pricing_source_attributes)
+      candidate.assign_attributes(attributes.slice(*ITEM_PRICING_SOURCE_FIELDS))
+      candidate.valid?(:update)
+
+      required_fields.all? do |field|
+        candidate.public_send(field).present? && candidate.errors[field].empty?
+      end
+    rescue ActiveModel::UnknownAttributeError, ArgumentError, TypeError
+      false
+    end
+
+    def cleared_pricing_source_attributes
+      {
+        pricing_source_kind: nil,
+        price: nil,
+        reference_price_amount: nil,
+        reference_quantity: nil,
+        reference_quantity_unit_code: nil,
+        reference_quantity_unit_raw: nil,
+        reference_price_tax_inclusion: nil,
+        quantity_unit_raw: nil
+      }
     end
 
     def item_review_reason_remaining?(reason, item:, submitted_attributes:)
@@ -203,7 +248,7 @@ class Receipts::Editing::ReviewState
   def call
     reasons = ReviewReasons.review_reasons_for_user(receipt.review_reasons)
     if nested_amount_inputs_submitted
-      reasons -= ReviewReasons::AMOUNT_REASONS - [ ADJUSTMENT_REVIEW_REASON ]
+      reasons -= ReviewReasons::AMOUNT_REASONS - [ ADJUSTMENT_REVIEW_REASON, ITEM_PRICING_MODE_REVIEW_REASON ]
     end
     reasons.delete(ADJUSTMENT_REVIEW_REASON) if adjustment_review_reason_resolved?
     if item_inputs_submitted

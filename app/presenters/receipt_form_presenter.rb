@@ -387,8 +387,9 @@ class ReceiptFormPresenter
 
       [
         "grid grid-cols-2 receipt-form-item-layout gap-4 md:gap-1.5 items-center p-3 rounded-lg transition-colors relative min-w-0",
-        item.needs_review ? "border receipt-form-item-review-row" : "receipt-form-item-row"
-      ].join(" ")
+        item.needs_review ? "border receipt-form-item-review-row" : "receipt-form-item-row",
+        ("receipt-form-item-details-open" if pricing_source_review?)
+      ].compact.join(" ")
     end
 
     def line_total_value
@@ -631,7 +632,11 @@ class ReceiptFormPresenter
     end
 
     def pricing_source_kind_highlight_variant
-      item.errors[:pricing_source_kind].any? ? :error : nil
+      item.errors[:pricing_source_kind].any? || pricing_source_review? ? :error : nil
+    end
+
+    def pricing_source_review?
+      item.needs_review && review_reason_includes?("item_pricing_mode_uncertain")
     end
 
     def reference_price_amount_highlight_variant

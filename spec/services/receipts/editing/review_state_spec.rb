@@ -1290,4 +1290,305 @@ RSpec.describe Receipts::Editing::ReviewState do
       expect(result.needs_review).to be(false)
     end
   end
+
+  it '計算方式reasonだけは同じcomplete sourceの明示送信を利用者確認として解除する' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_pricing_mode_uncertain' ],
+      purchased_at: Time.current,
+      payment_method: 'cash'
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '確認商品',
+      pricing_source_kind: 'count_unit_price',
+      price: 100,
+      quantity: 2,
+      quantity_unit_code: 'each',
+      original_line_total: 200,
+      line_total: 200,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    submitted = {
+      id: item.id,
+      pricing_source_kind: 'count_unit_price',
+      price: '100',
+      quantity: '2',
+      quantity_unit_code: 'each'
+    }
+
+    item_result = described_class.item_review_state(item: item, submitted_attributes: submitted)
+    receipt_result = resolve(
+      receipt,
+      permitted: { receipt_items_attributes: { '0' => submitted } },
+      nested_amount_inputs_submitted: true,
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(item_result).to have_attributes(review_reasons: [], needs_review: false)
+      expect(receipt_result).to have_attributes(review_reasons: [], status: 'completed')
+    end
+  end
+
+  it '計算方式reasonはpartial・無関係・invalidな送信では解除しない' do
+    item = ReceiptItem.new(
+      pricing_source_kind: 'count_unit_price',
+      price: 100,
+      quantity: 2,
+      quantity_unit_code: 'each',
+      original_line_total: 200,
+      line_total: 200,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    submissions = [
+      { pricing_source_kind: 'count_unit_price', price: '100' },
+      { confirmed_name: '無関係な変更' },
+      {
+        pricing_source_kind: 'count_unit_price',
+        price: '100',
+        quantity: '0',
+        quantity_unit_code: 'each'
+      }
+    ]
+
+    submissions.each do |submitted|
+      result = described_class.item_review_state(item: item, submitted_attributes: submitted)
+
+      aggregate_failures do
+        expect(result.review_reasons).to eq([ 'item_pricing_mode_uncertain' ])
+        expect(result.needs_review).to be(true)
+      end
+    end
+  end
+
+  it '計算方式reasonの確認は選択modeごとの全必須sourceを要求する' do
+    cases = [
+      {
+        item: ReceiptItem.new(
+          pricing_source_kind: 'reference_quantity_price',
+          reference_price_amount: 120,
+          reference_quantity: 100,
+          reference_quantity_unit_code: 'gram',
+          reference_price_tax_inclusion: 'gross',
+          quantity: 250,
+          quantity_unit_code: 'gram',
+          original_line_total: 300,
+          line_total: 300,
+          needs_review: true,
+          review_reasons: [ 'item_pricing_mode_uncertain' ]
+        ),
+        submitted: {
+          pricing_source_kind: 'reference_quantity_price',
+          reference_price_amount: '120',
+          reference_quantity: '100',
+          reference_quantity_unit_code: 'gram',
+          reference_price_tax_inclusion: 'gross',
+          quantity: '250',
+          quantity_unit_code: 'gram'
+        }
+      },
+      {
+        item: ReceiptItem.new(
+          pricing_source_kind: 'explicit_line_total',
+          original_line_total: 180,
+          line_total: 180,
+          needs_review: true,
+          review_reasons: [ 'item_pricing_mode_uncertain' ]
+        ),
+        submitted: {
+          pricing_source_kind: 'explicit_line_total',
+          original_line_total: '180'
+        }
+      }
+    ]
+
+    cases.each do |test_case|
+      result = described_class.item_review_state(
+        item: test_case.fetch(:item),
+        submitted_attributes: test_case.fetch(:submitted)
+      )
+
+      expect(result).to have_attributes(review_reasons: [], needs_review: false)
+    end
+  end
+
+  it '計算方式reasonは未知modeと必須sourceの境界値違反では解除しない' do
+    item = ReceiptItem.new(
+      pricing_source_kind: 'count_unit_price',
+      price: 100,
+      quantity: 2,
+      quantity_unit_code: 'each',
+      original_line_total: 200,
+      line_total: 200,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    submissions = [
+      {
+        pricing_source_kind: 'unknown',
+        price: '100',
+        quantity: '2',
+        quantity_unit_code: 'each'
+      },
+      {
+        pricing_source_kind: 'count_unit_price',
+        price: (ReceiptAmountService.receipt_item_price_max + 1).to_s,
+        quantity: '2',
+        quantity_unit_code: 'each'
+      },
+      {
+        pricing_source_kind: 'count_unit_price',
+        price: '100',
+        quantity: '1.001',
+        quantity_unit_code: 'each'
+      }
+    ]
+
+    submissions.each do |submitted|
+      result = described_class.item_review_state(item: item, submitted_attributes: submitted)
+
+      expect(result).to have_attributes(
+        review_reasons: [ 'item_pricing_mode_uncertain' ],
+        needs_review: true
+      )
+    end
+  end
+
+  it '同じ計算方式reasonを持つ全明細が確認されるまでreceipt reasonを解除しない' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    items = 2.times.map do |position_index|
+      receipt.receipt_items.create!(
+        confirmed_name: "確認商品#{position_index + 1}",
+        pricing_source_kind: 'count_unit_price',
+        price: 100,
+        quantity: 1,
+        quantity_unit_code: 'each',
+        original_line_total: 100,
+        line_total: 100,
+        position_index: position_index,
+        needs_review: true,
+        review_reasons: [ 'item_pricing_mode_uncertain' ]
+      )
+    end
+    first_submission = {
+      id: items.first.id,
+      pricing_source_kind: 'count_unit_price',
+      price: '100',
+      quantity: '1',
+      quantity_unit_code: 'each'
+    }
+
+    partial_result = resolve(
+      receipt,
+      permitted: { receipt_items_attributes: { '0' => first_submission } },
+      nested_amount_inputs_submitted: true,
+      item_inputs_submitted: true
+    )
+    complete_result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => first_submission,
+          '1' => {
+            id: items.second.id,
+            pricing_source_kind: 'count_unit_price',
+            price: '100',
+            quantity: '1',
+            quantity_unit_code: 'each'
+          }
+        }
+      },
+      nested_amount_inputs_submitted: true,
+      item_inputs_submitted: true
+    )
+
+    aggregate_failures do
+      expect(partial_result).to have_attributes(
+        review_reasons: [ 'item_pricing_mode_uncertain' ],
+        status: 'review_needed'
+      )
+      expect(complete_result).to have_attributes(review_reasons: [], status: 'completed')
+    end
+  end
+
+  it '計算方式reasonの確認で他のblocking reasonを解除しない' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: %w[ocr_unreadable item_pricing_mode_uncertain]
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '確認商品',
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 180,
+      line_total: 180,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+
+    result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            pricing_source_kind: 'explicit_line_total',
+            original_line_total: '180'
+          }
+        }
+      },
+      nested_amount_inputs_submitted: true,
+      item_inputs_submitted: true
+    )
+
+    expect(result).to have_attributes(review_reasons: [ 'ocr_unreadable' ], status: 'review_needed')
+  end
+
+  it '対象Itemに根拠がないreceipt-level計算方式reasonを別Itemの送信で解除しない' do
+    receipt = create(
+      :receipt,
+      status: 'review_needed',
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: '通常商品',
+      pricing_source_kind: 'count_unit_price',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      original_line_total: 100,
+      line_total: 100,
+      needs_review: false,
+      review_reasons: []
+    )
+
+    result = resolve(
+      receipt,
+      permitted: {
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            pricing_source_kind: 'count_unit_price',
+            price: '100',
+            quantity: '1',
+            quantity_unit_code: 'each'
+          }
+        }
+      },
+      nested_amount_inputs_submitted: true,
+      item_inputs_submitted: true
+    )
+
+    expect(result).to have_attributes(
+      review_reasons: [ 'item_pricing_mode_uncertain' ],
+      status: 'review_needed'
+    )
+  end
 end

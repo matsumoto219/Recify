@@ -53,6 +53,13 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
     }.merge(overrides)
   end
 
+  def calculation_item_attributes(item, overrides = {})
+    item_attributes(item).merge(
+      pricing_source_kind: item.pricing_source_kind,
+      original_line_total: item.original_line_total
+    ).merge(overrides)
+  end
+
   it '手動作成時のblank購入日時・支払方法は通常のitem編集後もcompletedのまま維持する' do
     post receipts_path, params: {
       receipt: {
@@ -365,6 +372,242 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
         'payment_method_uncertain'
       )
       expect(receipt.status).to eq('review_needed')
+    end
+  end
+
+  it '計算方式reasonは同じcomplete sourceの通常保存で解除しsourceを維持する' do
+    receipt = create_receipt(
+      status: 'review_needed',
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    item = receipt.receipt_items.sole
+    item.update!(
+      pricing_source_kind: 'count_unit_price',
+      original_line_total: 100,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+
+    patch_receipt(
+      receipt,
+      receipt_items_attributes: {
+        '0' => calculation_item_attributes(item)
+      }
+    )
+    receipt.reload
+    item.reload
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(item).to have_attributes(
+        pricing_source_kind: 'count_unit_price',
+        price: 100,
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: 100,
+        line_total: 100,
+        needs_review: false,
+        review_reasons: []
+      )
+      expect(receipt).to have_attributes(status: 'completed', review_reasons: [])
+      expect(receipt.total_amount).to eq(100)
+    end
+  end
+
+  it '計算方式reasonのpartial PATCHは既存sourceを保ちながら確認状態を維持する' do
+    receipt = create_receipt(
+      status: 'review_needed',
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    item = receipt.receipt_items.sole
+    item.update!(
+      pricing_source_kind: 'count_unit_price',
+      original_line_total: 100,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+
+    patch_receipt(
+      receipt,
+      receipt_items_attributes: {
+        '0' => {
+          id: item.id,
+          pricing_source_kind: 'count_unit_price',
+          price: '100'
+        }
+      }
+    )
+    receipt.reload
+    item.reload
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(item).to have_attributes(
+        pricing_source_kind: 'count_unit_price',
+        price: 100,
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: 100,
+        line_total: 100,
+        needs_review: true,
+        review_reasons: [ 'item_pricing_mode_uncertain' ]
+      )
+      expect(receipt).to have_attributes(
+        status: 'review_needed',
+        review_reasons: [ 'item_pricing_mode_uncertain' ],
+        total_amount: 100
+      )
+    end
+  end
+
+  it '計算方式reasonのinvalid source送信は422となり保存済みreview stateを維持する' do
+    receipt = create_receipt(
+      status: 'review_needed',
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    item = receipt.receipt_items.sole
+    item.update!(
+      pricing_source_kind: 'count_unit_price',
+      original_line_total: 100,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+
+    patch_receipt(
+      receipt,
+      receipt_items_attributes: {
+        '0' => calculation_item_attributes(item, quantity: '0')
+      }
+    )
+    receipt.reload
+    item.reload
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(item).to have_attributes(
+        pricing_source_kind: 'count_unit_price',
+        price: 100,
+        quantity: BigDecimal('1'),
+        original_line_total: 100,
+        line_total: 100,
+        needs_review: true,
+        review_reasons: [ 'item_pricing_mode_uncertain' ]
+      )
+      expect(receipt).to have_attributes(
+        status: 'review_needed',
+        review_reasons: [ 'item_pricing_mode_uncertain' ],
+        subtotal_amount: 91,
+        tax_amount: 9,
+        total_amount: 100
+      )
+    end
+  end
+
+  it '計算方式reasonだけを確認してもOCR由来のblocking reasonは維持する' do
+    receipt = create_receipt(
+      status: 'review_needed',
+      review_reasons: %w[ocr_unreadable item_pricing_mode_uncertain]
+    )
+    item = receipt.receipt_items.sole
+    item.update!(
+      pricing_source_kind: 'explicit_line_total',
+      price: nil,
+      original_line_total: 100,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+
+    patch_receipt(
+      receipt,
+      receipt_items_attributes: {
+        '0' => calculation_item_attributes(
+          item,
+          pricing_source_kind: 'explicit_line_total',
+          original_line_total: '100'
+        )
+      }
+    )
+    receipt.reload
+    item.reload
+
+    aggregate_failures do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(item).to have_attributes(needs_review: false, review_reasons: [])
+      expect(receipt).to have_attributes(
+        status: 'review_needed',
+        review_reasons: [ 'ocr_unreadable' ]
+      )
+    end
+  end
+
+  it '複数の計算方式reviewは確認した明細だけ解除し、全件確認後にreceiptを完了する' do
+    receipt = create_receipt(
+      subtotal_amount: 182,
+      tax_amount: 18,
+      total_amount: 200,
+      status: 'review_needed',
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    first_item = receipt.receipt_items.sole
+    first_item.update!(
+      pricing_source_kind: 'count_unit_price',
+      original_line_total: 100,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+    second_item = receipt.receipt_items.create!(
+      confirmed_name: '二件目商品',
+      pricing_source_kind: 'count_unit_price',
+      price: 100,
+      quantity: 1,
+      quantity_unit_code: 'each',
+      tax_rate: BigDecimal('0.1'),
+      original_line_total: 100,
+      line_total: 100,
+      position_index: 1,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+
+    patch_receipt(
+      receipt,
+      receipt_items_attributes: {
+        '0' => calculation_item_attributes(first_item)
+      }
+    )
+    receipt.reload
+    first_item.reload
+    second_item.reload
+
+    aggregate_failures 'first confirmation' do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(first_item).to have_attributes(needs_review: false, review_reasons: [])
+      expect(second_item).to have_attributes(
+        needs_review: true,
+        review_reasons: [ 'item_pricing_mode_uncertain' ]
+      )
+      expect(receipt).to have_attributes(
+        status: 'review_needed',
+        review_reasons: [ 'item_pricing_mode_uncertain' ],
+        total_amount: 200
+      )
+    end
+
+    patch_receipt(
+      receipt,
+      receipt_items_attributes: {
+        '0' => calculation_item_attributes(second_item)
+      }
+    )
+    receipt.reload
+    first_item.reload
+    second_item.reload
+
+    aggregate_failures 'second confirmation' do
+      expect(response).to redirect_to(receipt_path(receipt))
+      expect(first_item).to have_attributes(needs_review: false, review_reasons: [])
+      expect(second_item).to have_attributes(needs_review: false, review_reasons: [])
+      expect(receipt).to have_attributes(status: 'completed', review_reasons: [], total_amount: 200)
     end
   end
 end
