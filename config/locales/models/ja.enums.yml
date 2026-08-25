@@ -86,6 +86,7 @@ ja:
         competing_exact_basis_candidate: "複数の計算方法で金額が一致するため、明細金額や税内訳の確認が必要です"
         mixed_basis_search_truncated: "明細金額の税込・税抜の判定が確定できませんでした。明細金額と税内訳をご確認ください。"
         calculation_profile_uncertain: "計算方式を一意に推定できません"
+        item_pricing_mode_uncertain: "この明細の計算方式をご確認ください"
         invalid_amount_relation: "小計・税額・合計の整合性が取れていません"
         payment_amount_mismatch: "支払合計と計算上の支払額が一致していません"
         tax_details_double_counted: "税内訳が二重計上されている可能性があります"

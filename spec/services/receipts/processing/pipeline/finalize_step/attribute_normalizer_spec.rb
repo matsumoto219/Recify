@@ -8,7 +8,8 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     price: 120,
     quantity: BigDecimal('2'),
     unit: 'item',
-    projected_line_total: 240
+    projected_line_total: 240,
+    review_reason: nil
   )
     Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicator::Selection.new(
       item_identity: identity,
@@ -19,7 +20,8 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       price: price,
       quantity: quantity,
       quantity_unit_code: unit,
-      projected_line_total: projected_line_total
+      projected_line_total: projected_line_total,
+      review_reason:
     )
   end
 
@@ -27,7 +29,8 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     identity: 'azure_structured_item_i0_s100_e115',
     item_index: 0,
     position_index: 1,
-    line_total: 240
+    line_total: 240,
+    review_reason: nil
   )
     Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicator::Selection.new(
       item_identity: identity,
@@ -36,7 +39,8 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       proposal_id: "azure_items_#{item_index}_explicit_line_total",
       pricing_source_kind: 'explicit_line_total',
       explicit_line_total: line_total,
-      projected_line_total: line_total
+      projected_line_total: line_total,
+      review_reason:
     )
   end
 
@@ -402,6 +406,67 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         original_line_total: BigDecimal('0'),
         line_total: BigDecimal('0')
       )
+    end
+
+    it 'reviewable selectionと一致するbounded reasonだけをtrusted authorityと共に保持する' do
+      reason = 'item_pricing_mode_uncertain'
+      source = {
+        raw_text: '確認明細',
+        ocr_item_identity: 'azure_structured_item_i0_s100_e115',
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: 240,
+        line_total: 240,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1,
+        needs_review: true,
+        review_reasons: [ reason ]
+      }
+      selection = explicit_selection(review_reason: reason)
+
+      result = trusted_items([ source ], [ selection ]).sole
+
+      expect(result).to include(
+        pricing_source_kind: 'explicit_line_total',
+        needs_review: true,
+        review_reasons: [ reason ]
+      )
+    end
+
+    it 'selectionとitemのreview markerが不一致ならauthorityだけをfail-closedで破棄する' do
+      reason = 'item_pricing_mode_uncertain'
+      source = {
+        raw_text: '確認明細',
+        ocr_item_identity: 'azure_structured_item_i0_s100_e115',
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        quantity: BigDecimal('1'),
+        quantity_unit_code: 'each',
+        original_line_total: 240,
+        line_total: 240,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1,
+        needs_review: true,
+        review_reasons: [ reason ]
+      }
+      cases = [
+        [ source.except(:needs_review), explicit_selection(review_reason: reason) ],
+        [ source.merge(review_reasons: []), explicit_selection(review_reason: reason) ],
+        [ source, explicit_selection ]
+      ]
+
+      cases.each do |item_attributes, selection|
+        result = trusted_items([ item_attributes ], [ selection ]).sole
+
+        aggregate_failures do
+          expect(result[:raw_text]).to eq('確認明細')
+          expect(result).not_to have_key(:pricing_source_kind)
+        end
+      end
     end
 
     it 'Float・scientific・小数count・alias・measurement unit・raw unitをauthorityにしない' do

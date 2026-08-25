@@ -23,6 +23,7 @@ class Receipts::Processing::Pipeline
       item_name_uncertain
       item_category_uncertain
       item_quantity_uncertain
+      item_pricing_mode_uncertain
       item_tax_rate_uncertain
     ].freeze
     ITEM_TAX_RATE_RESOLUTION_BLOCKING_REASONS = %w[
@@ -622,6 +623,11 @@ class Receipts::Processing::Pipeline
 
     def item_calculation_mode_persistence_matches?(item, selection)
       return false unless item.pricing_source_kind == selection.pricing_source_kind
+      calculation_review_present = Array(item.review_reasons).map(&:to_s).include?(
+        ItemCalculationModeApplicator::ITEM_PRICING_MODE_REVIEW_REASON
+      )
+      return false unless calculation_review_present == selection.reviewable?
+      return false if selection.reviewable? && !item.needs_review?
       return false unless item.discount_amount.nil? && item.discount_rate.nil?
       return false unless item.original_line_total == selection.projected_line_total
       return false unless item.line_total == selection.projected_line_total

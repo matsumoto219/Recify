@@ -130,6 +130,26 @@ RSpec.describe 'OCR item calculation mode persistence' do
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
+  def count_total_mismatch_ocr_result
+    raw = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
+    analyze_result = raw.fetch('analyzeResult')
+    analyze_result.dig('documents', 0, 'fields', 'Items', 'valueArray').each do |item|
+      total = item.dig('valueObject', 'TotalPrice')
+      amount = total.dig('valueCurrency', 'amount') + 1
+      content = "¥#{amount}"
+      raise 'replacement must preserve fixture span length' unless content.length == total.fetch('content').length
+
+      span = total.fetch('spans').sole
+      parent_offset = item.fetch('spans').sole.fetch('offset')
+      analyze_result.fetch('content')[span.fetch('offset'), span.fetch('length')] = content
+      item.fetch('content')[span.fetch('offset') - parent_offset, span.fetch('length')] = content
+      total['content'] = content
+      total.fetch('valueCurrency')['amount'] = amount
+    end
+
+    Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+  end
+
   def create_reference_pricing_setting(value)
     create(
       :system_setting,
@@ -162,6 +182,10 @@ RSpec.describe 'OCR item calculation mode persistence' do
       expect(receipt.receipt_items.order(:position_index).pluck(:price, :original_line_total, :line_total)).to eq(
         [ 220, 132, 110, 308 ].map { |amount| [ amount, amount, amount ] }
       )
+      expect(receipt.review_reasons).not_to include('item_pricing_mode_uncertain')
+      expect(receipt.receipt_items).to all(
+        satisfy { |item| !Array(item.review_reasons).include?('item_pricing_mode_uncertain') }
+      )
       expect(receipt.amount_calculation_profile.dig('profile', 'receipt_tax_basis')).to eq('total_includes_tax')
       expect(run.reload).to have_attributes(status: 'succeeded', stage: 'completed')
     end
@@ -177,6 +201,34 @@ RSpec.describe 'OCR item calculation mode persistence' do
       expect(receipt.reload.total_amount).to eq(770)
       expect(receipt.receipt_items.order(:position_index).pluck(:pricing_source_kind).uniq).to eq(
         [ 'count_unit_price' ]
+      )
+      expect(run.reload.status).to eq('succeeded')
+    end
+  end
+
+  it 'formulaとstrong printed totalの不一致はexplicitをprefillし、該当Itemだけ計算方式reviewにする' do
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      ocr_result: count_total_mismatch_ocr_result,
+      strategy: :ai_success
+    )
+
+    Receipts::Processing.run_finalize(run)
+
+    items = receipt.reload.receipt_items.order(:position_index)
+    aggregate_failures do
+      expect(receipt).to have_attributes(status: 'review_needed', total_amount: 770)
+      expect(receipt.review_reasons).to include('item_pricing_mode_uncertain')
+      expect(items.pluck(:pricing_source_kind)).to all(eq('explicit_line_total'))
+      expect(items.pluck(:original_line_total, :line_total)).to eq(
+        [ 221, 133, 111, 309 ].map { |amount| [ amount, amount ] }
+      )
+      expect(items).to all(
+        have_attributes(
+          needs_review: true,
+          review_reasons: include('item_pricing_mode_uncertain')
+        )
       )
       expect(run.reload.status).to eq('succeeded')
     end

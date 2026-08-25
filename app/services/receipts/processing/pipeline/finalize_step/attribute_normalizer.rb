@@ -1,4 +1,6 @@
 class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
+  ITEM_PRICING_MODE_REVIEW_REASON = "item_pricing_mode_uncertain"
+
   class << self
     def items(
       value,
@@ -179,6 +181,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       return false unless valid_item_calculation_mode_proposal_id?(selection)
       return false unless selection.projected_line_total.is_a?(Integer)
       return false unless selection.projected_line_total.between?(0, item_line_total_limit)
+      return false unless trusted_item_calculation_mode_review_valid?(item, selection)
       return false unless item[:pricing_source_kind] == selection.pricing_source_kind
       return false unless item[:discount_amount].nil? && item[:discount_rate].nil?
 
@@ -195,6 +198,18 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         trusted_explicit_source_valid?(item, selection)
       else
         false
+      end
+    end
+
+    def trusted_item_calculation_mode_review_valid?(item, selection)
+      return false unless selection.review_reason.nil? ||
+        selection.review_reason == ITEM_PRICING_MODE_REVIEW_REASON
+
+      review_reasons = self.review_reasons(item[:review_reasons])
+      if selection.review_reason
+        item[:needs_review] == true && review_reasons.include?(selection.review_reason)
+      else
+        review_reasons.exclude?(ITEM_PRICING_MODE_REVIEW_REASON)
       end
     end
 

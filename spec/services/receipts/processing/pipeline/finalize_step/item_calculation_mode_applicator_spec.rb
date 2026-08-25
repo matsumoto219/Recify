@@ -118,6 +118,10 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
       )
       expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
       expect(result.amount_result.dig(:computed, :receipt_tax_basis)).to eq(:tax_added_to_subtotal)
+      expect(result.params[:review_reasons]).not_to include('item_pricing_mode_uncertain')
+      expect(result.params.fetch(:receipt_items_attributes)).to all(
+        satisfy { |item| !Array(item[:review_reasons]).include?('item_pricing_mode_uncertain') }
+      )
       expect(result.params).not_to equal(context.fetch(:params))
       expect(context.fetch(:params)).to eq(before)
     end
@@ -152,18 +156,28 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     end
   end
 
-  it 'formulaと印字額が全て不一致ならreviewableをauthorityにせずAmountを再実行しない' do
+  it 'formulaと印字額が不一致でもstrong printed totalを維持できる場合だけexplicitをprefillしてreviewableにする' do
     context = fixture_context('single_tax_receipt', mutate_raw: method(:make_all_printed_totals_mismatch))
-    amount_called = false
-
-    result = result_for(context) do
-      amount_called = true
-      raise 'Amount must not run for reviewable-only decisions'
-    end
+    result = result_for(context)
 
     aggregate_failures do
-      expect(amount_called).to be(false)
-      expect(result).not_to be_applied
+      expect(result).to be_applied
+      expect(result.decisions).to all(be_reviewable)
+      expect(result.selections).to all(
+        have_attributes(
+          pricing_source_kind: 'explicit_line_total',
+          review_reason: 'item_pricing_mode_uncertain'
+        )
+      )
+      expect(result.params[:review_reasons]).to include('item_pricing_mode_uncertain')
+      expect(result.params.fetch(:receipt_items_attributes)).to all(
+        include(
+          pricing_source_kind: 'explicit_line_total',
+          needs_review: true,
+          review_reasons: include('item_pricing_mode_uncertain')
+        )
+      )
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
     end
   end
 

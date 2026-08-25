@@ -2,6 +2,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
   DECISION_CONTRACT = Receipts::Processing::Contracts::ItemCalculationModeDecision
   PROPOSAL_CONTRACT = Receipts::Processing::Contracts::ItemCalculationModeProposalSet
   GATE_CONTRACT = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot
+  ITEM_PRICING_MODE_REVIEW_REASON = "item_pricing_mode_uncertain"
   SUPPORTED_PRICING_SOURCE_KINDS = %w[
     count_unit_price
     reference_quantity_price
@@ -76,6 +77,13 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     blocking_mismatch_codes: %w[INSUFFICIENT_DATA].freeze,
     review_reasons: %w[insufficient_data].freeze
   }.freeze
+  REVIEWABLE_ALLOWED_REMOVED_REVIEW_VALUES = {
+    inconsistencies: %w[item_total_mismatch].freeze,
+    blocking_inconsistencies: %w[item_total_mismatch].freeze,
+    mismatch_codes: %w[ITEM_TOTAL_MISMATCH].freeze,
+    blocking_mismatch_codes: %w[ITEM_TOTAL_MISMATCH].freeze,
+    review_reasons: %w[item_total_mismatch].freeze
+  }.freeze
   SKIPPED_SELECTION = Object.new.freeze
   private_constant :SKIPPED_SELECTION
 
@@ -94,7 +102,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     :reference_price_tax_inclusion,
     :explicit_line_total,
     :printed_line_total,
-    :projected_line_total
+    :projected_line_total,
+    :review_reason
   ) do
     def initialize(
       item_identity:,
@@ -111,7 +120,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       reference_price_tax_inclusion: nil,
       explicit_line_total: nil,
       printed_line_total: nil,
-      projected_line_total:
+      projected_line_total:,
+      review_reason: nil
     )
       super(
         item_identity: item_identity.dup.freeze,
@@ -128,8 +138,13 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         reference_price_tax_inclusion: reference_price_tax_inclusion&.dup&.freeze,
         explicit_line_total: explicit_line_total,
         printed_line_total: printed_line_total,
-        projected_line_total: projected_line_total
+        projected_line_total: projected_line_total,
+        review_reason: review_reason&.dup&.freeze
       )
+    end
+
+    def reviewable?
+      review_reason == ITEM_PRICING_MODE_REVIEW_REASON
     end
   end
 
@@ -268,7 +283,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     proposals_by_identity = proposals.index_by { |proposal| proposal.fetch("item_identity") }
 
     selections = decisions.each_with_object([]) do |decision, result|
-      next unless decision.confirmed?
+      next unless decision.confirmed? || decision.reviewable?
       next unless SUPPORTED_PRICING_SOURCE_KINDS.include?(decision.selected_pricing_source_kind)
 
       matches = items_by_identity[decision.item_identity]
@@ -308,15 +323,16 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     return unless options.one?
 
     option = options.sole
+    review_reason = decision.reviewable? ? ITEM_PRICING_MODE_REVIEW_REASON : nil
     case decision.selected_pricing_source_kind
     when "count_unit_price"
-      count_selection(decision, option, attributes, item_index:)
+      count_selection(decision, option, attributes, item_index:, review_reason:)
     when "reference_quantity_price"
       return SKIPPED_SELECTION unless reference_selection_authorized?(decision, proposal)
 
-      reference_selection(decision, proposal, option, attributes, item_index:)
+      reference_selection(decision, proposal, option, attributes, item_index:, review_reason:)
     when "explicit_line_total"
-      explicit_selection(decision, option, attributes, item_index:)
+      explicit_selection(decision, option, attributes, item_index:, review_reason:)
     end
   end
 
@@ -331,7 +347,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       gate.proposal_checksum == proposal["integrity_checksum"]
   end
 
-  def reference_selection(decision, proposal, option, attributes, item_index:)
+  def reference_selection(decision, proposal, option, attributes, item_index:, review_reason:)
     source = option.fetch("source")
     reference_price = exact_decimal(
       source.fetch("reference_price_amount"),
@@ -383,7 +399,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       reference_quantity_unit_code: reference_unit,
       reference_price_tax_inclusion: "gross",
       printed_line_total:,
-      projected_line_total: decision.projected_line_total
+      projected_line_total: decision.projected_line_total,
+      review_reason:
     )
   rescue ReceiptQuantityUnit::ConversionError
     nil
@@ -397,7 +414,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     amount if amount == projected
   end
 
-  def count_selection(decision, option, attributes, item_index:)
+  def count_selection(decision, option, attributes, item_index:, review_reason:)
     source = option.fetch("source")
     price = exact_integer(source.fetch("price_amount"))
     quantity = exact_positive_integer(source.fetch("quantity"))
@@ -417,11 +434,12 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       price:,
       quantity: BigDecimal(quantity.to_s),
       quantity_unit_code: unit_code,
-      projected_line_total: decision.projected_line_total
+      projected_line_total: decision.projected_line_total,
+      review_reason:
     )
   end
 
-  def explicit_selection(decision, option, attributes, item_index:)
+  def explicit_selection(decision, option, attributes, item_index:, review_reason:)
     source = option.fetch("source")
     line_total = exact_integer(source.fetch("line_total_amount"))
     return if line_total.nil?
@@ -435,7 +453,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       proposal_id: decision.selected_proposal_id,
       pricing_source_kind: decision.selected_pricing_source_kind,
       explicit_line_total: line_total,
-      projected_line_total: decision.projected_line_total
+      projected_line_total: decision.projected_line_total,
+      review_reason:
     )
   end
 
@@ -472,7 +491,14 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       else
         item[:price] = nil
       end
+      if selection.reviewable?
+        item[:needs_review] = true
+        item[:review_reasons] = (Array(item[:review_reasons]).map(&:to_s) + [ selection.review_reason ]).uniq
+      end
     end
+
+    review_reasons = selections.filter_map(&:review_reason)
+    candidate_params[:review_reasons] = (Array(candidate_params[:review_reasons]).map(&:to_s) + review_reasons).uniq
   end
 
   def clear_reference_source_fields!(item)
@@ -522,8 +548,21 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
   def financial_transition_valid?(candidate_params, final_amount_result, selections)
     return true if financial_result_signature(final_amount_result) ==
       financial_result_signature(preliminary_amount_result)
+    return true if reviewable_transition_valid?(final_amount_result, selections)
 
     no_total_reference_transition_valid?(candidate_params, final_amount_result, selections)
+  end
+
+  def reviewable_transition_valid?(final_amount_result, selections)
+    return false unless selections.any?(&:reviewable?)
+    return false unless financial_value_signature(final_amount_result) ==
+      financial_value_signature(preliminary_amount_result)
+    return false unless no_total_amount_result_safe?(final_amount_result)
+
+    review_transition_valid?(
+      final_amount_result,
+      allowed_removed_values: REVIEWABLE_ALLOWED_REMOVED_REVIEW_VALUES
+    )
   end
 
   def no_total_reference_transition_valid?(candidate_params, final_amount_result, selections)
@@ -536,7 +575,10 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     return false unless no_total_candidate_params_valid?(candidate_params, selection)
     return false unless no_total_result_context_unchanged?(final_amount_result)
     return false unless no_total_amount_result_safe?(final_amount_result)
-    return false unless no_total_review_transition_valid?(final_amount_result)
+    return false unless review_transition_valid?(
+      final_amount_result,
+      allowed_removed_values: NO_TOTAL_ALLOWED_REMOVED_REVIEW_VALUES
+    )
     return false unless non_no_total_computed_items_unchanged?(final_amount_result, selection)
     return false unless no_total_aggregate_valid?(final_amount_result)
 
@@ -595,7 +637,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       final_amount_result[:needs_review] == false
   end
 
-  def no_total_review_transition_valid?(final_amount_result)
+  def review_transition_valid?(final_amount_result, allowed_removed_values:)
     AMOUNT_REVIEW_FIELDS.all? do |field|
       case field
       when :needs_review
@@ -606,7 +648,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         removed = preliminary_values - final_values
         added = final_values - preliminary_values
 
-        allowed_removed = NO_TOTAL_ALLOWED_REMOVED_REVIEW_VALUES.fetch(field, [])
+        allowed_removed = allowed_removed_values.fetch(field, [])
         added.empty? && (removed - allowed_removed).empty?
       end
     end
@@ -679,6 +721,10 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       selected_candidate_status: result[:selected_candidate_status],
       no_safe_candidate: normalized_hash(result[:amount_engine])[:no_safe_candidate]
     }
+  end
+
+  def financial_value_signature(result)
+    financial_result_signature(result).except(:review)
   end
 
   def exact_integer(value)
