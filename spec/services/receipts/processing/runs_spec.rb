@@ -1498,6 +1498,7 @@ RSpec.describe Receipts::Processing::Runs do
         error_code: 'ai_api_error',
         error_message: 'x' * 600,
         error_metadata: {
+          actual_value: 987_654_321,
           provider_detail: {
             service: 'ai',
             provider: 'openai',
@@ -1533,6 +1534,8 @@ RSpec.describe Receipts::Processing::Runs do
         )
         expect(deep_json(failed_run.metadata)).not_to include('sk-secret-token')
         expect(deep_json(failed_run.metadata)).not_to include('RAW ERROR MUST NOT BE STORED')
+        expect(deep_json(failed_run.metadata)).not_to include('987654321')
+        expect(failed_run.metadata.fetch('error_metadata')).not_to have_key('actual_value')
         expect(superseded_run.reload.status).to eq('superseded')
         expect(canceled_run.reload.status).to eq('canceled')
       end

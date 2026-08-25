@@ -124,7 +124,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::LimitValidator do
   end
 
   describe '#validate_amount_limits!' do
-    it 'raises from the first amount violation with the existing metadata shape' do
+    it 'raises from the first amount violation without exposing the actual monetary value' do
       attributes = {
         receipt_attributes: { total_amount: 100 },
         items_attributes: [ { line_total: 501 } ],
@@ -155,7 +155,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::LimitValidator do
         validator.validate_amount_limits!(**attributes)
       }.to raise_error(
         Receipts::Processing::AnalysisError,
-        'receipt_items_amount_limit_exceeded field=line_total actual=501 limit=500'
+        'receipt_items_amount_limit_exceeded field=line_total limit=500'
       ) { |error|
         aggregate_failures do
           expect(error.error_code).to eq('analysis_value_invalid')
@@ -164,9 +164,10 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::LimitValidator do
             resource: 'receipt_items',
             field: 'line_total',
             limit: 500,
-            actual_value: 501,
             index: 0
           )
+          expect(error.message).not_to include('501')
+          expect(error.metadata).not_to have_key(:actual_value)
         end
       }
 
