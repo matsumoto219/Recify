@@ -75,13 +75,14 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       payment_sum: 1_732,
       tax_detail_count: 2,
       item_rows: [
-        [ 'たまご Mサイズ 10個入', 1, 198, 198, 198, nil, BigDecimal('0.08') ],
-        [ '牛乳 1000ml', 1, 248, 248, 248, nil, BigDecimal('0.08') ],
-        [ '食パン 6枚切', 1, 158, 158, 158, nil, BigDecimal('0.08') ],
-        [ 'トイレットペーパー12R', 1, 398, 398, 398, nil, BigDecimal('0.1') ],
-        [ '洗濯用洗剤 液体 900g', 1, 298, 298, 298, nil, BigDecimal('0.1') ],
-        [ 'シャンプー 詰替 330ml', 1, 298, 298, 298, nil, BigDecimal('0.1') ]
+        [ 'たまご Mサイズ 10個入', 1, nil, 198, 198, nil, BigDecimal('0.08') ],
+        [ '牛乳 1000ml', 1, nil, 248, 248, nil, BigDecimal('0.08') ],
+        [ '食パン 6枚切', 1, nil, 158, 158, nil, BigDecimal('0.08') ],
+        [ 'トイレットペーパー12R', 1, nil, 398, 398, nil, BigDecimal('0.1') ],
+        [ '洗濯用洗剤 液体 900g', 1, nil, 298, 298, nil, BigDecimal('0.1') ],
+        [ 'シャンプー 詰替 330ml', 1, nil, 298, 298, nil, BigDecimal('0.1') ]
       ],
+      pricing_source_kinds: Array.new(6, 'explicit_line_total'),
       adjustment_rows: [],
       payment_rows: [ [ 'cash', 1_732 ] ],
       tax_detail_rows: [
