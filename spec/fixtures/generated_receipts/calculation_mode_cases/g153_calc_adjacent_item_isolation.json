@@ -1,0 +1,79 @@
+{
+  "case_id": "g153_calc_adjacent_item_isolation",
+  "category": "calculation_mode",
+  "intent": "Adjacent item price and quantity lines remain isolated instead of forming a cross-item count formula.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル隣接品D", "単価 300円", "明細計 600円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "fallback",
+        "formula_conflicts": ["adjacent_item"],
+        "printed_line_total": 600
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["サンプル同梱品E", "数量 2個", "金額記載なし"],
+        "purchased_quantity": "2",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "formula_conflicts": ["adjacent_item"]
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算境界店",
+    "store_address": "サンプル県サンプル市境界町2-2",
+    "purchased_at": "2026-08-27T09:10:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル隣接品D",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 600,
+        "line_total": 600,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "サンプル同梱品E",
+        "unit_price": null,
+        "quantity": "2",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": null,
+        "original_line_total": null,
+        "line_total": null,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": true,
+        "review_reasons": ["item_pricing_mode_uncertain"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 546, "tax": 54, "gross": 600, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 546,
+    "tax": 54,
+    "total": 600,
+    "payments": [{"method": "cash", "label": "現金", "amount": 600}],
+    "payment_sum": 600,
+    "payment_method": "cash",
+    "status": "review_needed",
+    "review_reasons": ["item_pricing_mode_uncertain"]
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": ["item_pricing_mode_uncertain"], "allow_item_name_minor_diff": false}
+}

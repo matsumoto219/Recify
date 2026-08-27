@@ -1,0 +1,65 @@
+{
+  "case_id": "g158_calc_net_reference_explicit_review",
+  "category": "calculation_mode",
+  "intent": "An exact net reference source remains diagnostic in the gross-only initial selector, while its strong printed total is preserved as reviewable explicit authority.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル量売境界C", "税抜 420円/100g", "計量 250g", "1,155円"],
+        "purchased_quantity": "250",
+        "purchased_unit": "gram",
+        "purchased_quantity_origin": "explicit",
+        "reference_price_amount": "420",
+        "reference_quantity": "100",
+        "reference_unit": "gram",
+        "reference_price_tax_inclusion": "net",
+        "printed_line_total": 1155
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算境界店",
+    "store_address": "サンプル県サンプル市境界町2-2",
+    "purchased_at": "2026-08-20T11:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル量売境界C",
+        "unit_price": null,
+        "quantity": "250",
+        "quantity_unit_code": "gram",
+        "pricing_source_kind": "explicit_line_total",
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 1155,
+        "line_total": 1155,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": true,
+        "review_reasons": ["item_pricing_mode_uncertain"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 1050, "tax": 105, "gross": 1155, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 1050,
+    "tax": 105,
+    "total": 1155,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1155}],
+    "payment_sum": 1155,
+    "payment_method": "cash",
+    "status": "review_needed",
+    "review_reasons": ["item_pricing_mode_uncertain"]
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "item_review_states"], "allow_review_reasons": ["item_pricing_mode_uncertain"], "allow_item_name_minor_diff": false}
+}

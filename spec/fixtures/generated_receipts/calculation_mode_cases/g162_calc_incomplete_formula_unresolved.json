@@ -1,0 +1,63 @@
+{
+  "case_id": "g162_calc_incomplete_formula_unresolved",
+  "category": "calculation_mode",
+  "intent": "An incomplete reference formula without a strong item total remains unresolved and does not invent explicit or reference authority.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル不完全境界H", "税込 280円/基準量不明", "計量 180g"],
+        "purchased_quantity": "180",
+        "purchased_unit": "gram",
+        "purchased_quantity_origin": "explicit",
+        "reference_price_amount": "280",
+        "reference_unit": "gram",
+        "reference_price_tax_inclusion": "gross"
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算境界店",
+    "store_address": "サンプル県サンプル市境界町2-2",
+    "purchased_at": "2026-08-20T11:50:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル不完全境界H",
+        "unit_price": null,
+        "quantity": "180",
+        "quantity_unit_code": "gram",
+        "pricing_source_kind": null,
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": null,
+        "line_total": null,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": true,
+        "review_reasons": ["item_pricing_mode_uncertain"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 0, "tax": 0, "gross": 0, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 0,
+    "tax": 0,
+    "total": 0,
+    "payments": [{"method": "cash", "label": "現金", "amount": 0}],
+    "payment_sum": 0,
+    "payment_method": "cash",
+    "status": "review_needed",
+    "review_reasons": ["item_pricing_mode_uncertain"]
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "item_review_states"], "allow_review_reasons": ["item_pricing_mode_uncertain"], "allow_item_name_minor_diff": false}
+}

@@ -1,0 +1,94 @@
+{
+  "case_id": "g149_calc_multiple_reference_items",
+  "category": "calculation_mode",
+  "intent": "Two legitimate item-local gross reference formulas, one mass and one volume, are independently confirmed in the same receipt.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示量売素材A", "税込 475円/100g", "計量 320g", "1,520円"],
+        "purchased_quantity": "320",
+        "purchased_unit": "gram",
+        "purchased_quantity_origin": "explicit",
+        "reference_price_amount": "475",
+        "reference_quantity": "100",
+        "reference_unit": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 1520
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["例示量売素材B", "税込 248円/L", "計量 1.25L", "310円"],
+        "purchased_quantity": "1.25",
+        "purchased_unit": "liter",
+        "purchased_quantity_origin": "explicit",
+        "reference_price_amount": "248",
+        "reference_quantity": "1",
+        "reference_unit": "liter",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 310
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空量売商店",
+    "store_address": "架空県例示市量売町6-6",
+    "purchased_at": "2026-08-21T09:25:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示量売素材A",
+        "unit_price": null,
+        "quantity": "320",
+        "quantity_unit_code": "gram",
+        "pricing_source_kind": "reference_quantity_price",
+        "reference_price_amount": "475",
+        "reference_quantity": "100",
+        "reference_quantity_unit_code": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "original_line_total": 1520,
+        "line_total": 1520,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示量売素材B",
+        "unit_price": null,
+        "quantity": "1.25",
+        "quantity_unit_code": "liter",
+        "pricing_source_kind": "reference_quantity_price",
+        "reference_price_amount": "248",
+        "reference_quantity": "1",
+        "reference_quantity_unit_code": "liter",
+        "reference_price_tax_inclusion": "gross",
+        "original_line_total": 310,
+        "line_total": 310,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 1664, "tax": 166, "gross": 1830, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 1664,
+    "tax": 166,
+    "total": 1830,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1830}],
+    "payment_sum": 1830,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

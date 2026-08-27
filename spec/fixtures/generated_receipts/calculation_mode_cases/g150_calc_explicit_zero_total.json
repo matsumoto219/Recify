@@ -1,0 +1,57 @@
+{
+  "case_id": "g150_calc_explicit_zero_total",
+  "category": "calculation_mode",
+  "intent": "An explicitly printed zero line total remains confirmed explicit authority instead of becoming missing.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示無償提供品 0円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "fallback",
+        "printed_line_total": 0
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空明細商店",
+    "store_address": "架空県例示市明細町7-7",
+    "purchased_at": "2026-08-21T09:30:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示無償提供品",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 0,
+        "line_total": 0,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 0, "tax": 0, "gross": 0, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 0,
+    "tax": 0,
+    "total": 0,
+    "payments": [{"method": "cash", "label": "現金", "amount": 0}],
+    "payment_sum": 0,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

@@ -9,6 +9,15 @@ module GeneratedReceipts
     COUNT_TAX_SEMANTICS = %w[reproducible_as_recorded unknown].freeze
     PURCHASED_QUANTITY_ORIGINS = %w[explicit fallback missing].freeze
     COUNTABLE_UNIT_CODES = %w[each item piece bag sheet unit box set].freeze
+    CANONICAL_UNIT_CODES = (COUNTABLE_UNIT_CODES + MeasurementContract::UNIT_SCALES.keys).freeze
+    FORMULA_CONFLICTS = %w[
+      adjacent_item
+      dimension_mismatch
+      multiple_reference_expression
+      package_content
+      unsupported_unit
+    ].freeze
+    REVIEWABLE_FORMULA_CONFLICTS = %w[multiple_reference_expression].freeze
     ITEM_PRICING_MODE_REVIEW_REASON = "item_pricing_mode_uncertain"
     MAX_REVIEW_REASONS = 20
     MAX_REVIEW_REASON_BYTES = 64
@@ -87,6 +96,7 @@ module GeneratedReceipts
       end
 
       item_index = source_item.fetch("item_index")
+      validate_formula_conflicts(source_item, source_index)
       validate_review_state(expected_item, item_index)
       validate_decision(source_item, expected_item, item_index)
       case expected_item["pricing_source_kind"]
@@ -131,7 +141,7 @@ module GeneratedReceipts
 
       reasons = Array(item["review_reasons"])
       has_mode_review = reasons.include?(ITEM_PRICING_MODE_REVIEW_REASON)
-      if decision.state == :reviewable && !has_mode_review
+      if %i[reviewable unresolved].include?(decision.state) && !has_mode_review
         add_error(
           "expected.items[#{item_index}].review_reasons",
           "must include #{ITEM_PRICING_MODE_REVIEW_REASON} for the declared evidence"
@@ -145,6 +155,13 @@ module GeneratedReceipts
     end
 
     def decision_for(source_item, item)
+      if formula_conflicted?(source_item)
+        return conflict_decision(source_item)
+      end
+      if unsupported_reference_tax_semantics?(source_item, item)
+        return unsupported_reference_tax_decision(source_item)
+      end
+
       reference_projection = reference_projection_for(source_item, item)
       if reference_projection
         return formula_decision(
@@ -161,6 +178,26 @@ module GeneratedReceipts
 
       if bounded_printed_total(source_item)
         Decision.new(pricing_source_kind: "explicit_line_total", state: :confirmed)
+      else
+        Decision.new(pricing_source_kind: nil, state: :unresolved)
+      end
+    end
+
+    def conflict_decision(source_item)
+      printed_total = bounded_printed_total(source_item)
+      return Decision.new(pricing_source_kind: nil, state: :unresolved) unless printed_total
+
+      state = if (formula_conflicts(source_item) & REVIEWABLE_FORMULA_CONFLICTS).any?
+        :reviewable
+      else
+        :confirmed
+      end
+      Decision.new(pricing_source_kind: "explicit_line_total", state:)
+    end
+
+    def unsupported_reference_tax_decision(source_item)
+      if bounded_printed_total(source_item)
+        Decision.new(pricing_source_kind: "explicit_line_total", state: :reviewable)
       else
         Decision.new(pricing_source_kind: nil, state: :unresolved)
       end
@@ -215,6 +252,47 @@ module GeneratedReceipts
         discount_rounding: expected.dig("rounding", "discount")
       )
       projection if projection&.projected_gross_line_total
+    end
+
+    def unsupported_reference_tax_semantics?(source_item, item)
+      inclusion = source_item["reference_price_tax_inclusion"]
+      return false unless %w[net unknown].include?(inclusion)
+
+      projected_source = if inclusion == "unknown"
+        source_item.merge("reference_price_tax_inclusion" => "gross")
+      else
+        source_item
+      end
+      projection = MeasurementContract.project(
+        source_item: projected_source,
+        tax_rate: item["tax_rate"],
+        tax_rounding: expected.dig("rounding", "tax"),
+        discount_rounding: expected.dig("rounding", "discount")
+      )
+      !projection&.projected_gross_line_total.nil?
+    end
+
+    def validate_formula_conflicts(source_item, source_index)
+      return unless source_item.key?("formula_conflicts")
+      return if formula_conflicts(source_item)
+
+      add_error(
+        "source.items[#{source_index}].formula_conflicts",
+        "must be a bounded unique formula conflict array"
+      )
+    end
+
+    def formula_conflicted?(source_item)
+      formula_conflicts(source_item)&.any?
+    end
+
+    def formula_conflicts(source_item)
+      value = source_item["formula_conflicts"]
+      return [] if value.nil?
+      return unless value.is_a?(Array) && value.size <= FORMULA_CONFLICTS.size
+      return unless value.uniq.size == value.size && (value - FORMULA_CONFLICTS).empty?
+
+      value
     end
 
     def bounded_printed_total(source_item)

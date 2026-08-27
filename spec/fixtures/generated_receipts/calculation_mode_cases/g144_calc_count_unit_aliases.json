@@ -1,0 +1,212 @@
+{
+  "case_id": "g144_calc_count_unit_aliases",
+  "category": "calculation_mode",
+  "intent": "Every canonical Japanese count-unit alias independently selects confirmed count-unit pricing.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示小物入れ", "@120円 × 2個", "240円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "120",
+        "printed_line_total": 240
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["例示生活雑貨", "@85円 × 3点", "255円"],
+        "purchased_quantity": "3",
+        "purchased_unit": "item",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "85",
+        "printed_line_total": 255
+      },
+      {
+        "item_index": 2,
+        "printed_lines": ["例示鉛筆", "@70円 × 4本", "280円"],
+        "purchased_quantity": "4",
+        "purchased_unit": "piece",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "70",
+        "printed_line_total": 280
+      },
+      {
+        "item_index": 3,
+        "printed_lines": ["例示清掃用品詰替", "@160円 × 2袋", "320円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "bag",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "160",
+        "printed_line_total": 320
+      },
+      {
+        "item_index": 4,
+        "printed_lines": ["例示便箋", "@30円 × 5枚", "150円"],
+        "purchased_quantity": "5",
+        "purchased_unit": "sheet",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "30",
+        "printed_line_total": 150
+      },
+      {
+        "item_index": 5,
+        "printed_lines": ["例示卓上ライト", "@950円 × 2台", "1,900円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "unit",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "950",
+        "printed_line_total": 1900
+      },
+      {
+        "item_index": 6,
+        "printed_lines": ["例示収納箱", "@420円 × 2箱", "840円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "box",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "420",
+        "printed_line_total": 840
+      },
+      {
+        "item_index": 7,
+        "printed_lines": ["例示工作用品セット", "@680円 × 2セット", "1,360円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "set",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "680",
+        "printed_line_total": 1360
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空計数用品店",
+    "store_address": "架空県例示市計数町1-1",
+    "purchased_at": "2026-08-21T09:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示小物入れ",
+        "unit_price": 120,
+        "quantity": "2",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 240,
+        "line_total": 240,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示生活雑貨",
+        "unit_price": 85,
+        "quantity": "3",
+        "quantity_unit_code": "item",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 255,
+        "line_total": 255,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示鉛筆",
+        "unit_price": 70,
+        "quantity": "4",
+        "quantity_unit_code": "piece",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 280,
+        "line_total": 280,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示清掃用品詰替",
+        "unit_price": 160,
+        "quantity": "2",
+        "quantity_unit_code": "bag",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 320,
+        "line_total": 320,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示便箋",
+        "unit_price": 30,
+        "quantity": "5",
+        "quantity_unit_code": "sheet",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 150,
+        "line_total": 150,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示卓上ライト",
+        "unit_price": 950,
+        "quantity": "2",
+        "quantity_unit_code": "unit",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 1900,
+        "line_total": 1900,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示収納箱",
+        "unit_price": 420,
+        "quantity": "2",
+        "quantity_unit_code": "box",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 840,
+        "line_total": 840,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示工作用品セット",
+        "unit_price": 680,
+        "quantity": "2",
+        "quantity_unit_code": "set",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 1360,
+        "line_total": 1360,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 4860, "tax": 485, "gross": 5345, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 4860,
+    "tax": 485,
+    "total": 5345,
+    "payments": [{"method": "cash", "label": "現金", "amount": 5345}],
+    "payment_sum": 5345,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

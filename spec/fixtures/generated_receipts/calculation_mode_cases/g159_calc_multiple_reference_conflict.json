@@ -1,0 +1,66 @@
+{
+  "case_id": "g159_calc_multiple_reference_conflict",
+  "category": "calculation_mode",
+  "intent": "Different regular and member reference projections do not establish formula authority; the strong printed total remains explicit and reviewable.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル会員量売D", "通常 税込 400円/100g", "会員 税込 360円/100g", "計量 250g", "900円"],
+        "purchased_quantity": "250",
+        "purchased_unit": "gram",
+        "purchased_quantity_origin": "explicit",
+        "formula_conflicts": ["multiple_reference_expression"],
+        "reference_price_amount": "400",
+        "reference_quantity": "100",
+        "reference_unit": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 900
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算境界店",
+    "store_address": "サンプル県サンプル市境界町2-2",
+    "purchased_at": "2026-08-20T11:35:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル会員量売D",
+        "unit_price": null,
+        "quantity": "250",
+        "quantity_unit_code": "gram",
+        "pricing_source_kind": "explicit_line_total",
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 900,
+        "line_total": 900,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": true,
+        "review_reasons": ["item_pricing_mode_uncertain"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 819, "tax": 81, "gross": 900, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 819,
+    "tax": 81,
+    "total": 900,
+    "payments": [{"method": "cash", "label": "現金", "amount": 900}],
+    "payment_sum": 900,
+    "payment_method": "cash",
+    "status": "review_needed",
+    "review_reasons": ["item_pricing_mode_uncertain"]
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "item_review_states"], "allow_review_reasons": ["item_pricing_mode_uncertain"], "allow_item_name_minor_diff": false}
+}

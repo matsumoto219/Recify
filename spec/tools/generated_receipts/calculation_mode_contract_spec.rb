@@ -70,7 +70,9 @@ RSpec.describe GeneratedReceipts::CalculationModeContract do
         quantity_unit_code: nil,
         pricing_source_kind: nil,
         original_line_total: nil,
-        line_total: nil
+        line_total: nil,
+        needs_review: true,
+        review_reasons: [ "item_pricing_mode_uncertain" ]
       )
     )
 
@@ -128,7 +130,9 @@ RSpec.describe GeneratedReceipts::CalculationModeContract do
         quantity_unit_code: nil,
         pricing_source_kind: nil,
         original_line_total: nil,
-        line_total: nil
+        line_total: nil,
+        needs_review: true,
+        review_reasons: [ "item_pricing_mode_uncertain" ]
       )
     )
     data["source"]["count_tax_semantics"] = "unknown"
@@ -192,6 +196,67 @@ RSpec.describe GeneratedReceipts::CalculationModeContract do
     )
   end
 
+  it "falls back to reviewable explicit authority for complete net reference evidence" do
+    source = source_item(
+      purchased_quantity: "1",
+      purchased_unit: "kilogram",
+      count_unit_price_amount: nil,
+      reference_price_amount: "980",
+      reference_quantity: "1",
+      reference_unit: "kilogram",
+      reference_price_tax_inclusion: "net",
+      printed_line_total: 1_078
+    )
+    expected = expected_item(
+      unit_price: nil,
+      quantity: "1",
+      quantity_unit_code: "kilogram",
+      pricing_source_kind: "explicit_line_total",
+      original_line_total: 1_078,
+      line_total: 1_078,
+      needs_review: true,
+      review_reasons: [ "item_pricing_mode_uncertain" ]
+    )
+
+    expect(validate(calculation_case(source:, expected:))).to eq([])
+  end
+
+  it "uses reviewable explicit authority when multiple reference expressions conflict" do
+    source = source_item(
+      purchased_quantity: "2",
+      purchased_unit: "kilogram",
+      count_unit_price_amount: nil,
+      reference_price_amount: "500",
+      reference_quantity: "1",
+      reference_unit: "kilogram",
+      reference_price_tax_inclusion: "gross",
+      printed_line_total: 1_000,
+      formula_conflicts: [ "multiple_reference_expression" ]
+    )
+    expected = expected_item(
+      unit_price: nil,
+      quantity: "2",
+      quantity_unit_code: "kilogram",
+      pricing_source_kind: "explicit_line_total",
+      original_line_total: 1_000,
+      line_total: 1_000,
+      needs_review: true,
+      review_reasons: [ "item_pricing_mode_uncertain" ]
+    )
+
+    expect(validate(calculation_case(source:, expected:))).to eq([])
+  end
+
+  it "rejects formula conflict labels outside the fixture allowlist" do
+    data = calculation_case(
+      source: source_item(formula_conflicts: [ "invented_conflict" ])
+    )
+
+    expect(validate(data)).to include(
+      "source.items[0].formula_conflicts: must be a bounded unique formula conflict array"
+    )
+  end
+
   it "validates a strong printed total as explicit authority without inventing formula source" do
     source = source_item(
       purchased_quantity: "1",
@@ -224,7 +289,7 @@ RSpec.describe GeneratedReceipts::CalculationModeContract do
     expect(validate(calculation_case(source:, expected:))).to eq([])
   end
 
-  it "validates unclassified items without derived amount authority" do
+  it "requires calculation-mode review when an item remains unclassified" do
     source = source_item(
       purchased_quantity: nil,
       purchased_unit: nil,
@@ -241,7 +306,9 @@ RSpec.describe GeneratedReceipts::CalculationModeContract do
       line_total: nil
     )
 
-    expect(validate(calculation_case(source:, expected:))).to eq([])
+    expect(validate(calculation_case(source:, expected:))).to include(
+      "expected.items[0].review_reasons: must include item_pricing_mode_uncertain for the declared evidence"
+    )
   end
 
   it "derives reviewable only from a persisted mode plus the calculation-mode review reason" do

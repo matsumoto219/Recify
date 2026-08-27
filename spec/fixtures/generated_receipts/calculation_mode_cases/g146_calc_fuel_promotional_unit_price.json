@@ -1,0 +1,65 @@
+{
+  "case_id": "g146_calc_fuel_promotional_unit_price",
+  "category": "calculation_mode",
+  "intent": "A displayed post-promotion gross fuel unit price extends once to the matching printed total without modeling a second discount.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示給油商品A", "特典適用後単価 160円/L", "会員値引 3円/L引", "給油量 20.74L", "金額 3,318円"],
+        "purchased_quantity": "20.74",
+        "purchased_unit": "liter",
+        "purchased_quantity_origin": "explicit",
+        "reference_price_amount": "160",
+        "reference_quantity": "1",
+        "reference_unit": "liter",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 3318
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空給油所A",
+    "store_address": "架空県例示市燃料町3-3",
+    "purchased_at": "2026-08-21T09:10:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示給油商品A",
+        "unit_price": null,
+        "quantity": "20.74",
+        "quantity_unit_code": "liter",
+        "pricing_source_kind": "reference_quantity_price",
+        "reference_price_amount": "160",
+        "reference_quantity": "1",
+        "reference_quantity_unit_code": "liter",
+        "reference_price_tax_inclusion": "gross",
+        "original_line_total": 3318,
+        "line_total": 3318,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 3017, "tax": 301, "gross": 3318, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 3017,
+    "tax": 301,
+    "total": 3318,
+    "payments": [{"method": "cash", "label": "現金", "amount": 3318}],
+    "payment_sum": 3318,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

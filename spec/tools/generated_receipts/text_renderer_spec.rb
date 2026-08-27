@@ -18,8 +18,8 @@ RSpec.describe GeneratedReceipts::TextRenderer do
     aggregate_failures do
       expect(GeneratedReceipts.legacy_case_paths.size).to eq(112)
       expect(GeneratedReceipts.measurement_case_paths.size).to eq(10)
-      expect(GeneratedReceipts.calculation_mode_case_paths.size).to eq(4)
-      expect(GeneratedReceipts.case_paths.size).to eq(126)
+      expect(GeneratedReceipts.calculation_mode_case_paths.size).to eq(23)
+      expect(GeneratedReceipts.case_paths.size).to eq(145)
     end
 
     GeneratedReceipts.case_paths.each do |path|

@@ -363,7 +363,7 @@ RSpec.describe "Generated receipt adversarial contract" do
           data["source"]["context"] = "manual"
           data["source"]["items"][0]["purchased_unit"] = unit
           data["expected"]["items"][0].merge!(
-            "quantity_unit_code" => unit,
+            "quantity_unit_code" => unit == "parsec" ? "each" : unit,
             "pricing_source_kind" => "reference_quantity_price",
             "reference_price_amount" => "120",
             "reference_quantity" => "500",
