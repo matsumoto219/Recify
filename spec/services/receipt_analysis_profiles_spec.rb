@@ -315,6 +315,21 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
+    it 'owns the strong item-total label without treating receipt summaries as item totals' do
+      pattern = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern
+
+      aggregate_failures do
+        expect('明細計 1,703円').to match(pattern)
+        expect('明細計：￥１，７０３').to match(pattern)
+        expect('明細計 0円').to match(pattern)
+        expect('明細計').not_to match(pattern)
+        expect('明細小計 1,703円').not_to match(pattern)
+        expect('小計 1,703円').not_to match(pattern)
+        expect('合計 1,703円').not_to match(pattern)
+        expect('お支払 1,703円').not_to match(pattern)
+      end
+    end
+
     it 'owns discount, summary, identifier, and subtotal vocabulary' do
       destination_conflicts = profile.ocr_reference_pricing_line_group_destination_identifier_conflict_patterns
 

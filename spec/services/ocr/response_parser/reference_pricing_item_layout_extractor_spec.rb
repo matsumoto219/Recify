@@ -155,6 +155,49 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
     )
   end
 
+  it 'accepts the strong item-total label only inside a complete strict layout block' do
+    labeled = extract([
+      '架空計算店',
+      '例示量売品A',
+      '税込 498円/100g',
+      '計量 342g',
+      '明細計 1,703円',
+      '合計 1,703円'
+    ]).sole
+    full_width = extract([
+      '架空計算店',
+      '例示量売品A',
+      '税込 498円/100g',
+      '計量 342g',
+      '明細計：￥１，７０３',
+      '合計 1,703円'
+    ]).sole
+    rejected = [
+      [ '明細計', '合計 1,703円' ],
+      [ '明細小計 1,703円', '合計 1,703円' ],
+      [ '小計 1,703円', '合計 1,703円' ],
+      [ '合計 1,703円', '合計 1,703円' ],
+      [ 'お支払 1,703円', '合計 1,703円' ]
+    ].map do |total_line, summary_line|
+      extract([
+        '架空計算店',
+        '例示量売品A',
+        '税込 498円/100g',
+        '計量 342g',
+        total_line,
+        summary_line
+      ])
+    end
+
+    aggregate_failures do
+      expect(labeled.dig(:printed_line_total, :amount)).to eq('1703')
+      expect(labeled[:printed_total_line_index]).to eq(4)
+      expect(full_width.dig(:printed_line_total, :amount)).to eq('1703')
+      expect(full_width[:printed_total_line_index]).to eq(4)
+      expect(rejected).to all(eq([]))
+    end
+  end
+
   it 'keeps an applied unit-price block with an exact informational per-unit discount note' do
     block = extract([
       '架空給油所A',
