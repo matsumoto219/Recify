@@ -5,6 +5,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     identity: 'azure_structured_item_i0_s100_e115',
     item_index: 0,
     position_index: 1,
+    proposal_id: nil,
     price: 120,
     quantity: BigDecimal('2'),
     unit: 'item',
@@ -15,7 +16,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       item_identity: identity,
       item_index: item_index,
       position_index: position_index,
-      proposal_id: "azure_items_#{item_index}_count_unit_price",
+      proposal_id: proposal_id || "azure_items_#{item_index}_count_unit_price",
       pricing_source_kind: 'count_unit_price',
       price: price,
       quantity: quantity,
@@ -29,6 +30,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     identity: 'azure_structured_item_i0_s100_e115',
     item_index: 0,
     position_index: 1,
+    proposal_id: nil,
     line_total: 240,
     review_reason: nil
   )
@@ -36,7 +38,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       item_identity: identity,
       item_index: item_index,
       position_index: position_index,
-      proposal_id: "azure_items_#{item_index}_explicit_line_total",
+      proposal_id: proposal_id || "azure_items_#{item_index}_explicit_line_total",
       pricing_source_kind: 'explicit_line_total',
       explicit_line_total: line_total,
       projected_line_total: line_total,
@@ -48,6 +50,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     identity: 'azure_structured_item_i0_s100_e115',
     item_index: 0,
     position_index: 1,
+    proposal_id: nil,
     reference_price: BigDecimal('498'),
     reference_quantity: BigDecimal('100'),
     reference_unit: 'gram',
@@ -62,7 +65,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       item_identity: identity,
       item_index: item_index,
       position_index: position_index,
-      proposal_id: "azure_items_#{item_index}_reference_quantity_price",
+      proposal_id: proposal_id || "azure_items_#{item_index}_reference_quantity_price",
       pricing_source_kind: 'reference_quantity_price',
       price: price,
       quantity: quantity,
@@ -406,6 +409,164 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         original_line_total: BigDecimal('0'),
         line_total: BigDecimal('0')
       )
+    end
+
+    it 'layout itemとproposalのpage・name・reference・quantity・total indexが一致するexplicit authorityだけを保持する' do
+      identity = 'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l3_total_l4'
+      proposal_id = 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_explicit_line_total'
+      source = {
+        raw_text: 'レイアウト明細',
+        ocr_item_identity: identity,
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        quantity: BigDecimal('342'),
+        quantity_unit_code: 'gram',
+        original_line_total: 1703,
+        line_total: 1703,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1
+      }
+      selection = explicit_selection(
+        identity:,
+        proposal_id:,
+        line_total: 1703
+      )
+
+      result = trusted_items([ source ], [ selection ]).sole
+
+      expect(result).to include(
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        original_line_total: BigDecimal('1703'),
+        line_total: BigDecimal('1703')
+      )
+    end
+
+    it 'layout itemとproposalのstructural index不一致をauthorityにしない' do
+      identity = 'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l3_total_l4'
+      source = {
+        raw_text: 'レイアウト明細',
+        ocr_item_identity: identity,
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        quantity: BigDecimal('342'),
+        quantity_unit_code: 'gram',
+        original_line_total: 1703,
+        line_total: 1703,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1
+      }
+      mismatches = %w[
+        azure_item_layout_p1_name_l1_ref_l2_qty_l3_total_l4_explicit_line_total
+        azure_item_layout_p0_name_l9_ref_l2_qty_l3_total_l4_explicit_line_total
+        azure_item_layout_p0_name_l1_ref_l9_qty_l3_total_l4_explicit_line_total
+        azure_item_layout_p0_name_l1_ref_l2_qty_l9_total_l4_explicit_line_total
+        azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l9_explicit_line_total
+        azure_items_0_explicit_line_total
+      ]
+
+      results = mismatches.map do |proposal_id|
+        trusted_items(
+          [ source ],
+          [ explicit_selection(identity:, proposal_id:, line_total: 1703) ]
+        ).sole
+      end
+
+      expect(results).to all(satisfy { |item| !item.key?(:pricing_source_kind) })
+    end
+
+    it 'layout sourceではcount・reference selectionとmalformed identityをauthorityにしない' do
+      layout_identity = 'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l3_total_l4'
+      count_source = {
+        raw_text: 'レイアウト明細',
+        ocr_item_identity: layout_identity,
+        pricing_source_kind: 'count_unit_price',
+        price: 120,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'item',
+        quantity_unit_raw: nil,
+        original_line_total: 240,
+        line_total: 240,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1
+      }
+      count = count_selection(
+        identity: layout_identity,
+        proposal_id: 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_count_unit_price'
+      )
+      reference = reference_selection(
+        identity: layout_identity,
+        proposal_id: 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_reference_quantity_price'
+      )
+      malformed_identity = layout_identity.sub('_s6_e12_', '_s12_e6_')
+      malformed = explicit_selection(
+        identity: malformed_identity,
+        proposal_id: 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_explicit_line_total'
+      )
+
+      count_result = trusted_items([ count_source ], [ count ]).sole
+      reference_result = trusted_items(
+        [ reference_source(reference, ocr_item_identity: layout_identity) ],
+        [ reference ]
+      ).sole
+      malformed_result = trusted_items(
+        [
+          count_source.merge(
+            ocr_item_identity: malformed_identity,
+            pricing_source_kind: 'explicit_line_total',
+            price: nil
+          )
+        ],
+        [ malformed ]
+      ).sole
+
+      expect([ count_result, reference_result, malformed_result ]).to all(
+        satisfy { |item| !item.key?(:pricing_source_kind) }
+      )
+    end
+
+    it 'layout identityとproposalのpage・line indexをprovider上限内に制限する' do
+      at_limit_identity =
+        'azure_item_layout_item_p0_name_l149_s0_e10000000_ref_l149_qty_l149_total_l149'
+      at_limit_proposal =
+        'azure_item_layout_p0_name_l149_ref_l149_qty_l149_total_l149_explicit_line_total'
+      invalid_pairs = [
+        [
+          'azure_item_layout_item_p1_name_l1_s6_e12_ref_l2_qty_l3_total_l4',
+          'azure_item_layout_p1_name_l1_ref_l2_qty_l3_total_l4_explicit_line_total'
+        ],
+        [
+          'azure_item_layout_item_p0_name_l150_s6_e12_ref_l2_qty_l3_total_l4',
+          'azure_item_layout_p0_name_l150_ref_l2_qty_l3_total_l4_explicit_line_total'
+        ]
+      ]
+      source = {
+        raw_text: 'レイアウト明細',
+        pricing_source_kind: 'explicit_line_total',
+        price: nil,
+        original_line_total: 1703,
+        line_total: 1703,
+        position_index: 1
+      }
+
+      at_limit = trusted_items(
+        [ source.merge(ocr_item_identity: at_limit_identity) ],
+        [ explicit_selection(identity: at_limit_identity, proposal_id: at_limit_proposal, line_total: 1703) ]
+      ).sole
+      invalid = invalid_pairs.map do |identity, proposal_id|
+        trusted_items(
+          [ source.merge(ocr_item_identity: identity) ],
+          [ explicit_selection(identity:, proposal_id:, line_total: 1703) ]
+        ).sole
+      end
+
+      aggregate_failures do
+        expect(at_limit[:pricing_source_kind]).to eq('explicit_line_total')
+        expect(invalid).to all(satisfy { |item| !item.key?(:pricing_source_kind) })
+      end
     end
 
     it 'reviewable selectionと一致するbounded reasonだけをtrusted authorityと共に保持する' do

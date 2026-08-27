@@ -5,6 +5,16 @@ module Analysis
     OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD = BigDecimal("0.75")
     PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
+    OCR_ITEM_IDENTITY_MAX_BYTES = 160
+    OCR_ITEM_LAYOUT_MAX_LINE_INDEX = 149
+    OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN = 10_000_000
+    OCR_ITEM_LAYOUT_IDENTITY_PATTERN = /
+      \Aazure_item_layout_item_p0_name_l(?<name_line_index>\d+)
+      _s(?<provider_span_start>\d+)_e(?<provider_span_end>\d+)
+      _ref_l(?<reference_line_index>\d+)
+      _qty_l(?<quantity_line_index>\d+)
+      _total_l(?<total_line_index>\d+)\z
+    /x.freeze
 
     class << self
       def call(ocr_result:, ai_result: nil)
@@ -2246,9 +2256,31 @@ module Analysis
 
       def normalize_ocr_item_identity(value)
         identity = value.to_s
-        return nil if identity.bytesize > 160
+        return nil if identity.bytesize > OCR_ITEM_IDENTITY_MAX_BYTES
+        return identity if identity.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
 
-        identity if identity.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
+        identity if valid_ocr_item_layout_identity?(identity)
+      end
+
+      def valid_ocr_item_layout_identity?(identity)
+        match = OCR_ITEM_LAYOUT_IDENTITY_PATTERN.match(identity)
+        return false if match.nil?
+
+        line_indexes = %i[
+          name_line_index
+          reference_line_index
+          quantity_line_index
+          total_line_index
+        ].map { |key| Integer(match[key], 10) }
+        span_start = Integer(match[:provider_span_start], 10)
+        span_end = Integer(match[:provider_span_end], 10)
+
+        line_indexes.all? { |index| index.between?(0, OCR_ITEM_LAYOUT_MAX_LINE_INDEX) } &&
+          span_start.between?(0, OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN) &&
+          span_end.between?(1, OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN) &&
+          span_end > span_start
+      rescue ArgumentError
+        false
       end
 
       def normalize_currency_code(value)

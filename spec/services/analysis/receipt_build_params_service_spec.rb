@@ -336,10 +336,51 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
       aggregate_failures do
         expect(params.fetch(:receipt_items_attributes)).to contain_exactly(
-          include(raw_text: '例示量売品', line_total: 3318)
+          include(
+            raw_text: '例示量売品',
+            line_total: 3318,
+            ocr_item_identity: 'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l4_total_l5'
+          )
         )
         expect(params.fetch(:receipt_adjustments_attributes)).to eq([])
       end
+    end
+
+    it 'Azure item-layout identityはlineとspanの境界内だけ保持する' do
+      identities = [
+        'azure_item_layout_item_p0_name_l149_s0_e10000000_ref_l149_qty_l149_total_l149',
+        'azure_item_layout_item_p1_name_l1_s6_e12_ref_l2_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l150_s6_e12_ref_l2_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l1_s6_e12_ref_l150_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l150_total_l5',
+        'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l4_total_l150',
+        'azure_item_layout_item_p0_name_l1_s12_e6_ref_l2_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l1_s0_e0_ref_l2_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l1_s0_e10000001_ref_l2_qty_l4_total_l5',
+        "azure_item_layout_item_#{'x' * 161}"
+      ]
+
+      normalized = identities.map do |identity|
+        result = described_class.call(
+          ocr_result: {
+            candidates: {
+              items: [
+                {
+                  raw_text: '例示量売品',
+                  line_total: 3318,
+                  original_line_total: 3318,
+                  ocr_item_identity: identity
+                }
+              ]
+            }
+          },
+          ai_result: nil
+        )
+
+        result.fetch(:receipt_items_attributes).sole[:ocr_item_identity]
+      end
+
+      expect(normalized).to eq([ identities.first, *Array.new(identities.size - 1) ])
     end
 
     it 'ambiguousな複数item-layout blockをAIやraw lineから明細へ復活させない' do

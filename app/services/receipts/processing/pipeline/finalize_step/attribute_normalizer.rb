@@ -1,5 +1,22 @@
 class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
   ITEM_PRICING_MODE_REVIEW_REASON = "item_pricing_mode_uncertain"
+  LAYOUT_ITEM_IDENTITY_PATTERN = /
+    \Aazure_item_layout_item_p(?<page_index>0)
+    _name_l(?<name_line_index>0|[1-9]\d*)
+    _s(?<provider_span_start>0|[1-9]\d*)
+    _e(?<provider_span_end>0|[1-9]\d*)
+    _ref_l(?<reference_line_index>0|[1-9]\d*)
+    _qty_l(?<quantity_line_index>0|[1-9]\d*)
+    _total_l(?<total_line_index>0|[1-9]\d*)\z
+  /x.freeze
+  LAYOUT_PROPOSAL_ID_PATTERN = /
+    \Aazure_item_layout_p(?<page_index>0)
+    _name_l(?<name_line_index>0|[1-9]\d*)
+    _ref_l(?<reference_line_index>0|[1-9]\d*)
+    _qty_l(?<quantity_line_index>0|[1-9]\d*)
+    _total_l(?<total_line_index>0|[1-9]\d*)
+    _explicit_line_total\z
+  /x.freeze
 
   class << self
     def items(
@@ -297,16 +314,71 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     end
 
     def valid_item_calculation_mode_identity?(value)
-      value.is_a?(String) &&
-        value.bytesize <= Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES &&
-        value.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
+      return false unless value.is_a?(String)
+      return false if value.bytesize > Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
+      return true if value.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
+
+      layout_item_identity_valid?(value)
     end
 
     def valid_item_calculation_mode_proposal_id?(selection)
       value = selection.proposal_id
-      value.is_a?(String) &&
-        value.bytesize <= Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES &&
-        value.match?(/\Aazure_items_\d+_#{Regexp.escape(selection.pricing_source_kind)}\z/)
+      return false unless value.is_a?(String)
+      return false if value.bytesize > Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
+      if selection.item_identity.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
+        return value.match?(/\Aazure_items_\d+_#{Regexp.escape(selection.pricing_source_kind)}\z/)
+      end
+
+      layout_item_proposal_link_valid?(selection)
+    end
+
+    def layout_item_identity_valid?(value)
+      identity = LAYOUT_ITEM_IDENTITY_PATTERN.match(value)
+      return false if identity.nil?
+
+      span_start = identity[:provider_span_start].to_i
+      span_end = identity[:provider_span_end].to_i
+      line_indexes = %i[
+        name_line_index
+        reference_line_index
+        quantity_line_index
+        total_line_index
+      ].map { |key| identity[key].to_i }
+
+      line_indexes.all? do |index|
+        index.between?(0, Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_LAYOUT_LINE_INDEX)
+      end &&
+        span_start.between?(0, Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_PROVIDER_SPAN) &&
+        span_end.between?(1, Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_PROVIDER_SPAN) &&
+        span_end > span_start
+    end
+
+    def layout_item_proposal_link_valid?(selection)
+      return false unless selection.pricing_source_kind == "explicit_line_total"
+
+      identity = LAYOUT_ITEM_IDENTITY_PATTERN.match(selection.item_identity)
+      proposal = LAYOUT_PROPOSAL_ID_PATTERN.match(selection.proposal_id)
+      return false if identity.nil? || proposal.nil?
+      return false unless layout_item_identity_valid?(selection.item_identity)
+      return false unless %i[
+        name_line_index
+        reference_line_index
+        quantity_line_index
+        total_line_index
+      ].all? do |key|
+        proposal[key].to_i.between?(
+          0,
+          Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_LAYOUT_LINE_INDEX
+        )
+      end
+
+      %i[
+        page_index
+        name_line_index
+        reference_line_index
+        quantity_line_index
+        total_line_index
+      ].all? { |key| identity[key] == proposal[key] }
     end
 
     def valid_item_calculation_mode_limit?(value)
