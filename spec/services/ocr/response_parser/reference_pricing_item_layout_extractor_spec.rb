@@ -432,6 +432,100 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
     end
   end
 
+  it 'links one exact structured destination whose parent ends before the layout quantity and total' do
+    lines = [
+      '架空量売店F',
+      '例示量売確認品F',
+      '240円/100g',
+      '計量 250g',
+      '明細計 600円',
+      '合計 600円'
+    ]
+    result = synthetic_analyze_result(lines)
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: 'textElements')
+    content = result.fetch('content')
+    name_line = result.dig('pages', 0, 'lines', 1)
+    reference_line = result.dig('pages', 0, 'lines', 2)
+    name_start = name_line.dig('spans', 0, 'offset')
+    name_end = name_start + name_line.dig('spans', 0, 'length')
+    reference_start = reference_line.dig('spans', 0, 'offset')
+    reference_end = reference_start + reference_line.dig('spans', 0, 'length')
+    structured_item = {
+      'content' => content[name_start...reference_end],
+      'spans' => [ { 'offset' => name_start, 'length' => reference_end - name_start } ],
+      'valueObject' => {
+        'Description' => {
+          'content' => lines[1],
+          'valueString' => lines[1],
+          'spans' => [ { 'offset' => name_start, 'length' => mapper.length(lines[1]) } ]
+        },
+        'Price' => {
+          'content' => lines[2],
+          'spans' => [ { 'offset' => reference_start, 'length' => mapper.length(lines[2]) } ]
+        }
+      }
+    }
+    result.dig('documents', 0, 'fields', 'Items')['valueArray'] = [ structured_item ]
+    words = result.dig('pages', 0, 'words')
+    words.reject! do |word|
+      offset = word.dig('span', 'offset')
+      offset >= name_start && offset < name_end
+    end
+    name_bounds = name_line.fetch('polygon')
+    lines[1].scan(/\X/).each_with_index do |character, index|
+      left = name_bounds[0] + (index * 10)
+      top = name_bounds[1]
+      words << {
+        'content' => character,
+        'polygon' => [ left, top, left + 10, top, left + 10, top + 16, left, top + 16 ],
+        'confidence' => 0.99,
+        'span' => { 'offset' => name_start + index, 'length' => 1 }
+      }
+    end
+    words.sort_by! { |word| word.dig('span', 'offset') }
+
+    block = described_class.call(
+      analyze_result: result,
+      profile: ReceiptAnalysisProfiles.fetch('JPN'),
+      projection: ReceiptAmountService.method(:reference_item_extension_projection)
+    ).sole
+
+    aggregate_failures do
+      expect(block).to include(
+        destination_kind: 'azure_structured_item',
+        structured_item_index: 0,
+        item_identity: "azure_structured_item_i0_s#{name_start}_e#{reference_end}",
+        layout_item: nil,
+        purchased_quantity_line_indexes: [ 3 ],
+        printed_total_line_index: 4
+      )
+      expect(block[:destination_evidence]).to include(
+        source_provider: 'azure_item_layout',
+        source_field_path: 'pages[0].lines[1]',
+        provider_span_start: name_start,
+        provider_span_end: name_end
+      )
+      expect(block.dig(:reference_pricing_candidate, :validation_state)).to eq('ambiguous')
+      expect(block.dig(:reference_pricing_candidate, :rejection_reasons)).to eq([ 'ambiguous_tax_inclusion' ])
+      expect(block.dig(:printed_line_total, :amount)).to eq('600')
+    end
+
+    missing_price = result.deep_dup
+    missing_price.dig('documents', 0, 'fields', 'Items', 'valueArray', 0, 'valueObject').delete('Price')
+    duplicate_destination = result.deep_dup
+    duplicate_destination.dig('documents', 0, 'fields', 'Items', 'valueArray') << structured_item.deep_dup
+
+    aggregate_failures do
+      [ missing_price, duplicate_destination ].each do |analyze_result|
+        expect(described_class.call(
+          analyze_result:,
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          projection: ReceiptAmountService.method(:reference_item_extension_projection)
+        )).to eq([])
+      end
+    end
+  end
+
   it 'fails closed for mismatches, ordinary discounts, packages, and summary-only totals' do
     cases = [
       [ '例示品A', '税込 498円/100g', '計量 342g', '1,704円' ],

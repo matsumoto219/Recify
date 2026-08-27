@@ -352,7 +352,7 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     item_identity = destination.fetch(:item_identity)
     printed_line_total = candidate[:printed_line_total]
     return if printed_line_total.nil?
-    destination_evidence = destination_evidence(block.fetch(:name))
+    destination_evidence = destination[:destination_evidence] || destination_evidence(block.fetch(:name))
     return if destination_evidence.nil?
 
     resolved_layout_item = if destination[:layout_item]
@@ -624,6 +624,7 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
 
   def destination_for(block)
     structured = exact_structured_destination(block)
+    structured ||= exact_single_structured_destination(block)
     return structured if structured
     if block[:kind] == :column
       replacement = replacement_destination(block)
@@ -657,6 +658,31 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     end
 
     matches.sole if matches.one?
+  end
+
+  def exact_single_structured_destination(block)
+    return unless structured_items.one?
+
+    item = structured_items.sole
+    parent = exact_structured_parent_span(item)
+    return if parent.nil?
+
+    name = block.fetch(:name)
+    reference = block.fetch(:reference)
+    purchased = block.fetch(:purchased_entries).last
+    return unless parent.begin == name.fetch(:span_start)
+    return unless parent.end == reference.fetch(:span_end)
+    return unless purchased.fetch(:span_start) > parent.end
+    return unless exact_structured_description?(item, name, parent:)
+    return unless exact_field_entry?(item.dig("valueObject", "Price"), reference)
+
+    {
+      destination_kind: "azure_structured_item",
+      structured_item_index: 0,
+      item_identity: "azure_structured_item_i0_s#{parent.begin}_e#{parent.end}",
+      layout_item: false,
+      destination_evidence: exact_entry_evidence(name)
+    }
   end
 
   def replacement_destination(block)
@@ -774,13 +800,22 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     return false if destination_conflict?(value)
     return false if value.match?(profile.ocr_reference_pricing_line_group_package_or_uncertain_pattern)
     return false unless lines.count { |line| line[:content] == value } == 1
-    return false if destination_evidence(name).nil?
+    return false if destination_evidence(name).nil? && exact_structured_name_line(name).nil?
     return false if non_item_document_field_overlap?(name)
 
     previous = lines[first_block_line_index - 1] if first_block_line_index.positive?
     return false if previous && product_like_line?(previous[:content])
 
     true
+  end
+
+  def exact_structured_name_line(name)
+    matches = structured_items.select do |item|
+      parent = exact_structured_parent_span(item)
+      parent && exact_structured_description?(item, name, parent:)
+    end
+
+    matches.sole if matches.one?
   end
 
   def product_like_line?(value)
