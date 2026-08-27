@@ -95,8 +95,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   def initialize(
     items:,
     profile:,
-    content:,
-    string_index_type:,
+    content: nil,
+    string_index_type: "utf16CodeUnit",
     projection: nil,
     allow_separated_tax_label: false
   )
@@ -1490,10 +1490,10 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def normalized_mappable_text(value, max_bytes:)
-    encoded = raw_mappable_text(value, max_bytes:)
+    encoded = raw_mappable_text(value, max_bytes:)&.freeze
     return if encoded.nil?
 
-    normalized = encoded.unicode_normalize(:nfkc)
+    normalized = encoded.unicode_normalize(:nfkc).freeze
     return unless normalized.length == encoded.length
     return unless provider_length(normalized) == provider_length(encoded)
 

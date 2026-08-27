@@ -4,9 +4,6 @@ RSpec.describe 'Azure measurement line-group mapping' do
   LINE_GROUP_FIXTURE_PATH = Rails.root.join(
     'spec/fixtures/ocr/ocr_azure_measurement_line_group_anonymized.json'
   )
-  ITEMS_FIXTURE_PATH = Rails.root.join(
-    'spec/fixtures/ocr/ocr_azure_measurement_unit_price_positive_anonymized.json'
-  )
 
   def line_group_response
     JSON.parse(LINE_GROUP_FIXTURE_PATH.read)
@@ -104,7 +101,44 @@ RSpec.describe 'Azure measurement line-group mapping' do
 
   it 'keeps the existing Azure Items candidate path authoritative over the fallback' do
     response = line_group_response.deep_dup
-    item = JSON.parse(ITEMS_FIXTURE_PATH.read).fetch('cases').first.fetch('item')
+    analyze_result = response.fetch('analyzeResult')
+    content = analyze_result.fetch('content')
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: 'textElements')
+    description = 'SYNTH-LAYOUT'
+    price_content = '税込 120円/1 L'
+    quantity_content = '計量 2.5 L'
+    total_content = '合計 300円'
+    item = {
+      'content' => content,
+      'spans' => [ { 'offset' => 0, 'length' => mapper.length(content) } ],
+      'valueObject' => {
+        'Description' => {
+          'content' => description,
+          'spans' => [ { 'offset' => content.index(description), 'length' => mapper.length(description) } ],
+          'valueString' => description
+        },
+        'Price' => {
+          'content' => price_content,
+          'spans' => [ { 'offset' => content.index(price_content), 'length' => mapper.length(price_content) } ],
+          'valueCurrency' => { 'amount' => 120, 'currencyCode' => 'JPY' }
+        },
+        'Quantity' => {
+          'content' => quantity_content,
+          'spans' => [ { 'offset' => content.index(quantity_content), 'length' => mapper.length(quantity_content) } ],
+          'valueNumber' => 2.5
+        },
+        'QuantityUnit' => {
+          'content' => quantity_content,
+          'spans' => [ { 'offset' => content.index(quantity_content), 'length' => mapper.length(quantity_content) } ],
+          'valueString' => 'L'
+        },
+        'TotalPrice' => {
+          'content' => total_content,
+          'spans' => [ { 'offset' => content.index(total_content), 'length' => mapper.length(total_content) } ],
+          'valueCurrency' => { 'amount' => 300, 'currencyCode' => 'JPY' }
+        }
+      }
+    }
     response.dig('analyzeResult', 'documents', 0, 'fields', 'Items')['valueArray'] = [ item ]
 
     result = parse(response)

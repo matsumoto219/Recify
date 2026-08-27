@@ -19,6 +19,7 @@ class Ocr::ResponseParser::AzureStringIndexMapper
 
   def length(content)
     return unless valid_content?(content)
+    return @boundary_index[:provider_offsets].last if cached_boundary_for?(content)
 
     total = 0
     each_index_segment(content) do |_byte_length, provider_length|
@@ -100,7 +101,7 @@ class Ocr::ResponseParser::AzureStringIndexMapper
   end
 
   def boundary_index(content)
-    return @boundary_index if defined?(@boundary_content) && @boundary_content.equal?(content)
+    return @boundary_index if cached_boundary_for?(content)
 
     byte_offsets = [ 0 ]
     provider_offsets = [ 0 ]
@@ -121,6 +122,12 @@ class Ocr::ResponseParser::AzureStringIndexMapper
       @boundary_index = index
     end
     index
+  end
+
+  def cached_boundary_for?(content)
+    defined?(@boundary_content) &&
+      (@boundary_content.equal?(content) ||
+        (@boundary_content.frozen? && content.frozen? && @boundary_content == content))
   end
 
   def exact_boundary_value(search_offsets, result_offsets, target)
