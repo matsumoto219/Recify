@@ -4,6 +4,7 @@ module GeneratedReceipts
   ROOT = File.expand_path("../spec/fixtures/generated_receipts", __dir__)
   CASES_DIR = File.join(ROOT, "cases")
   MEASUREMENT_CASES_DIR = File.join(ROOT, "measurement_cases")
+  CALCULATION_MODE_CASES_DIR = File.join(ROOT, "calculation_mode_cases")
   ADOPTION_EVIDENCE_CASES_DIR = File.join(ROOT, "adoption_evidence_cases")
   ADOPTION_EVIDENCE_TEXT_DIR = File.join(ROOT, "adoption_evidence_text")
   ADOPTION_EVIDENCE_IMAGES_DIR = File.join(ROOT, "adoption_evidence_images")
@@ -36,8 +37,12 @@ module GeneratedReceipts
     Dir[File.join(MEASUREMENT_CASES_DIR, "*.json")].sort
   end
 
+  def self.calculation_mode_case_paths
+    Dir[File.join(CALCULATION_MODE_CASES_DIR, "*.json")].sort
+  end
+
   def self.case_paths
-    legacy_case_paths + measurement_case_paths
+    legacy_case_paths + measurement_case_paths + calculation_mode_case_paths
   end
 
   def self.adoption_evidence_case_paths
@@ -48,6 +53,7 @@ end
 require_relative "generated_receipts/degradation_profiles"
 require_relative "generated_receipts/degrader"
 require_relative "generated_receipts/measurement_contract"
+require_relative "generated_receipts/calculation_mode_contract"
 require_relative "generated_receipts/validator"
 require_relative "generated_receipts/text_renderer"
 require_relative "generated_receipts/html_renderer"

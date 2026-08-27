@@ -46,6 +46,7 @@ module GeneratedReceipts
       abort "#{failures.size} generated receipt case(s) failed validation" if failures.any?
       puts "#{GeneratedReceipts.legacy_case_paths.size} existing generated receipt case(s) passed"
       puts "#{GeneratedReceipts.measurement_case_paths.size} Measurement generated receipt case(s) passed"
+      puts "#{GeneratedReceipts.calculation_mode_case_paths.size} calculation-mode generated receipt case(s) passed"
       puts "#{case_paths.size} generated receipt case(s) passed"
     rescue DuplicateFiles::Error => error
       abort error.message

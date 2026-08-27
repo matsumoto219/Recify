@@ -16,6 +16,7 @@ module GeneratedReceipts
       tax_rate
       tax_details
       item_amounts
+      item_review_states
       reference_pricing_candidates
       receipt_adjustments
       payment_method
@@ -31,6 +32,8 @@ module GeneratedReceipts
       reference_price_tax_inclusion
       original_line_total
     ].freeze
+    OPTIONAL_ITEM_REVIEW_KEYS = %w[needs_review review_reasons].freeze
+    ITEM_REVIEW_REASON_LIMIT = 20
     REFERENCE_PRICING_CANDIDATE_LIMIT = 100
     REFERENCE_PRICING_ITEM_INDEX_MAX = REFERENCE_PRICING_CANDIDATE_LIMIT - 1
     REFERENCE_PRICING_LINE_TOTAL_MAX = 999_999_999
@@ -63,7 +66,7 @@ module GeneratedReceipts
       name unit_price quantity quantity_unit_code line_total original_line_total
       tax_rate discount_amount pricing_source_kind reference_price_amount
       reference_quantity reference_quantity_unit_code reference_price_tax_inclusion
-      tax_inclusion
+      tax_inclusion needs_review review_reasons
     ].freeze
     ACTUAL_TAX_DETAIL_KEYS = %w[rate net tax gross basis label].freeze
     ACTUAL_ADJUSTMENT_KEYS = %w[
@@ -137,7 +140,9 @@ module GeneratedReceipts
                 max_scale: REFERENCE_PRICING_QUANTITY_MAX_SCALE
               ),
               "reference_quantity_unit_code" => item.reference_quantity_unit_code,
-              "reference_price_tax_inclusion" => item.reference_price_tax_inclusion
+              "reference_price_tax_inclusion" => item.reference_price_tax_inclusion,
+              "needs_review" => item.needs_review?,
+              "review_reasons" => bounded_item_review_reasons(item.review_reasons)
             }
           end,
           "receipt_adjustments" => receipt.receipt_adjustments.order(:position_index, :id).map do |adjustment|
@@ -552,6 +557,12 @@ module GeneratedReceipts
 
         value.all? { |entry| strict_token?(entry, allowed: allowed) }
       end
+
+      def bounded_item_review_reasons(value)
+        return unless valid_token_array?(value, limit: ITEM_REVIEW_REASON_LIMIT)
+
+        value.sort
+      end
     end
 
     def initialize(case_data, actual)
@@ -581,6 +592,7 @@ module GeneratedReceipts
       compare_tax_details
       compare_items
       compare_item_amounts
+      compare_item_review_states
       compare_reference_pricing_candidates if expected.key?("reference_pricing_candidates")
       compare_adjustments
       compare_scalar("payment_method", expected["payment_method"], actual["payment_method"])
@@ -613,6 +625,7 @@ module GeneratedReceipts
       %w[items tax_details receipt_adjustments payments].all? do |key|
         bounded_hash_array?(comparison_expected[key])
       end && bounded_string_array?(comparison_expected["review_reasons"]) &&
+        valid_expected_item_review_shapes?(comparison_expected["items"]) &&
         valid_expected_candidates_shape?(comparison_expected["reference_pricing_candidates"])
     rescue StandardError
       false
@@ -638,15 +651,24 @@ module GeneratedReceipts
 
     def valid_actual_collections?(value, required:)
       collections = {
-        "items" => ACTUAL_ITEM_KEYS,
         "tax_details" => ACTUAL_TAX_DETAIL_KEYS,
         "receipt_adjustments" => ACTUAL_ADJUSTMENT_KEYS,
         "payments" => ACTUAL_PAYMENT_KEYS
       }
-      collections.all? do |key, allowed_keys|
+      valid_items = (!required && !value.key?("items")) || bounded_actual_items?(value["items"])
+      valid_items && collections.all? do |key, allowed_keys|
         (!required && !value.key?(key)) ||
           bounded_actual_hash_array?(value[key], allowed_keys: allowed_keys)
       end && bounded_actual_candidates?(value)
+    end
+
+    def bounded_actual_items?(value)
+      return false unless bounded_actual_hash_array?(value, allowed_keys: ACTUAL_ITEM_KEYS)
+
+      value.all? do |item|
+        valid_optional_boolean?(item, "needs_review") &&
+          valid_optional_item_review_reasons?(item)
+      end
     end
 
     def valid_actual_scalar_fields?(value)
@@ -763,6 +785,25 @@ module GeneratedReceipts
       end
     end
 
+    def valid_expected_item_review_shapes?(items)
+      items.all? do |item|
+        valid_optional_boolean?(item, "needs_review") &&
+          valid_optional_item_review_reasons?(item)
+      end
+    end
+
+    def valid_optional_boolean?(container, key)
+      !container.key?(key) || container[key] == true || container[key] == false
+    end
+
+    def valid_optional_item_review_reasons?(container)
+      return true unless container.key?("review_reasons")
+
+      reasons = container["review_reasons"]
+      bounded_string_array?(reasons, maximum: ITEM_REVIEW_REASON_LIMIT) &&
+        reasons.uniq.size == reasons.size
+    end
+
     def valid_expected_candidates_shape?(value)
       return true if value.nil?
       return false unless bounded_hash_array?(value)
@@ -831,6 +872,18 @@ module GeneratedReceipts
         normalize_item_amounts(safe_hash_entry(item), optional_keys: optional_keys)
       end
       compare_array("item_amounts", expected_amounts, actual_amounts)
+    end
+
+    def compare_item_review_states
+      expected_items = expected["items"]
+      expected_states = expected_items.map do |item|
+        normalize_item_review_state(item, optional_keys: declared_optional_item_review_keys(item))
+      end
+      actual_states = Array(actual["items"]).each_with_index.map do |item, index|
+        optional_keys = declared_optional_item_review_keys(expected_items[index] || {})
+        normalize_item_review_state(safe_hash_entry(item), optional_keys: optional_keys)
+      end
+      compare_array("item_review_states", expected_states, actual_states)
     end
 
     def compare_reference_pricing_candidates
@@ -961,6 +1014,17 @@ module GeneratedReceipts
       else
         value
       end
+    end
+
+    def normalize_item_review_state(item, optional_keys: [])
+      optional_keys.to_h do |key|
+        value = key == "review_reasons" ? Array(item[key]).sort : item[key]
+        [ key, value ]
+      end
+    end
+
+    def declared_optional_item_review_keys(item)
+      OPTIONAL_ITEM_REVIEW_KEYS.select { |key| item.key?(key) }
     end
 
     def normalize_expected_reference_pricing_candidate(candidate)

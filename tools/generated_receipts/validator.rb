@@ -78,6 +78,8 @@ module GeneratedReceipts
       reference_quantity_unit_code
       reference_price_tax_inclusion
       original_line_total
+      needs_review
+      review_reasons
     ].freeze
     ITEM_REQUIRED_KEYS = %w[
       name
@@ -86,6 +88,13 @@ module GeneratedReceipts
       line_total
       tax_rate
       discount_amount
+    ].freeze
+    ITEM_REVIEW_REASONS = %w[
+      item_name_uncertain
+      item_category_uncertain
+      item_quantity_uncertain
+      item_tax_rate_uncertain
+      item_pricing_mode_uncertain
     ].freeze
     ADJUSTMENT_KEYS = %w[
       kind
@@ -127,12 +136,15 @@ module GeneratedReceipts
       simulated_ai_item_tax_rate
       expected_item_tax_rate_after_save
     ].freeze
-    SOURCE_KEYS = %w[context items].freeze
+    SOURCE_KEYS = %w[context count_tax_semantics items].freeze
+    SOURCE_REQUIRED_KEYS = %w[context items].freeze
     SOURCE_ITEM_KEYS = %w[
       item_index
       printed_lines
       purchased_quantity
       purchased_unit
+      purchased_quantity_origin
+      count_unit_price_amount
       reference_price_amount
       reference_quantity
       reference_unit
@@ -167,7 +179,17 @@ module GeneratedReceipts
       rounding_matches
     ].freeze
     REFERENCE_CANDIDATE_REQUIRED_KEYS = %w[item_index validation_state rejection_reasons].freeze
-    CATEGORIES = %w[normal payment discount_adjustment tax_rounding ocr_anomaly non_receipt conflict measurement].freeze
+    CATEGORIES = %w[
+      normal
+      payment
+      discount_adjustment
+      tax_rounding
+      ocr_anomaly
+      non_receipt
+      conflict
+      measurement
+      calculation_mode
+    ].freeze
     RECEIPT_KINDS = %w[receipt non_receipt].freeze
     SOURCE_CONTEXTS = %w[analysis manual edit_save].freeze
     REFERENCE_CANDIDATE_STATES = %w[valid missing ambiguous unsupported none].freeze
@@ -293,7 +315,11 @@ module GeneratedReceipts
         end
 
         resolved = File.realpath(candidate)
-        approved = [ GeneratedReceipts::CASES_DIR, GeneratedReceipts::MEASUREMENT_CASES_DIR ].any? do |root|
+        approved = [
+          GeneratedReceipts::CASES_DIR,
+          GeneratedReceipts::MEASUREMENT_CASES_DIR,
+          GeneratedReceipts::CALCULATION_MODE_CASES_DIR
+        ].any? do |root|
           path_within_root?(resolved, File.realpath(root))
         end
         raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE unless approved
@@ -418,6 +444,20 @@ module GeneratedReceipts
           item["reference_quantity"],
           allow_numeric: true
         )
+        validate_optional_boolean("expected.items[#{index}].needs_review", item["needs_review"])
+        if item.key?("review_reasons")
+          validate_array(
+            "expected.items[#{index}].review_reasons",
+            item["review_reasons"]
+          ) do |reason, reason_index|
+            validate_inclusion(
+              "expected.items[#{index}].review_reasons[#{reason_index}]",
+              reason,
+              ITEM_REVIEW_REASONS
+            )
+          end
+          validate_unique_array("expected.items[#{index}].review_reasons", item["review_reasons"])
+        end
       end
       validate_measurement_projections
       validate_reference_pricing_candidates
@@ -468,14 +508,21 @@ module GeneratedReceipts
     def validate_source
       source = case_data["source"]
       if source.nil?
-        add_error("source", "is required for Measurement cases") if case_data["category"] == "measurement"
+        if measurement_case? || calculation_mode_case?
+          add_error("source", "is required for #{case_data['category']} cases")
+        end
         return
       end
 
-      validate_hash("source", source, required: SOURCE_KEYS, allowed: SOURCE_KEYS)
+      validate_hash("source", source, required: SOURCE_REQUIRED_KEYS, allowed: SOURCE_KEYS)
       return unless source.is_a?(Hash)
 
       validate_inclusion("source.context", source["context"], SOURCE_CONTEXTS)
+      validate_optional_inclusion(
+        "source.count_tax_semantics",
+        source["count_tax_semantics"],
+        CalculationModeContract::COUNT_TAX_SEMANTICS
+      )
       validate_array("source.items", source["items"]) do |item, index|
         validate_hash(
           "source.items[#{index}]",
@@ -498,6 +545,16 @@ module GeneratedReceipts
           item["purchased_quantity"]
         )
         validate_bounded_token("source.items[#{index}].purchased_unit", item["purchased_unit"])
+        validate_optional_inclusion(
+          "source.items[#{index}].purchased_quantity_origin",
+          item["purchased_quantity_origin"],
+          CalculationModeContract::PURCHASED_QUANTITY_ORIGINS
+        )
+        validate_bounded_integer_token(
+          "source.items[#{index}].count_unit_price_amount",
+          item["count_unit_price_amount"],
+          maximum: MeasurementContract::MAX_LINE_TOTAL
+        )
         validate_bounded_decimal_token(
           "source.items[#{index}].reference_price_amount",
           item["reference_price_amount"]
@@ -527,12 +584,14 @@ module GeneratedReceipts
           TAX_INCLUSIONS + [ "unknown" ]
         )
       end
-      add_error("category", "must be measurement when source is present") unless case_data["category"] == "measurement"
+      unless measurement_case? || calculation_mode_case?
+        add_error("category", "must be measurement or calculation_mode when source is present")
+      end
     end
 
     def validate_measurement_projections
       value = expected["measurement_projections"]
-      return if value.nil? && case_data["source"].nil?
+      return if value.nil? && !measurement_case?
 
       validate_array("expected.measurement_projections", value) do |projection, index|
         validate_hash(
@@ -583,7 +642,7 @@ module GeneratedReceipts
 
     def validate_reference_pricing_candidates
       value = expected["reference_pricing_candidates"]
-      return if value.nil? && case_data["source"].nil?
+      return if value.nil? && !measurement_case?
 
       validate_array("expected.reference_pricing_candidates", value) do |candidate, index|
         validate_hash(
@@ -761,7 +820,9 @@ module GeneratedReceipts
     end
 
     def validate_amounts
-      if case_data["source"]
+      if calculation_mode_case?
+        validate_calculation_mode_contract
+      elsif case_data["source"]
         validate_measurement_contract
       else
         validate_item_line_totals
@@ -771,6 +832,14 @@ module GeneratedReceipts
       validate_receipt_totals
       validate_payments
       validate_receipt_tax_rate
+    end
+
+    def validate_calculation_mode_contract
+      CalculationModeContract.validate(case_data).each do |error|
+        break if errors.size >= MAX_ERRORS
+
+        errors << error
+      end
     end
 
     def validate_item_line_totals
@@ -1328,6 +1397,14 @@ module GeneratedReceipts
 
     def receipt_case?
       case_data["receipt_kind"] == "receipt"
+    end
+
+    def measurement_case?
+      case_data["category"] == "measurement"
+    end
+
+    def calculation_mode_case?
+      case_data["category"] == "calculation_mode"
     end
 
     def expected_required_keys

@@ -14,6 +14,7 @@ RSpec.describe GeneratedReceipts::Validator do
 
   let(:case_paths) { Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort }
   let(:measurement_case_paths) { GeneratedReceipts.measurement_case_paths }
+  let(:calculation_mode_case_paths) { GeneratedReceipts.calculation_mode_case_paths }
   let(:case_schema) do
     JSON.parse(File.read(File.expand_path("../../fixtures/generated_receipts/case_schema.json", __dir__)))
   end
@@ -113,6 +114,22 @@ RSpec.describe GeneratedReceipts::Validator do
       expect(candidate_states).to match_array(described_class::REFERENCE_CANDIDATE_STATES)
       expect(rejection_reasons).to match_array(described_class::REFERENCE_CANDIDATE_REJECTION_REASONS)
       expect(described_class::REFERENCE_CANDIDATE_STATES).to include("missing", "none")
+    end
+  end
+
+  it "keeps the calculation-mode category and source enums in sync with the schema" do
+    categories = case_schema.dig("properties", "category", "enum")
+    source_properties = case_schema.dig("properties", "source", "properties")
+    source_item_properties = source_properties.dig("items", "items", "properties")
+
+    aggregate_failures do
+      expect(categories).to match_array(described_class::CATEGORIES)
+      expect(source_properties.dig("count_tax_semantics", "enum")).to match_array(
+        GeneratedReceipts::CalculationModeContract::COUNT_TAX_SEMANTICS
+      )
+      expect(source_item_properties.dig("purchased_quantity_origin", "enum")).to match_array(
+        GeneratedReceipts::CalculationModeContract::PURCHASED_QUANTITY_ORIGINS
+      )
     end
   end
 
@@ -444,11 +461,42 @@ RSpec.describe GeneratedReceipts::Validator do
     aggregate_failures do
       expect(case_paths.size).to eq(112)
       expect(results.size).to eq(10)
-      expect(GeneratedReceipts.case_paths.size).to eq(122)
+      expect(case_paths.size + results.size).to eq(122)
       results.each do |filename, result|
         expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
       end
     end
+  end
+
+  it "validates the calculation-mode proof cases without changing the candidate-only Measurement corpus" do
+    results = calculation_mode_case_paths.map do |path|
+      [ File.basename(path), described_class.call(described_class.load_file(path)) ]
+    end
+
+    aggregate_failures do
+      expect(case_paths.size).to eq(112)
+      expect(measurement_case_paths.size).to eq(10)
+      expect(results.size).to eq(4)
+      expect(GeneratedReceipts.case_paths.size).to eq(126)
+      results.each do |filename, result|
+        expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
+      end
+    end
+  end
+
+  it "does not permit a fallback quantity to establish count-unit pricing authority" do
+    data = deep_dup(
+      described_class.load_file(
+        File.join(GeneratedReceipts::CALCULATION_MODE_CASES_DIR, "g140_calc_count_exact_total.json")
+      )
+    )
+    data.dig("source", "items", 0)["purchased_quantity_origin"] = "fallback"
+
+    result = described_class.call(data)
+
+    expect(result.errors).to include(
+      "source.items[0].purchased_quantity_origin: must be explicit for count-unit pricing authority"
+    )
   end
 
   it "covers the generated discount/adjustment and tax/rounding expansion cases" do
