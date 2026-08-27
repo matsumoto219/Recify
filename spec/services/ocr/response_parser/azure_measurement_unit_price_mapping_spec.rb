@@ -90,6 +90,40 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
     value.encode(Encoding::UTF_16LE).bytesize / 2
   end
 
+  def reindex_item(item, index_type:)
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type:)
+    value_object = item.fetch('valueObject')
+    fields = %w[Description Price Quantity TotalPrice].map { |name| value_object.fetch(name) }
+    content = fields.map { |field| field.fetch('content') }.join("\n")
+    byte_cursor = 0
+
+    fields.each do |field|
+      field_content = field.fetch('content')
+      span = mapper.span_for_bytes(
+        content,
+        byte_offset: byte_cursor,
+        byte_length: field_content.bytesize
+      ).transform_keys(&:to_s)
+      field['spans'] = [ span ]
+      byte_cursor += field_content.bytesize + 1
+    end
+    quantity = value_object.fetch('Quantity')
+    unit = value_object.fetch('QuantityUnit')
+    quantity_byte_offset = content.b.index(quantity.fetch('content').b)
+    unit_byte_offset = quantity.fetch('content').b.index(unit.fetch('content').b)
+    unit['spans'] = [
+      mapper.span_for_bytes(
+        content,
+        byte_offset: quantity_byte_offset + unit_byte_offset,
+        byte_length: unit.fetch('content').bytesize
+      ).transform_keys(&:to_s)
+    ]
+    item.merge(
+      'content' => content,
+      'spans' => [ { 'offset' => 0, 'length' => mapper.length(content) } ]
+    )
+  end
+
   def structured_item(description:, price:, quantity:, unit:, total:)
     content = [ description, price.fetch(:content), quantity.fetch(:content), total.fetch(:content) ].join("\n")
     description_offset = 0
@@ -176,6 +210,71 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
           :reference_quantity_unit_code
         )
       end
+    end
+  end
+
+  it 'maps textElements structured evidence without splitting emoji or combining sequences' do
+    item = fixture('ocr_azure_item_calculation_reference_gross_anonymized.json')
+      .dig('analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray', 0)
+      .deep_dup
+    description = item.dig('valueObject', 'Description')
+    description.merge!('content' => '検証😀品', 'valueString' => '検証😀品')
+    item = reindex_item(item, index_type: 'textElements')
+    prefix = "受付e\u0301\n"
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: 'textElements')
+    prefix_length = mapper.length(prefix)
+    [ item, *item.fetch('valueObject').values ].each do |component|
+      component.fetch('spans').each { |span| span['offset'] += prefix_length }
+    end
+    response = synthetic_response(item)
+    analyze_result = response.fetch('analyzeResult')
+    analyze_result['stringIndexType'] = 'textElements'
+    analyze_result['content'] = "#{prefix}#{item.fetch('content')}"
+    cursor = 0
+    analyze_result.dig('pages', 0)['lines'] = analyze_result.fetch('content').lines(chomp: true).map do |line|
+      entry = {
+        'content' => line,
+        'spans' => [ { 'offset' => cursor, 'length' => mapper.length(line) } ]
+      }
+      cursor += mapper.length(line) + 1
+      entry
+    end
+
+    result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+    candidate = result.dig(:candidates, :reference_pricing_candidates).sole
+
+    aggregate_failures do
+      expect(candidate).to include(
+        item_index: 0,
+        validation_state: 'valid',
+        rejection_reasons: [],
+        reference_price_tax_inclusion: 'gross'
+      )
+      expect(candidate.dig(:reference_price, :amount)).to eq('498')
+      expect(candidate.dig(:reference_quantity, :amount)).to eq('100')
+      expect(candidate.dig(:purchased_quantity, :amount)).to eq('342')
+      expect(result.dig(:candidates, :item_calculation_mode_candidates).sole).to include(
+        string_index_type: 'textElements'
+      )
+    end
+  end
+
+  it 'fails closed when the provider index type is unsupported or the top-level content binding differs' do
+    item = positive_cases.first.fetch('item').deep_dup
+    unsupported = synthetic_response(item.deep_dup)
+    unsupported.dig('analyzeResult')['stringIndexType'] = 'utf8Byte'
+    mismatched = synthetic_response(item.deep_dup)
+    mismatched.dig('analyzeResult')['content'] = "X#{mismatched.dig('analyzeResult', 'content')}"
+
+    aggregate_failures do
+      expect(Ocr::ResponseParser.new(
+        response: unsupported,
+        provider: :fixture
+      ).call.dig(:candidates, :reference_pricing_candidates)).to eq([])
+      expect(Ocr::ResponseParser.new(
+        response: mismatched,
+        provider: :fixture
+      ).call.dig(:candidates, :reference_pricing_candidates)).to eq([])
     end
   end
 

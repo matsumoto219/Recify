@@ -16,11 +16,30 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
-  def parsed_structured_reference_result(with_total: true, string_index_type: 'utf16CodeUnit')
+  def parsed_structured_reference_result(
+    with_total: true,
+    string_index_type: 'utf16CodeUnit',
+    item_scoped_tax_evidence: false
+  )
     raw = JSON.parse(
       Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
     )
     raw.dig('analyzeResult')['stringIndexType'] = string_index_type
+    if item_scoped_tax_evidence
+      price = raw.dig(
+        'analyzeResult',
+        'documents',
+        0,
+        'fields',
+        'Items',
+        'valueArray',
+        0,
+        'valueObject',
+        'Price'
+      )
+      price['content'] = '¥498/100g'
+      price.fetch('spans').sole.replace('offset' => 7, 'length' => 9)
+    end
     unless with_total
       analyze_result = raw.fetch('analyzeResult')
       document = analyze_result.fetch('documents').sole
@@ -137,14 +156,50 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       end
     end
 
-    it 'structured reference evidenceはUTF-16 indexに限定しtextElementsではfail-closedにする' do
+    it 'textElementsのsame-item valid structured referenceもexact optionとして保持する' do
       result = parsed_structured_reference_result(string_index_type: 'textElements')
       snapshot = snapshot_without_proposals(result)
 
-      expect(described_class.build_all(
+      proposal = described_class.build_all(
         candidates: result.dig(:candidates, :item_calculation_mode_candidates),
         ocr_snapshot: snapshot
-      )).to be_nil
+      ).sole
+
+      aggregate_failures do
+        expect(proposal['string_index_type']).to eq('textElements')
+        expect(proposal.fetch('options').map { |option| option.fetch('pricing_source_kind') }).to eq(%w[
+          reference_quantity_price
+          explicit_line_total
+        ])
+        expect(described_class.from_snapshot(
+          JSON.parse(JSON.generate([ proposal ])),
+          ocr_snapshot: JSON.parse(JSON.generate(snapshot))
+        )).to eq([ proposal ])
+      end
+    end
+
+    it '同一Item parentの税表記で補完したstructured referenceもexact optionとして保持する' do
+      result = parsed_structured_reference_result(item_scoped_tax_evidence: true)
+      snapshot = snapshot_without_proposals(result)
+
+      proposal = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      ).sole
+
+      aggregate_failures do
+        expect(result.dig(
+          :candidates,
+          :reference_pricing_candidates,
+          0,
+          :tax_inclusion_evidence,
+          :source_field_path
+        )).to eq('documents[0].fields.Items[0]')
+        expect(proposal.fetch('options').map { |option| option.fetch('pricing_source_kind') }).to eq(%w[
+          reference_quantity_price
+          explicit_line_total
+        ])
+      end
     end
 
     it 'valid optionにunknownまたはkind欠損optionが混在する場合は部分採用しない' do

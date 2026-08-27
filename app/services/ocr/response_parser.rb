@@ -53,17 +53,20 @@ class Ocr::ResponseParser
     normalized_raw_text = normalize_text(raw_text)
     normalized_lines = normalized_lines(parsed_response)
     case_preserved_lines = case_preserved_lines(parsed_response)
+    analyze_result = extract_analyze_result(parsed_response)
     structured_items = extract_fields(parsed_response).dig("Items", "valueArray")
     structured_reference_pricing_candidates = Ocr::ResponseParser::ReferencePricingCandidateExtractor.call(
       items: structured_items,
       profile: profile,
+      content: analyze_result["content"],
+      string_index_type: analyze_result["stringIndexType"],
       projection: ->(**attributes) {
         ReceiptAmountService.reference_item_extension_projection(**attributes)
       }
     )
     line_group_reference_pricing_candidates = if structured_reference_pricing_candidates.empty?
       Ocr::ResponseParser::ReferencePricingLineGroupExtractor.call(
-        analyze_result: extract_analyze_result(parsed_response),
+        analyze_result: analyze_result,
         profile: profile,
         projection: ->(**attributes) {
           ReceiptAmountService.reference_item_extension_projection(**attributes)
@@ -92,7 +95,7 @@ class Ocr::ResponseParser
       {}
     end
     item_calculation_mode_candidates = Ocr::ResponseParser::ItemCalculationModeCandidateExtractor.call(
-      analyze_result: extract_analyze_result(parsed_response),
+      analyze_result: analyze_result,
       profile: profile,
       reference_pricing_candidates: structured_reference_pricing_candidates,
       discount_item_indexes: discount_details_by_item_index.keys,

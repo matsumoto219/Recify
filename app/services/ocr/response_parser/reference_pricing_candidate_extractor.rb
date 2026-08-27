@@ -74,20 +74,49 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u0084\u0086-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
   LINE_BREAK_PATTERN = /[\n\r\u0085\u2028\u2029]/.freeze
 
-  def self.call(items:, profile:, projection: nil, allow_separated_tax_label: false)
-    new(items:, profile:, projection:, allow_separated_tax_label:).call
+  def self.call(
+    items:,
+    profile:,
+    content: nil,
+    string_index_type: "utf16CodeUnit",
+    projection: nil,
+    allow_separated_tax_label: false
+  )
+    new(
+      items:,
+      profile:,
+      content:,
+      string_index_type:,
+      projection:,
+      allow_separated_tax_label:
+    ).call
   end
 
-  def initialize(items:, profile:, projection: nil, allow_separated_tax_label: false)
+  def initialize(
+    items:,
+    profile:,
+    content:,
+    string_index_type:,
+    projection: nil,
+    allow_separated_tax_label: false
+  )
     @items = items
     @profile = profile
     @allow_separated_tax_label = allow_separated_tax_label
+    @mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: string_index_type)
+    @provider_content_supplied = !content.nil?
+    @provider_content = raw_mappable_text(
+      content,
+      max_bytes: Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
+    )&.freeze if @provider_content_supplied
     @projection = projection || ->(**attributes) {
       ReceiptAmountService.reference_item_extension_projection(**attributes)
     }
   end
 
   def call
+    return [] if mapper.nil?
+    return [] if provider_content_supplied && provider_content.nil?
     return [] unless items.is_a?(Array)
 
     bounded_items = items.first(MAX_ITEMS)
@@ -103,15 +132,18 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
 
   private
 
-  attr_reader :items, :profile, :projection, :allow_separated_tax_label
+  attr_reader :items, :mapper, :profile, :projection, :provider_content,
+    :provider_content_supplied, :allow_separated_tax_label
 
   def extract_candidate(item, item_index)
     return unless item.is_a?(Hash)
 
+    raw_item_content = raw_mappable_text(item["content"], max_bytes: MAX_ITEM_CONTENT_BYTES)
     item_content = normalized_mappable_text(item["content"], max_bytes: MAX_ITEM_CONTENT_BYTES)
     parent_span = single_span(item)
-    return if item_content.nil? || parent_span.nil?
-    return unless utf16_length(item_content) <= span_length(parent_span)
+    return if raw_item_content.nil? || item_content.nil? || parent_span.nil?
+    return unless provider_length(item_content) <= span_length(parent_span)
+    return unless exact_top_level_content?(raw_item_content, parent_span)
 
     value_object = item["valueObject"]
     value_object = {} unless value_object.is_a?(Hash)
@@ -204,7 +236,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       field_span = single_span(price_field)
 
       if field_content.nil? || field_span.nil? || !span_within?(field_span, parent_span) ||
-          utf16_length(field_content) > span_length(field_span)
+          provider_length(field_content) > span_length(field_span)
         evidence_errors << "evidence_outside_item"
       else
         price_matches = scan_reference_expressions(
@@ -385,7 +417,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def structured_measurement_unit_price_match(value_object:, item_content:, parent_span:, item_index:)
-    return unless utf16_length(item_content) == span_length(parent_span)
+    return unless provider_length(item_content) == span_length(parent_span)
 
     fields = %w[Price Quantity QuantityUnit TotalPrice].to_h do |field_name|
       [ field_name, value_object[field_name] ]
@@ -468,7 +500,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def structured_measurement_context?(value_object, item_content:, parent_span:, item_index:)
-    return false unless utf16_length(item_content) == span_length(parent_span)
+    return false unless provider_length(item_content) == span_length(parent_span)
 
     fields = %w[Quantity QuantityUnit TotalPrice].to_h do |field_name|
       [ field_name, value_object[field_name] ]
@@ -599,21 +631,18 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     content = normalized_mappable_text(field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
     span = single_span(field)
     return if content.blank? || span.nil? || !span_within?(span, parent_span)
-    return unless utf16_length(content) == span_length(span)
-    return unless utf16_slice_for_span(item_content, span, parent_span) == content
+    return unless provider_length(content) == span_length(span)
+    return unless provider_slice_for_span(item_content, span, parent_span) == content
+    return unless exact_top_level_content?(raw_mappable_text(field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES), span)
 
     { content:, span: }
   end
 
-  def utf16_slice_for_span(text, span, parent_span)
+  def provider_slice_for_span(text, span, parent_span)
     relative_offset = span_offset(span) - span_offset(parent_span)
     return if relative_offset.negative?
 
-    encoded = text.encode(Encoding::UTF_16LE)
-    bytes = encoded.byteslice(relative_offset * 2, span_length(span) * 2)
-    return unless bytes&.bytesize == span_length(span) * 2
-
-    bytes.force_encoding(Encoding::UTF_16LE).encode(Encoding::UTF_8)
+    mapper.slice(text, offset: relative_offset, length: span_length(span))
   rescue EncodingError, ArgumentError
     nil
   end
@@ -984,7 +1013,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       quantity_span = single_span(quantity_field)
 
       if quantity_content.nil? || quantity_span.nil? || !span_within?(quantity_span, parent_span) ||
-          utf16_length(quantity_content) > span_length(quantity_span)
+          provider_length(quantity_content) > span_length(quantity_span)
         evidence_errors << "evidence_outside_item"
       else
         structured_matches = scan_purchased_quantities(
@@ -1138,17 +1167,24 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
 
   def provider_line_break_offsets(text, base_offset)
     offsets = []
-    provider_position = base_offset
+    byte_offset = 0
 
     text.each_char do |character|
-      offsets << provider_position if character.match?(LINE_BREAK_PATTERN)
-      provider_position += (character.ord > 0xFFFF ? 2 : 1)
+      if character.match?(LINE_BREAK_PATTERN)
+        span = mapper.span_for_bytes(text, byte_offset:, byte_length: 0)
+        return if span.nil?
+
+        offsets << base_offset + span.fetch(:offset)
+      end
+      byte_offset += character.bytesize
     end
 
     offsets
   end
 
   def line_break_between_provider_offsets?(line_break_offsets, start_offset, end_offset)
+    return true unless line_break_offsets.is_a?(Array)
+
     line_break_offset = line_break_offsets.bsearch { |offset| offset >= start_offset }
     !line_break_offset.nil? && line_break_offset < end_offset
   end
@@ -1244,7 +1280,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     content = normalized_mappable_text(field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
     span = single_span(field)
     return if content.nil? || span.nil? || !span_within?(span, parent_span) ||
-      utf16_length(content) > span_length(span)
+      provider_length(content) > span_length(span)
 
     match_data = content.match(PRINTED_AMOUNT_PATTERN)
     return if match_data.nil?
@@ -1454,19 +1490,38 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def normalized_mappable_text(value, max_bytes:)
+    encoded = raw_mappable_text(value, max_bytes:)
+    return if encoded.nil?
+
+    normalized = encoded.unicode_normalize(:nfkc)
+    return unless normalized.length == encoded.length
+    return unless provider_length(normalized) == provider_length(encoded)
+
+    normalized
+  rescue EncodingError, ArgumentError
+    nil
+  end
+
+  def raw_mappable_text(value, max_bytes:)
     return unless value.is_a?(String)
     return if value.bytesize > max_bytes
     return unless value.valid_encoding?
     return if value.match?(CONTROL_CHARACTER_PATTERN)
 
-    encoded = value.encode(Encoding::UTF_8)
-    normalized = encoded.unicode_normalize(:nfkc)
-    return unless normalized.length == encoded.length
-    return unless utf16_length(normalized) == utf16_length(encoded)
-
-    normalized
+    value.encode(Encoding::UTF_8)
   rescue EncodingError, ArgumentError
     nil
+  end
+
+  def exact_top_level_content?(raw_content, span)
+    return false if raw_content.nil?
+    return true unless provider_content_supplied
+
+    mapper.slice(
+      provider_content,
+      offset: span_offset(span),
+      length: span_length(span)
+    ) == raw_content
   end
 
   def content_supplied?(value)
@@ -1627,11 +1682,15 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def provider_offset(text, base_offset, character_index)
-    base_offset + utf16_length(text[0...character_index].to_s)
+    byte_offset = text[0...character_index].to_s.bytesize
+    span = mapper.span_for_bytes(text, byte_offset:, byte_length: 0)
+    return if span.nil?
+
+    base_offset + span.fetch(:offset)
   end
 
-  def utf16_length(text)
-    text.encode(Encoding::UTF_16LE).bytesize / 2
+  def provider_length(text)
+    mapper.length(text)
   end
 
   def normalize_reasons(reasons)

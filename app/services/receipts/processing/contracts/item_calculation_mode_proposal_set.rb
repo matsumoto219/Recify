@@ -186,7 +186,7 @@ module Receipts::Processing::Contracts
       end
 
       def reference_option_for(candidate, context:)
-        return unless candidate["string_index_type"] == "utf16CodeUnit"
+        return unless SUPPORTED_STRING_INDEX_TYPES.include?(candidate["string_index_type"])
 
         item_index = candidate["item_index"]
         matches = context.dig("candidates", "reference_pricing_candidates").select do |reference_candidate|
@@ -489,8 +489,7 @@ module Receipts::Processing::Contracts
         paths = {
           "reference_price" => "Price",
           "reference_quantity" => "Price",
-          "purchased_quantity" => "Quantity",
-          "tax_inclusion" => "Price"
+          "purchased_quantity" => "Quantity"
         }
         return false unless paths.all? do |evidence_key, field_name|
           component_evidence_valid?(
@@ -500,6 +499,12 @@ module Receipts::Processing::Contracts
             parent_end: parent_end
           )
         end
+        return false unless reference_tax_component_evidence_valid?(
+          evidence["tax_inclusion"],
+          item_index: item_index,
+          parent_start: parent_start,
+          parent_end: parent_end
+        )
 
         reference_projection(source).present?
       end
@@ -545,7 +550,7 @@ module Receipts::Processing::Contracts
       end
 
       def reference_candidate_valid?(reference_candidate, candidate:)
-        return false unless candidate["string_index_type"] == "utf16CodeUnit"
+        return false unless SUPPORTED_STRING_INDEX_TYPES.include?(candidate["string_index_type"])
         return false unless exact_optional_keys?(
           reference_candidate,
           required: REFERENCE_CANDIDATE_REQUIRED_KEYS,
@@ -575,9 +580,8 @@ module Receipts::Processing::Contracts
         return false unless REFERENCE_TAX_INCLUSIONS.include?(
           reference_candidate["reference_price_tax_inclusion"]
         )
-        return false unless reference_context_evidence_valid?(
+        return false unless reference_tax_evidence_valid?(
           reference_candidate["tax_inclusion_evidence"],
-          expected_path: "documents[0].fields.Items[#{item_index}].Price",
           item_index: item_index,
           parent_start: candidate["provider_span_start"],
           parent_end: candidate["provider_span_end"]
@@ -686,6 +690,35 @@ module Receipts::Processing::Contracts
           valid_span?(evidence["provider_span_start"], evidence["provider_span_end"]) &&
           evidence["provider_span_start"] >= parent_start &&
           evidence["provider_span_end"] <= parent_end
+      end
+
+      def reference_tax_evidence_valid?(value, item_index:, parent_start:, parent_end:)
+        [
+          "documents[0].fields.Items[#{item_index}].Price",
+          "documents[0].fields.Items[#{item_index}]"
+        ].any? do |expected_path|
+          reference_context_evidence_valid?(
+            value,
+            expected_path: expected_path,
+            item_index: item_index,
+            parent_start: parent_start,
+            parent_end: parent_end
+          )
+        end
+      end
+
+      def reference_tax_component_evidence_valid?(value, item_index:, parent_start:, parent_end:)
+        [
+          "documents[0].fields.Items[#{item_index}].Price",
+          "documents[0].fields.Items[#{item_index}]"
+        ].any? do |expected_path|
+          component_evidence_valid?(
+            value,
+            expected_path: expected_path,
+            parent_start: parent_start,
+            parent_end: parent_end
+          )
+        end
       end
 
       def reference_printed_corroboration_valid?(reference_candidate, candidate:, projection:)
