@@ -19,6 +19,7 @@ RSpec.describe 'reference pricing profile boundary' do
       expect(scanner.scanned_paths).to match_array(%w[
         app/services/ocr/response_parser/item_calculation_mode_candidate_extractor.rb
         app/services/ocr/response_parser/reference_pricing_candidate_extractor.rb
+        app/services/ocr/response_parser/reference_pricing_item_layout_extractor.rb
         app/services/ocr/response_parser/reference_pricing_line_group_extractor.rb
       ])
     end

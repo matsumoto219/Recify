@@ -290,7 +290,7 @@ module ReceiptAnalysisProfiles
     OCR_ADJUSTMENT_EXCLUDED_LINE_PATTERN = /小計|商品小計|合計|総合計|税抜合計|税込合計|対象|消費税|税額|税率|内税|外税|お預かり|お預り|預り|釣銭|お釣り|つり銭|支払|お支払|決済|現金|カード|au\s*pay|paypay|楽天ペイ|ポイント|獲得|利用可能|残高|カード番号|取引番号|レシート|領収|tel|電話|住所|登録番号|返品はお受け|返品.*(?:不可|致しかね)|お受け致しかね|barcode|qr|total|subtotal|tax|payment|change|point/i.freeze
     OCR_ADJUSTMENT_ZONE_START_PATTERN = /小計|商品小計|税抜合計|内税品計|subtotal/i.freeze
     OCR_ADJUSTMENT_ZONE_END_PATTERN = /合計|総合計|total/i.freeze
-    OCR_MERCHANT_ANCHOR_PATTERN = /店舗|店名|店|マーケット|スーパー|株式会社|有限会社|住所|所在地|電話|tel|market|store|mart|shop/i.freeze
+    OCR_MERCHANT_ANCHOR_PATTERN = /店舗|店名|店|給油所|マーケット|スーパー|株式会社|有限会社|住所|所在地|電話|tel|market|store|mart|shop/i.freeze
     OCR_DATETIME_ANCHOR_PATTERN = /(?:\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?)|(?:\d{1,2}[:：]\d{2})/.freeze
     OCR_SUBTOTAL_ANCHOR_PATTERN = /小\s*計|subtotal/i.freeze
     OCR_TOTAL_ANCHOR_PATTERN = /合\s*計|総合計|total/i.freeze
@@ -316,6 +316,12 @@ module ReceiptAnalysisProfiles
     OCR_REFERENCE_PRICING_TAX_NEGATION_PREFIX_PATTERN = /(?:非|未|不|not)[\p{Zs}\t\r\n\p{P}]*\z/iu.freeze
     OCR_REFERENCE_PRICING_PACKAGE_QUANTITY_CONTEXT_BEFORE_PATTERN = /(?:約|およそ|[x×@＠]|[-–—〜～~]|gross|tare|風袋|総重量)\s*\z/i.freeze
     OCR_REFERENCE_PRICING_PACKAGE_QUANTITY_CONTEXT_AFTER_PATTERN = /\A\s*(?:入|入り|詰|パック|[x×@＠]|gross|tare|風袋|総重量)/i.freeze
+    OCR_REFERENCE_PRICING_ITEM_LAYOUT_APPLIED_UNIT_PRICE_LINE_PATTERN = /\A[ \t]*(?:特典適用後単価|値引(?:き)?後単価)[ \t:：]*(?:[¥￥@＠][ \t]*)?[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*(?:円)?[ \t]*[\/／][ \t]*(?:[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*)?[\p{L}]+[ \t]*\z/iu.freeze
+    OCR_REFERENCE_PRICING_ITEM_LAYOUT_PURCHASED_QUANTITY_LINE_PATTERN = /\A[ \t]*(?:計量|給油量)[ \t:：]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})[ \t]*\z/u.freeze
+    OCR_REFERENCE_PRICING_ITEM_LAYOUT_PURCHASED_QUANTITY_LABEL_LINE_PATTERN = /\A[ \t]*(?:計量|給油量)[ \t:：]*\z/.freeze
+    OCR_REFERENCE_PRICING_ITEM_LAYOUT_PRINTED_TOTAL_LINE_PATTERN = /\A[ \t]*(?:(?:金額|商品金額|明細金額)[ \t:：]*(?:[¥￥][ \t]*)?(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+))(?:[ \t]*円)?|(?:[¥￥][ \t]*)?(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+))[ \t]*円)[ \t]*\z/.freeze
+    OCR_REFERENCE_PRICING_ITEM_LAYOUT_COLUMN_HEADER_PATTERN = /\A[ \t]*(?<price_heading>単価\([ \t]*円[ \t]*[\/／][ \t]*(?<reference_unit>[\p{L}]{1,24})[ \t]*\))[ \t]+(?<quantity_heading>数量\([ \t]*(?<purchased_unit>[\p{L}]{1,24})[ \t]*\))[ \t]+(?<total_heading>金額\([ \t]*円[ \t]*\))[ \t]*\z/u.freeze
+    OCR_REFERENCE_PRICING_ITEM_LAYOUT_PER_UNIT_DISCOUNT_NOTE_PATTERN = /\A[ \t]*(?:会員|特典|アプリ)?値引(?:き)?[ \t:：]*(?:[¥￥][ \t]*)?[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*円[ \t]*[\/／][ \t]*(?:(?<basis_quantity>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*)?(?<unit>[\p{L}]+?)[ \t]*引(?:き)?[ \t]*\z/iu.freeze
     OCR_TOTAL_AMOUNT_LINE_PATTERN = /合計|小計|total|税込|現計/i.freeze
     OCR_STRICT_RECEIPT_SUMMARY_TOTAL_LINE_PATTERN = /\A(?:総合計|合計|現計|grand\s+total|total)[ \t]*[:：]?[ \t]*(?:[¥￥][ \t]*)?[0-9０-９][0-9０-９,，]*(?:[ \t]*円)?[ \t]*\z/i.freeze
     OCR_STRICT_RECEIPT_SUBTOTAL_LINE_PATTERN = /\A(?:商品小計|小計|subtotal)[ \t]*[:：]?[ \t]*(?:[¥￥][ \t]*)?[0-9０-９][0-9０-９,，]*(?:[ \t]*円)?[ \t]*\z/i.freeze
@@ -888,6 +894,30 @@ module ReceiptAnalysisProfiles
 
       def ocr_reference_pricing_package_quantity_context_after_pattern
         OCR_REFERENCE_PRICING_PACKAGE_QUANTITY_CONTEXT_AFTER_PATTERN
+      end
+
+      def ocr_reference_pricing_item_layout_applied_unit_price_line_pattern
+        OCR_REFERENCE_PRICING_ITEM_LAYOUT_APPLIED_UNIT_PRICE_LINE_PATTERN
+      end
+
+      def ocr_reference_pricing_item_layout_purchased_quantity_line_pattern
+        OCR_REFERENCE_PRICING_ITEM_LAYOUT_PURCHASED_QUANTITY_LINE_PATTERN
+      end
+
+      def ocr_reference_pricing_item_layout_purchased_quantity_label_line_pattern
+        OCR_REFERENCE_PRICING_ITEM_LAYOUT_PURCHASED_QUANTITY_LABEL_LINE_PATTERN
+      end
+
+      def ocr_reference_pricing_item_layout_printed_total_line_pattern
+        OCR_REFERENCE_PRICING_ITEM_LAYOUT_PRINTED_TOTAL_LINE_PATTERN
+      end
+
+      def ocr_reference_pricing_item_layout_column_header_pattern
+        OCR_REFERENCE_PRICING_ITEM_LAYOUT_COLUMN_HEADER_PATTERN
+      end
+
+      def ocr_reference_pricing_item_layout_per_unit_discount_note_pattern
+        OCR_REFERENCE_PRICING_ITEM_LAYOUT_PER_UNIT_DISCOUNT_NOTE_PATTERN
       end
 
       def ocr_total_amount_line_pattern
