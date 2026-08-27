@@ -284,6 +284,100 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       expect(params.fetch(:receipt_adjustments_attributes)).to eq([])
     end
 
+    it 'Azure item-layout block内の値をfallback明細やadjustmentとして重複保存しない' do
+      ocr_result[:lines] = [
+        '架空量売店',
+        '例示量売品',
+        '値引後 税込 160円/L',
+        '会員値引 3円/L引',
+        '給油量 20.74L',
+        '金額 3,318円',
+        '合計 3,318円'
+      ]
+      ocr_result[:case_preserved_lines] = ocr_result[:lines].dup
+      ocr_result[:candidates][:reference_pricing_block_line_indexes] = [ 1, 2, 3, 4, 5 ]
+      ocr_result[:candidates][:items] = [
+        {
+          raw_text: '例示量売品',
+          price: '160',
+          quantity: '20.74',
+          quantity_unit_code: 'liter',
+          line_total: 3318,
+          original_line_total: 3318,
+          ocr_item_identity: 'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l4_total_l5'
+        }
+      ]
+      ocr_result[:candidates][:adjustment_candidates] = [
+        {
+          source_text: ocr_result[:lines][3],
+          source_line_index: 3,
+          amount: 3,
+          sign_hint: 'discount',
+          confidence: 0.99,
+          candidate_reason: 'label_same_line_amount',
+          needs_review: false
+        }
+      ]
+      ai_result = {
+        receipt_adjustments_attributes: [
+          {
+            source_text: ocr_result[:lines][3],
+            source_line_index: 3,
+            kind: 'receipt_discount',
+            sign: 'decrease',
+            amount: 3,
+            confidence: 0.99,
+            needs_review: false
+          }
+        ]
+      }
+
+      params = described_class.call(ocr_result:, ai_result:)
+
+      aggregate_failures do
+        expect(params.fetch(:receipt_items_attributes)).to contain_exactly(
+          include(raw_text: '例示量売品', line_total: 3318)
+        )
+        expect(params.fetch(:receipt_adjustments_attributes)).to eq([])
+      end
+    end
+
+    it 'ambiguousな複数item-layout blockをAIやraw lineから明細へ復活させない' do
+      ocr_result[:lines] = [
+        '架空量売店',
+        '例示量売品A',
+        '税込 498円/100g',
+        '計量 342g',
+        '1,703円',
+        '例示量売品B',
+        '税込 120円/500ml',
+        '計量 1.5L',
+        '360円',
+        '合計 2,063円'
+      ]
+      ocr_result[:case_preserved_lines] = ocr_result[:lines].dup
+      ocr_result[:candidates][:items] = []
+      ocr_result[:candidates][:reference_pricing_candidates] = []
+      ocr_result[:candidates][:reference_pricing_block_line_indexes] = (1..8).to_a
+      ai_result = {
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: '推測明細',
+            price: 1703,
+            quantity: 1,
+            quantity_unit_code: 'each',
+            line_total: 1703,
+            needs_review: false
+          }
+        ]
+      }
+
+      params = described_class.call(ocr_result:, ai_result:)
+
+      expect(params.fetch(:receipt_items_attributes)).to eq([])
+    end
+
     it 'Azure Itemsとline-group候補が併存する場合はItemsのindexに対応するAI補完を維持する' do
       ocr_result[:candidates][:reference_pricing_candidates] = [
         {

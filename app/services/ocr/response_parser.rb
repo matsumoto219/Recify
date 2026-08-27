@@ -64,7 +64,20 @@ class Ocr::ResponseParser
         ReceiptAmountService.reference_item_extension_projection(**attributes)
       }
     )
-    line_group_reference_pricing_candidates = if structured_reference_pricing_candidates.empty?
+    item_layout_descriptors = Ocr::ResponseParser::ReferencePricingItemLayoutExtractor.call(
+      analyze_result: analyze_result,
+      profile: profile,
+      projection: ->(**attributes) {
+        ReceiptAmountService.reference_item_extension_projection(**attributes)
+      }
+    )
+    item_layout_resolution = resolve_reference_pricing_item_layout(
+      structured_items:,
+      structured_candidates: structured_reference_pricing_candidates,
+      descriptors: item_layout_descriptors
+    )
+    structured_or_layout_reference_pricing_candidates = item_layout_resolution.fetch(:candidates)
+    line_group_reference_pricing_candidates = if structured_reference_pricing_candidates.empty? && item_layout_descriptors.empty?
       Ocr::ResponseParser::ReferencePricingLineGroupExtractor.call(
         analyze_result: analyze_result,
         profile: profile,
@@ -75,20 +88,22 @@ class Ocr::ResponseParser
     else
       []
     end
-    reference_pricing_candidates = if structured_reference_pricing_candidates.any?
-      structured_reference_pricing_candidates
+    reference_pricing_candidates = if structured_or_layout_reference_pricing_candidates.any?
+      structured_or_layout_reference_pricing_candidates
     else
       line_group_reference_pricing_candidates
     end
-    authority_response = response_without_reference_pricing_line_group_fields(
+    reference_pricing_blocks = item_layout_descriptors + line_group_reference_pricing_candidates
+    authority_response = response_without_reference_pricing_block_fields(
       parsed_response,
-      reference_pricing_candidates
+      reference_pricing_blocks
     )
-    authority_lines = lines_without_reference_pricing_line_groups(
+    authority_lines = lines_without_reference_pricing_blocks(
       normalized_lines,
-      reference_pricing_candidates
+      reference_pricing_blocks
     )
     retained_item_indexes = retained_structured_item_indexes(structured_items)
+    retained_item_indexes |= item_layout_resolution.fetch(:replacement_item_indexes)
     discount_details_by_item_index = if structured_items.is_a?(Array) && structured_items.all?(Hash)
       extract_discount_details_by_item_index(structured_items, authority_lines)
     else
@@ -97,9 +112,11 @@ class Ocr::ResponseParser
     item_calculation_mode_candidates = Ocr::ResponseParser::ItemCalculationModeCandidateExtractor.call(
       analyze_result: analyze_result,
       profile: profile,
-      reference_pricing_candidates: structured_reference_pricing_candidates,
+      reference_pricing_candidates: structured_or_layout_reference_pricing_candidates,
       discount_item_indexes: discount_details_by_item_index.keys,
-      destination_item_indexes: retained_item_indexes
+      destination_item_indexes: retained_item_indexes,
+      item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+      reference_conflict_item_indexes: item_layout_resolution.fetch(:conflict_item_indexes)
     )
     authority_raw_text = authority_lines.reject(&:blank?).join("\n")
 
@@ -140,6 +157,7 @@ class Ocr::ResponseParser
         tax_details: extract_tax_details(authority_response, authority_lines),
         adjustment_candidates: extract_adjustment_candidates(authority_response, authority_lines),
         reference_pricing_candidates: reference_pricing_candidates,
+        reference_pricing_block_line_indexes: reference_pricing_block_line_indexes(reference_pricing_blocks),
         item_calculation_mode_candidates: item_calculation_mode_candidates,
         item_calculation_mode_source_truncated:
           structured_items.is_a?(Array) &&
@@ -148,7 +166,8 @@ class Ocr::ResponseParser
           authority_response,
           authority_lines,
           item_calculation_mode_candidates: item_calculation_mode_candidates,
-          retained_item_indexes: retained_item_indexes
+          retained_item_indexes: retained_item_indexes,
+          item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors)
         ),
         review_reasons: extract_review_reasons(authority_response),
         confidence_summary: extract_confidence_summary(authority_response)
@@ -542,18 +561,167 @@ class Ocr::ResponseParser
     nil
   end
 
-  def lines_without_reference_pricing_line_groups(lines, candidates)
+  def resolve_reference_pricing_item_layout(structured_items:, structured_candidates:, descriptors:)
+    structured_items = Array(structured_items)
+    structured_candidates = Array(structured_candidates)
+    descriptors = Array(descriptors)
+    if structured_items.empty?
+      accepted_descriptors = if descriptors.one? && layout_only_descriptor?(descriptors.sole)
+        descriptors
+      else
+        []
+      end
+      return {
+        candidates: accepted_descriptors.map { |descriptor| layout_reference_candidate(descriptor, item_index: 0) },
+        accepted_descriptors: accepted_descriptors,
+        replacement_item_indexes: [],
+        conflict_item_indexes: []
+      }
+    end
+
+    candidates = structured_candidates.dup
+    accepted_descriptors = []
+    replacement_item_indexes = []
+    conflict_item_indexes = []
+    structured_by_index = structured_candidates.index_by { |candidate| candidate[:item_index] }
+
+    descriptors.each do |descriptor|
+      item_index = descriptor[:structured_item_index]
+      next unless item_index.is_a?(Integer) && item_index.between?(0, structured_items.size - 1)
+
+      layout_candidate = layout_reference_candidate(descriptor, item_index:)
+      next if layout_candidate.nil?
+
+      structured_candidate = structured_by_index[item_index]
+      if structured_item_layout_conflict?(
+        structured_items.fetch(item_index),
+        structured_candidate:,
+        layout_candidate:
+      )
+        candidates.reject! { |candidate| candidate[:item_index] == item_index }
+        conflict_item_indexes << item_index
+        next
+      end
+      next if complete_structured_reference_pricing_candidate?(structured_candidate)
+
+      candidates.reject! { |candidate| candidate[:item_index] == item_index }
+      candidates << layout_candidate
+      accepted_descriptors << descriptor
+      if descriptor[:destination_kind] == "azure_layout_item"
+        replacement_item_indexes << item_index
+      end
+    end
+
+    {
+      candidates: candidates.sort_by { |candidate| candidate[:item_index] || MAX_REFERENCE_PRICING_TOTAL_LINES },
+      accepted_descriptors: accepted_descriptors,
+      replacement_item_indexes: replacement_item_indexes.uniq.sort,
+      conflict_item_indexes: conflict_item_indexes.uniq.sort
+    }
+  rescue KeyError, NoMethodError, TypeError
+    {
+      candidates: structured_candidates,
+      accepted_descriptors: [],
+      replacement_item_indexes: [],
+      conflict_item_indexes: []
+    }
+  end
+
+  def layout_only_descriptor?(descriptor)
+    descriptor.is_a?(Hash) &&
+      descriptor[:source_kind] == "azure_item_layout" &&
+      descriptor[:destination_kind] == "azure_layout_item" &&
+      descriptor[:structured_item_index].nil? &&
+      descriptor[:layout_item].is_a?(Hash)
+  end
+
+  def layout_reference_candidate(descriptor, item_index:)
+    return unless descriptor.is_a?(Hash) && descriptor[:source_kind] == "azure_item_layout"
+
+    candidate = descriptor[:reference_pricing_candidate]
+    return unless candidate.is_a?(Hash)
+
+    candidate.merge(
+      item_index:,
+      item_identity: descriptor[:item_identity],
+      destination_kind: descriptor[:destination_kind],
+      structured_item_index: descriptor[:structured_item_index],
+      name_line_index: descriptor[:name_line_index],
+      reference_line_index: descriptor[:reference_line_index],
+      purchased_quantity_line_indexes: descriptor[:purchased_quantity_line_indexes],
+      printed_total_line_index: descriptor[:printed_total_line_index],
+      owned_line_indexes: descriptor[:owned_line_indexes],
+      block_provider_span_start: descriptor[:block_provider_span_start],
+      block_provider_span_end: descriptor[:block_provider_span_end]
+    )
+  end
+
+  def complete_structured_reference_pricing_candidate?(candidate)
+    return false unless candidate.is_a?(Hash)
+    return false unless candidate[:validation_state] == "valid"
+    return false unless Array(candidate[:rejection_reasons]).empty?
+
+    candidate.dig(:reference_price, :amount).present? &&
+      candidate.dig(:reference_quantity, :amount).present? &&
+      candidate.dig(:reference_quantity, :unit_code).present? &&
+      candidate.dig(:purchased_quantity, :amount).present? &&
+      candidate.dig(:purchased_quantity, :unit_code).present? &&
+      candidate[:reference_price_tax_inclusion].present?
+  end
+
+  def structured_item_layout_conflict?(item, structured_candidate:, layout_candidate:)
+    return true if structured_total_conflicts_with_layout?(item, layout_candidate)
+    return false unless structured_candidate.is_a?(Hash)
+
+    comparable_reference_pricing_values(structured_candidate).any? do |key, value|
+      layout_value = comparable_reference_pricing_values(layout_candidate)[key]
+      layout_value.present? && value.present? && layout_value != value
+    end
+  end
+
+  def structured_total_conflicts_with_layout?(item, layout_candidate)
+    value_object = item.is_a?(Hash) ? item["valueObject"] : nil
+    return false unless value_object.is_a?(Hash)
+
+    total_field = value_object["TotalPrice"]
+    return false unless total_field.is_a?(Hash)
+
+    structured_amount = total_field.dig("valueCurrency", "amount") || total_field["valueNumber"]
+    return false if structured_amount.nil?
+
+    exact_decimal_value(structured_amount) != exact_decimal_value(layout_candidate.dig(:printed_line_total, :amount))
+  end
+
+  def comparable_reference_pricing_values(candidate)
+    {
+      reference_price: exact_decimal_value(candidate.dig(:reference_price, :amount)),
+      reference_quantity: exact_decimal_value(candidate.dig(:reference_quantity, :amount)),
+      reference_unit: candidate.dig(:reference_quantity, :unit_code),
+      purchased_quantity: exact_decimal_value(candidate.dig(:purchased_quantity, :amount)),
+      purchased_unit: candidate.dig(:purchased_quantity, :unit_code),
+      tax_inclusion: exact_tax_inclusion(candidate[:reference_price_tax_inclusion]),
+      printed_line_total: exact_decimal_value(candidate.dig(:printed_line_total, :amount))
+    }
+  end
+
+  def exact_decimal_value(value)
+    return if value.nil?
+
+    decimal = BigDecimal(value.to_s)
+    decimal.to_s("F")
+  rescue ArgumentError
+    nil
+  end
+
+  def exact_tax_inclusion(value)
+    value if %w[gross net].include?(value)
+  end
+
+  def lines_without_reference_pricing_blocks(lines, blocks)
     source_lines = Array(lines)
-    excluded_indexes = Array(candidates).filter_map do |candidate|
-      next unless candidate.is_a?(Hash) && candidate[:source_kind] == "azure_line_group"
-
-      reference_index = candidate[:reference_line_index]
-      purchased_index = candidate[:purchased_quantity_line_index]
-      next unless reference_index.is_a?(Integer) && purchased_index == reference_index + 1
-      next unless reference_index >= 0 && purchased_index < source_lines.size
-
-      [ reference_index, purchased_index ]
-    end.flatten.uniq
+    excluded_indexes = reference_pricing_block_line_indexes(blocks).select do |index|
+      index < source_lines.size
+    end
     return source_lines if excluded_indexes.empty?
 
     source_lines.each_with_index.map do |line, index|
@@ -561,11 +729,33 @@ class Ocr::ResponseParser
     end
   end
 
-  # A strict line-group candidate is diagnostic evidence only. Azure occasionally assigns
+  def reference_pricing_block_line_indexes(blocks)
+    Array(blocks).filter_map do |block|
+      next unless block.is_a?(Hash)
+
+      case block[:source_kind]
+      when "azure_line_group"
+        reference_index = block[:reference_line_index]
+        purchased_index = block[:purchased_quantity_line_index]
+        next unless reference_index.is_a?(Integer) && purchased_index == reference_index + 1
+        next if reference_index.negative?
+
+        [ reference_index, purchased_index ]
+      when "azure_item_layout"
+        indexes = block[:owned_line_indexes]
+        next unless indexes.is_a?(Array) && indexes.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_LINES)
+        next unless indexes.all? { |index| index.is_a?(Integer) && index.between?(0, MAX_REFERENCE_PRICING_TOTAL_LINES - 1) }
+
+        indexes
+      end
+    end.flatten.uniq.sort
+  end
+
+  # A strict reference-pricing block is diagnostic evidence only. Azure occasionally assigns
   # receipt-level fields to the same glyphs, so those fields must prove ownership outside
   # the candidate block before any receipt authority extractor can consume them.
-  def response_without_reference_pricing_line_group_fields(parsed_response, candidates)
-    block_ranges = reference_pricing_line_group_block_ranges(candidates)
+  def response_without_reference_pricing_block_fields(parsed_response, blocks)
+    block_ranges = reference_pricing_block_ranges(blocks)
     return parsed_response if block_ranges.empty?
 
     analyze_result = extract_analyze_result(parsed_response)
@@ -620,12 +810,13 @@ class Ocr::ResponseParser
     { "analyzeResult" => { "documents" => [ { "fields" => {} } ] } }
   end
 
-  def reference_pricing_line_group_block_ranges(candidates)
-    Array(candidates).filter_map do |candidate|
-      next unless candidate.is_a?(Hash) && candidate[:source_kind] == "azure_line_group"
+  def reference_pricing_block_ranges(blocks)
+    Array(blocks).filter_map do |block|
+      next unless block.is_a?(Hash)
+      next unless %w[azure_item_layout azure_line_group].include?(block[:source_kind])
 
-      range_start = candidate[:block_provider_span_start]
-      range_end = candidate[:block_provider_span_end]
+      range_start = block[:block_provider_span_start]
+      range_end = block[:block_provider_span_end]
       next unless range_start.is_a?(Integer) && range_end.is_a?(Integer)
       next unless range_start >= 0 && range_end > range_start
       next if range_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN ||
@@ -1834,15 +2025,34 @@ class Ocr::ResponseParser
     parsed_response,
     lines = [],
     item_calculation_mode_candidates: [],
-    retained_item_indexes: nil
+    retained_item_indexes: nil,
+    item_layout_descriptors: []
   )
     fields = extract_fields(parsed_response)
     items = fields.dig("Items", "valueArray")
+    items = [] if items.nil? && Array(item_layout_descriptors).any?
     return [] unless items.is_a?(Array)
+
+    layout_descriptors = Array(item_layout_descriptors).select { |descriptor| descriptor.is_a?(Hash) }
+    if items.empty?
+      descriptor = layout_descriptors.sole if layout_descriptors.one?
+      layout_item = descriptor&.dig(:layout_item)
+      return layout_item.is_a?(Hash) ? [ layout_item.deep_dup ] : []
+    end
 
     discount_details_by_index = extract_discount_details_by_item_index(items, lines)
     retained_item_indexes ||= retained_structured_item_indexes(items)
     retained_item_index_lookup = Array(retained_item_indexes).index_with(true)
+    layout_replacements_by_index = layout_descriptors.each_with_object({}) do |descriptor, replacements|
+      next unless descriptor[:destination_kind] == "azure_layout_item"
+
+      item_index = descriptor[:structured_item_index]
+      layout_item = descriptor[:layout_item]
+      next unless item_index.is_a?(Integer) && item_index.between?(0, items.size - 1)
+      next unless layout_item.is_a?(Hash)
+
+      replacements[item_index] = layout_item
+    end
     item_identities_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, identities|
       next unless candidate.is_a?(Hash)
 
@@ -1853,6 +2063,9 @@ class Ocr::ResponseParser
 
     items.filter_map.with_index do |item, index|
       next unless retained_item_index_lookup[index]
+
+      layout_replacement = layout_replacements_by_index[index]
+      next layout_replacement.deep_dup if layout_replacement
 
       value_object = item["valueObject"] || {}
       amount_field_name = value_object["TotalPrice"].present? ? "TotalPrice" : "Price"

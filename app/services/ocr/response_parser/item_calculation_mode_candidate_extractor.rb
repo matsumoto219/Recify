@@ -2,6 +2,7 @@ require "set"
 
 class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   MAX_ITEMS = 100
+  MAX_LINES = 150
   MAX_CONTENT_BYTES = Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
   MAX_ITEM_CONTENT_BYTES = 4_096
   MAX_FIELD_CONTENT_BYTES = 512
@@ -28,14 +29,18 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     profile:,
     reference_pricing_candidates: [],
     discount_item_indexes: [],
-    destination_item_indexes: nil
+    destination_item_indexes: nil,
+    item_layout_descriptors: [],
+    reference_conflict_item_indexes: []
   )
     new(
       analyze_result: analyze_result,
       profile: profile,
       reference_pricing_candidates: reference_pricing_candidates,
       discount_item_indexes: discount_item_indexes,
-      destination_item_indexes: destination_item_indexes
+      destination_item_indexes: destination_item_indexes,
+      item_layout_descriptors: item_layout_descriptors,
+      reference_conflict_item_indexes: reference_conflict_item_indexes
     ).call
   end
 
@@ -44,15 +49,21 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     profile:,
     reference_pricing_candidates:,
     discount_item_indexes:,
-    destination_item_indexes: nil
+    destination_item_indexes: nil,
+    item_layout_descriptors: [],
+    reference_conflict_item_indexes: []
   )
     @analyze_result = analyze_result
     @profile = profile
-    @reference_pricing_item_indexes = Array(reference_pricing_candidates).filter_map do |candidate|
+    reference_pricing_item_indexes = Array(reference_pricing_candidates).filter_map do |candidate|
       normalized = normalized_hash(candidate)
       item_index = normalized[:item_index]
       item_index if item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
-    end.to_set
+    end
+    reference_conflict_item_indexes = Array(reference_conflict_item_indexes).select do |item_index|
+      item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
+    end
+    @reference_pricing_item_indexes = (reference_pricing_item_indexes + reference_conflict_item_indexes).to_set
     @valid_reference_pricing_item_indexes = Array(reference_pricing_candidates).filter_map do |candidate|
       normalized = normalized_hash(candidate)
       item_index = normalized[:item_index]
@@ -71,6 +82,12 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
         item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
       end.to_set
     end
+    item_layout_descriptors = Array(item_layout_descriptors)
+    @item_layout_descriptors = item_layout_descriptors.select do |descriptor|
+      descriptor.is_a?(Hash) && descriptor[:source_kind] == "azure_item_layout"
+    end
+    @item_layout_descriptors = [] if item_layout_descriptors.size > MAX_ITEMS ||
+      @item_layout_descriptors.size != item_layout_descriptors.size
   end
 
   def call
@@ -80,20 +97,28 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     parent_spans = items.map { |item| item.is_a?(Hash) ? single_span(item) : nil }
     overlapping_indexes = overlapping_parent_indexes(parent_spans)
 
-    items.filter_map.with_index do |item, item_index|
+    layout_replacement_indexes = item_layout_descriptors.filter_map do |descriptor|
+      descriptor[:structured_item_index] if descriptor[:layout_item].is_a?(Hash)
+    end.to_set
+    structured_candidates = items.filter_map.with_index do |item, item_index|
       next unless destination_item_indexes.nil? || destination_item_indexes.include?(item_index)
+      next if layout_replacement_indexes.include?(item_index)
       next if overlapping_indexes.include?(item_index)
 
       extract_candidate(item, item_index, parent_spans.fetch(item_index))
     rescue EncodingError, ArgumentError, TypeError
       nil
     end
+    layout_candidates = item_layout_descriptors.filter_map { |descriptor| extract_layout_candidate(descriptor) }
+
+    (structured_candidates + layout_candidates).sort_by { |candidate| candidate.fetch(:item_index) }
   end
 
   private
 
   attr_reader :analyze_result, :content, :destination_item_indexes, :discount_item_indexes,
-    :items, :mapper, :profile, :reference_pricing_item_indexes, :valid_reference_pricing_item_indexes
+    :item_layout_descriptors, :items, :mapper, :profile, :reference_pricing_item_indexes,
+    :valid_reference_pricing_item_indexes
 
   def provider_context_valid?
     return false unless analyze_result.is_a?(Hash)
@@ -113,7 +138,11 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
 
     fields = documents.sole["fields"]
     items_field = fields.is_a?(Hash) ? fields["Items"] : nil
-    @items = items_field.is_a?(Hash) ? items_field["valueArray"] : nil
+    @items = if items_field.is_a?(Hash)
+      items_field["valueArray"]
+    elsif items_field.nil? && item_layout_descriptors.any?
+      []
+    end
     items.is_a?(Array)
   end
 
@@ -160,6 +189,71 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       conflicts: conflicts_for(item, item_index),
       options: options
     }
+  end
+
+  def extract_layout_candidate(descriptor)
+    layout_item = descriptor[:layout_item]
+    return unless layout_item.is_a?(Hash)
+
+    item_index = descriptor[:structured_item_index]
+    item_index = 0 if item_index.nil? && items.empty?
+    return unless item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
+
+    printed_line_total = normalized_hash(descriptor[:printed_line_total])
+    amount = lexeme_decimal(printed_line_total[:amount])
+    evidence = normalized_hash(printed_line_total[:evidence])
+    return unless amount && amount.frac.zero? && amount.between?(BigDecimal("0"), MAX_AMOUNT)
+    return unless valid_layout_evidence?(evidence)
+
+    candidate_id = descriptor[:candidate_id]
+    item_identity = descriptor[:item_identity]
+    block_start = descriptor[:block_provider_span_start]
+    block_end = descriptor[:block_provider_span_end]
+    name_line_index = descriptor[:name_line_index]
+    return unless candidate_id.is_a?(String) && candidate_id.bytesize.between?(1, 256)
+    return unless item_identity.is_a?(String) && item_identity.bytesize.between?(1, 256)
+    return unless valid_provider_range?(block_start, block_end)
+    return unless name_line_index.is_a?(Integer) && name_line_index.between?(0, MAX_LINES - 1)
+
+    {
+      candidate_id: "#{candidate_id}_item_calculation_mode",
+      item_identity: item_identity,
+      item_index: item_index,
+      source_provider: "azure_item_layout",
+      provider_model_id: SUPPORTED_MODEL_ID,
+      provider_api_version: SUPPORTED_API_VERSION,
+      string_index_type: mapper.index_type,
+      source_field_path: "pages[0].lines[#{name_line_index}]",
+      provider_span_start: block_start,
+      provider_span_end: block_end,
+      destination_evidence: descriptor[:destination_evidence],
+      owned_line_indexes: descriptor[:owned_line_indexes],
+      printed_line_total: printed_line_total,
+      conflicts: [],
+      options: [
+        {
+          proposal_id: "#{candidate_id}_explicit_line_total",
+          pricing_source_kind: "explicit_line_total",
+          source: { line_total_amount: canonical_decimal_string(amount) },
+          evidence: { line_total: evidence }
+        }
+      ]
+    }
+  rescue ArgumentError, TypeError
+    nil
+  end
+
+  def valid_layout_evidence?(evidence)
+    return false unless evidence[:source_provider] == "azure_item_layout"
+    return false unless evidence[:string_index_type] == mapper.index_type
+
+    valid_provider_range?(evidence[:provider_span_start], evidence[:provider_span_end])
+  end
+
+  def valid_provider_range?(range_start, range_end)
+    range_start.is_a?(Integer) && range_end.is_a?(Integer) &&
+      range_start.between?(0, MAX_PROVIDER_SPAN_VALUE) &&
+      range_end > range_start && range_end <= MAX_PROVIDER_SPAN_VALUE
   end
 
   def count_option(value_object, item, item_index, parent_span, description:)
