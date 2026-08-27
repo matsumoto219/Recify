@@ -32,6 +32,128 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  def item_layout_ocr_result
+    candidate_prefix = 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4'
+    item_identity = 'azure_item_layout_item_p0_name_l1_s16_e22_ref_l2_qty_l3_total_l4'
+    evidence = lambda do |line_index, span_start, span_end|
+      {
+        source_provider: 'azure_item_layout',
+        source_field_path: "pages[0].lines[#{line_index}]",
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: 'textElements',
+        provider_span_start: span_start,
+        provider_span_end: span_end
+      }
+    end
+
+    {
+      success: true,
+      lines: [ '架空店', '例示品', '税込 498円/100g', '計量 342g', '1,703円', '合計 1,703円' ],
+      case_preserved_lines: [ '架空店', '例示品', '税込 498円/100g', '計量 342g', '1,703円', '合計 1,703円' ],
+      candidates: {
+        total_amount: 1703,
+        reference_pricing_block_line_indexes: [ 1, 2, 3, 4 ],
+        items: [
+          {
+            raw_text: '例示品',
+            price: '498',
+            quantity: '342',
+            quantity_unit_code: 'gram',
+            quantity_unit_status: 'known',
+            line_total: 1703,
+            original_line_total: 1703,
+            ocr_item_identity: item_identity
+          }
+        ],
+        reference_pricing_candidates: [
+          {
+            candidate_id: "#{candidate_prefix}_reference_pricing",
+            source_kind: 'azure_item_layout',
+            item_index: 0,
+            item_identity: item_identity,
+            destination_kind: 'azure_layout_item',
+            page_index: 0,
+            name_line_index: 1,
+            reference_line_index: 2,
+            purchased_quantity_line_indexes: [ 3 ],
+            printed_total_line_index: 4,
+            owned_line_indexes: [ 1, 2, 3, 4 ],
+            provider_model_id: 'prebuilt-receipt',
+            provider_api_version: '2024-11-30',
+            string_index_type: 'textElements',
+            validation_contract_version: 'azure_item_layout_v1',
+            block_provider_span_start: 16,
+            block_provider_span_end: 66,
+            validation_state: 'valid',
+            rejection_reasons: [],
+            reference_price: { amount: '498', evidence: evidence.call(2, 29, 32) },
+            reference_quantity: {
+              amount: '100',
+              unit_code: 'gram',
+              unit_status: 'known',
+              origin: 'explicit',
+              evidence: evidence.call(2, 34, 38)
+            },
+            purchased_quantity: {
+              amount: '342',
+              unit_code: 'gram',
+              unit_status: 'known',
+              evidence: evidence.call(3, 43, 47)
+            },
+            reference_price_tax_inclusion: 'gross',
+            tax_inclusion_evidence: evidence.call(2, 26, 28),
+            printed_line_total: { amount: '1703', evidence: evidence.call(4, 49, 55) },
+            corroboration: {
+              exact_amount: { numerator: '42579', denominator: '25' },
+              projected_amount: 1703,
+              printed_line_total: '1703',
+              rounding_matches: %w[floor half_up]
+            }
+          }
+        ],
+        item_calculation_mode_candidates: [
+          {
+            candidate_id: "#{candidate_prefix}_item_calculation_mode",
+            item_identity: item_identity,
+            item_index: 0,
+            source_provider: 'azure_item_layout',
+            provider_model_id: 'prebuilt-receipt',
+            provider_api_version: '2024-11-30',
+            string_index_type: 'textElements',
+            source_field_path: 'pages[0].lines[1]',
+            provider_span_start: 16,
+            provider_span_end: 66,
+            destination_evidence: evidence.call(1, 16, 22),
+            printed_line_total: {
+              amount: '1703',
+              evidence: evidence.call(4, 49, 55)
+            },
+            conflicts: [],
+            options: [
+              {
+                proposal_id: "#{candidate_prefix}_explicit_line_total",
+                pricing_source_kind: 'explicit_line_total',
+                source: { line_total_amount: '1703' },
+                evidence: {
+                  line_total: evidence.call(4, 49, 55)
+                }
+              }
+            ]
+          }
+        ],
+        payments: [],
+        tax_details: [],
+        adjustment_candidates: [],
+        review_reasons: []
+      },
+      meta: {
+        provider: 'azure_document_intelligence',
+        model_id: 'prebuilt-receipt'
+      }
+    }
+  end
+
   def discount_heavy_ocr_result
     raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/discount_heavy_receipt.json').read)
 
@@ -609,6 +731,64 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
       expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(stored)
       expect(rehydrated.dig(:adoption_proposals, 'item_calculation_modes')).to eq(stored)
       expect(stored.to_json).not_to include('raw_text', 'provider_raw_response', 'polygon')
+    end
+  end
+
+  it 'layout明細のbounded構造とexplicit-only proposalをsnapshotへ保存する' do
+    snapshot = described_class.ocr_result_snapshot(item_layout_ocr_result)
+    candidate = snapshot.dig('candidates', 'reference_pricing_candidates').sole
+    proposal = snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+
+    aggregate_failures do
+      expect(snapshot.dig('candidates', 'reference_pricing_block_line_indexes')).to eq([ 1, 2, 3, 4 ])
+      expect(snapshot.dig('candidates', 'items', 0, 'ocr_item_identity')).to start_with(
+        'azure_item_layout_item_'
+      )
+      expect(candidate).to include(
+        'candidate_id' => 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_reference_pricing',
+        'source_kind' => 'azure_item_layout',
+        'item_index' => 0,
+        'page_index' => 0,
+        'name_line_index' => 1,
+        'reference_line_index' => 2,
+        'purchased_quantity_line_indexes' => [ 3 ],
+        'printed_total_line_index' => 4,
+        'owned_line_indexes' => [ 1, 2, 3, 4 ],
+        'validation_state' => 'valid'
+      )
+      expect(candidate.dig('reference_price', 'amount')).to eq('498')
+      expect(candidate.dig('reference_price', 'evidence')).to include(
+        'source_provider' => 'azure_item_layout',
+        'source_field_path' => 'pages[0].lines[2]',
+        'provider_span_start' => 29,
+        'provider_span_end' => 32,
+        'string_index_type' => 'textElements'
+      )
+      expect(proposal).to include(
+        'source_provider' => 'azure_item_layout',
+        'item_identity' => 'azure_item_layout_item_p0_name_l1_s16_e22_ref_l2_qty_l3_total_l4'
+      )
+      expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
+      expect(snapshot.dig('adoption_proposals', 'reference_pricing')).to be_nil
+      expect(snapshot.to_json).not_to include('polygon', 'word_content', 'provider_raw_response')
+    end
+  end
+
+  it 'layout explicit proposalをJSON round-tripでexactに維持し不正なblock indexをfail-closedにする' do
+    initial = described_class.ocr_result_snapshot(item_layout_ocr_result)
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    malformed = item_layout_ocr_result.deep_dup
+    malformed[:candidates][:reference_pricing_block_line_indexes] = [ -1, 2, 3, 151 ]
+    malformed_snapshot = described_class.ocr_result_snapshot(malformed)
+
+    aggregate_failures do
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(
+        initial.dig('adoption_proposals', 'item_calculation_modes')
+      )
+      expect(copied.dig('candidates', 'reference_pricing_candidates')).to eq(
+        initial.dig('candidates', 'reference_pricing_candidates')
+      )
+      expect(malformed_snapshot.dig('candidates', 'reference_pricing_block_line_indexes')).to eq([])
     end
   end
 

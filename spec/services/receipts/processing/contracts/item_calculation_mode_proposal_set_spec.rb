@@ -57,6 +57,108 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
+  def item_layout_candidate(amount: '1703', span_offset: 0)
+    name_start = span_offset + 6
+    name_end = span_offset + 12
+    total_start = span_offset + 34
+    total_end = span_offset + 40
+    candidate_id = 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4'
+    item_identity =
+      "azure_item_layout_item_p0_name_l1_s#{name_start}_e#{name_end}_ref_l2_qty_l3_total_l4"
+    destination_evidence = {
+      source_provider: 'azure_item_layout',
+      source_field_path: 'pages[0].lines[1]',
+      page_index: 0,
+      line_index: 1,
+      string_index_type: 'textElements',
+      provider_span_start: name_start,
+      provider_span_end: name_end,
+      word_spans: [
+        {
+          source_field_path: 'pages[0].words[1]',
+          word_index: 1,
+          provider_span_start: name_start,
+          provider_span_end: name_end
+        }
+      ]
+    }
+    total_evidence = {
+      source_provider: 'azure_item_layout',
+      source_field_path: 'pages[0].lines[4]',
+      page_index: 0,
+      line_index: 4,
+      string_index_type: 'textElements',
+      provider_span_start: total_start,
+      provider_span_end: total_end
+    }
+
+    {
+      candidate_id: "#{candidate_id}_item_calculation_mode",
+      item_identity: item_identity,
+      item_index: 0,
+      source_provider: 'azure_item_layout',
+      provider_model_id: 'prebuilt-receipt',
+      provider_api_version: '2024-11-30',
+      string_index_type: 'textElements',
+      source_field_path: 'pages[0].lines[1]',
+      provider_span_start: name_start,
+      provider_span_end: span_offset + 45,
+      destination_evidence: destination_evidence,
+      owned_line_indexes: [ 1, 2, 3, 4 ],
+      printed_line_total: {
+        amount: amount,
+        evidence: total_evidence
+      },
+      conflicts: [],
+      options: [
+        {
+          proposal_id: "#{candidate_id}_explicit_line_total",
+          pricing_source_kind: 'explicit_line_total',
+          source: { line_total_amount: amount },
+          evidence: { line_total: total_evidence.deep_dup }
+        }
+      ]
+    }
+  end
+
+  def item_layout_snapshot(candidate)
+    amount = candidate.dig(:printed_line_total, :amount)
+    {
+      schema_version: Receipts::Processing::Runs::SnapshotBuilder::OCR_RESULT_SCHEMA_VERSION,
+      success: true,
+      candidates: {
+        items: [
+          {
+            price: '498',
+            quantity: '342',
+            quantity_unit_code: 'gram',
+            line_total: amount.to_i,
+            original_line_total: amount.to_i,
+            ocr_item_identity: candidate.fetch(:item_identity)
+          }
+        ],
+        reference_pricing_candidates: [
+          {
+            candidate_id: candidate.fetch(:candidate_id).sub(/_item_calculation_mode\z/, '_reference_pricing'),
+            item_index: 0,
+            validation_state: 'valid',
+            rejection_reasons: []
+          }
+        ]
+      },
+      candidate_counts: {
+        items: { actual_count: 1, snapshot_count: 1 },
+        reference_pricing_candidates: { actual_count: 1, snapshot_count: 1 },
+        item_calculation_mode_candidates: { actual_count: 1, snapshot_count: 1 }
+      },
+      truncated: {
+        items: false,
+        reference_pricing_candidates: false,
+        item_calculation_mode_candidates: false
+      }
+    }
+  end
+
   def snapshot_without_proposals(result)
     result = result.deep_dup
     result[:candidates] = result.fetch(:candidates).deep_dup
@@ -199,6 +301,148 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
           reference_quantity_price
           explicit_line_total
         ])
+      end
+    end
+
+    it 'item-layoutの印字明細金額だけをcanonicalなexact proposalとしてround-tripする' do
+      candidate = item_layout_candidate
+      snapshot = item_layout_snapshot(candidate)
+
+      proposal = described_class.build_all(candidates: [ candidate ], ocr_snapshot: snapshot).sole
+
+      aggregate_failures do
+        expect(proposal).to include(
+          'source_provider' => 'azure_item_layout',
+          'candidate_id' => 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_item_calculation_mode',
+          'item_identity' => 'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l3_total_l4',
+          'source_field_path' => 'pages[0].lines[1]',
+          'destination_evidence' => {
+            'source_field_path' => 'pages[0].lines[1]',
+            'provider_span_start' => 6,
+            'provider_span_end' => 12
+          }
+        )
+        expect(proposal.fetch('options')).to contain_exactly(
+          include(
+            'proposal_id' => 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_explicit_line_total',
+            'pricing_source_kind' => 'explicit_line_total',
+            'source' => { 'line_total_amount' => '1703' },
+            'evidence' => {
+              'line_total' => {
+                'source_field_path' => 'pages[0].lines[4]',
+                'provider_span_start' => 34,
+                'provider_span_end' => 40
+              }
+            }
+          )
+        )
+        expect(proposal.to_json).not_to include('word_spans')
+        expect(described_class.from_snapshot(
+          JSON.parse(JSON.generate([ proposal ])),
+          ocr_snapshot: JSON.parse(JSON.generate(snapshot))
+        )).to eq([ proposal ])
+      end
+    end
+
+    it 'item-layoutへcount/reference optionを混在させず、identity・path・span不一致を部分採用しない' do
+      candidate = item_layout_candidate
+      snapshot = item_layout_snapshot(candidate)
+      count_mixed = candidate.deep_dup
+      count_mixed.fetch(:options).prepend(
+        proposal_id: 'azure_items_0_count_unit_price',
+        pricing_source_kind: 'count_unit_price',
+        source: { price_amount: '498', quantity: '342', quantity_unit_code: 'gram' },
+        evidence: {}
+      )
+      mismatched_identity = candidate.deep_dup
+      mismatched_identity[:candidate_id] =
+        'azure_item_layout_p0_name_l9_ref_l2_qty_l3_total_l4_item_calculation_mode'
+      mismatched_path = candidate.deep_dup
+      mismatched_path.dig(:printed_line_total, :evidence)[:source_field_path] = 'pages[0].lines[3]'
+      mismatched_span = candidate.deep_dup
+      mismatched_span[:destination_evidence][:provider_span_end] -= 1
+
+      aggregate_failures do
+        expect(described_class.build_all(candidates: [ count_mixed ], ocr_snapshot: snapshot)).to be_nil
+        expect(described_class.build_all(candidates: [ mismatched_identity ], ocr_snapshot: snapshot)).to be_nil
+        expect(described_class.build_all(candidates: [ mismatched_path ], ocr_snapshot: snapshot)).to be_nil
+        expect(described_class.build_all(candidates: [ mismatched_span ], ocr_snapshot: snapshot)).to be_nil
+      end
+    end
+
+    it 'item-layout optionのunknown fieldをcanonical化で隠さずproposal全体を拒否する' do
+      candidate = item_layout_candidate
+      snapshot = item_layout_snapshot(candidate)
+      option_extra = candidate.deep_dup
+      option_extra.dig(:options, 0)[:unknown] = 'discard-me'
+      source_extra = candidate.deep_dup
+      source_extra.dig(:options, 0, :source)[:unknown] = 'discard-me'
+      evidence_extra = candidate.deep_dup
+      evidence_extra.dig(:options, 0, :evidence)[:unknown] = 'discard-me'
+
+      aggregate_failures do
+        expect(described_class.build_all(candidates: [ option_extra ], ocr_snapshot: snapshot)).to be_nil
+        expect(described_class.build_all(candidates: [ source_extra ], ocr_snapshot: snapshot)).to be_nil
+        expect(described_class.build_all(candidates: [ evidence_extra ], ocr_snapshot: snapshot)).to be_nil
+      end
+    end
+
+    it 'item-layoutの明示0円とprovider span上限を受け入れ、上限を1超えるspanは拒否する' do
+      zero = item_layout_candidate(amount: '0')
+      zero_snapshot = item_layout_snapshot(zero)
+      at_limit = item_layout_candidate(
+        span_offset: described_class::MAX_PROVIDER_SPAN - 45
+      )
+      at_limit_snapshot = item_layout_snapshot(at_limit)
+      above_limit = item_layout_candidate(
+        span_offset: described_class::MAX_PROVIDER_SPAN - 44
+      )
+      above_limit_snapshot = item_layout_snapshot(above_limit)
+
+      aggregate_failures do
+        expect(described_class.build_all(candidates: [ zero ], ocr_snapshot: zero_snapshot))
+          .to contain_exactly(include('options' => [ include('source' => { 'line_total_amount' => '0' }) ]))
+        expect(described_class.build_all(candidates: [ at_limit ], ocr_snapshot: at_limit_snapshot)).to be_present
+        expect(described_class.build_all(candidates: [ above_limit ], ocr_snapshot: above_limit_snapshot)).to be_nil
+      end
+    end
+
+    it 'item-layout reference candidateの既知26 fieldを受け入れ、専用collection上限超過は拒否する' do
+      candidate = item_layout_candidate
+      snapshot = item_layout_snapshot(candidate)
+      reference = snapshot.dig(:candidates, :reference_pricing_candidates).sole
+      reference.merge!(
+        source_kind: 'azure_item_layout',
+        item_identity: candidate.fetch(:item_identity),
+        destination_kind: 'azure_layout_item',
+        page_index: 0,
+        name_line_index: 1,
+        reference_line_index: 2,
+        purchased_quantity_line_indexes: [ 3 ],
+        printed_total_line_index: 4,
+        owned_line_indexes: [ 1, 2, 3, 4 ],
+        string_index_type: 'textElements',
+        provider_model_id: 'prebuilt-receipt',
+        provider_api_version: '2024-11-30',
+        validation_contract_version: 'azure_item_layout_v1',
+        block_provider_span_start: 6,
+        block_provider_span_end: 45,
+        reference_price: {},
+        reference_quantity: {},
+        purchased_quantity: {},
+        reference_price_tax_inclusion: 'gross',
+        tax_inclusion_evidence: {},
+        printed_line_total: {},
+        corroboration: {}
+      )
+      oversized = snapshot.deep_dup
+      oversized_reference = oversized.dig(:candidates, :reference_pricing_candidates).sole
+      7.times { |index| oversized_reference["unknown_#{index}"] = index }
+
+      aggregate_failures do
+        expect(reference.size).to eq(26)
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: snapshot)).to be_present
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: oversized)).to be_nil
       end
     end
 
