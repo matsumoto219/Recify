@@ -270,6 +270,21 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile OCR single structured item inner-tax descriptions' do
+    it '単一明細の税込根拠へ利用できるexactな内税descriptionだけを定義する' do
+      pattern = described_class.fetch('JPN').ocr_reference_pricing_single_structured_item_inner_tax_description_pattern
+
+      aggregate_failures do
+        expect('内税').to match(pattern)
+        expect('内消費税').to match(pattern)
+        expect('内消費税等').to match(pattern)
+        expect('消費税').not_to match(pattern)
+        expect('外税').not_to match(pattern)
+        expect('内税対象').not_to match(pattern)
+      end
+    end
+  end
+
   describe 'JPN profile post-discount reference pricing labels' do
     it '値引額と値引適用後の明示basisを区別する' do
       pattern = described_class.fetch('JPN').ocr_post_discount_price_basis_pattern
