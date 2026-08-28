@@ -117,6 +117,17 @@ class Ocr::ResponseParser
     tax_details = extract_tax_details(authority_response, authority_lines)
     tax_amount = extract_tax_amount(authority_response, authority_lines, tax_details:)
     adjustment_candidates = extract_adjustment_candidates(authority_response, authority_lines)
+    reference_pricing_candidates = promote_single_structured_item_gross_reference_pricing(
+      analyze_result:,
+      structured_items:,
+      candidates: reference_pricing_candidates,
+      retained_item_indexes:,
+      receipt_total: total_amount,
+      receipt_tax: tax_amount,
+      tax_details:,
+      adjustment_candidates:,
+      discount_count: discount_details_by_item_index.size
+    )
     reference_pricing_candidates = promote_single_item_gross_summary_reference_pricing(
       analyze_result:,
       candidates: reference_pricing_candidates,
@@ -642,6 +653,52 @@ class Ocr::ResponseParser
     }
   end
 
+  def promote_single_structured_item_gross_reference_pricing(
+    analyze_result:,
+    structured_items:,
+    candidates:,
+    retained_item_indexes:,
+    receipt_total:,
+    receipt_tax:,
+    tax_details:,
+    adjustment_candidates:,
+    discount_count:
+  )
+    candidates = Array(candidates)
+    retained_indexes = Array(retained_item_indexes)
+    return candidates unless structured_items.is_a?(Array) && structured_items.one?
+    return candidates unless candidates.one?
+
+    candidate = candidates.sole
+    evidence = Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossEvidenceExtractor.call(
+      analyze_result:,
+      profile:,
+      receipt_total:,
+      receipt_tax:
+    )
+    policy = Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy.call(
+      candidate:,
+      item_count: structured_items.size,
+      retained_item_indexes: retained_indexes,
+      summary_gross_evidence: evidence,
+      adjustment_count: Array(adjustment_candidates).size,
+      discount_count:,
+      competing_tax_basis_count: competing_tax_basis_count(tax_details),
+      item_line_total_limit: ReceiptAmountService.receipt_item_line_total_max
+    )
+    return candidates unless policy.eligible?
+
+    promoted = candidate.deep_dup.merge(
+      validation_state: "valid",
+      rejection_reasons: [],
+      reference_price_tax_inclusion: policy.reference_price_tax_inclusion,
+      tax_inclusion_evidence: single_structured_item_gross_evidence(evidence, policy:)
+    )
+    [ promoted ]
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    candidates
+  end
+
   def promote_single_item_gross_summary_reference_pricing(
     analyze_result:,
     candidates:,
@@ -726,6 +783,20 @@ class Ocr::ResponseParser
       policy_contract_version: policy.contract_version,
       summary_total: evidence.summary_total.deep_dup,
       gross_tax_target: evidence.gross_tax_target.deep_dup
+    }
+  end
+
+  def single_structured_item_gross_evidence(evidence, policy:)
+    {
+      kind: evidence.kind,
+      string_index_type: evidence.string_index_type,
+      policy_contract_version: policy.contract_version,
+      item_parent: evidence.item_parent.deep_dup,
+      tax_detail_parent: evidence.tax_detail_parent.deep_dup,
+      tax_description: evidence.tax_description.deep_dup,
+      tax_amount: evidence.tax_amount.deep_dup,
+      document_tax_total: evidence.document_tax_total.deep_dup,
+      summary_total: evidence.summary_total.deep_dup
     }
   end
 

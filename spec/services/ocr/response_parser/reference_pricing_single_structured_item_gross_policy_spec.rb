@@ -28,7 +28,7 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPol
         unit_code: 'gram',
         unit_status: 'known',
         origin: 'explicit',
-        evidence: component('documents[0].fields.Items[0].QuantityUnit', 14, 18)
+        evidence: component('documents[0].fields.Items[0].Price', 14, 18)
       },
       purchased_quantity: {
         amount: '250',
@@ -112,6 +112,30 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPol
       evidence_kind: 'single_item_receipt_inner_tax_summary',
       candidate_id: 'azure_items_0_reference_pricing'
     )
+  end
+
+  it 'implicit per-unit基準数量1をQuantityUnit spanから昇格できる' do
+    implicit = candidate.deep_dup
+    implicit[:reference_price][:amount] = '2.4'
+    implicit[:reference_quantity].merge!(
+      amount: '1',
+      origin: 'implicit_per_unit',
+      evidence: component('documents[0].fields.Items[0].QuantityUnit', 14, 15)
+    )
+
+    aggregate_failures do
+      expect(evaluate(candidate_value: implicit)).to be_eligible
+
+      wrong_owner = implicit.deep_dup
+      wrong_owner[:reference_quantity][:evidence] = component(
+        'documents[0].fields.Items[0].Price', 14, 15
+      )
+      expect(evaluate(candidate_value: wrong_owner)).not_to be_eligible
+
+      non_unit_basis = implicit.deep_dup
+      non_unit_basis[:reference_quantity][:amount] = '2'
+      expect(evaluate(candidate_value: non_unit_basis)).not_to be_eligible
+    end
   end
 
   it 'candidate identity・state・source completenessの不一致を拒否する' do

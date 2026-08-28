@@ -120,6 +120,28 @@ module Receipts::Processing::Contracts
     SINGLE_ITEM_GROSS_SUMMARY_TAX_KEYS = (LAYOUT_REFERENCE_CONTEXT_EVIDENCE_KEYS + %w[
       rate net_amount tax_amount gross_amount
     ]).freeze
+    SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND = "single_item_receipt_inner_tax_summary"
+    SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION = "reference_pricing_single_structured_item_gross_policy_v1"
+    SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KEYS = %w[
+      kind string_index_type policy_contract_version item_parent tax_detail_parent
+      tax_description tax_amount document_tax_total summary_total
+    ].freeze
+    SINGLE_STRUCTURED_ITEM_GROSS_ITEM_PARENT_KEYS = %w[
+      source_provider source_field_path item_index provider_span_start provider_span_end
+    ].freeze
+    SINGLE_STRUCTURED_ITEM_GROSS_TAX_PARENT_KEYS = %w[
+      source_provider source_field_path tax_detail_index provider_span_start provider_span_end
+    ].freeze
+    SINGLE_STRUCTURED_ITEM_GROSS_LINE_KEYS = %w[
+      source_provider source_field_path page_index line_index string_index_type
+      provider_span_start provider_span_end
+    ].freeze
+    SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS =
+      (SINGLE_STRUCTURED_ITEM_GROSS_LINE_KEYS + %w[tax_detail_index]).freeze
+    SINGLE_STRUCTURED_ITEM_GROSS_TAX_AMOUNT_KEYS =
+      (SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS + %w[amount]).freeze
+    SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS =
+      (SINGLE_STRUCTURED_ITEM_GROSS_LINE_KEYS + %w[amount]).freeze
     LAYOUT_PRODUCER_OFFSETS = [
       { reference: 1, reference_quantity: 1, purchased: [ 2 ], total: 3, owned: [ 0, 1, 2, 3 ] },
       { reference: 1, reference_quantity: 1, purchased: [ 3 ], total: 4, owned: [ 0, 1, 2, 3, 4 ] },
@@ -301,7 +323,10 @@ module Receipts::Processing::Contracts
 
       def proposal_tax_inclusion_evidence(value)
         evidence = normalized_hash(value)
-        return deep_copy(evidence) if evidence["kind"] == SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND
+        return deep_copy(evidence) if [
+          SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND,
+          SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+        ].include?(evidence["kind"])
 
         proposal_evidence(value)
       end
@@ -928,9 +953,16 @@ module Receipts::Processing::Contracts
             parent_end: parent_end
           )
         else
+          reference_quantity_path = if source["reference_quantity_origin"] == "implicit_per_unit"
+            return false unless source["reference_quantity"] == "1"
+
+            "QuantityUnit"
+          else
+            "Price"
+          end
           paths = {
             "reference_price" => "Price",
-            "reference_quantity" => "Price",
+            "reference_quantity" => reference_quantity_path,
             "purchased_quantity" => "Quantity"
           }
           return false unless paths.all? do |evidence_key, field_name|
@@ -941,12 +973,22 @@ module Receipts::Processing::Contracts
               parent_end: parent_end
             )
           end
-          return false unless reference_tax_component_evidence_valid?(
-            evidence["tax_inclusion"],
-            item_index: item_index,
-            parent_start: parent_start,
-            parent_end: parent_end
-          )
+          tax_evidence = normalized_hash(evidence["tax_inclusion"])
+          if tax_evidence["kind"] == SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+            return false unless single_structured_item_gross_evidence_valid?(
+              tax_evidence,
+              proposal: proposal,
+              parent_start: parent_start,
+              parent_end: parent_end
+            )
+          else
+            return false unless reference_tax_component_evidence_valid?(
+              tax_evidence,
+              item_index: item_index,
+              parent_start: parent_start,
+              parent_end: parent_end
+            )
+          end
         end
 
         reference_projection(source).present?
@@ -1071,6 +1113,145 @@ module Receipts::Processing::Contracts
           valid_span?(value["provider_span_start"], value["provider_span_end"])
       end
 
+      def single_structured_item_gross_evidence_valid?(
+        value,
+        proposal:,
+        parent_start:,
+        parent_end:,
+        context: nil
+      )
+        evidence = normalized_hash(value)
+        return false unless exact_keys?(evidence, SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KEYS)
+        return false unless proposal["source_provider"] == SOURCE_PROVIDER
+        return false unless proposal["item_index"] == 0
+        return false unless evidence["kind"] == SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+        return false unless evidence["policy_contract_version"] == SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION
+        return false unless evidence["string_index_type"] == proposal["string_index_type"]
+
+        item_parent = normalized_hash(evidence["item_parent"])
+        tax_parent = normalized_hash(evidence["tax_detail_parent"])
+        return false unless single_structured_item_parent_valid?(
+          item_parent,
+          expected_keys: SINGLE_STRUCTURED_ITEM_GROSS_ITEM_PARENT_KEYS,
+          expected_path: "documents[0].fields.Items[0]",
+          index_key: "item_index"
+        )
+        return false unless single_structured_item_parent_valid?(
+          tax_parent,
+          expected_keys: SINGLE_STRUCTURED_ITEM_GROSS_TAX_PARENT_KEYS,
+          expected_path: "documents[0].fields.TaxDetails[0]",
+          index_key: "tax_detail_index"
+        )
+        return false unless item_parent["source_field_path"] == proposal["source_field_path"]
+        return false unless item_parent["item_index"] == proposal["item_index"]
+        return false unless item_parent["provider_span_start"] == parent_start
+        return false unless item_parent["provider_span_end"] == parent_end
+        return false if evidence_ranges_overlap?(item_parent, tax_parent)
+
+        tax_description = normalized_hash(evidence["tax_description"])
+        tax_amount = normalized_hash(evidence["tax_amount"])
+        document_tax_total = normalized_hash(evidence["document_tax_total"])
+        summary_total = normalized_hash(evidence["summary_total"])
+        return false unless single_structured_item_line_evidence_valid?(
+          tax_description,
+          expected_keys: SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS,
+          expected_provider: SOURCE_PROVIDER,
+          expected_path: "documents[0].fields.TaxDetails[0].Description",
+          string_index_type: proposal["string_index_type"],
+          index_key: "tax_detail_index"
+        )
+        return false unless single_structured_item_line_evidence_valid?(
+          tax_amount,
+          expected_keys: SINGLE_STRUCTURED_ITEM_GROSS_TAX_AMOUNT_KEYS,
+          expected_provider: SOURCE_PROVIDER,
+          expected_path: "documents[0].fields.TaxDetails[0].Amount",
+          string_index_type: proposal["string_index_type"],
+          index_key: "tax_detail_index"
+        )
+        return false unless single_structured_item_line_evidence_valid?(
+          document_tax_total,
+          expected_keys: SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS,
+          expected_provider: SOURCE_PROVIDER,
+          expected_path: "documents[0].fields.TotalTax",
+          string_index_type: proposal["string_index_type"]
+        )
+        return false unless single_structured_item_line_evidence_valid?(
+          summary_total,
+          expected_keys: SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS,
+          expected_provider: "azure_document_total",
+          expected_path: layout_line_path(summary_total["line_index"]),
+          string_index_type: proposal["string_index_type"]
+        )
+        return false unless evidence_within_parent?(tax_description, parent: tax_parent)
+        return false unless evidence_within_parent?(tax_amount, parent: tax_parent)
+        return false if evidence_ranges_overlap?(tax_description, tax_amount)
+        return false unless evidence_ranges_equal_or_disjoint?(tax_amount, document_tax_total)
+        return false if evidence_ranges_overlap?(summary_total, item_parent)
+        return false if evidence_ranges_overlap?(summary_total, tax_parent)
+
+        tax_value = bounded_exact_integer_value(tax_amount["amount"], allow_zero: false)
+        tax_total_value = bounded_exact_integer_value(document_tax_total["amount"], allow_zero: false)
+        summary_value = bounded_exact_integer_value(summary_total["amount"], allow_zero: false)
+        return false if [ tax_value, tax_total_value, summary_value ].any?(&:nil?)
+        return false unless tax_value == tax_total_value
+        return true if context.nil?
+
+        context_integer_matches?(
+          context.dig("candidates", "tax_amount"),
+          tax_value.to_s,
+          maximum: MAX_AMOUNT,
+          allow_zero: false
+        ) && context_integer_matches?(
+          context.dig("candidates", "total_amount"),
+          summary_value.to_s,
+          maximum: MAX_AMOUNT,
+          allow_zero: false
+        )
+      rescue ArgumentError, TypeError
+        false
+      end
+
+      def single_structured_item_parent_valid?(value, expected_keys:, expected_path:, index_key:)
+        exact_keys?(value, expected_keys) &&
+          value["source_provider"] == SOURCE_PROVIDER &&
+          value["source_field_path"] == expected_path &&
+          value["source_field_path"].bytesize <= MAX_PATH_BYTES &&
+          value[index_key] == 0 &&
+          valid_span?(value["provider_span_start"], value["provider_span_end"])
+      end
+
+      def single_structured_item_line_evidence_valid?(
+        value,
+        expected_keys:,
+        expected_provider:,
+        expected_path:,
+        string_index_type:,
+        index_key: nil
+      )
+        return false unless exact_keys?(value, expected_keys)
+        return false unless value["source_provider"] == expected_provider
+        return false unless value["source_field_path"] == expected_path
+        return false unless value["source_field_path"].bytesize <= MAX_PATH_BYTES
+        return false unless value["page_index"] == 0
+        return false unless value["line_index"].is_a?(Integer)
+        return false unless value["line_index"].between?(0, MAX_LAYOUT_LINE_INDEX)
+        return false unless value["string_index_type"] == string_index_type
+        return false if index_key && value[index_key] != 0
+
+        valid_span?(value["provider_span_start"], value["provider_span_end"])
+      end
+
+      def evidence_within_parent?(value, parent:)
+        value["provider_span_start"] >= parent["provider_span_start"] &&
+          value["provider_span_end"] <= parent["provider_span_end"]
+      end
+
+      def evidence_ranges_equal_or_disjoint?(left, right)
+        same_range = left["provider_span_start"] == right["provider_span_start"] &&
+          left["provider_span_end"] == right["provider_span_end"]
+        same_range || !evidence_ranges_overlap?(left, right)
+      end
+
       def evidence_outside_parent?(value, parent_start:, parent_end:)
         value["provider_span_end"] <= parent_start || value["provider_span_start"] >= parent_end
       end
@@ -1172,12 +1353,23 @@ module Receipts::Processing::Contracts
         return false unless REFERENCE_TAX_INCLUSIONS.include?(
           reference_candidate["reference_price_tax_inclusion"]
         )
-        return false unless reference_tax_evidence_valid?(
-          reference_candidate["tax_inclusion_evidence"],
-          item_index: item_index,
-          parent_start: candidate["provider_span_start"],
-          parent_end: candidate["provider_span_end"]
-        )
+        tax_evidence = normalized_hash(reference_candidate["tax_inclusion_evidence"])
+        if tax_evidence["kind"] == SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+          return false unless single_structured_item_gross_evidence_valid?(
+            tax_evidence,
+            proposal: candidate,
+            parent_start: candidate["provider_span_start"],
+            parent_end: candidate["provider_span_end"],
+            context:
+          )
+        else
+          return false unless reference_tax_evidence_valid?(
+            tax_evidence,
+            item_index: item_index,
+            parent_start: candidate["provider_span_start"],
+            parent_end: candidate["provider_span_end"]
+          )
+        end
 
         source = reference_source(reference_candidate)
         return false unless compatible_reference_units?(
@@ -1397,6 +1589,13 @@ module Receipts::Processing::Contracts
 
       def reference_quantity_component_valid?(value, item_index:, parent_start:, parent_end:, layout_evidence: nil)
         component = normalized_hash(value)
+        field_name = if component["origin"] == "implicit_per_unit" && layout_evidence.nil?
+          return false unless component["amount"] == "1"
+
+          "QuantityUnit"
+        else
+          "Price"
+        end
         exact_keys?(component, REFERENCE_QUANTITY_COMPONENT_KEYS) &&
           exact_decimal?(
             component["amount"],
@@ -1409,7 +1608,7 @@ module Receipts::Processing::Contracts
           ReceiptQuantityUnit.unit_for(component["unit_code"])&.allows_pricing_role?(:reference) &&
           reference_component_evidence_valid?(
             component["evidence"],
-            field_name: "Price",
+            field_name: field_name,
             item_index: item_index,
             parent_start: parent_start,
             parent_end: parent_end,
@@ -1670,6 +1869,13 @@ module Receipts::Processing::Contracts
             if normalized["kind"] == SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND
               evidence << normalized["summary_total"]
               evidence << normalized["gross_tax_target"]
+            elsif normalized["kind"] == SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+              evidence << normalized["tax_description"]
+              evidence << normalized["tax_amount"]
+              evidence << normalized["summary_total"]
+              document_tax_total = normalized_hash(normalized["document_tax_total"])
+              tax_amount = normalized_hash(normalized["tax_amount"])
+              evidence << document_tax_total unless evidence_ranges_equal?(tax_amount, document_tax_total)
             else
               evidence << entry
             end
@@ -1690,6 +1896,11 @@ module Receipts::Processing::Contracts
         return unless valid_span?(start_value, end_value)
 
         (start_value...end_value)
+      end
+
+      def evidence_ranges_equal?(left, right)
+        left["provider_span_start"] == right["provider_span_start"] &&
+          left["provider_span_end"] == right["provider_span_end"]
       end
 
       def collection_valid?(proposals, context:)

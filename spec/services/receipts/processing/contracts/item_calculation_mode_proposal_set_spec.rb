@@ -57,6 +57,51 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
+  def parsed_structured_inner_tax_reference_result(implicit_per_unit: false)
+    result = parsed_structured_reference_result.deep_dup
+    result.dig(:candidates).merge!(total_amount: 1703, tax_amount: 154)
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+    reference[:tax_inclusion_evidence] = single_structured_item_gross_evidence
+    return result unless implicit_per_unit
+
+    result.dig(:candidates).merge!(total_amount: 600, tax_amount: 54)
+    result.dig(:candidates, :items, 0).merge!(
+      price: 2,
+      quantity: 300,
+      line_total: 600,
+      original_line_total: 600
+    )
+    mode_candidate = result.dig(:candidates, :item_calculation_mode_candidates).sole
+    mode_candidate[:printed_line_total][:amount] = '600'
+    mode_candidate.dig(:options, 0, :source)[:line_total_amount] = '600'
+    reference[:reference_price][:amount] = '2'
+    reference[:reference_quantity].merge!(
+      amount: '1',
+      origin: 'implicit_per_unit',
+      evidence: {
+        source_provider: 'azure_structured',
+        source_field_path: 'documents[0].fields.Items[0].QuantityUnit',
+        item_index: 0,
+        provider_span_start: 20,
+        provider_span_end: 21
+      }
+    )
+    reference[:purchased_quantity].merge!(amount: '300')
+    reference[:purchased_quantity][:evidence].merge!(provider_span_end: 20)
+    reference[:printed_line_total][:amount] = '600'
+    reference[:corroboration] = {
+      exact_amount: { numerator: '600', denominator: '1' },
+      projected_amount: 600,
+      printed_line_total: '600',
+      rounding_matches: %w[floor half_up ceil]
+    }
+    reference[:tax_inclusion_evidence] = single_structured_item_gross_evidence(
+      amount: 600,
+      tax_amount: 54
+    )
+    result
+  end
+
   def item_layout_candidate(amount: '1703', span_offset: 0)
     name_start = span_offset + 6
     name_end = span_offset + 12
@@ -195,6 +240,52 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
         tax_amount: tax_amount,
         gross_amount: amount
       }
+    }
+  end
+
+  def single_structured_item_gross_evidence(amount: 1703, tax_amount: 154)
+    line = lambda do |path, line_index, span, source_provider: 'azure_structured'|
+      {
+        source_provider: source_provider,
+        source_field_path: path,
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: 'utf16CodeUnit',
+        provider_span_start: span.begin,
+        provider_span_end: span.end
+      }
+    end
+
+    {
+      kind: 'single_item_receipt_inner_tax_summary',
+      string_index_type: 'utf16CodeUnit',
+      policy_contract_version: 'reference_pricing_single_structured_item_gross_policy_v1',
+      item_parent: {
+        source_provider: 'azure_structured',
+        source_field_path: 'documents[0].fields.Items[0]',
+        item_index: 0,
+        provider_span_start: 0,
+        provider_span_end: 28
+      },
+      tax_detail_parent: {
+        source_provider: 'azure_structured',
+        source_field_path: 'documents[0].fields.TaxDetails[0]',
+        tax_detail_index: 0,
+        provider_span_start: 30,
+        provider_span_end: 42
+      },
+      tax_description: line.call(
+        'documents[0].fields.TaxDetails[0].Description', 4, 30...35
+      ).merge(tax_detail_index: 0),
+      tax_amount: line.call(
+        'documents[0].fields.TaxDetails[0].Amount', 5, 36...39
+      ).merge(tax_detail_index: 0, amount: tax_amount),
+      document_tax_total: line.call(
+        'documents[0].fields.TotalTax', 5, 36...39
+      ).merge(amount: tax_amount),
+      summary_total: line.call(
+        'pages[0].lines[7]', 7, 44...49, source_provider: 'azure_document_total'
+      ).merge(amount: amount)
     }
   end
 
@@ -509,6 +600,60 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
           reference_quantity_price
           explicit_line_total
         ])
+      end
+    end
+
+    it 'native Item外の内税根拠をreference optionへexactに保持する' do
+      result = parsed_structured_inner_tax_reference_result
+      snapshot = snapshot_without_proposals(result)
+
+      proposal = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      ).sole
+      copied = JSON.parse(JSON.generate([ proposal ]))
+
+      aggregate_failures do
+        expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+          reference_quantity_price
+          explicit_line_total
+        ])
+        expect(proposal.dig('options', 0, 'evidence', 'tax_inclusion')).to eq(
+          snapshot.dig(
+            :candidates, :reference_pricing_candidates, 0, :tax_inclusion_evidence
+          ).deep_stringify_keys
+        )
+        expect(described_class.from_snapshot(copied, ocr_snapshot: snapshot)).to eq([ proposal ])
+        expect(proposal.to_json).not_to include('raw_text', 'polygon', 'product_name')
+      end
+    end
+
+    it 'implicit per-unit基準数量1をQuantityUnit evidenceから保持する' do
+      result = parsed_structured_inner_tax_reference_result(implicit_per_unit: true)
+      snapshot = snapshot_without_proposals(result)
+
+      proposal = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      ).sole
+      reference = proposal.fetch('options').find do |option|
+        option.fetch('pricing_source_kind') == 'reference_quantity_price'
+      end
+
+      aggregate_failures do
+        expect(reference.fetch('source')).to include(
+          'reference_price_amount' => '2',
+          'reference_quantity' => '1',
+          'reference_quantity_origin' => 'implicit_per_unit',
+          'purchased_quantity' => '300'
+        )
+        expect(reference.dig('evidence', 'reference_quantity', 'source_field_path')).to eq(
+          'documents[0].fields.Items[0].QuantityUnit'
+        )
+        expect(described_class.from_snapshot(
+          JSON.parse(JSON.generate([ proposal ])),
+          ocr_snapshot: JSON.parse(JSON.generate(snapshot))
+        )).to eq([ proposal ])
       end
     end
 
@@ -1196,6 +1341,24 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
         expect(described_class.from_snapshot(proposals, ocr_snapshot: exact_source_mutated)).to be_nil
         expect(described_class.from_snapshot(proposals, ocr_snapshot: evidence_mutated)).to be_nil
         expect(described_class.from_snapshot(proposals, ocr_snapshot: printed_total_span_mutated)).to be_nil
+      end
+    end
+
+    it 'native Item外の内税根拠をcurrent total・taxと再照合する' do
+      result = parsed_structured_inner_tax_reference_result
+      snapshot = snapshot_without_proposals(result)
+      proposals = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      )
+      total_mismatch = snapshot.deep_dup
+      total_mismatch.dig(:candidates)[:total_amount] = 1702
+      tax_mismatch = snapshot.deep_dup
+      tax_mismatch.dig(:candidates)[:tax_amount] = 153
+
+      aggregate_failures do
+        expect(described_class.from_snapshot(proposals, ocr_snapshot: total_mismatch)).to be_nil
+        expect(described_class.from_snapshot(proposals, ocr_snapshot: tax_mismatch)).to be_nil
       end
     end
 

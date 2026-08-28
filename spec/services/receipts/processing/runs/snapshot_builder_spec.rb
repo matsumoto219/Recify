@@ -210,6 +210,81 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     result
   end
 
+  def single_structured_item_inner_tax_ocr_result
+    result = structured_reference_ocr_result.deep_dup
+    result[:lines].concat([ '内消費税等', '154円', '合計', '1,703円' ])
+    result[:case_preserved_lines].concat([ '内消費税等', '154円', '合計', '1,703円' ])
+    result.dig(:candidates).merge!(total_amount: 1703, tax_amount: 154)
+
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+    reference.merge!(
+      reference_price_tax_inclusion: 'gross',
+      validation_state: 'valid',
+      rejection_reasons: [],
+      tax_inclusion_evidence: {
+        kind: 'single_item_receipt_inner_tax_summary',
+        string_index_type: 'utf16CodeUnit',
+        policy_contract_version: 'reference_pricing_single_structured_item_gross_policy_v1',
+        item_parent: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.Items[0]',
+          item_index: 0,
+          provider_span_start: 0,
+          provider_span_end: 28
+        },
+        tax_detail_parent: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TaxDetails[0]',
+          tax_detail_index: 0,
+          provider_span_start: 30,
+          provider_span_end: 42
+        },
+        tax_description: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TaxDetails[0].Description',
+          tax_detail_index: 0,
+          page_index: 0,
+          line_index: 4,
+          string_index_type: 'utf16CodeUnit',
+          provider_span_start: 30,
+          provider_span_end: 35
+        },
+        tax_amount: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TaxDetails[0].Amount',
+          tax_detail_index: 0,
+          page_index: 0,
+          line_index: 5,
+          string_index_type: 'utf16CodeUnit',
+          provider_span_start: 36,
+          provider_span_end: 39,
+          amount: 154
+        },
+        document_tax_total: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TotalTax',
+          page_index: 0,
+          line_index: 5,
+          string_index_type: 'utf16CodeUnit',
+          provider_span_start: 36,
+          provider_span_end: 39,
+          amount: 154
+        },
+        summary_total: {
+          source_provider: 'azure_document_total',
+          source_field_path: 'pages[0].lines[7]',
+          page_index: 0,
+          line_index: 7,
+          string_index_type: 'utf16CodeUnit',
+          provider_span_start: 44,
+          provider_span_end: 49,
+          amount: 1703
+        }
+      }
+    )
+    result
+  end
+
   def discount_heavy_ocr_result
     raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/discount_heavy_receipt.json').read)
 
@@ -893,6 +968,73 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
         'store_name',
         'polygon'
       )
+    end
+  end
+
+  it 'native Itemの内税根拠をbounded proposalへ保存しretryでexactに再検証する' do
+    initial = described_class.ocr_result_snapshot(single_structured_item_inner_tax_ocr_result)
+    candidate = initial.dig('candidates', 'reference_pricing_candidates').sole
+    proposal = initial.dig('adoption_proposals', 'item_calculation_modes').sole
+    tax_evidence = candidate.fetch('tax_inclusion_evidence')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(copied)
+
+    aggregate_failures do
+      expect(tax_evidence).to include(
+        'kind' => 'single_item_receipt_inner_tax_summary',
+        'policy_contract_version' => 'reference_pricing_single_structured_item_gross_policy_v1'
+      )
+      expect(tax_evidence.fetch('item_parent')).to include(
+        'source_field_path' => 'documents[0].fields.Items[0]',
+        'item_index' => 0
+      )
+      expect(tax_evidence.fetch('tax_detail_parent')).to include(
+        'source_field_path' => 'documents[0].fields.TaxDetails[0]',
+        'tax_detail_index' => 0
+      )
+      expect(tax_evidence.dig('tax_amount', 'amount')).to eq(154)
+      expect(tax_evidence.dig('document_tax_total', 'amount')).to eq(154)
+      expect(tax_evidence.dig('summary_total', 'amount')).to eq(1703)
+      expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+        reference_quantity_price
+        explicit_line_total
+      ])
+      expect(proposal.dig('options', 0, 'evidence', 'tax_inclusion')).to eq(tax_evidence)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(proposal)
+      expect(rehydrated.dig(:adoption_proposals, 'item_calculation_modes').sole).to eq(proposal)
+      expect([ tax_evidence, proposal ].to_json).not_to include(
+        'raw_text',
+        'product_name',
+        'store_name',
+        'polygon'
+      )
+    end
+  end
+
+  it 'native Item内税根拠のunknown field・partial overlap・amount不一致を部分保存しない' do
+    unknown = single_structured_item_inner_tax_ocr_result
+    unknown.dig(
+      :candidates, :reference_pricing_candidates, 0, :tax_inclusion_evidence
+    )[:raw_text] = '保存禁止'
+    partial_overlap = single_structured_item_inner_tax_ocr_result
+    partial_overlap.dig(
+      :candidates, :reference_pricing_candidates, 0, :tax_inclusion_evidence, :document_tax_total
+    ).merge!(provider_span_start: 37, provider_span_end: 40)
+    mismatched = single_structured_item_inner_tax_ocr_result
+    mismatched.dig(
+      :candidates, :reference_pricing_candidates, 0, :tax_inclusion_evidence, :summary_total
+    )[:amount] = 1702
+
+    [ unknown, partial_overlap, mismatched ].each do |result|
+      snapshot = described_class.ocr_result_snapshot(result)
+
+      aggregate_failures do
+        expect(snapshot.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+        expect(snapshot.dig('candidates', 'reference_pricing_candidates').to_json).not_to include(
+          '保存禁止',
+          'raw_text'
+        )
+      end
     end
   end
 

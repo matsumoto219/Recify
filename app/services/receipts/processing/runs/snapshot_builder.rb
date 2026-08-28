@@ -96,6 +96,29 @@ module Receipts::Processing::Runs
       (REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_STRUCTURAL_KEYS + %w[amount]).freeze
     REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_TAX_KEYS =
       (REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_STRUCTURAL_KEYS + %w[rate net_amount tax_amount gross_amount]).freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND = "single_item_receipt_inner_tax_summary"
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION =
+      "reference_pricing_single_structured_item_gross_policy_v1"
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_KEYS = %w[
+      kind string_index_type policy_contract_version item_parent tax_detail_parent
+      tax_description tax_amount document_tax_total summary_total
+    ].freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_ITEM_PARENT_KEYS = %w[
+      source_provider source_field_path item_index provider_span_start provider_span_end
+    ].freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_PARENT_KEYS = %w[
+      source_provider source_field_path tax_detail_index provider_span_start provider_span_end
+    ].freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_STRUCTURAL_KEYS = %w[
+      source_provider source_field_path page_index line_index string_index_type
+      provider_span_start provider_span_end
+    ].freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS =
+      (REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_STRUCTURAL_KEYS + %w[tax_detail_index]).freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_AMOUNT_KEYS =
+      (REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS + %w[amount]).freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS =
+      (REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_STRUCTURAL_KEYS + %w[amount]).freeze
     MAX_REFERENCE_PRICING_RECEIPT_AMOUNT = 999_999_999_999
     REFERENCE_PRICING_LINE_GROUP_PROFILE_COUNTRY_CODES = %w[JPN].freeze
     REFERENCE_PRICING_DESTINATION_CONTRACTS = %w[azure_line_group_destination_v1].freeze
@@ -952,12 +975,230 @@ module Receipts::Processing::Runs
 
     def reference_pricing_tax_inclusion_evidence_snapshot(value, source_kind:, candidate:)
       evidence = normalized_hash(value)
+      if source_kind.nil? &&
+          evidence[:kind].to_s == REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+        return reference_pricing_single_structured_item_gross_snapshot(evidence, candidate:)
+      end
       if source_kind == "azure_item_layout" &&
           evidence[:kind].to_s == REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND
         return reference_pricing_single_item_gross_summary_snapshot(evidence, candidate:)
       end
 
       reference_pricing_evidence_snapshot(value, source_kind:)
+    end
+
+    def reference_pricing_single_structured_item_gross_snapshot(value, candidate:)
+      return {} unless exact_snapshot_keys?(
+        value,
+        REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_KEYS
+      )
+      return {} unless candidate[:candidate_id].to_s == "azure_items_0_reference_pricing"
+      return {} unless candidate[:item_index] == 0
+      return {} unless candidate[:reference_price_tax_inclusion].to_s == "gross"
+      return {} unless candidate[:validation_state].to_s == "valid"
+      return {} unless Array(candidate[:rejection_reasons]).empty?
+
+      index_type = enum_string(value[:string_index_type], REFERENCE_PRICING_STRING_INDEX_TYPES)
+      return {} if index_type.nil?
+      return {} unless value[:kind].to_s == REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+      return {} unless value[:policy_contract_version].to_s ==
+        REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION
+
+      item_parent = reference_pricing_single_structured_item_parent_snapshot(
+        value[:item_parent],
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_ITEM_PARENT_KEYS,
+        expected_path: "documents[0].fields.Items[0]",
+        index_key: :item_index
+      )
+      tax_detail_parent = reference_pricing_single_structured_item_parent_snapshot(
+        value[:tax_detail_parent],
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_PARENT_KEYS,
+        expected_path: "documents[0].fields.TaxDetails[0]",
+        index_key: :tax_detail_index
+      )
+      return {} if item_parent.empty? || tax_detail_parent.empty?
+      return {} if reference_pricing_ranges_overlap?(item_parent, tax_detail_parent)
+      return {} unless reference_pricing_native_candidate_components_within_parent?(candidate, item_parent:)
+
+      tax_description = reference_pricing_single_structured_item_line_snapshot(
+        value[:tax_description],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS,
+        expected_provider: "azure_structured",
+        expected_path: "documents[0].fields.TaxDetails[0].Description",
+        index_key: :tax_detail_index
+      )
+      tax_amount = reference_pricing_single_structured_item_line_snapshot(
+        value[:tax_amount],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_AMOUNT_KEYS,
+        expected_provider: "azure_structured",
+        expected_path: "documents[0].fields.TaxDetails[0].Amount",
+        index_key: :tax_detail_index
+      )
+      document_tax_total = reference_pricing_single_structured_item_line_snapshot(
+        value[:document_tax_total],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS,
+        expected_provider: "azure_structured",
+        expected_path: "documents[0].fields.TotalTax"
+      )
+      summary_total = reference_pricing_single_structured_item_line_snapshot(
+        value[:summary_total],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS,
+        expected_provider: "azure_document_total"
+      )
+      return {} if [ tax_description, tax_amount, document_tax_total, summary_total ].any?(&:empty?)
+      return {} unless reference_pricing_range_within?(tax_description, tax_detail_parent)
+      return {} unless reference_pricing_range_within?(tax_amount, tax_detail_parent)
+      return {} if reference_pricing_ranges_overlap?(tax_description, tax_amount)
+      return {} unless reference_pricing_ranges_equal_or_disjoint?(tax_amount, document_tax_total)
+      return {} if reference_pricing_ranges_overlap?(summary_total, item_parent)
+      return {} if reference_pricing_ranges_overlap?(summary_total, tax_detail_parent)
+      return {} unless tax_amount[:amount] == document_tax_total[:amount]
+      return {} unless reference_pricing_single_item_gross_amounts_match_candidate?(
+        candidate,
+        gross_amount: summary_total[:amount]
+      )
+
+      {
+        kind: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND,
+        string_index_type: index_type,
+        policy_contract_version: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION,
+        item_parent:,
+        tax_detail_parent:,
+        tax_description:,
+        tax_amount:,
+        document_tax_total:,
+        summary_total:
+      }
+    rescue ArgumentError, TypeError
+      {}
+    end
+
+    def reference_pricing_single_structured_item_parent_snapshot(
+      value,
+      expected_keys:,
+      expected_path:,
+      index_key:
+    )
+      parent = normalized_hash(value)
+      return {} unless exact_snapshot_keys?(parent, expected_keys)
+      return {} unless parent[:source_provider].to_s == "azure_structured"
+      return {} unless parent[:source_field_path].to_s == expected_path
+      return {} unless parent[index_key] == 0
+
+      span_start = bounded_non_negative_integer(
+        parent[:provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        parent[:provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      return {} if span_start.nil? || span_end.nil? || span_end <= span_start
+
+      {
+        source_provider: "azure_structured",
+        source_field_path: expected_path,
+        index_key => 0,
+        provider_span_start: span_start,
+        provider_span_end: span_end
+      }
+    end
+
+    def reference_pricing_single_structured_item_line_snapshot(
+      value,
+      index_type:,
+      expected_keys:,
+      expected_provider:,
+      expected_path: nil,
+      index_key: nil
+    )
+      entry = normalized_hash(value)
+      return {} unless exact_snapshot_keys?(entry, expected_keys)
+      return {} unless entry[:source_provider].to_s == expected_provider
+      return {} if index_key && entry[index_key] != 0
+
+      line_index = bounded_non_negative_integer(
+        entry[:line_index],
+        maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+      )
+      page_index = bounded_non_negative_integer(
+        entry[:page_index],
+        maximum: MAX_REFERENCE_PRICING_PAGE_INDEX
+      )
+      span_start = bounded_non_negative_integer(
+        entry[:provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        entry[:provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      return {} unless page_index == 0 && line_index && span_start && span_end && span_end > span_start
+      return {} unless entry[:string_index_type].to_s == index_type
+
+      source_field_path = entry[:source_field_path].to_s
+      expected_source_field_path = expected_path || "pages[0].lines[#{line_index}]"
+      return {} unless source_field_path == expected_source_field_path
+
+      snapshot = {
+        source_provider: expected_provider,
+        source_field_path: expected_source_field_path,
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: index_type,
+        provider_span_start: span_start,
+        provider_span_end: span_end
+      }
+      snapshot[index_key] = 0 if index_key
+      if expected_keys.include?("amount")
+        amount = reference_pricing_positive_receipt_amount(entry[:amount])
+        return {} if amount.nil?
+
+        snapshot[:amount] = amount
+      end
+      snapshot
+    end
+
+    def reference_pricing_native_candidate_components_within_parent?(candidate, item_parent:)
+      reference_quantity = normalized_hash(candidate[:reference_quantity])
+      reference_quantity_path = if reference_quantity[:origin].to_s == "implicit_per_unit"
+        return false unless exact_decimal_string(reference_quantity[:amount]) == "1"
+
+        "QuantityUnit"
+      else
+        "Price"
+      end
+      paths = {
+        reference_price: "Price",
+        reference_quantity: reference_quantity_path,
+        purchased_quantity: "Quantity",
+        printed_line_total: "TotalPrice"
+      }
+      paths.all? do |component_name, field_name|
+        component = normalized_hash(candidate[component_name])
+        evidence = normalized_hash(component[:evidence])
+        evidence[:source_provider].to_s == "azure_structured" &&
+          evidence[:source_field_path].to_s == "documents[0].fields.Items[0].#{field_name}" &&
+          evidence[:item_index] == 0 &&
+          reference_pricing_range_within?(evidence, item_parent)
+      end
+    end
+
+    def reference_pricing_range_within?(inner, outer)
+      inner[:provider_span_start].is_a?(Integer) && inner[:provider_span_end].is_a?(Integer) &&
+        inner[:provider_span_start] >= outer[:provider_span_start] &&
+        inner[:provider_span_end] <= outer[:provider_span_end] &&
+        inner[:provider_span_end] > inner[:provider_span_start]
+    end
+
+    def reference_pricing_ranges_equal_or_disjoint?(left, right)
+      same_range = left[:provider_span_start] == right[:provider_span_start] &&
+        left[:provider_span_end] == right[:provider_span_end]
+      same_range || !reference_pricing_ranges_overlap?(left, right)
     end
 
     def reference_pricing_single_item_gross_summary_snapshot(value, candidate:)

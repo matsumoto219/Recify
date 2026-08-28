@@ -63,7 +63,29 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossEvi
         { 'pageNumber' => 1, 'polygon' => [ 10, 10, 400, 10, 400, 105, 10, 105 ] }
       ],
       'spans' => [ range.call(0, 3) ],
-      'valueObject' => {}
+      'valueObject' => {
+        'Description' => field.call(0, 'valueString' => line_contents.fetch(0)),
+        'Price' => field.call(
+          1,
+          'valueCurrency' => { 'amount' => 240.0, 'currencyCode' => 'JPY' }
+        ),
+        'Quantity' => field.call(2, 'valueNumber' => 250.0),
+        'QuantityUnit' => {
+          'content' => 'g',
+          'boundingRegions' => lines.fetch(2).fetch('boundingRegions').deep_dup,
+          'spans' => [
+            {
+              'offset' => line_span.call(2).fetch('offset') + provider_length('250', string_index_type),
+              'length' => provider_length('g', string_index_type)
+            }
+          ],
+          'valueString' => 'g'
+        },
+        'TotalPrice' => field.call(
+          3,
+          'valueCurrency' => { 'amount' => total_amount.to_f, 'currencyCode' => 'JPY' }
+        )
+      }
     }
     tax_detail = {
       'content' => line_contents.slice(4, 2).join("\n"),
@@ -173,6 +195,39 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossEvi
         line_index: 7
       )
       expect(evidence.to_h.to_json).not_to match(/匿名商品|内消費税|raw|content|polygon|description_text/)
+    end
+  end
+
+  it 'native Item候補をexact内税TaxDetailsとsummary Totalからgross validへ昇格する' do
+    response = {
+      'status' => 'succeeded',
+      'analyzeResult' => build_analyze_result
+    }
+
+    result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+    reference_candidate = result.dig(:candidates, :reference_pricing_candidates).sole
+    mode_candidate = result.dig(:candidates, :item_calculation_mode_candidates).sole
+
+    aggregate_failures do
+      expect(result.fetch(:candidates)).to include(
+        total_amount: 600,
+        tax_amount: 54,
+        adjustment_candidates: []
+      )
+      expect(reference_candidate).to include(
+        candidate_id: 'azure_items_0_reference_pricing',
+        validation_state: 'valid',
+        rejection_reasons: [],
+        reference_price_tax_inclusion: 'gross'
+      )
+      expect(reference_candidate.dig(:tax_inclusion_evidence, :kind)).to eq(
+        'single_item_receipt_inner_tax_summary'
+      )
+      expect(mode_candidate).to include(
+        candidate_id: 'azure_items_0_item_calculation_mode',
+        item_index: 0,
+        conflicts: include('reference_expression')
+      )
     end
   end
 

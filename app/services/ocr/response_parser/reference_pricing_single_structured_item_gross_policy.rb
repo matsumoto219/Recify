@@ -17,7 +17,6 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
   COMPONENT_NAMES = %i[reference_price reference_quantity purchased_quantity printed_line_total].freeze
   COMPONENT_FIELD_NAMES = {
     reference_price: "Price",
-    reference_quantity: "QuantityUnit",
     purchased_quantity: "Quantity",
     printed_line_total: "TotalPrice"
   }.freeze
@@ -159,6 +158,9 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       return unless reference_quantity[:unit_status] == "known"
       return unless purchased_quantity[:unit_status] == "known"
       return unless %w[explicit implicit_per_unit].include?(reference_quantity[:origin])
+      if reference_quantity[:origin] == "implicit_per_unit"
+        return unless exact_decimal(reference_quantity[:amount], maximum:) == BigDecimal("1")
+      end
       return unless ReceiptQuantityUnit.convertible?(
         from: purchased_quantity[:unit_code],
         to: reference_quantity[:unit_code]
@@ -176,8 +178,12 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       evidence = component[:evidence]
       return false unless evidence.is_a?(Hash)
       return false unless evidence[:source_provider] == SOURCE_PROVIDER
-      return false unless evidence[:source_field_path] ==
-        "documents[0].fields.Items[0].#{COMPONENT_FIELD_NAMES.fetch(component_name)}"
+      field_name = if component_name == :reference_quantity
+        component[:origin] == "implicit_per_unit" ? "QuantityUnit" : "Price"
+      else
+        COMPONENT_FIELD_NAMES.fetch(component_name)
+      end
+      return false unless evidence[:source_field_path] == "documents[0].fields.Items[0].#{field_name}"
       return false unless evidence[:item_index] == 0
 
       valid_span_within?(evidence, item_parent)
