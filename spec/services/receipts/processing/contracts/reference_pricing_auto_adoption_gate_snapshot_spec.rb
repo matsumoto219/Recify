@@ -19,6 +19,15 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
   end
 
+  def structured_layout_reference_ocr_snapshot
+    raw_json = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_summary_gross_anonymized.json').read
+    )
+    result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+
+    Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
+  end
+
   it 'run開始時のsetting state・generation・Receipt versionをbounded v3 snapshotへ固定する' do
     setting = create(
       :system_setting,
@@ -143,6 +152,88 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
         '342',
         'polygon'
       )
+    end
+  end
+
+  it 'layout sourceとstructured destinationのreference optionをexact identity pairでbindする' do
+    run = create(:receipt_analysis_run)
+    start_snapshot = described_class.capture_start(
+      run_key: run.run_key,
+      run_source: run.source,
+      receipt_lock_version: run.receipt.lock_version
+    )
+    ocr_snapshot = structured_layout_reference_ocr_snapshot
+    proposal = ocr_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+    reference_option = proposal.fetch('options').find do |option|
+      option['pricing_source_kind'] == 'reference_quantity_price'
+    end
+
+    bound = described_class.bind(start_snapshot, run:, ocr_snapshot:)
+
+    aggregate_failures do
+      expect(bound.fetch('proposal_binding')).to eq(
+        'binding_kind' => 'azure_structured_item_reference',
+        'candidate_identity' => proposal.fetch('candidate_id'),
+        'destination_identity' => proposal.fetch('item_identity'),
+        'selected_proposal_identity' => reference_option.fetch('proposal_id'),
+        'decision_contract_version' => 'item_calculation_mode_decision_v1',
+        'proposal_checksum' => proposal.fetch('integrity_checksum'),
+        'receipt_lock_version' => run.receipt.lock_version
+      )
+      expect(proposal.fetch('candidate_id')).to start_with('azure_item_layout_')
+      expect(proposal.fetch('item_identity')).to start_with('azure_structured_item_')
+      redacted_bound = bound.deep_dup
+      redacted_bound.dig('proposal_binding')['proposal_checksum'] = '[CHECKSUM]'
+      expect(redacted_bound.to_json).not_to include(
+        '例示量売品A',
+        'reference_price_amount',
+        '498',
+        '342',
+        'polygon'
+      )
+    end
+  end
+
+  it 'structured bindingのcandidateとselected proposalが同じprovider prefixでなければ拒否する' do
+    run = create(:receipt_analysis_run)
+    start_snapshot = described_class.capture_start(
+      run_key: run.run_key,
+      run_source: run.source,
+      receipt_lock_version: run.receipt.lock_version
+    )
+    structured_bound = described_class.bind(
+      start_snapshot,
+      run:,
+      ocr_snapshot: structured_reference_ocr_snapshot
+    )
+    layout_bound = described_class.bind(
+      start_snapshot,
+      run:,
+      ocr_snapshot: structured_layout_reference_ocr_snapshot
+    )
+
+    mutations = [
+      structured_bound.deep_merge(
+        'proposal_binding' => {
+          'selected_proposal_identity' => 'azure_items_1_reference_quantity_price'
+        }
+      ),
+      layout_bound.deep_merge(
+        'proposal_binding' => {
+          'selected_proposal_identity' =>
+            'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l5_reference_quantity_price'
+        }
+      ),
+      layout_bound.deep_merge(
+        'proposal_binding' => {
+          'candidate_identity' =>
+            'azure_item_layout_p1_name_l1_ref_l2_qty_l3_total_l4_item_calculation_mode'
+        }
+      )
+    ]
+
+    mutations.each do |mutation|
+      expect(described_class.from_snapshot(mutation, run:, require_binding: true)).to be_nil
     end
   end
 

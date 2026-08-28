@@ -29,6 +29,16 @@ module Receipts::Processing::Contracts
       binding_kind candidate_identity destination_identity selected_proposal_identity
       decision_contract_version proposal_checksum receipt_lock_version
     ].freeze
+    STRUCTURED_ITEM_CANDIDATE_ID_PATTERN = /
+      \A(?:
+        azure_items_(?:0|[1-9]\d*) |
+        azure_item_layout_p0
+          _name_l(?:0|[1-9]\d*)
+          _ref_l(?:0|[1-9]\d*)
+          _qty_l(?:0|[1-9]\d*)
+          _total_l(?:0|[1-9]\d*)
+      )_item_calculation_mode\z
+    /x.freeze
 
     class << self
       def capture_start(run_key:, run_source:, receipt_lock_version:)
@@ -288,24 +298,31 @@ module Receipts::Processing::Contracts
       def structured_item_binding_valid?(binding, receipt_lock_version:)
         exact_keys?(binding, STRUCTURED_ITEM_BINDING_KEYS) &&
           binding["binding_kind"] == STRUCTURED_ITEM_BINDING_KIND &&
-          bounded_string?(
-            binding["candidate_identity"],
-            max_bytes: MAX_ID_BYTES,
-            pattern: /\Aazure_items_\d+_item_calculation_mode\z/
-          ) &&
+          structured_item_proposal_identities_valid?(binding) &&
           bounded_string?(
             binding["destination_identity"],
             max_bytes: MAX_ID_BYTES,
             pattern: /\Aazure_structured_item_i\d+_s\d+_e\d+\z/
           ) &&
-          bounded_string?(
-            binding["selected_proposal_identity"],
-            max_bytes: MAX_ID_BYTES,
-            pattern: /\Aazure_items_\d+_reference_quantity_price\z/
-          ) &&
           binding["decision_contract_version"] == ItemCalculationModeDecision::CONTRACT_VERSION &&
           bounded_string?(binding["proposal_checksum"], max_bytes: 64, pattern: CHECKSUM_PATTERN) &&
           binding["receipt_lock_version"] == receipt_lock_version
+      end
+
+      def structured_item_proposal_identities_valid?(binding)
+        candidate_identity = binding["candidate_identity"]
+        selected_proposal_identity = binding["selected_proposal_identity"]
+        return false unless bounded_string?(
+          candidate_identity,
+          max_bytes: MAX_ID_BYTES,
+          pattern: STRUCTURED_ITEM_CANDIDATE_ID_PATTERN
+        )
+        return false unless bounded_string?(selected_proposal_identity, max_bytes: MAX_ID_BYTES)
+
+        selected_proposal_identity == candidate_identity.sub(
+          /_item_calculation_mode\z/,
+          "_reference_quantity_price"
+        )
       end
 
       def bounded_integer?(value, minimum:)

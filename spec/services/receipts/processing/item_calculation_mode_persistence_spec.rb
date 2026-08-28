@@ -223,6 +223,7 @@ RSpec.describe 'OCR item calculation mode persistence' do
             provider_span_start: 16,
             provider_span_end: 66,
             destination_evidence: evidence.call(1, 16, 22),
+            destination_kind: 'azure_layout_item',
             printed_line_total: {
               amount: '1703',
               evidence: evidence.call(4, 49, 55)
@@ -476,6 +477,97 @@ RSpec.describe 'OCR item calculation mode persistence' do
       )
       expect(run.reload.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to be_present
       expect(run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes')).to eq(proposal_before)
+    end
+  end
+
+  it 'SystemSetting有効時に単一明細summary gross proposalを既存Amount経由でreference authorityへ保存する' do
+    create_reference_pricing_setting(true)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      fixture: 'ocr_azure_item_calculation_reference_summary_gross_anonymized',
+      strategy: :ocr_only
+    )
+    proposal_before = run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+    reference_option = proposal_before.fetch('options').find do |option|
+      option['pricing_source_kind'] == 'reference_quantity_price'
+    end
+
+    result = Receipts::Processing.run_finalize(run)
+
+    item = receipt.reload.receipt_items.sole
+    aggregate_failures do
+      expect(result.next_step).to eq(:done)
+      expect(receipt).to have_attributes(status: 'review_needed', total_amount: 1703, tax_amount: 154)
+      expect(proposal_before).to include(
+        'candidate_id' => start_with('azure_item_layout_'),
+        'item_identity' => start_with('azure_structured_item_')
+      )
+      expect(reference_option).to include(
+        'proposal_id' => start_with('azure_item_layout_'),
+        'pricing_source_kind' => 'reference_quantity_price',
+        'source' => include(
+          'reference_price_amount' => '498',
+          'reference_quantity' => '100',
+          'reference_quantity_unit_code' => 'gram',
+          'purchased_quantity' => '342',
+          'purchased_quantity_unit_code' => 'gram',
+          'reference_price_tax_inclusion' => 'gross'
+        )
+      )
+      expect(item).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('498'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'gross',
+        quantity: BigDecimal('342'),
+        quantity_unit_code: 'gram',
+        original_line_total: 1703,
+        line_total: 1703
+      )
+      expect(run.reload.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to eq(
+        proposal_before.fetch('integrity_checksum')
+      )
+      expect(run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(
+        proposal_before
+      )
+    end
+  end
+
+  it 'SystemSetting無効時も単一明細summary gross proposalと印字額を維持しauthorityへ昇格しない' do
+    create_reference_pricing_setting(false)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      fixture: 'ocr_azure_item_calculation_reference_summary_gross_anonymized',
+      strategy: :ocr_only
+    )
+    proposal_before = run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+
+    Receipts::Processing.run_finalize(run)
+
+    item = receipt.reload.receipt_items.sole
+    aggregate_failures do
+      expect(receipt).to have_attributes(status: 'review_needed', total_amount: 1703, tax_amount: 154)
+      expect(item).to have_attributes(
+        pricing_source_kind: nil,
+        reference_price_amount: nil,
+        reference_quantity: nil,
+        reference_quantity_unit_code: nil,
+        reference_price_tax_inclusion: nil,
+        original_line_total: 1703,
+        line_total: 1703
+      )
+      expect(proposal_before.fetch('options').map { |option| option['pricing_source_kind'] }).to contain_exactly(
+        'reference_quantity_price',
+        'explicit_line_total'
+      )
+      expect(run.reload.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+      expect(run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(
+        proposal_before
+      )
     end
   end
 

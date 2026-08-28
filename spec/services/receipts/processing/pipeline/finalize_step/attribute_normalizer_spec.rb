@@ -319,6 +319,46 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       )
     end
 
+    it 'layout sourceとstructured destinationを結ぶFence後のexact reference sourceを保持する' do
+      identity = 'azure_structured_item_i0_s7_e38'
+      proposal_id =
+        'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_reference_quantity_price'
+      selection = reference_selection(identity:, proposal_id:)
+
+      result = trusted_items([ reference_source(selection) ], [ selection ]).sole
+
+      expect(result).to include(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('498'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'gross',
+        quantity: BigDecimal('342'),
+        quantity_unit_code: 'gram',
+        original_line_total: BigDecimal('1703'),
+        line_total: BigDecimal('1703')
+      )
+    end
+
+    it 'structured destinationへmalformed layout proposalや別source kindを接続しない' do
+      identity = 'azure_structured_item_i0_s7_e38'
+      invalid_proposal_ids = %w[
+        azure_item_layout_p1_name_l1_ref_l2_qty_l3_total_l4_reference_quantity_price
+        azure_item_layout_p0_name_l150_ref_l2_qty_l3_total_l4_reference_quantity_price
+        azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_count_unit_price
+        azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_explicit_line_total
+        azure_items_1_reference_quantity_price
+      ]
+
+      results = invalid_proposal_ids.map do |proposal_id|
+        selection = reference_selection(identity:, proposal_id:)
+        trusted_items([ reference_source(selection) ], [ selection ]).sole
+      end
+
+      expect(results).to all(satisfy { |item| !item.key?(:pricing_source_kind) })
+    end
+
     it 'structured referenceの余分なsource・raw unit・net・unit不一致・数値境界違反をauthorityにしない' do
       cases = []
       cases << [ reference_selection(price: 498), reference_source ]

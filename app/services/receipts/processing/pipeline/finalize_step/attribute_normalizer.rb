@@ -17,6 +17,23 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     _total_l(?<total_line_index>0|[1-9]\d*)
     _explicit_line_total\z
   /x.freeze
+  STRUCTURED_ITEM_IDENTITY_PATTERN = /
+    \Aazure_structured_item_i(?<item_index>0|[1-9]\d*)
+    _s(?<provider_span_start>0|[1-9]\d*)
+    _e(?<provider_span_end>0|[1-9]\d*)\z
+  /x.freeze
+  STRUCTURED_ITEM_PROPOSAL_ID_PATTERN = /
+    \Aazure_items_(?<item_index>0|[1-9]\d*)
+    _(?<pricing_source_kind>count_unit_price|reference_quantity_price|explicit_line_total)\z
+  /x.freeze
+  STRUCTURED_LAYOUT_REFERENCE_PROPOSAL_ID_PATTERN = /
+    \Aazure_item_layout_p(?<page_index>0)
+    _name_l(?<name_line_index>0|[1-9]\d*)
+    _ref_l(?<reference_line_index>0|[1-9]\d*)
+    _qty_l(?<quantity_line_index>0|[1-9]\d*)
+    _total_l(?<total_line_index>0|[1-9]\d*)
+    _reference_quantity_price\z
+  /x.freeze
 
   class << self
     def items(
@@ -316,7 +333,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     def valid_item_calculation_mode_identity?(value)
       return false unless value.is_a?(String)
       return false if value.bytesize > Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
-      return true if value.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
+      return true if value.match?(STRUCTURED_ITEM_IDENTITY_PATTERN)
 
       layout_item_identity_valid?(value)
     end
@@ -325,11 +342,36 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       value = selection.proposal_id
       return false unless value.is_a?(String)
       return false if value.bytesize > Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
-      if selection.item_identity.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
-        return value.match?(/\Aazure_items_\d+_#{Regexp.escape(selection.pricing_source_kind)}\z/)
+      structured_identity = STRUCTURED_ITEM_IDENTITY_PATTERN.match(selection.item_identity)
+      if structured_identity
+        return structured_item_proposal_link_valid?(selection, structured_identity:)
       end
 
       layout_item_proposal_link_valid?(selection)
+    end
+
+    def structured_item_proposal_link_valid?(selection, structured_identity:)
+      proposal = STRUCTURED_ITEM_PROPOSAL_ID_PATTERN.match(selection.proposal_id)
+      if proposal
+        return proposal[:item_index] == structured_identity[:item_index] &&
+          proposal[:pricing_source_kind] == selection.pricing_source_kind
+      end
+      return false unless selection.pricing_source_kind == "reference_quantity_price"
+
+      layout_proposal = STRUCTURED_LAYOUT_REFERENCE_PROPOSAL_ID_PATTERN.match(selection.proposal_id)
+      return false if layout_proposal.nil?
+
+      %i[
+        name_line_index
+        reference_line_index
+        quantity_line_index
+        total_line_index
+      ].all? do |key|
+        layout_proposal[key].to_i.between?(
+          0,
+          Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_LAYOUT_LINE_INDEX
+        )
+      end
     end
 
     def layout_item_identity_valid?(value)
