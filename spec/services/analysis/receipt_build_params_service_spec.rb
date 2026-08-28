@@ -346,6 +346,46 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       end
     end
 
+    it '単位当たりの販促注記をreference block外でもreceipt adjustmentにしない' do
+      ocr_result[:lines] = [
+        '例示量売品',
+        '会員値引 3円/L引',
+        '合計 1,280円'
+      ]
+      ocr_result[:candidates][:adjustment_candidates] = [
+        {
+          source_text: ocr_result[:lines][1],
+          source_line_index: 1,
+          amount: 3,
+          sign_hint: 'discount',
+          confidence: 0.99,
+          candidate_reason: 'label_same_line_amount',
+          needs_review: false
+        }
+      ]
+      ai_result = {
+        receipt_adjustments_attributes: [
+          {
+            kind: 'receipt_discount',
+            label: '値引',
+            amount: 3,
+            sign: 'discount',
+            source_text: ocr_result[:lines][1],
+            source_line_index: 1,
+            confidence: 0.99,
+            needs_review: false
+          }
+        ]
+      }
+
+      params = described_class.call(ocr_result:, ai_result:)
+
+      aggregate_failures do
+        expect(params.fetch(:receipt_adjustments_attributes)).to eq([])
+        expect(Array(params.dig(:receipt_attributes, :review_reasons))).not_to include('adjustment_uncertain')
+      end
+    end
+
     it 'Azure item-layout identityはlineとspanの境界内だけ保持する' do
       identities = [
         'azure_item_layout_item_p0_name_l149_s0_e10000000_ref_l149_qty_l149_total_l149',

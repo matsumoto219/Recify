@@ -544,6 +544,7 @@ module ReceiptAnalysisProfiles
     ANALYSIS_TAX_TARGET_MARKER_PATTERN = /対象/.freeze
     ANALYSIS_TAX_AMOUNT_DESCRIPTION_PATTERN = /消費税|税額|tax/i.freeze
     ANALYSIS_NEGATIVE_ADJUSTMENT_CONTEXT_PATTERN = /値引|割引|ディスカウント|discount|off|クーポン|coupon|ポイント|point|返品|返金|refund|return/i.freeze
+    ANALYSIS_PER_UNIT_DISCOUNT_NOTE_PATTERN = /\A[ \t]*(?=(?:(?:会員|特典|アプリ)?値引(?:き)?|.*[\/／].*引(?:き)?[ \t]*\z))(?:(?:会員|特典|アプリ)?値引(?:き)?[ \t:：]*)?(?:[¥￥][ \t]*)?[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*円[ \t]*[\/／][ \t]*(?:[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*)?[\p{L}]+?[ \t]*(?:引(?:き)?)?[ \t]*\z/iu.freeze
     ANALYSIS_ITEM_DISCOUNT_LABEL_PATTERN = /割引|discount|off/i.freeze
     ANALYSIS_RECEIPT_LEVEL_ADJUSTMENT_LINE_PATTERN = /クーポン|ポイント|coupon|point/i.freeze
     ANALYSIS_PREVIOUS_SUBTOTAL_CONTEXT_PATTERN = /小計|合計|総合計|total|subtotal/i.freeze
@@ -1313,6 +1314,10 @@ module ReceiptAnalysisProfiles
 
       def analysis_negative_adjustment_context_pattern
         ANALYSIS_NEGATIVE_ADJUSTMENT_CONTEXT_PATTERN
+      end
+
+      def analysis_per_unit_discount_note_pattern
+        ANALYSIS_PER_UNIT_DISCOUNT_NOTE_PATTERN
       end
 
       def analysis_item_discount_label_pattern
