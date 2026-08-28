@@ -1165,24 +1165,26 @@ module Receipts::Processing::Runs
 
     def reference_pricing_native_candidate_components_within_parent?(candidate, item_parent:)
       reference_quantity = normalized_hash(candidate[:reference_quantity])
-      reference_quantity_path = if reference_quantity[:origin].to_s == "implicit_per_unit"
+      reference_quantity_paths = if reference_quantity[:origin].to_s == "implicit_per_unit"
         return false unless exact_decimal_string(reference_quantity[:amount]) == "1"
 
-        "QuantityUnit"
+        %w[Price QuantityUnit]
       else
-        "Price"
+        [ "Price" ]
       end
       paths = {
-        reference_price: "Price",
-        reference_quantity: reference_quantity_path,
-        purchased_quantity: "Quantity",
-        printed_line_total: "TotalPrice"
+        reference_price: [ "Price" ],
+        reference_quantity: reference_quantity_paths,
+        purchased_quantity: [ "Quantity" ],
+        printed_line_total: [ "TotalPrice" ]
       }
-      paths.all? do |component_name, field_name|
+      paths.all? do |component_name, field_names|
         component = normalized_hash(candidate[component_name])
         evidence = normalized_hash(component[:evidence])
         evidence[:source_provider].to_s == "azure_structured" &&
-          evidence[:source_field_path].to_s == "documents[0].fields.Items[0].#{field_name}" &&
+          field_names.any? do |field_name|
+            evidence[:source_field_path].to_s == "documents[0].fields.Items[0].#{field_name}"
+          end &&
           evidence[:item_index] == 0 &&
           reference_pricing_range_within?(evidence, item_parent)
       end

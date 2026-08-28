@@ -953,25 +953,23 @@ module Receipts::Processing::Contracts
             parent_end: parent_end
           )
         else
-          reference_quantity_path = if source["reference_quantity_origin"] == "implicit_per_unit"
-            return false unless source["reference_quantity"] == "1"
-
-            "QuantityUnit"
-          else
-            "Price"
-          end
           paths = {
-            "reference_price" => "Price",
-            "reference_quantity" => reference_quantity_path,
-            "purchased_quantity" => "Quantity"
+            "reference_price" => [ "Price" ],
+            "reference_quantity" => native_reference_quantity_field_names(
+              origin: source["reference_quantity_origin"],
+              amount: source["reference_quantity"]
+            ),
+            "purchased_quantity" => [ "Quantity" ]
           }
-          return false unless paths.all? do |evidence_key, field_name|
-            component_evidence_valid?(
-              evidence[evidence_key],
-              expected_path: "documents[0].fields.Items[#{item_index}].#{field_name}",
-              parent_start: parent_start,
-              parent_end: parent_end
-            )
+          return false unless paths.all? do |evidence_key, field_names|
+            field_names.any? do |field_name|
+              component_evidence_valid?(
+                evidence[evidence_key],
+                expected_path: "documents[0].fields.Items[#{item_index}].#{field_name}",
+                parent_start: parent_start,
+                parent_end: parent_end
+              )
+            end
           end
           tax_evidence = normalized_hash(evidence["tax_inclusion"])
           if tax_evidence["kind"] == SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
@@ -1589,12 +1587,13 @@ module Receipts::Processing::Contracts
 
       def reference_quantity_component_valid?(value, item_index:, parent_start:, parent_end:, layout_evidence: nil)
         component = normalized_hash(value)
-        field_name = if component["origin"] == "implicit_per_unit" && layout_evidence.nil?
-          return false unless component["amount"] == "1"
-
-          "QuantityUnit"
+        field_names = if layout_evidence.nil?
+          native_reference_quantity_field_names(
+            origin: component["origin"],
+            amount: component["amount"]
+          )
         else
-          "Price"
+          [ "Price" ]
         end
         exact_keys?(component, REFERENCE_QUANTITY_COMPONENT_KEYS) &&
           exact_decimal?(
@@ -1606,14 +1605,23 @@ module Receipts::Processing::Contracts
           REFERENCE_UNIT_STATUSES.include?(component["unit_status"]) &&
           REFERENCE_QUANTITY_ORIGINS.include?(component["origin"]) &&
           ReceiptQuantityUnit.unit_for(component["unit_code"])&.allows_pricing_role?(:reference) &&
-          reference_component_evidence_valid?(
-            component["evidence"],
-            field_name: field_name,
-            item_index: item_index,
-            parent_start: parent_start,
-            parent_end: parent_end,
-            layout_evidence:
-          )
+          field_names.any? do |field_name|
+            reference_component_evidence_valid?(
+              component["evidence"],
+              field_name: field_name,
+              item_index: item_index,
+              parent_start: parent_start,
+              parent_end: parent_end,
+              layout_evidence:
+            )
+          end
+      end
+
+      def native_reference_quantity_field_names(origin:, amount:)
+        return [ "Price" ] if origin == "explicit"
+        return [] unless origin == "implicit_per_unit" && amount == "1"
+
+        %w[Price QuantityUnit]
       end
 
       def purchased_quantity_component_valid?(value, item_index:, parent_start:, parent_end:, layout_evidence: nil)

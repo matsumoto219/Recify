@@ -114,7 +114,7 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPol
     )
   end
 
-  it 'implicit per-unit基準数量1をQuantityUnit spanから昇格できる' do
+  it 'implicit per-unit基準数量1をPriceまたはQuantityUnit spanから昇格できる' do
     implicit = candidate.deep_dup
     implicit[:reference_price][:amount] = '2.4'
     implicit[:reference_quantity].merge!(
@@ -126,9 +126,15 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPol
     aggregate_failures do
       expect(evaluate(candidate_value: implicit)).to be_eligible
 
+      price_owned = implicit.deep_dup
+      price_owned[:reference_quantity][:evidence] = component(
+        'documents[0].fields.Items[0].Price', 14, 15
+      )
+      expect(evaluate(candidate_value: price_owned)).to be_eligible
+
       wrong_owner = implicit.deep_dup
       wrong_owner[:reference_quantity][:evidence] = component(
-        'documents[0].fields.Items[0].Price', 14, 15
+        'documents[0].fields.Items[0].Quantity', 14, 15
       )
       expect(evaluate(candidate_value: wrong_owner)).not_to be_eligible
 

@@ -178,15 +178,25 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       evidence = component[:evidence]
       return false unless evidence.is_a?(Hash)
       return false unless evidence[:source_provider] == SOURCE_PROVIDER
-      field_name = if component_name == :reference_quantity
-        component[:origin] == "implicit_per_unit" ? "QuantityUnit" : "Price"
+      field_names = if component_name == :reference_quantity
+        reference_quantity_field_names(component, maximum:)
       else
-        COMPONENT_FIELD_NAMES.fetch(component_name)
+        [ COMPONENT_FIELD_NAMES.fetch(component_name) ]
       end
-      return false unless evidence[:source_field_path] == "documents[0].fields.Items[0].#{field_name}"
+      return false unless field_names.any? do |field_name|
+        evidence[:source_field_path] == "documents[0].fields.Items[0].#{field_name}"
+      end
       return false unless evidence[:item_index] == 0
 
       valid_span_within?(evidence, item_parent)
+    end
+
+    def reference_quantity_field_names(component, maximum:)
+      return [ "Price" ] if component[:origin] == "explicit"
+      return [] unless component[:origin] == "implicit_per_unit"
+      return [] unless exact_decimal(component[:amount], maximum:) == BigDecimal("1")
+
+      %w[Price QuantityUnit]
     end
 
     def exact_evidence_valid?(evidence)
