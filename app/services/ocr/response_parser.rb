@@ -109,10 +109,29 @@ class Ocr::ResponseParser
     else
       {}
     end
+    total_amount = extract_total_amount(
+      authority_response,
+      authority_lines,
+      reference_pricing_candidates:
+    )
+    tax_details = extract_tax_details(authority_response, authority_lines)
+    tax_amount = extract_tax_amount(authority_response, authority_lines, tax_details:)
+    adjustment_candidates = extract_adjustment_candidates(authority_response, authority_lines)
+    reference_pricing_candidates = promote_single_item_gross_summary_reference_pricing(
+      analyze_result:,
+      candidates: reference_pricing_candidates,
+      accepted_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+      retained_item_indexes:,
+      receipt_total: total_amount,
+      receipt_tax: tax_amount,
+      tax_details:,
+      adjustment_candidates:,
+      discount_count: discount_details_by_item_index.size
+    )
     item_calculation_mode_candidates = Ocr::ResponseParser::ItemCalculationModeCandidateExtractor.call(
       analyze_result: analyze_result,
       profile: profile,
-      reference_pricing_candidates: structured_or_layout_reference_pricing_candidates,
+      reference_pricing_candidates: reference_pricing_candidates,
       discount_item_indexes: discount_details_by_item_index.keys,
       destination_item_indexes: retained_item_indexes,
       item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
@@ -135,17 +154,13 @@ class Ocr::ResponseParser
           lines: authority_lines,
           profile: profile
         ),
-        total_amount: extract_total_amount(
-          authority_response,
-          authority_lines,
-          reference_pricing_candidates:
-        ),
+        total_amount: total_amount,
         subtotal_amount: extract_subtotal_amount(
           authority_response,
           authority_lines,
           reference_pricing_candidates:
         ),
-        tax_amount: extract_tax_amount(authority_response, authority_lines),
+        tax_amount: tax_amount,
         tax_rate: extract_tax_rate(authority_response),
         payment_method_text: extract_payment_method_text(authority_response, authority_raw_text, authority_lines),
         payment_candidates: extract_payment_candidates(authority_response),
@@ -154,8 +169,8 @@ class Ocr::ResponseParser
         country_region: extract_country_region(authority_response),
         receipt_type: extract_receipt_type(authority_response),
         payments: extract_payments(authority_response),                                                             # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
-        tax_details: extract_tax_details(authority_response, authority_lines),
-        adjustment_candidates: extract_adjustment_candidates(authority_response, authority_lines),
+        tax_details: tax_details,
+        adjustment_candidates: adjustment_candidates,
         reference_pricing_candidates: reference_pricing_candidates,
         reference_pricing_block_line_indexes: reference_pricing_block_line_indexes(reference_pricing_blocks),
         item_calculation_mode_candidates: item_calculation_mode_candidates,
@@ -627,6 +642,93 @@ class Ocr::ResponseParser
     }
   end
 
+  def promote_single_item_gross_summary_reference_pricing(
+    analyze_result:,
+    candidates:,
+    accepted_descriptors:,
+    retained_item_indexes:,
+    receipt_total:,
+    receipt_tax:,
+    tax_details:,
+    adjustment_candidates:,
+    discount_count:
+  )
+    candidates = Array(candidates)
+    descriptors = Array(accepted_descriptors)
+    retained_indexes = Array(retained_item_indexes)
+    return candidates unless descriptors.one? && retained_indexes.one?
+
+    descriptor = descriptors.sole
+    return candidates unless descriptor[:destination_kind] == "azure_structured_item"
+    return candidates unless descriptor[:structured_item_index] == retained_indexes.sole
+
+    candidate_id = descriptor.dig(:reference_pricing_candidate, :candidate_id)
+    matches = candidates.select do |candidate|
+      candidate.is_a?(Hash) &&
+        candidate[:source_kind] == "azure_item_layout" &&
+        candidate[:candidate_id] == candidate_id &&
+        candidate[:item_identity] == descriptor[:item_identity] &&
+        candidate[:item_index] == retained_indexes.sole
+    end
+    return candidates unless matches.one?
+
+    candidate = matches.sole
+    evidence = Ocr::ResponseParser::ReferencePricingSingleItemGrossSummaryEvidenceExtractor.call(
+      analyze_result:,
+      profile:,
+      receipt_total:,
+      receipt_tax:,
+      existing_tax_details: tax_details,
+      excluded_span_ranges: [
+        {
+          span_start: descriptor[:block_provider_span_start],
+          span_end: descriptor[:block_provider_span_end]
+        }
+      ]
+    )
+    policy = Ocr::ResponseParser::ReferencePricingSingleItemGrossSummaryPolicy.call(
+      candidate:,
+      item_identities: [ descriptor[:item_identity] ],
+      block_candidate_ids: [ candidate_id ],
+      destination_identities: [ descriptor[:item_identity] ],
+      summary_gross_evidence: evidence,
+      adjustment_count: Array(adjustment_candidates).size,
+      discount_count: discount_count + descriptors.count { |entry| entry[:per_unit_discount_note_present] },
+      competing_tax_basis_count: competing_tax_basis_count(tax_details),
+      item_line_total_limit: ReceiptAmountService.receipt_item_line_total_max
+    )
+    return candidates unless policy.eligible?
+
+    promoted = candidate.deep_dup.merge(
+      validation_state: "valid",
+      rejection_reasons: [],
+      reference_price_tax_inclusion: policy.reference_price_tax_inclusion,
+      tax_inclusion_evidence: single_item_gross_summary_evidence(evidence, policy:)
+    )
+    candidates.map { |entry| entry.equal?(candidate) ? promoted : entry }
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    candidates
+  end
+
+  def competing_tax_basis_count(tax_details)
+    rates = Array(tax_details).filter_map do |detail|
+      normalize_rate_value(detail[:rate]) if detail.is_a?(Hash)
+    end.uniq
+    [ rates.size - 1, 0 ].max
+  rescue ArgumentError, NoMethodError, TypeError
+    1
+  end
+
+  def single_item_gross_summary_evidence(evidence, policy:)
+    {
+      kind: evidence.kind,
+      string_index_type: evidence.string_index_type,
+      policy_contract_version: policy.contract_version,
+      summary_total: evidence.summary_total.deep_dup,
+      gross_tax_target: evidence.gross_tax_target.deep_dup
+    }
+  end
+
   def layout_only_descriptor?(descriptor)
     descriptor.is_a?(Hash) &&
       descriptor[:source_kind] == "azure_item_layout" &&
@@ -642,12 +744,16 @@ class Ocr::ResponseParser
     return unless candidate.is_a?(Hash)
 
     candidate.merge(
+      page_index: descriptor[:page_index],
       item_index:,
       item_identity: descriptor[:item_identity],
       destination_kind: descriptor[:destination_kind],
       structured_item_index: descriptor[:structured_item_index],
       name_line_index: descriptor[:name_line_index],
       reference_line_index: descriptor[:reference_line_index],
+      reference_line_provider_span_start: descriptor[:reference_line_provider_span_start],
+      reference_line_provider_span_end: descriptor[:reference_line_provider_span_end],
+      per_unit_discount_note_present: descriptor[:per_unit_discount_note_present],
       purchased_quantity_line_indexes: descriptor[:purchased_quantity_line_indexes],
       printed_total_line_index: descriptor[:printed_total_line_index],
       owned_line_indexes: descriptor[:owned_line_indexes],
@@ -1178,21 +1284,22 @@ class Ocr::ResponseParser
     end.max
   end
 
-  def extract_tax_amount(parsed_response, lines)
+  def extract_tax_amount(parsed_response, lines, tax_details: nil)
     fields = extract_fields(parsed_response)
 
     fields.dig("TotalTax", "valueCurrency", "amount") ||
       fields.dig("TotalTax", "valueNumber") ||
       fields.dig("Tax", "valueCurrency", "amount") ||
       fields.dig("Tax", "valueNumber") ||
-      extract_tax_amount_from_tax_details(parsed_response, lines) ||
+      extract_tax_amount_from_tax_details(parsed_response, lines, tax_details:) ||
       extract_amount_from_lines(lines, profile.ocr_tax_amount_description_pattern)
   rescue NoMethodError, TypeError
     nil
   end
 
-  def extract_tax_amount_from_tax_details(parsed_response, lines)
-    amounts = extract_tax_details(parsed_response, lines).filter_map do |tax_detail|
+  def extract_tax_amount_from_tax_details(parsed_response, lines, tax_details: nil)
+    details = tax_details || extract_tax_details(parsed_response, lines)
+    amounts = Array(details).filter_map do |tax_detail|
       next if normalize_rate_value(tax_detail[:rate]).blank?
       next if tax_detail[:net_amount].present? && tax_detail[:net_amount].to_i <= 0
 
@@ -2053,6 +2160,24 @@ class Ocr::ResponseParser
 
       replacements[item_index] = layout_item
     end
+    structured_layout_candidate_ids_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, ids|
+      next unless candidate.is_a?(Hash)
+      next unless candidate[:source_provider] == "azure_item_layout"
+      next unless candidate[:destination_kind] == "azure_structured_item"
+
+      item_index = candidate[:item_index]
+      candidate_id = candidate[:candidate_id]
+      ids[item_index] = candidate_id if item_index.is_a?(Integer) && candidate_id.is_a?(String)
+    end
+    layout_overlays_by_index = layout_descriptors.each_with_object({}) do |descriptor, overlays|
+      next unless descriptor[:destination_kind] == "azure_structured_item"
+
+      item_index = descriptor[:structured_item_index]
+      expected_candidate_id = "#{descriptor[:candidate_id]}_item_calculation_mode"
+      next unless structured_layout_candidate_ids_by_index[item_index] == expected_candidate_id
+
+      overlays[item_index] = descriptor
+    end
     item_identities_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, identities|
       next unless candidate.is_a?(Hash)
 
@@ -2068,9 +2193,14 @@ class Ocr::ResponseParser
       next layout_replacement.deep_dup if layout_replacement
 
       value_object = item["valueObject"] || {}
+      layout_overlay = layout_overlays_by_index[index]
       amount_field_name = value_object["TotalPrice"].present? ? "TotalPrice" : "Price"
       amount_field = value_object[amount_field_name]
-      total_price = value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
+      total_price = if layout_overlay
+        ReceiptAmountService.parse_amount_or_nil(layout_overlay.dig(:printed_line_total, :amount))&.to_i
+      else
+        value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
+      end
       raw_text = value_object.dig("Description", "valueString") ||
         value_object.dig("Description", "content") ||
         item["content"]
@@ -2083,13 +2213,31 @@ class Ocr::ResponseParser
         else
           original_line_total
         end
-      quantity_unit_resolution = profile.resolve_quantity_unit(value_object.dig("QuantityUnit", "valueString"))
+      purchased_quantity = layout_overlay&.dig(:reference_pricing_candidate, :purchased_quantity)
+      quantity_unit_resolution = if purchased_quantity
+        ReceiptQuantityUnit::Resolution.new(
+          code: purchased_quantity[:unit_code],
+          status: purchased_quantity[:unit_status].to_sym,
+          raw: nil
+        )
+      else
+        profile.resolve_quantity_unit(value_object.dig("QuantityUnit", "valueString"))
+      end
       quantity_unit_code = quantity_unit_resolution.known? ? quantity_unit_resolution.code : ReceiptQuantityUnit.default_code
+      source_metadata = if layout_overlay
+        layout_source_metadata(parsed_response, layout_overlay.dig(:printed_line_total, :evidence))
+      else
+        structured_source_metadata(
+          parsed_response,
+          amount_field,
+          field_path: "documents[0].fields.Items[#{index}].#{amount_field_name}"
+        )
+      end
 
       {
         raw_text: raw_text,
         price: value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
-        quantity: value_object.dig("Quantity", "valueNumber"),
+        quantity: purchased_quantity&.dig(:amount) || value_object.dig("Quantity", "valueNumber"),
         quantity_unit_code: quantity_unit_code,
         quantity_unit_status: quantity_unit_resolution.status.to_s,
         **unknown_quantity_unit_diagnostic(quantity_unit_resolution),
@@ -2101,11 +2249,7 @@ class Ocr::ResponseParser
         tax_rate: extract_item_tax_rate(item, value_object),
         confidence: item["confidence"],
         ocr_item_identity: item_identities_by_index[index],
-        **structured_source_metadata(
-          parsed_response,
-          amount_field,
-          field_path: "documents[0].fields.Items[#{index}].#{amount_field_name}"
-        )
+        **source_metadata
       }
     end
   rescue NoMethodError, TypeError
@@ -2184,6 +2328,40 @@ class Ocr::ResponseParser
     end
 
     extractor.call(field:, field_path:)
+  end
+
+  def layout_source_metadata(parsed_response, evidence)
+    return {} unless evidence.is_a?(Hash)
+    return {} unless evidence[:source_provider] == "azure_item_layout"
+
+    page_index = evidence[:page_index]
+    line_index = evidence[:line_index]
+    return {} unless page_index.is_a?(Integer) && page_index.zero?
+    return {} unless line_index.is_a?(Integer) && line_index.between?(0, MAX_REFERENCE_PRICING_TOTAL_LINES - 1)
+    return {} unless evidence[:source_field_path] == "pages[#{page_index}].lines[#{line_index}]"
+
+    line = extract_analyze_result(parsed_response).dig("pages", page_index, "lines", line_index)
+    spans = line.is_a?(Hash) ? line["spans"] : nil
+    return {} unless spans.is_a?(Array) && spans.one? && spans.sole.is_a?(Hash)
+
+    line_start = spans.sole["offset"]
+    line_length = spans.sole["length"]
+    source_start = evidence[:provider_span_start]
+    source_end = evidence[:provider_span_end]
+    return {} unless [ line_start, line_length, source_start, source_end ].all?(Integer)
+    return {} unless line_start >= 0 && line_length.positive?
+    return {} unless source_start >= line_start && source_end > source_start
+    return {} unless source_end <= line_start + line_length
+
+    {
+      source_provider: evidence[:source_provider],
+      source_field_path: evidence[:source_field_path],
+      source_line_index: line_index,
+      source_span_start: source_start - line_start,
+      source_span_end: source_end - line_start
+    }
+  rescue NoMethodError, TypeError
+    {}
   end
 
   def build_structured_source_metadata_extractor(parsed_response)

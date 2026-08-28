@@ -192,6 +192,19 @@ RSpec.describe 'Azure measurement item-layout mapping' do
     ])
   end
 
+  def single_item_gross_summary_response
+    synthetic_response([
+      '架空量売店F',
+      '例示量売品F',
+      '240円/100g',
+      '計量 250g',
+      '明細計 600円',
+      '10%対象計 ¥600',
+      '(内税額 ¥54)',
+      '合計 ¥600'
+    ])
+  end
+
   def modes(candidate)
     candidate.fetch(:options).map { |option| option.fetch(:pricing_source_kind) }
   end
@@ -267,13 +280,180 @@ RSpec.describe 'Azure measurement item-layout mapping' do
 
     aggregate_failures do
       expect(result.dig(:candidates, :items)).to contain_exactly(
-        include(raw_text: '例示量売品A', line_total: 1703)
+        include(
+          raw_text: '例示量売品A',
+          line_total: 1703,
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.Items[0].TotalPrice'
+        )
       )
       expect(result.dig(:candidates, :item_calculation_mode_candidates)).to contain_exactly(
         include(item_index: 0, options: [ include(pricing_source_kind: 'explicit_line_total') ])
       )
       expect(reference).to include(source_kind: 'azure_item_layout')
       expect(reference[:candidate_id]).to start_with('azure_item_layout_')
+    end
+  end
+
+  it 'promotes one exact structured destination from bounded single-item gross summary evidence' do
+    response = single_item_gross_summary_response
+    item = structured_item(
+      response,
+      name_line_index: 1,
+      reference_line_index: 2,
+      quantity_line_index: 3,
+      total_line_index: 4,
+      reference_amount: 240,
+      total_amount: 600
+    )
+    item.fetch('valueObject').delete('TotalPrice')
+    response.dig('analyzeResult', 'documents', 0, 'fields', 'Items')['valueArray'] = [ item ]
+
+    result = parse(response)
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+    mode_candidate = result.dig(:candidates, :item_calculation_mode_candidates).sole
+    parsed_item = result.dig(:candidates, :items).sole
+
+    aggregate_failures do
+      expect(reference).to include(
+        source_kind: 'azure_item_layout',
+        destination_kind: 'azure_structured_item',
+        item_index: 0,
+        structured_item_index: 0,
+        reference_line_provider_span_start: line_span(response, 2).fetch('offset'),
+        reference_line_provider_span_end:
+          line_span(response, 2).then { |span| span.fetch('offset') + span.fetch('length') },
+        validation_state: 'valid',
+        rejection_reasons: [],
+        reference_price_tax_inclusion: 'gross'
+      )
+      expect(reference[:candidate_id]).to start_with('azure_item_layout_')
+      expect(reference[:item_identity]).to start_with('azure_structured_item_i0_')
+      expect(reference[:tax_inclusion_evidence]).to include(
+        kind: 'single_item_receipt_gross_summary',
+        string_index_type: 'textElements',
+        policy_contract_version: 'reference_pricing_single_item_gross_summary_policy_v1',
+        summary_total: include(
+          source_provider: 'azure_item_layout',
+          source_field_path: 'pages[0].lines[7]',
+          amount: 600
+        ),
+        gross_tax_target: include(
+          source_provider: 'azure_item_layout',
+          source_field_path: 'pages[0].lines[5]',
+          rate: '0.1',
+          net_amount: 546,
+          tax_amount: 54,
+          gross_amount: 600
+        )
+      )
+      expect(mode_candidate).to include(
+        source_provider: 'azure_item_layout',
+        destination_kind: 'azure_structured_item',
+        item_index: 0,
+        item_identity: reference[:item_identity]
+      )
+      expect(mode_candidate[:candidate_id]).to start_with('azure_item_layout_')
+      expect(modes(mode_candidate)).to eq([ 'explicit_line_total' ])
+      expect(parsed_item).to include(
+        raw_text: '例示量売品F',
+        price: 240,
+        quantity: '250',
+        quantity_unit_code: 'gram',
+        line_total: 600,
+        original_line_total: 600,
+        ocr_item_identity: reference[:item_identity],
+        source_provider: 'azure_item_layout',
+        source_field_path: 'pages[0].lines[4]',
+        source_line_index: 4,
+        source_span_start:
+          reference.dig(:printed_line_total, :evidence, :provider_span_start) - line_span(response, 4).fetch('offset'),
+        source_span_end:
+          reference.dig(:printed_line_total, :evidence, :provider_span_end) - line_span(response, 4).fetch('offset')
+      )
+      expect(parsed_item[:source_field_path]).not_to eq('documents[0].fields.Items[0].Price')
+      expect(result.dig(:candidates, :total_amount)).to eq(600)
+      expect(result.dig(:candidates, :tax_amount)).to eq(54)
+    end
+  end
+
+  it 'does not promote a structured destination when multiple tax bases compete' do
+    response = synthetic_response([
+      '架空量売店G',
+      '例示量売品G',
+      '240円/100g',
+      '計量 250g',
+      '明細計 600円',
+      '8%対象計 200円',
+      '10%対象計 400円',
+      '(内税額 50円)',
+      '合計 600円'
+    ])
+    item = structured_item(
+      response,
+      name_line_index: 1,
+      reference_line_index: 2,
+      quantity_line_index: 3,
+      total_line_index: 4,
+      reference_amount: 240,
+      total_amount: 600
+    )
+    response.dig('analyzeResult', 'documents', 0, 'fields', 'Items')['valueArray'] = [ item ]
+
+    result = parse(response)
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+
+    aggregate_failures do
+      expect(reference).to include(
+        source_kind: 'azure_item_layout',
+        validation_state: 'ambiguous',
+        rejection_reasons: [ 'ambiguous_tax_inclusion' ],
+        reference_price_tax_inclusion: 'unknown'
+      )
+      expect(reference[:tax_inclusion_evidence]).to be_nil
+      expect(result.dig(:candidates, :item_calculation_mode_candidates)).to all(
+        satisfy { |candidate| modes(candidate).exclude?('reference_quantity_price') }
+      )
+    end
+  end
+
+  it 'does not promote a structured destination with an informational discount line' do
+    response = synthetic_response([
+      '架空量売店H',
+      '例示量売品H',
+      '特典適用後単価 240円/100g',
+      '会員値引 3円/100g引',
+      '計量 250g',
+      '明細計 600円',
+      '10%対象計 ¥600',
+      '(内税額 ¥54)',
+      '合計 ¥600'
+    ])
+    item = structured_item(
+      response,
+      name_line_index: 1,
+      reference_line_index: 2,
+      quantity_line_index: 4,
+      total_line_index: 5,
+      reference_amount: 240,
+      total_amount: 600
+    )
+    response.dig('analyzeResult', 'documents', 0, 'fields', 'Items')['valueArray'] = [ item ]
+
+    result = parse(response)
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+
+    aggregate_failures do
+      expect(reference).to include(
+        source_kind: 'azure_item_layout',
+        per_unit_discount_note_present: true,
+        validation_state: 'ambiguous',
+        reference_price_tax_inclusion: 'unknown'
+      )
+      expect(reference[:tax_inclusion_evidence]).to be_nil
+      expect(result.dig(:candidates, :item_calculation_mode_candidates)).to all(
+        satisfy { |candidate| candidate[:source_provider] != 'azure_item_layout' }
+      )
     end
   end
 

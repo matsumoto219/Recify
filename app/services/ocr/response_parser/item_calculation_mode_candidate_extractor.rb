@@ -55,8 +55,10 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   )
     @analyze_result = analyze_result
     @profile = profile
-    reference_pricing_item_indexes = Array(reference_pricing_candidates).filter_map do |candidate|
-      normalized = normalized_hash(candidate)
+    @reference_pricing_candidates = Array(reference_pricing_candidates).filter_map do |candidate|
+      normalized_hash(candidate)
+    end
+    reference_pricing_item_indexes = @reference_pricing_candidates.filter_map do |normalized|
       item_index = normalized[:item_index]
       item_index if item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
     end
@@ -64,8 +66,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
     end
     @reference_pricing_item_indexes = (reference_pricing_item_indexes + reference_conflict_item_indexes).to_set
-    @valid_reference_pricing_item_indexes = Array(reference_pricing_candidates).filter_map do |candidate|
-      normalized = normalized_hash(candidate)
+    @valid_reference_pricing_item_indexes = @reference_pricing_candidates.filter_map do |normalized|
       item_index = normalized[:item_index]
       next unless normalized[:validation_state] == "valid"
       next unless Array(normalized[:rejection_reasons]).empty?
@@ -96,10 +97,8 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
 
     parent_spans = items.map { |item| item.is_a?(Hash) ? single_span(item) : nil }
     overlapping_indexes = overlapping_parent_indexes(parent_spans)
-
-    layout_replacement_indexes = item_layout_descriptors.filter_map do |descriptor|
-      descriptor[:structured_item_index] if descriptor[:layout_item].is_a?(Hash)
-    end.to_set
+    layout_candidates = item_layout_descriptors.filter_map { |descriptor| extract_layout_candidate(descriptor) }
+    layout_replacement_indexes = layout_candidates.filter_map { |candidate| candidate[:item_index] }.to_set
     structured_candidates = items.filter_map.with_index do |item, item_index|
       next unless destination_item_indexes.nil? || destination_item_indexes.include?(item_index)
       next if layout_replacement_indexes.include?(item_index)
@@ -109,7 +108,6 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     rescue EncodingError, ArgumentError, TypeError
       nil
     end
-    layout_candidates = item_layout_descriptors.filter_map { |descriptor| extract_layout_candidate(descriptor) }
 
     (structured_candidates + layout_candidates).sort_by { |candidate| candidate.fetch(:item_index) }
   end
@@ -118,7 +116,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
 
   attr_reader :analyze_result, :content, :destination_item_indexes, :discount_item_indexes,
     :item_layout_descriptors, :items, :mapper, :profile, :reference_pricing_item_indexes,
-    :valid_reference_pricing_item_indexes
+    :reference_pricing_candidates, :valid_reference_pricing_item_indexes
 
   def provider_context_valid?
     return false unless analyze_result.is_a?(Hash)
@@ -193,11 +191,14 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
 
   def extract_layout_candidate(descriptor)
     layout_item = descriptor[:layout_item]
-    return unless layout_item.is_a?(Hash)
+    destination_kind = descriptor[:destination_kind]
+    structured_destination = destination_kind == "azure_structured_item"
+    return unless layout_item.is_a?(Hash) || structured_destination
 
     item_index = descriptor[:structured_item_index]
     item_index = 0 if item_index.nil? && items.empty?
     return unless item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
+    return unless !structured_destination || valid_structured_layout_reference_candidate?(descriptor, item_index:)
 
     printed_line_total = normalized_hash(descriptor[:printed_line_total])
     amount = lexeme_decimal(printed_line_total[:amount])
@@ -227,6 +228,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       provider_span_start: block_start,
       provider_span_end: block_end,
       destination_evidence: descriptor[:destination_evidence],
+      destination_kind: destination_kind,
       owned_line_indexes: descriptor[:owned_line_indexes],
       printed_line_total: printed_line_total,
       conflicts: [],
@@ -241,6 +243,24 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     }
   rescue ArgumentError, TypeError
     nil
+  end
+
+  def valid_structured_layout_reference_candidate?(descriptor, item_index:)
+    candidate_id = descriptor.dig(:reference_pricing_candidate, :candidate_id)
+    item_identity = descriptor[:item_identity]
+    matches = reference_pricing_candidates.select do |candidate|
+      candidate[:source_kind] == "azure_item_layout" &&
+        candidate[:candidate_id] == candidate_id &&
+        candidate[:item_identity] == item_identity &&
+        candidate[:item_index] == item_index &&
+        candidate[:destination_kind] == "azure_structured_item" &&
+        candidate[:structured_item_index] == item_index &&
+        candidate[:validation_state] == "valid" &&
+        Array(candidate[:rejection_reasons]).empty? &&
+        candidate.dig(:tax_inclusion_evidence, :kind) == "single_item_receipt_gross_summary"
+    end
+
+    matches.one?
   end
 
   def valid_layout_evidence?(evidence)
