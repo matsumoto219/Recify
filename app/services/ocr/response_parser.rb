@@ -1080,41 +1080,21 @@ class Ocr::ResponseParser
     total_start:,
     total_length:
   )
-    analyze_result = extract_analyze_result(parsed_response)
-    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(
-      index_type: analyze_result["stringIndexType"]
-    )
-    return false if mapper.nil?
+    summary = exact_strict_summary_total(parsed_response, total_field:)
+    return false if summary.nil?
 
-    content = analyze_result["content"]
-    field_content = total_field["content"]
-    return false unless content.is_a?(String) && content.valid_encoding?
-    return false unless field_content.is_a?(String) && field_content.valid_encoding?
-    return false if field_content.blank? || field_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
-    return false unless mapper.length(field_content) == total_length
-    return false unless mapper.slice(content, offset: total_start, length: total_length) == field_content
+    document_total_evidence = summary.document_total_evidence
+    return false if document_total_evidence.nil?
 
-    structured_amount = strict_document_total_amount(total_field, field_content)
-    return false if structured_amount.nil?
-
-    summary_lines = exact_strict_summary_lines(parsed_response)
-    return false if summary_lines.nil?
-
-    owners = summary_lines.filter_map do |line|
-      line_start = line.fetch(:span_start)
-      line_end = line.fetch(:span_end)
-      next unless total_start >= line_start && total_start + total_length <= line_end
-      next unless line.fetch(:amount) == structured_amount
-
-      line
-    end
-
-    owners.one?
+    line_start = document_total_evidence.fetch(:provider_span_start)
+    line_end = document_total_evidence.fetch(:provider_span_end)
+    total_start >= line_start && total_start + total_length <= line_end &&
+      summary.amount == strict_summary_total_amount(total_field)
   rescue EncodingError, ArgumentError, TypeError
     false
   end
 
-  def strict_document_total_amount(total_field, field_content)
+  def strict_summary_total_amount(total_field)
     currency = total_field["valueCurrency"]
     raw_amount = if currency
       return unless currency.is_a?(Hash) && currency["currencyCode"] == "JPY"
@@ -1127,96 +1107,23 @@ class Ocr::ResponseParser
     return if raw_amount.negative? || raw_amount > MAX_REFERENCE_PRICING_TOTAL_AMOUNT
     return if raw_amount.is_a?(Float) && (!raw_amount.finite? || raw_amount.floor != raw_amount)
 
-    amount = raw_amount.to_i
-
-    lexical_amounts = normalized_money_numbers(field_content)
-    amount if lexical_amounts.one? && lexical_amounts.sole == amount
+    raw_amount.to_i
   rescue NoMethodError, TypeError
     nil
   end
 
-  def strict_summary_line_amount(line_content)
-    amounts = normalized_money_numbers(line_content)
-    amounts.sole if amounts.one?
-  rescue Enumerable::SoleItemExpectedError
-    nil
-  end
-
-  def normalized_money_numbers(text)
-    text.unicode_normalize(:nfkc).scan(/\d[\d,]*/).filter_map do |value|
-      ReceiptAmountService.parse_amount_or_nil(value)&.to_i
-    end.uniq
-  rescue EncodingError, ArgumentError
-    []
-  end
-
   def extract_strict_summary_total_from_response(parsed_response)
-    matches = exact_strict_summary_lines(parsed_response)
-    return if matches.nil? || !matches.one?
-
-    matches.sole.fetch(:amount)
-  rescue Enumerable::SoleItemExpectedError, KeyError
-    nil
+    total_field = extract_fields(parsed_response)["Total"]
+    exact_strict_summary_total(parsed_response, total_field:)&.amount
   end
 
-  def exact_strict_summary_lines(parsed_response)
+  def exact_strict_summary_total(parsed_response, total_field: nil)
     analyze_result = extract_analyze_result(parsed_response)
-    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(
-      index_type: analyze_result["stringIndexType"]
+    Ocr::ResponseParser::ReferencePricingStrictSummaryTotalExtractor.call(
+      analyze_result:,
+      profile:,
+      total_field:
     )
-    return if mapper.nil?
-
-    content = analyze_result["content"]
-    return unless content.is_a?(String) && content.valid_encoding?
-    return if content.bytesize > Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
-
-    content = content.dup.freeze
-
-    pages = analyze_result["pages"]
-    return unless pages.is_a?(Array) && pages.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
-
-    line_count = 0
-    matches = []
-    pages.each do |page|
-      return unless page.is_a?(Hash) && page["lines"].is_a?(Array)
-
-      raw_lines = page["lines"]
-      return if raw_lines.size > MAX_REFERENCE_PRICING_TOTAL_LINES - line_count
-
-      line_count += raw_lines.size
-      raw_lines.each do |line|
-        return unless line.is_a?(Hash)
-
-        line_content = line["content"]
-        spans = line["spans"]
-        return unless line_content.is_a?(String) && line_content.valid_encoding?
-        return if line_content.blank? || line_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
-        return unless spans.is_a?(Array) && spans.size == 1 && spans.sole.is_a?(Hash)
-
-        line_start = spans.sole["offset"]
-        line_length = spans.sole["length"]
-        return unless line_start.is_a?(Integer) && line_length.is_a?(Integer) && line_length.positive?
-        return if line_start.negative? || line_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN
-        return if line_length > MAX_REFERENCE_PRICING_PROVIDER_SPAN - line_start
-        return unless mapper.length(line_content) == line_length
-        return unless mapper.slice(content, offset: line_start, length: line_length) == line_content
-        next unless line_content.match?(profile.ocr_strict_receipt_summary_total_line_pattern)
-
-        amount = strict_summary_line_amount(line_content)
-        return if amount.nil?
-
-        matches << {
-          span_start: line_start,
-          span_end: line_start + line_length,
-          amount:
-        }
-        return if matches.many?
-      end
-    end
-
-    matches
-  rescue EncodingError, ArgumentError, TypeError
-    nil
   end
 
   def reference_pricing_evidence_ranges(candidates)

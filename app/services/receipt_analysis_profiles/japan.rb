@@ -324,6 +324,8 @@ module ReceiptAnalysisProfiles
     OCR_REFERENCE_PRICING_ITEM_LAYOUT_PER_UNIT_DISCOUNT_NOTE_PATTERN = /\A[ \t]*(?:会員|特典|アプリ)?値引(?:き)?[ \t:：]*(?:[¥￥][ \t]*)?[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*円[ \t]*[\/／][ \t]*(?:(?<basis_quantity>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*)?(?<unit>[\p{L}]+?)[ \t]*引(?:き)?[ \t]*\z/iu.freeze
     OCR_TOTAL_AMOUNT_LINE_PATTERN = /合計|小計|total|税込|現計/i.freeze
     OCR_STRICT_RECEIPT_SUMMARY_TOTAL_LINE_PATTERN = /\A(?:総合計|合計|現計|grand\s+total|total)[ \t]*[:：]?[ \t]*(?:[¥￥][ \t]*)?[0-9０-９][0-9０-９,，]*(?:[ \t]*円)?[ \t]*\z/i.freeze
+    OCR_STRICT_RECEIPT_SUMMARY_TOTAL_LABEL_LINE_PATTERN = /\A(?:総合計|合計|現計|grand\s+total|total)[ \t]*[:：]?[ \t]*\z/i.freeze
+    OCR_STRICT_RECEIPT_SUMMARY_TOTAL_AMOUNT_LINE_PATTERN = /\A[ \t]*(?:[¥￥][ \t]*)?[0-9０-９][0-9０-９,，]*(?:[ \t]*円)?[ \t]*\z/.freeze
     OCR_STRICT_RECEIPT_SUBTOTAL_LINE_PATTERN = /\A(?:商品小計|小計|subtotal)[ \t]*[:：]?[ \t]*(?:[¥￥][ \t]*)?[0-9０-９][0-9０-９,，]*(?:[ \t]*円)?[ \t]*\z/i.freeze
     OCR_SUBTOTAL_AMOUNT_LINE_PATTERN = /小計|subtotal|税抜/i.freeze
     OCR_CARD_SLIP_CONTEXT_PATTERN = /クレジットカード売上票|カード会社|お支払方法|支払方法|payment method/i.freeze
@@ -927,6 +929,14 @@ module ReceiptAnalysisProfiles
 
       def ocr_strict_receipt_summary_total_line_pattern
         OCR_STRICT_RECEIPT_SUMMARY_TOTAL_LINE_PATTERN
+      end
+
+      def ocr_strict_receipt_summary_total_label_line_pattern
+        OCR_STRICT_RECEIPT_SUMMARY_TOTAL_LABEL_LINE_PATTERN
+      end
+
+      def ocr_strict_receipt_summary_total_amount_line_pattern
+        OCR_STRICT_RECEIPT_SUMMARY_TOTAL_AMOUNT_LINE_PATTERN
       end
 
       def ocr_strict_receipt_subtotal_line_pattern

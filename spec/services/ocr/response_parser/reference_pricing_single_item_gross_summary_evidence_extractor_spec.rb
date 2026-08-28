@@ -11,16 +11,23 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleItemGrossSummaryEviden
       '(内税額 ¥54)',
       '合計 ¥600'
     ],
+    line_layout: {},
     string_index_type: 'textElements',
     model_id: 'prebuilt-receipt',
     api_version: '2024-11-30'
   )
     content = line_contents.join("\n")
     offset = 0
-    lines = line_contents.map do |line_content|
+    lines = line_contents.map.with_index do |line_content, line_index|
       length = provider_length(line_content, string_index_type)
+      layout = line_layout.fetch(line_index, {})
+      left = layout.fetch(:left, 20)
+      top = layout.fetch(:top, 20 + (line_index * 24))
+      width = layout.fetch(:width, 120)
+      height = layout.fetch(:height, 16)
       line = {
         'content' => line_content,
+        'polygon' => [ left, top, left + width, top, left + width, top + height, left, top + height ],
         'spans' => [ { 'offset' => offset, 'length' => length } ]
       }
       offset += length + provider_length("\n", string_index_type)
@@ -57,6 +64,17 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleItemGrossSummaryEviden
     {
       span_start: span.fetch('offset'),
       span_end: span.fetch('offset') + span.fetch('length')
+    }
+  end
+
+  def document_total(result, line_index:, amount: 600)
+    line = result.dig('pages', 0, 'lines', line_index)
+    digits = amount.to_s
+    offset = line.dig('spans', 0, 'offset') + line.fetch('content').index(digits)
+    {
+      'content' => digits,
+      'spans' => [ { 'offset' => offset, 'length' => provider_length(digits, result.fetch('stringIndexType')) } ],
+      'valueCurrency' => { 'amount' => amount, 'currencyCode' => 'JPY' }
     }
   end
 
@@ -148,6 +166,38 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleItemGrossSummaryEviden
       expect(evidence.string_index_type).to eq('utf16CodeUnit')
       expect(evidence.summary_total[:provider_span_start]).to eq(line_span(result, 6)[:span_start])
       expect(evidence.gross_tax_target[:provider_span_start]).to eq(line_span(result, 4)[:span_start])
+    end
+  end
+
+  it 'labelとdocument Totalが分離したsame-row summaryを共有contractで保持する' do
+    result = analyze_result(
+      line_contents: [
+        '匿名商品',
+        '240円/100g',
+        '計量 250g',
+        '明細計 600円',
+        '10%対象計 ¥600',
+        '(内税額 ¥54)',
+        '合計',
+        '¥600'
+      ],
+      line_layout: {
+        6 => { left: 20, top: 180, width: 60 },
+        7 => { left: 200, top: 182, width: 70 }
+      }
+    )
+    result['documents'] = [ { 'fields' => { 'Total' => document_total(result, line_index: 7) } } ]
+
+    evidence = extract(result: result)
+
+    aggregate_failures do
+      expect(evidence.summary_total).to include(
+        amount: 600,
+        source_provider: 'azure_item_layout',
+        source_field_path: 'pages[0].lines[7]',
+        line_index: 7
+      )
+      expect(evidence.to_h.to_json).not_to match(/匿名商品|raw|content|polygon/)
     end
   end
 

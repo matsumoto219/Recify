@@ -229,17 +229,17 @@ class Ocr::ResponseParser::ReferencePricingSingleItemGrossSummaryEvidenceExtract
   end
 
   def exact_summary_total
-    matches = lines.filter_map do |line|
-      next unless line.fetch(:content).match?(profile.ocr_strict_receipt_summary_total_line_pattern)
+    descriptor = Ocr::ResponseParser::ReferencePricingStrictSummaryTotalExtractor.call(
+      analyze_result:,
+      profile:,
+      total_field: analyze_result.dig("documents", 0, "fields", "Total")
+    )
+    return unless descriptor&.amount == receipt_total
 
-      amount = exact_money_amount(line.fetch(:content), remove_rate: false)
-      next if amount.nil?
-
-      structural_evidence(line).merge(amount: amount).freeze
-    end
-    return unless matches.one? && matches.sole.fetch(:amount) == receipt_total
-
-    matches.sole
+    descriptor.amount_evidence.merge(
+      amount: descriptor.amount,
+      source_provider: SOURCE_PROVIDER.dup.freeze
+    ).freeze
   end
 
   def exact_canonical_tax_group

@@ -285,8 +285,11 @@ RSpec.describe ReceiptAnalysisProfiles do
   end
 
   describe 'JPN profile strict receipt summary labels' do
-    it 'receipt summaryだけを認識し小計やtax-labelled itemを除外する' do
-      pattern = described_class.fetch('JPN').ocr_strict_receipt_summary_total_line_pattern
+    it 'same-lineとlabel-onlyのreceipt summaryを区別し小計やtax-labelled itemを除外する' do
+      profile = described_class.fetch('JPN')
+      pattern = profile.ocr_strict_receipt_summary_total_line_pattern
+      label_pattern = profile.ocr_strict_receipt_summary_total_label_line_pattern
+      amount_pattern = profile.ocr_strict_receipt_summary_total_amount_line_pattern
 
       aggregate_failures do
         expect('合計 300円').to match(pattern)
@@ -296,6 +299,13 @@ RSpec.describe ReceiptAnalysisProfiles do
         expect('小計 300円').not_to match(pattern)
         expect('税込 300円').not_to match(pattern)
         expect('通常明細 300円').not_to match(pattern)
+        expect('合計').to match(label_pattern)
+        expect('TOTAL:').to match(label_pattern)
+        expect('合計 300円').not_to match(label_pattern)
+        expect('小計').not_to match(label_pattern)
+        expect('¥300').to match(amount_pattern)
+        expect('300円').to match(amount_pattern)
+        expect('支払 300円').not_to match(amount_pattern)
       end
     end
   end

@@ -379,6 +379,35 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
     expect(parser.call.dig(:candidates, :total_amount)).to eq(summary_amount.to_i)
   end
 
+  it 'preserves an exact document Total split from its same-row summary label' do
+    item = positive_cases.first.fetch('item').deep_dup
+    response = synthetic_response(item)
+    analyze_result = response.fetch('analyzeResult')
+    analyze_result['stringIndexType'] = 'utf16CodeUnit'
+    analyze_result.dig('pages', 0).merge!(
+      'pageNumber' => 1,
+      'unit' => 'pixel',
+      'width' => 800,
+      'height' => 1_200
+    )
+    summary_amount = item.dig('valueObject', 'TotalPrice', 'content')
+    append_response_line(response, '合計')
+    append_response_line(response, "¥#{summary_amount}")
+    label_line, amount_line = analyze_result.dig('pages', 0, 'lines').last(2)
+    label_line['polygon'] = [ 20, 100, 80, 100, 80, 116, 20, 116 ]
+    amount_line['polygon'] = [ 200, 102, 270, 102, 270, 118, 200, 118 ]
+    amount_offset = amount_line.dig('spans', 0, 'offset') + 1
+    analyze_result.dig('documents', 0, 'fields')['Total'] = {
+      'content' => summary_amount,
+      'spans' => [ { 'offset' => amount_offset, 'length' => utf16_length(summary_amount) } ],
+      'valueCurrency' => { 'amount' => summary_amount.to_i, 'currencyCode' => 'JPY' }
+    }
+
+    result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+
+    expect(result.dig(:candidates, :total_amount)).to eq(summary_amount.to_i)
+  end
+
   it 'fails closed from malformed or non-JPY structured Total ownership' do
     item = positive_cases.first.fetch('item').deep_dup
     response = synthetic_response(item)
@@ -407,16 +436,22 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
     end
   end
 
-  it 'rejects an oversized structured Total before decimal conversion' do
+  it 'rejects an oversized structured Total without raising' do
     item = positive_cases.first.fetch('item').deep_dup
     response = synthetic_response(item)
-    parser = Ocr::ResponseParser.new(response:, provider: :fixture)
     total = {
       'valueCurrency' => { 'amount' => 10**10_000, 'currencyCode' => 'JPY' }
     }
 
-    expect(parser).not_to receive(:BigDecimal)
-    expect(parser.send(:strict_document_total_amount, total, '300')).to be_nil
+    result = nil
+    expect do
+      result = Ocr::ResponseParser::ReferencePricingStrictSummaryTotalExtractor.call(
+        analyze_result: response.fetch('analyzeResult'),
+        profile: ReceiptAnalysisProfiles.fetch('JPN'),
+        total_field: total
+      )
+    end.not_to raise_error
+    expect(result).to be_nil
   end
 
   it 'indexes bounded provider content once while validating a dense summary-line receipt' do
