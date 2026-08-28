@@ -124,6 +124,9 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
         structured_item_index: nil,
         name_line_index: 1,
         reference_line_index: 2,
+        reference_line_provider_span_start: 13,
+        reference_line_provider_span_end: 25,
+        per_unit_discount_note_present: false,
         purchased_quantity_line_indexes: [ 3 ],
         printed_total_line_index: 4,
         owned_line_indexes: [ 1, 2, 3, 4 ]
@@ -212,6 +215,7 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
     aggregate_failures do
       expect(block).to include(
         reference_line_index: 2,
+        per_unit_discount_note_present: true,
         purchased_quantity_line_indexes: [ 4 ],
         printed_total_line_index: 5,
         owned_line_indexes: [ 1, 2, 3, 4, 5 ]
@@ -496,6 +500,8 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
         structured_item_index: 0,
         item_identity: "azure_structured_item_i0_s#{name_start}_e#{reference_end}",
         layout_item: nil,
+        reference_line_provider_span_start: reference_start,
+        reference_line_provider_span_end: reference_end,
         purchased_quantity_line_indexes: [ 3 ],
         printed_total_line_index: 4
       )
@@ -559,6 +565,8 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
     }
     malformed_span = synthetic_analyze_result(lines)
     malformed_span.dig('pages', 0, 'lines', 3, 'spans', 0)['length'] = -1
+    malformed_reference_span = synthetic_analyze_result(lines)
+    malformed_reference_span.dig('pages', 0, 'lines', 2, 'spans', 0)['length'] = -1
     malformed_polygon = synthetic_analyze_result(lines)
     malformed_polygon.dig('pages', 0, 'lines', 3)['polygon'] = [ 20, 20, 30 ]
     distant_layout = {
@@ -578,7 +586,7 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
       expect(extract(lines, layout:)).to eq([])
       expect(extract(lines, layout: distant_layout)).to eq([])
       expect(extract(lines, layout: reversed_vertical_layout)).to eq([])
-      [ malformed_span, malformed_polygon ].each do |result|
+      [ malformed_span, malformed_reference_span, malformed_polygon ].each do |result|
         expect(described_class.call(
           analyze_result: result,
           profile: ReceiptAnalysisProfiles.fetch('JPN'),
