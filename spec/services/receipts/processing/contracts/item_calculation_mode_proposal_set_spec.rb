@@ -97,6 +97,7 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       item_identity: item_identity,
       item_index: 0,
       source_provider: 'azure_item_layout',
+      destination_kind: 'azure_layout_item',
       provider_model_id: 'prebuilt-receipt',
       provider_api_version: '2024-11-30',
       string_index_type: 'textElements',
@@ -159,6 +160,207 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     }
   end
 
+  def single_item_gross_summary_evidence(
+    amount: 1703,
+    tax_amount: 154,
+    net_amount: 1549,
+    rate: '0.1',
+    summary_span: 46...55,
+    tax_span: 56...76
+  )
+    {
+      kind: 'single_item_receipt_gross_summary',
+      string_index_type: 'textElements',
+      policy_contract_version: 'reference_pricing_single_item_gross_summary_policy_v1',
+      summary_total: {
+        source_provider: 'azure_item_layout',
+        source_field_path: 'pages[0].lines[5]',
+        page_index: 0,
+        line_index: 5,
+        string_index_type: 'textElements',
+        provider_span_start: summary_span.begin,
+        provider_span_end: summary_span.end,
+        amount: amount
+      },
+      gross_tax_target: {
+        source_provider: 'azure_item_layout',
+        source_field_path: 'pages[0].lines[6]',
+        page_index: 0,
+        line_index: 6,
+        string_index_type: 'textElements',
+        provider_span_start: tax_span.begin,
+        provider_span_end: tax_span.end,
+        rate: rate,
+        net_amount: net_amount,
+        tax_amount: tax_amount,
+        gross_amount: amount
+      }
+    }
+  end
+
+  def hybrid_item_layout_candidate
+    candidate = item_layout_candidate
+    candidate.merge(
+      item_identity: 'azure_structured_item_i0_s0_e22',
+      destination_kind: 'azure_structured_item'
+    )
+  end
+
+  def hybrid_item_layout_snapshot(candidate = hybrid_item_layout_candidate)
+    snapshot = item_layout_snapshot(candidate)
+    snapshot[:candidates].merge!(total_amount: 1703, tax_amount: 154)
+    snapshot.dig(:candidates, :reference_pricing_candidates).sole.merge!(
+      source_kind: 'azure_item_layout',
+      item_identity: candidate.fetch(:item_identity),
+      destination_kind: 'azure_structured_item',
+      structured_item_index: 0,
+      page_index: 0,
+      name_line_index: 1,
+      reference_line_index: 2,
+      reference_line_provider_span_start: 13,
+      reference_line_provider_span_end: 23,
+      purchased_quantity_line_indexes: [ 3 ],
+      printed_total_line_index: 4,
+      owned_line_indexes: [ 1, 2, 3, 4 ],
+      string_index_type: 'textElements',
+      provider_model_id: 'prebuilt-receipt',
+      provider_api_version: '2024-11-30',
+      validation_contract_version: 'azure_item_layout_v1',
+      block_provider_span_start: 6,
+      block_provider_span_end: 45,
+      reference_price: {
+        amount: '498',
+        evidence: {
+          source_provider: 'azure_item_layout',
+          source_field_path: 'pages[0].lines[2]',
+          page_index: 0,
+          line_index: 2,
+          string_index_type: 'textElements',
+          provider_span_start: 14,
+          provider_span_end: 17
+        }
+      },
+      reference_quantity: {
+        amount: '100',
+        unit_code: 'gram',
+        unit_status: 'known',
+        origin: 'explicit',
+        evidence: {
+          source_provider: 'azure_item_layout',
+          source_field_path: 'pages[0].lines[2]',
+          page_index: 0,
+          line_index: 2,
+          string_index_type: 'textElements',
+          provider_span_start: 19,
+          provider_span_end: 22
+        }
+      },
+      purchased_quantity: {
+        amount: '342',
+        unit_code: 'gram',
+        unit_status: 'known',
+        evidence: {
+          source_provider: 'azure_item_layout',
+          source_field_path: 'pages[0].lines[3]',
+          page_index: 0,
+          line_index: 3,
+          string_index_type: 'textElements',
+          provider_span_start: 25,
+          provider_span_end: 28
+        }
+      },
+      reference_price_tax_inclusion: 'gross',
+      tax_inclusion_evidence: single_item_gross_summary_evidence,
+      printed_line_total: candidate.fetch(:printed_line_total).deep_dup,
+      corroboration: {
+        exact_amount: { numerator: '42579', denominator: '25' },
+        projected_amount: 1703,
+        printed_line_total: '1703',
+        rounding_matches: %w[floor half_up]
+      }
+    )
+    snapshot
+  end
+
+  def column_header_hybrid_case
+    candidate = hybrid_item_layout_candidate.deep_dup
+    candidate[:candidate_id] = candidate[:candidate_id].sub('name_l1', 'name_l0')
+    candidate[:source_field_path] = 'pages[0].lines[0]'
+    candidate[:owned_line_indexes] = [ 0, 1, 2, 3, 4 ]
+    candidate[:destination_evidence].merge!(source_field_path: 'pages[0].lines[0]', line_index: 0)
+    candidate.dig(:options, 0)[:proposal_id] = candidate[:candidate_id].sub(
+      /_item_calculation_mode\z/,
+      '_explicit_line_total'
+    )
+
+    snapshot = hybrid_item_layout_snapshot(candidate)
+    reference = snapshot.dig(:candidates, :reference_pricing_candidates).sole
+    reference[:name_line_index] = 0
+    reference[:owned_line_indexes] = candidate[:owned_line_indexes]
+    reference.merge!(reference_line_provider_span_start: 18, reference_line_provider_span_end: 23)
+    reference.dig(:reference_price, :evidence).merge!(provider_span_start: 19, provider_span_end: 22)
+    reference.dig(:reference_quantity, :evidence).merge!(
+      source_field_path: 'pages[0].lines[1]',
+      line_index: 1,
+      provider_span_start: 14,
+      provider_span_end: 17
+    )
+    [ candidate, snapshot ]
+  end
+
+  def quantity_before_reference_hybrid_case
+    candidate = hybrid_item_layout_candidate.deep_dup
+    candidate_prefix = 'azure_item_layout_p0_name_l0_ref_l2_qty_l1_total_l3'
+    candidate.merge!(
+      candidate_id: "#{candidate_prefix}_item_calculation_mode",
+      source_field_path: 'pages[0].lines[0]',
+      owned_line_indexes: [ 0, 1, 2, 3 ]
+    )
+    candidate[:destination_evidence].merge!(source_field_path: 'pages[0].lines[0]', line_index: 0)
+    candidate[:printed_line_total][:evidence].merge!(
+      source_field_path: 'pages[0].lines[3]',
+      line_index: 3,
+      provider_span_start: 34,
+      provider_span_end: 40
+    )
+    candidate.dig(:options, 0).merge!(proposal_id: "#{candidate_prefix}_explicit_line_total")
+    candidate.dig(:options, 0, :evidence, :line_total).replace(
+      candidate.dig(:printed_line_total, :evidence).deep_dup
+    )
+
+    snapshot = hybrid_item_layout_snapshot(candidate)
+    reference = snapshot.dig(:candidates, :reference_pricing_candidates).sole
+    reference.merge!(
+      name_line_index: 0,
+      reference_line_index: 2,
+      reference_line_provider_span_start: 20,
+      reference_line_provider_span_end: 30,
+      purchased_quantity_line_indexes: [ 1 ],
+      printed_total_line_index: 3,
+      owned_line_indexes: [ 0, 1, 2, 3 ]
+    )
+    reference.dig(:reference_price, :evidence).merge!(
+      source_field_path: 'pages[0].lines[2]',
+      line_index: 2,
+      provider_span_start: 21,
+      provider_span_end: 24
+    )
+    reference.dig(:reference_quantity, :evidence).merge!(
+      source_field_path: 'pages[0].lines[2]',
+      line_index: 2,
+      provider_span_start: 26,
+      provider_span_end: 29
+    )
+    reference.dig(:purchased_quantity, :evidence).merge!(
+      source_field_path: 'pages[0].lines[1]',
+      line_index: 1,
+      provider_span_start: 14,
+      provider_span_end: 18
+    )
+    reference[:printed_line_total][:evidence].replace(candidate.dig(:printed_line_total, :evidence).deep_dup)
+    [ candidate, snapshot ]
+  end
+
   def snapshot_without_proposals(result)
     result = result.deep_dup
     result[:candidates] = result.fetch(:candidates).deep_dup
@@ -181,6 +383,12 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
         item_calculation_mode_candidates: false
       }
     }
+  end
+
+  def recompute_integrity!(proposal, snapshot:)
+    context = described_class.send(:ocr_context, snapshot)
+    proposal['integrity_checksum'] = described_class.send(:integrity_checksum, proposal, context:)
+    proposal
   end
 
   describe '.build_all' do
@@ -341,6 +549,312 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
           JSON.parse(JSON.generate([ proposal ])),
           ocr_snapshot: JSON.parse(JSON.generate(snapshot))
         )).to eq([ proposal ])
+      end
+    end
+
+    it 'structured destinationへ結び付くlayout sourceをreferenceとexplicitのexact proposalへ合成する' do
+      candidate = hybrid_item_layout_candidate
+      snapshot = hybrid_item_layout_snapshot(candidate)
+
+      proposal = described_class.build_all(candidates: [ candidate ], ocr_snapshot: snapshot).sole
+
+      aggregate_failures do
+        expect(proposal).to include(
+          'source_provider' => 'azure_item_layout',
+          'destination_kind' => 'azure_structured_item',
+          'item_identity' => 'azure_structured_item_i0_s0_e22'
+        )
+        expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+          reference_quantity_price
+          explicit_line_total
+        ])
+        expect(proposal.dig('options', 0, 'source_candidate_id')).to eq(
+          'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_reference_pricing'
+        )
+        expect(proposal.dig('options', 0, 'source')).to eq(
+          'reference_price_amount' => '498',
+          'reference_quantity' => '100',
+          'reference_quantity_unit_code' => 'gram',
+          'reference_quantity_origin' => 'explicit',
+          'purchased_quantity' => '342',
+          'purchased_quantity_unit_code' => 'gram',
+          'reference_price_tax_inclusion' => 'gross'
+        )
+        expect(proposal.dig('options', 0, 'evidence', 'tax_inclusion')).to eq(
+          single_item_gross_summary_evidence.deep_stringify_keys
+        )
+        expect(described_class.from_snapshot(
+          JSON.parse(JSON.generate([ proposal ])),
+          ocr_snapshot: JSON.parse(JSON.generate(snapshot))
+        )).to eq([ proposal ])
+        expect(proposal.to_json).not_to include('raw_text', 'product_name', 'store_name', 'polygon')
+      end
+    end
+
+    it 'destination kindをsource providerとidentityの3つの正規組合せだけに限定する' do
+      structured_result = parsed_ocr_result
+      structured_snapshot = snapshot_without_proposals(structured_result)
+      structured_candidates = structured_result.dig(:candidates, :item_calculation_mode_candidates)
+      invalid_structured = structured_candidates.deep_dup
+      invalid_structured.first[:destination_kind] = 'azure_structured_item'
+      layout_candidate = item_layout_candidate
+      layout_snapshot = item_layout_snapshot(layout_candidate)
+      invalid_layout = layout_candidate.merge(destination_kind: 'azure_structured_item')
+      hybrid_candidate = hybrid_item_layout_candidate
+      hybrid_snapshot = hybrid_item_layout_snapshot(hybrid_candidate)
+      invalid_hybrid = hybrid_candidate.merge(destination_kind: 'azure_layout_item')
+
+      aggregate_failures do
+        expect(described_class.build_all(
+          candidates: structured_candidates,
+          ocr_snapshot: structured_snapshot
+        )).to all(satisfy { |proposal| !proposal.key?('destination_kind') })
+        expect(described_class.build_all(
+          candidates: [ layout_candidate ],
+          ocr_snapshot: layout_snapshot
+        )).to contain_exactly(include('destination_kind' => 'azure_layout_item'))
+        expect(described_class.build_all(
+          candidates: [ hybrid_candidate ],
+          ocr_snapshot: hybrid_snapshot
+        )).to contain_exactly(include('destination_kind' => 'azure_structured_item'))
+        expect(described_class.build_all(
+          candidates: invalid_structured,
+          ocr_snapshot: structured_snapshot
+        )).to be_nil
+        expect(described_class.build_all(
+          candidates: [ invalid_layout ],
+          ocr_snapshot: layout_snapshot
+        )).to be_nil
+        expect(described_class.build_all(
+          candidates: [ invalid_hybrid ],
+          ocr_snapshot: hybrid_snapshot
+        )).to be_nil
+      end
+    end
+
+    it 'Choice Bをstructured destinationとreceipt summary grossの完全一致へ限定する' do
+      candidate = hybrid_item_layout_candidate
+      snapshot = hybrid_item_layout_snapshot(candidate)
+      layout_only = item_layout_candidate
+      layout_only_snapshot = hybrid_item_layout_snapshot(layout_only)
+      unknown_evidence = snapshot.deep_dup
+      unknown_evidence.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :tax_inclusion_evidence,
+        :summary_total
+      )[:raw_text] = '保存禁止'
+      amount_mismatch = snapshot.deep_dup
+      amount_mismatch.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :tax_inclusion_evidence,
+        :summary_total
+      )[:amount] = 1702
+      non_gross = snapshot.deep_dup
+      non_gross.dig(:candidates, :reference_pricing_candidates, 0)[:reference_price_tax_inclusion] = 'net'
+      overlapping = snapshot.deep_dup
+      overlapping.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :tax_inclusion_evidence,
+        :summary_total
+      ).merge!(provider_span_start: 40, provider_span_end: 44)
+      block_line = snapshot.deep_dup
+      block_line.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :tax_inclusion_evidence,
+        :summary_total
+      ).merge!(source_field_path: 'pages[0].lines[4]', line_index: 4)
+      structured_parent_overlap_candidate = hybrid_item_layout_candidate.merge(
+        item_identity: 'azure_structured_item_i0_s0_e55'
+      )
+      structured_parent_overlap = hybrid_item_layout_snapshot(structured_parent_overlap_candidate)
+
+      aggregate_failures do
+        expect(described_class.build_all(candidates: [ layout_only ], ocr_snapshot: layout_only_snapshot))
+          .to contain_exactly(include(
+            'options' => [ include('pricing_source_kind' => 'explicit_line_total') ]
+          ))
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: unknown_evidence)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: amount_mismatch)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: non_gross)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: overlapping)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: block_line)).to be_nil
+        expect(described_class.build_all(
+          candidates: [ structured_parent_overlap_candidate ],
+          ocr_snapshot: structured_parent_overlap
+        )).to be_nil
+      end
+    end
+
+    it 'Choice Bのtax算術・receipt context・identity・line境界を改変時にfail closedにする' do
+      candidate = hybrid_item_layout_candidate
+      snapshot = hybrid_item_layout_snapshot(candidate)
+      tax_mismatch = snapshot.deep_dup
+      tax_mismatch.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :tax_inclusion_evidence,
+        :gross_tax_target
+      )[:tax_amount] = 153
+      receipt_tax_mismatch = snapshot.deep_dup
+      receipt_tax_mismatch.dig(:candidates)[:tax_amount] = 153
+      identity_mismatch = snapshot.deep_dup
+      identity_mismatch.dig(:candidates, :reference_pricing_candidates, 0)[:item_identity] =
+        'azure_structured_item_i0_s0_e44'
+      line_over_bound = snapshot.deep_dup
+      line_over_bound.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :tax_inclusion_evidence,
+        :summary_total
+      ).merge!(source_field_path: 'pages[0].lines[150]', line_index: 150)
+      line_at_bound = snapshot.deep_dup
+      line_at_bound.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :tax_inclusion_evidence,
+        :summary_total
+      ).merge!(source_field_path: 'pages[0].lines[149]', line_index: 149)
+      overprecision_rate = snapshot.deep_dup
+      target = overprecision_rate.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :tax_inclusion_evidence,
+        :gross_tax_target
+      )
+      target.merge!(rate: '0.1234567', net_amount: 1516, tax_amount: 187)
+      overprecision_rate.dig(:candidates)[:tax_amount] = 187
+
+      aggregate_failures do
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: tax_mismatch)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: receipt_tax_mismatch)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: identity_mismatch)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: line_over_bound)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: line_at_bound)).to be_present
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: overprecision_rate)).to be_nil
+      end
+    end
+
+    it 'column producerのreference quantity header pathを保持しpath改変を拒否する' do
+      candidate, snapshot = column_header_hybrid_case
+      mismatched_path = snapshot.deep_dup
+      mismatched_path.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :reference_quantity,
+        :evidence
+      )[:source_field_path] = 'pages[0].lines[2]'
+      outside_owned = snapshot.deep_dup
+      outside_owned.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :reference_quantity,
+        :evidence
+      ).merge!(source_field_path: 'pages[0].lines[5]', line_index: 5)
+
+      aggregate_failures do
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: snapshot)).to be_present
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: mismatched_path)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: outside_owned)).to be_nil
+      end
+    end
+
+    it '購入数量がreference priceより前にあるproducer形状をexact tupleとして保持する' do
+      candidate, snapshot = quantity_before_reference_hybrid_case
+
+      proposal = described_class.build_all(candidates: [ candidate ], ocr_snapshot: snapshot).sole
+
+      aggregate_failures do
+        expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+          reference_quantity_price
+          explicit_line_total
+        ])
+        expect(proposal.dig('options', 0, 'evidence', 'purchased_quantity')).to include(
+          'source_field_path' => 'pages[0].lines[1]'
+        )
+        expect(proposal.dig('options', 0, 'evidence', 'reference_price')).to include(
+          'source_field_path' => 'pages[0].lines[2]'
+        )
+      end
+    end
+
+    it 'layout producerを既知の5 tupleとexact owned linesだけに限定する' do
+      cases = [
+        [ 'azure_item_layout_p0_name_l0_ref_l1_qty_l2_total_l3_item_calculation_mode', [ 0, 1, 2, 3 ], [ 2 ], 1 ],
+        [ 'azure_item_layout_p0_name_l0_ref_l1_qty_l3_total_l4_item_calculation_mode', [ 0, 1, 2, 3, 4 ], [ 3 ], 1 ],
+        [ 'azure_item_layout_p0_name_l0_ref_l1_qty_l3_total_l4_item_calculation_mode', [ 0, 1, 2, 3, 4 ], [ 2, 3 ], 1 ],
+        [ 'azure_item_layout_p0_name_l0_ref_l2_qty_l1_total_l3_item_calculation_mode', [ 0, 1, 2, 3 ], [ 1 ], 2 ],
+        [ 'azure_item_layout_p0_name_l0_ref_l2_qty_l3_total_l4_item_calculation_mode', [ 0, 1, 2, 3, 4 ], [ 3 ], 1 ]
+      ]
+      invalid = {
+        'candidate_id' => 'azure_item_layout_p0_name_l0_ref_l3_qty_l1_total_l4_item_calculation_mode'
+      }
+
+      aggregate_failures do
+        cases.each do |candidate_id, owned_line_indexes, purchased_line_indexes, reference_quantity_line_index|
+          metadata = described_class.send(:layout_candidate_metadata, { 'candidate_id' => candidate_id })
+          reference_candidate = {
+            'owned_line_indexes' => owned_line_indexes,
+            'purchased_quantity_line_indexes' => purchased_line_indexes,
+            'reference_quantity' => {
+              'evidence' => { 'source_field_path' => "pages[0].lines[#{reference_quantity_line_index}]" }
+            }
+          }
+          expect(metadata).to be_present
+          expect(described_class.send(:exact_owned_line_indexes?, owned_line_indexes, metadata:)).to be(true)
+          expect(described_class.send(
+            :exact_layout_producer_contract,
+            reference_candidate,
+            metadata:
+          )).to be_present
+          expect(described_class.send(
+            :exact_owned_line_indexes?,
+            owned_line_indexes.drop(1),
+            metadata:
+          )).to be(false)
+        end
+        expect(described_class.send(:layout_candidate_metadata, invalid)).to be_nil
+      end
+    end
+
+    it 'reference line span欠損・component逸脱・reference quantityの別producer pathを拒否する' do
+      candidate = hybrid_item_layout_candidate
+      snapshot = hybrid_item_layout_snapshot(candidate)
+      missing_line_span = snapshot.deep_dup
+      missing_line_span.dig(:candidates, :reference_pricing_candidates, 0)
+        .delete(:reference_line_provider_span_start)
+      price_outside_line = snapshot.deep_dup
+      price_outside_line.dig(:candidates, :reference_pricing_candidates, 0)
+        .merge!(reference_line_provider_span_start: 15, reference_line_provider_span_end: 23)
+      wrong_reference_quantity_line = snapshot.deep_dup
+      wrong_reference_quantity_line.dig(
+        :candidates,
+        :reference_pricing_candidates,
+        0,
+        :reference_quantity,
+        :evidence
+      ).merge!(source_field_path: 'pages[0].lines[1]', line_index: 1)
+
+      aggregate_failures do
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: missing_line_span)).to be_nil
+        expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: price_outside_line)).to be_nil
+        expect(described_class.build_all(
+          candidates: [ candidate ],
+          ocr_snapshot: wrong_reference_quantity_line
+        )).to be_nil
       end
     end
 
@@ -590,6 +1104,35 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
         expect(described_class.from_snapshot(unknown, ocr_snapshot: snapshot)).to be_nil
         expect(described_class.from_snapshot(mutated, ocr_snapshot: snapshot)).to be_nil
         expect(described_class.from_snapshot(duplicate, ocr_snapshot: snapshot)).to be_nil
+      end
+    end
+
+    it 'destination kind改変をchecksum再計算後もrehydrationで拒否する' do
+      structured_result = parsed_ocr_result
+      structured_snapshot = snapshot_without_proposals(structured_result)
+      structured = described_class.build_all(
+        candidates: structured_result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: structured_snapshot
+      )
+      structured.first['destination_kind'] = 'azure_structured_item'
+      recompute_integrity!(structured.first, snapshot: structured_snapshot)
+
+      layout_candidate = item_layout_candidate
+      layout_snapshot = item_layout_snapshot(layout_candidate)
+      layout = described_class.build_all(candidates: [ layout_candidate ], ocr_snapshot: layout_snapshot)
+      layout.sole['destination_kind'] = 'azure_structured_item'
+      recompute_integrity!(layout.sole, snapshot: layout_snapshot)
+
+      hybrid_candidate = hybrid_item_layout_candidate
+      hybrid_snapshot = hybrid_item_layout_snapshot(hybrid_candidate)
+      hybrid = described_class.build_all(candidates: [ hybrid_candidate ], ocr_snapshot: hybrid_snapshot)
+      hybrid.sole['destination_kind'] = 'azure_layout_item'
+      recompute_integrity!(hybrid.sole, snapshot: hybrid_snapshot)
+
+      aggregate_failures do
+        expect(described_class.from_snapshot(structured, ocr_snapshot: structured_snapshot)).to be_nil
+        expect(described_class.from_snapshot(layout, ocr_snapshot: layout_snapshot)).to be_nil
+        expect(described_class.from_snapshot(hybrid, ocr_snapshot: hybrid_snapshot)).to be_nil
       end
     end
 

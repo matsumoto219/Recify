@@ -76,6 +76,8 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
             page_index: 0,
             name_line_index: 1,
             reference_line_index: 2,
+            reference_line_provider_span_start: 26,
+            reference_line_provider_span_end: 40,
             purchased_quantity_line_indexes: [ 3 ],
             printed_total_line_index: 4,
             owned_line_indexes: [ 1, 2, 3, 4 ],
@@ -118,6 +120,7 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
             item_identity: item_identity,
             item_index: 0,
             source_provider: 'azure_item_layout',
+            destination_kind: 'azure_layout_item',
             provider_model_id: 'prebuilt-receipt',
             provider_api_version: '2024-11-30',
             string_index_type: 'textElements',
@@ -152,6 +155,59 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
         model_id: 'prebuilt-receipt'
       }
     }
+  end
+
+  def single_item_gross_summary_ocr_result
+    result = item_layout_ocr_result.deep_dup
+    result[:lines] << '10%対象 1,549円 内税154円'
+    result[:case_preserved_lines] << '10%対象 1,549円 内税154円'
+    result.dig(:candidates).merge!(total_amount: 1703, tax_amount: 154)
+
+    item_identity = 'azure_structured_item_i0_s16_e38'
+    result.dig(:candidates, :items, 0)[:ocr_item_identity] = item_identity
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+    reference.merge!(
+      item_identity: item_identity,
+      destination_kind: 'azure_structured_item',
+      structured_item_index: 0,
+      reference_price_tax_inclusion: 'gross',
+      validation_state: 'valid',
+      rejection_reasons: [],
+      tax_inclusion_evidence: {
+        kind: 'single_item_receipt_gross_summary',
+        string_index_type: 'textElements',
+        policy_contract_version: 'reference_pricing_single_item_gross_summary_policy_v1',
+        summary_total: {
+          source_provider: 'azure_item_layout',
+          source_field_path: 'pages[0].lines[5]',
+          page_index: 0,
+          line_index: 5,
+          string_index_type: 'textElements',
+          provider_span_start: 70,
+          provider_span_end: 80,
+          amount: 1703
+        },
+        gross_tax_target: {
+          source_provider: 'azure_item_layout',
+          source_field_path: 'pages[0].lines[6]',
+          page_index: 0,
+          line_index: 6,
+          string_index_type: 'textElements',
+          provider_span_start: 82,
+          provider_span_end: 105,
+          rate: '0.1',
+          net_amount: 1549,
+          tax_amount: 154,
+          gross_amount: 1703
+        }
+      }
+    )
+    result.dig(:candidates, :item_calculation_mode_candidates).sole.merge!(
+      item_identity: item_identity,
+      destination_kind: 'azure_structured_item',
+      owned_line_indexes: [ 1, 2, 3, 4 ]
+    )
+    result
   end
 
   def discount_heavy_ocr_result
@@ -751,6 +807,8 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
         'page_index' => 0,
         'name_line_index' => 1,
         'reference_line_index' => 2,
+        'reference_line_provider_span_start' => 26,
+        'reference_line_provider_span_end' => 40,
         'purchased_quantity_line_indexes' => [ 3 ],
         'printed_total_line_index' => 4,
         'owned_line_indexes' => [ 1, 2, 3, 4 ],
@@ -771,6 +829,140 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
       expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
       expect(snapshot.dig('adoption_proposals', 'reference_pricing')).to be_nil
       expect(snapshot.to_json).not_to include('polygon', 'word_content', 'provider_raw_response')
+    end
+  end
+
+  it 'single-item gross summaryをitem block外のbounded evidenceとしてexactに保存する' do
+    result = single_item_gross_summary_ocr_result
+    snapshot = described_class.ocr_result_snapshot(result)
+    candidate = snapshot.dig('candidates', 'reference_pricing_candidates').sole
+    proposal = snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+    tax_evidence = candidate.fetch('tax_inclusion_evidence')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(snapshot)))
+
+    aggregate_failures do
+      expect(candidate).to include(
+        'item_identity' => 'azure_structured_item_i0_s16_e38',
+        'destination_kind' => 'azure_structured_item',
+        'structured_item_index' => 0,
+        'reference_price_tax_inclusion' => 'gross'
+      )
+      expect(tax_evidence).to eq(
+        'kind' => 'single_item_receipt_gross_summary',
+        'string_index_type' => 'textElements',
+        'policy_contract_version' => 'reference_pricing_single_item_gross_summary_policy_v1',
+        'summary_total' => {
+          'source_provider' => 'azure_item_layout',
+          'source_field_path' => 'pages[0].lines[5]',
+          'page_index' => 0,
+          'line_index' => 5,
+          'string_index_type' => 'textElements',
+          'provider_span_start' => 70,
+          'provider_span_end' => 80,
+          'amount' => 1703
+        },
+        'gross_tax_target' => {
+          'source_provider' => 'azure_item_layout',
+          'source_field_path' => 'pages[0].lines[6]',
+          'page_index' => 0,
+          'line_index' => 6,
+          'string_index_type' => 'textElements',
+          'provider_span_start' => 82,
+          'provider_span_end' => 105,
+          'rate' => '0.1',
+          'net_amount' => 1549,
+          'tax_amount' => 154,
+          'gross_amount' => 1703
+        }
+      )
+      expect(proposal).to include(
+        'source_provider' => 'azure_item_layout',
+        'destination_kind' => 'azure_structured_item',
+        'item_identity' => 'azure_structured_item_i0_s16_e38'
+      )
+      expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+        reference_quantity_price
+        explicit_line_total
+      ])
+      expect(proposal.dig('options', 0, 'evidence', 'tax_inclusion')).to eq(tax_evidence)
+      expect(copied.dig('candidates', 'reference_pricing_candidates').sole).to eq(candidate)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(proposal)
+      expect([ tax_evidence, proposal ].to_json).not_to include(
+        'raw_text',
+        'product_name',
+        'store_name',
+        'polygon'
+      )
+    end
+  end
+
+  it 'single-item gross summaryのunknown・block overlap・amount不一致をproposalへ部分保存しない' do
+    unknown = single_item_gross_summary_ocr_result
+    unknown.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :summary_total
+    )[:raw_text] = '保存禁止'
+    overlapping = single_item_gross_summary_ocr_result
+    overlapping.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :summary_total
+    ).merge!(provider_span_start: 50, provider_span_end: 60)
+    mismatched = single_item_gross_summary_ocr_result
+    mismatched.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :gross_tax_target
+    )[:gross_amount] = 1702
+    line_over_bound = single_item_gross_summary_ocr_result
+    line_over_bound.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :summary_total
+    ).merge!(source_field_path: 'pages[0].lines[150]', line_index: 150)
+    overprecision_rate = single_item_gross_summary_ocr_result
+    target = overprecision_rate.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :gross_tax_target
+    )
+    target.merge!(rate: '0.1234567', net_amount: 1516, tax_amount: 187)
+    overprecision_rate.dig(:candidates)[:tax_amount] = 187
+    structured_parent_overlap = single_item_gross_summary_ocr_result
+    expanded_identity = 'azure_structured_item_i0_s16_e80'
+    structured_parent_overlap.dig(:candidates, :items, 0)[:ocr_item_identity] = expanded_identity
+    structured_parent_overlap.dig(:candidates, :reference_pricing_candidates, 0)[:item_identity] = expanded_identity
+    structured_parent_overlap.dig(:candidates, :item_calculation_mode_candidates, 0)[:item_identity] = expanded_identity
+    missing_line_span = single_item_gross_summary_ocr_result
+    missing_line_span.dig(:candidates, :reference_pricing_candidates, 0)
+      .delete(:reference_line_provider_span_start)
+
+    aggregate_failures do
+      [
+        unknown,
+        overlapping,
+        mismatched,
+        line_over_bound,
+        overprecision_rate,
+        structured_parent_overlap,
+        missing_line_span
+      ].each do |result|
+        snapshot = described_class.ocr_result_snapshot(result)
+        expect(snapshot.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+        expect(snapshot.dig('candidates', 'reference_pricing_candidates').to_json)
+          .not_to include('保存禁止', 'raw_text')
+      end
     end
   end
 
