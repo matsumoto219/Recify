@@ -568,7 +568,8 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     candidate = matches.sole
     return unless candidate[:validation_state] == "valid"
     return unless Array(candidate[:rejection_reasons]).empty?
-    return unless candidate[:reference_price_tax_inclusion] == "gross"
+    return unless candidate[:reference_price_tax_inclusion] ==
+      Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy::TAX_INCLUSION
     return unless candidate.dig(:tax_inclusion_evidence, :kind) ==
       "single_item_receipt_inner_tax_summary"
     return unless candidate.dig(:reference_quantity, :origin) == "implicit_per_unit"

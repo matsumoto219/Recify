@@ -3,6 +3,7 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
   EVIDENCE_KIND = "single_item_receipt_inner_tax_summary"
   CANDIDATE_ID = "azure_items_0_reference_pricing"
   SOURCE_PROVIDER = "azure_structured"
+  TAX_INCLUSION = "gross"
   ELIGIBLE_REASON = "eligible"
   REASONS = %w[
     eligible
@@ -96,7 +97,7 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       result(
         ELIGIBLE_REASON,
         eligible: true,
-        reference_price_tax_inclusion: "gross",
+        reference_price_tax_inclusion: TAX_INCLUSION,
         evidence_kind: EVIDENCE_KIND,
         candidate_id: CANDIDATE_ID
       )
