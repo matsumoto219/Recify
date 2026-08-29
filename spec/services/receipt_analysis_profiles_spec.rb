@@ -144,6 +144,24 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile OCR per-unit discount notes' do
+    it 'standaloneの@付き単位当たり販促注記だけを許可する' do
+      pattern = described_class.fetch('JPN').ocr_reference_pricing_item_layout_per_unit_discount_note_pattern
+
+      aggregate_failures do
+        expect('会員値引 3円/L引').to match(pattern)
+        expect('@3円/L引').to match(pattern)
+        expect('＠３円／Ｌ引き').to match(pattern)
+        expect('@3円/100L引').to match(pattern)
+        expect('3円/L引').not_to match(pattern)
+        expect('@3円/L').not_to match(pattern)
+        expect('@-3円/L引').not_to match(pattern)
+        expect('@3%/L引').not_to match(pattern)
+        expect('クーポン @3円/L引').not_to match(pattern)
+      end
+    end
+  end
+
   describe 'JPN profile analysis cash tendered payment labels' do
     it 'Amount Engine用の現金預かりラベルをprofile側で定義する' do
       pattern = described_class.fetch('JPN').analysis_cash_tendered_payment_pattern

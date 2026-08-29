@@ -234,6 +234,34 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
     )
   end
 
+  it 'keeps a standalone at-mark per-unit discount note bound to the applied price' do
+    block = extract([
+      '架空給油所A',
+      '例示給油商品A',
+      '特典適用後単価 160円/L',
+      '@3円/L引',
+      '給油量 20.74L',
+      '金額 3,318円',
+      '合計 3,318円'
+    ]).sole
+
+    aggregate_failures do
+      expect(block).to include(
+        per_unit_discount_note_present: true,
+        owned_line_indexes: [ 1, 2, 3, 4, 5 ]
+      )
+      expect(block.dig(:layout_item, :discount_amount)).to be_nil
+    end
+    expect_reference_source(
+      block,
+      price: '160',
+      basis: '1',
+      basis_unit: 'liter',
+      purchased: '20.74',
+      purchased_unit: 'liter'
+    )
+  end
+
   it 'rejects a promotional note whose quantity basis differs from the applied unit price' do
     blocks = extract([
       '架空給油所A',

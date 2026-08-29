@@ -322,7 +322,7 @@ module ReceiptAnalysisProfiles
     OCR_REFERENCE_PRICING_ITEM_LAYOUT_PURCHASED_QUANTITY_LABEL_LINE_PATTERN = /\A[ \t]*(?:計量|給油量)[ \t:：]*\z/.freeze
     OCR_REFERENCE_PRICING_ITEM_LAYOUT_PRINTED_TOTAL_LINE_PATTERN = /\A[ \t]*(?:(?:金額|商品金額|明細金額|明細計)[ \t:：]*(?:[¥￥][ \t]*)?(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+))(?:[ \t]*円)?|(?:[¥￥][ \t]*)?(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+))[ \t]*円)[ \t]*\z/.freeze
     OCR_REFERENCE_PRICING_ITEM_LAYOUT_COLUMN_HEADER_PATTERN = /\A[ \t]*(?<price_heading>単価\([ \t]*円[ \t]*[\/／][ \t]*(?<reference_unit>[\p{L}]{1,24})[ \t]*\))[ \t]+(?<quantity_heading>数量\([ \t]*(?<purchased_unit>[\p{L}]{1,24})[ \t]*\))[ \t]+(?<total_heading>金額\([ \t]*円[ \t]*\))[ \t]*\z/u.freeze
-    OCR_REFERENCE_PRICING_ITEM_LAYOUT_PER_UNIT_DISCOUNT_NOTE_PATTERN = /\A[ \t]*(?:会員|特典|アプリ)?値引(?:き)?[ \t:：]*(?:[¥￥][ \t]*)?[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*円[ \t]*[\/／][ \t]*(?:(?<basis_quantity>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*)?(?<unit>[\p{L}]+?)[ \t]*引(?:き)?[ \t]*\z/iu.freeze
+    OCR_REFERENCE_PRICING_ITEM_LAYOUT_PER_UNIT_DISCOUNT_NOTE_PATTERN = /\A[ \t]*(?:(?:会員|特典|アプリ)?値引(?:き)?[ \t:：]*(?:[@＠][ \t]*)?|[@＠][ \t]*)(?:[¥￥][ \t]*)?[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*円[ \t]*[\/／][ \t]*(?:(?<basis_quantity>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*)?(?<unit>[\p{L}]+?)[ \t]*引(?:き)?[ \t]*\z/iu.freeze
     OCR_TOTAL_AMOUNT_LINE_PATTERN = /合計|小計|total|税込|現計/i.freeze
     OCR_STRICT_RECEIPT_SUMMARY_TOTAL_LINE_PATTERN = /\A(?:総合計|合計|現計|grand\s+total|total)[ \t]*[:：]?[ \t]*(?:[¥￥][ \t]*)?[0-9０-９][0-9０-９,，]*(?:[ \t]*円)?[ \t]*\z/i.freeze
     OCR_STRICT_RECEIPT_SUMMARY_TOTAL_LABEL_LINE_PATTERN = /\A(?:総合計|合計|現計|grand\s+total|total)[ \t]*[:：]?[ \t]*\z/i.freeze

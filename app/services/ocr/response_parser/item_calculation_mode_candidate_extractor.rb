@@ -19,6 +19,9 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   CONFLICTS = %w[count_semantics discount package reference_expression].freeze
   JPY_CURRENCY_SYMBOLS = %w[¥ 円].freeze
   CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
+  LINE_BREAK_PATTERN = /\r\n|[\n\r\u0085\u2028\u2029]/.freeze
+  LINE_BREAK_CAPTURE_PATTERN = /(\r\n|[\n\r\u0085\u2028\u2029])/.freeze
+  PROMOTIONAL_DISCOUNT_LABEL_VALUE_PATTERN = /[0-9¥￥円%％@＠\/／+\-−▲△]/.freeze
   MONEY_CONTENT_PATTERN = /\A\s*(?:(?<prefix>¥|JPY)\s*)?(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)(?:\s*(?<suffix>円))?\s*\z/i.freeze
   UNIT_PRICE_CONTENT_PATTERN = /\A\s*(?:[x×]\s*)?@\s*(?:(?<prefix>¥|JPY)\s*)?(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)(?:\s*(?<suffix>円))?\)?\s*\z/i.freeze
   QUANTITY_CONTENT_PATTERN = /\A\s*(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)\s*\z/.freeze
@@ -483,8 +486,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     content = content.unicode_normalize(:nfkc)
     conflicts = []
     conflicts << "count_semantics" if content.match?(profile.ocr_item_calculation_count_uncertain_pattern)
-    conflicts << "discount" if discount_item_indexes.include?(item_index) ||
-      content.match?(profile.ocr_item_discount_keyword_pattern)
+    conflicts << "discount" if discount_conflict?(item, item_index, content)
     package_conflict = content.match?(profile.ocr_item_calculation_package_quantity_pattern) ||
       content.match?(profile.ocr_item_calculation_package_capacity_pattern)
     conflicts << "package" if package_conflict
@@ -494,6 +496,145 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
 
   def unsafe_count_context?(item, item_index)
     conflicts_for(item, item_index).any?
+  end
+
+  def discount_conflict?(item, item_index, content)
+    return true if discount_item_indexes.include?(item_index)
+    return false unless content.match?(profile.ocr_item_discount_keyword_pattern)
+
+    !exact_informational_per_unit_discount_block?(item, item_index, content)
+  end
+
+  def exact_informational_per_unit_discount_block?(item, item_index, content)
+    return false unless items.one?
+
+    reference_candidate = exact_promotional_reference_candidate(item, item_index)
+    return false if reference_candidate.nil?
+
+    parent_span = single_span(item)
+    lines = provider_content_lines(content, parent_span)
+    return false if lines.nil? || lines.size > MAX_LINES || lines.any? { |line| line[:content].blank? }
+    return false if lines.any? do |line|
+      line[:content].match?(profile.ocr_reference_pricing_line_group_discount_conflict_pattern)
+    end
+
+    price_field = item.dig("valueObject", "Price")
+    price_content = safe_content(price_field&.fetch("content", nil), maximum_bytes: MAX_FIELD_CONTENT_BYTES)
+    price_span = single_span(price_field)
+    return false unless exact_provider_content?(price_content, price_span, maximum_bytes: MAX_FIELD_CONTENT_BYTES)
+    return false unless span_within?(price_span, parent_span)
+
+    price_content = price_content.unicode_normalize(:nfkc).strip
+    return false if price_content.blank? || price_content.match?(LINE_BREAK_PATTERN)
+    discount_line_indexes = lines.each_index.select do |index|
+      lines.fetch(index).fetch(:content).match?(profile.ocr_item_discount_keyword_pattern)
+    end
+    return false unless discount_line_indexes.one?
+
+    label_index = discount_line_indexes.sole
+    return false unless promotional_discount_label?(lines.fetch(label_index).fetch(:content))
+
+    price_line_indexes = lines.each_index.select do |index|
+      span_within?(price_span, lines.fetch(index).fetch(:provider_span))
+    end
+    return false unless price_line_indexes.one?
+
+    price_line_index = price_line_indexes.sole
+    return false unless lines.fetch(price_line_index).fetch(:content) == price_content
+    notes = lines.each_index.filter_map do |index|
+      match = profile.ocr_reference_pricing_item_layout_per_unit_discount_note_pattern.match(
+        lines.fetch(index).fetch(:content)
+      )
+      [ index, match ] if match
+    end
+    return false unless notes.one?
+
+    note_index, note_match = notes.sole
+    return false unless price_line_index == label_index + 1
+    return false unless note_index == price_line_index + 1
+
+    promotional_note_matches_reference?(note_match, reference_candidate)
+  rescue ArgumentError, EncodingError, IndexError, TypeError
+    false
+  end
+
+  def exact_promotional_reference_candidate(item, item_index)
+    matches = reference_pricing_candidates.select do |candidate|
+      candidate[:candidate_id] == "azure_items_#{item_index}_reference_pricing" &&
+        candidate[:item_index] == item_index
+    end
+    return unless matches.one?
+
+    candidate = matches.sole
+    return unless candidate[:validation_state] == "valid"
+    return unless Array(candidate[:rejection_reasons]).empty?
+    return unless candidate[:reference_price_tax_inclusion] == "gross"
+    return unless candidate.dig(:tax_inclusion_evidence, :kind) ==
+      "single_item_receipt_inner_tax_summary"
+    return unless candidate.dig(:reference_quantity, :origin) == "implicit_per_unit"
+    return unless reference_component_path?(candidate, :reference_price, item_index, "Price")
+    return unless reference_component_path?(candidate, :reference_quantity, item_index, "QuantityUnit")
+    return unless reference_component_path?(candidate, :purchased_quantity, item_index, "Quantity")
+    return unless reference_component_path?(candidate, :printed_line_total, item_index, "TotalPrice")
+    return unless candidate.dig(:corroboration, :projected_amount).to_s ==
+      candidate.dig(:printed_line_total, :amount).to_s
+    return unless candidate.dig(:corroboration, :printed_line_total).to_s ==
+      candidate.dig(:printed_line_total, :amount).to_s
+    return unless promotional_reference_candidate_matches_item?(candidate, item)
+
+    candidate
+  end
+
+  def promotional_reference_candidate_matches_item?(candidate, item)
+    fields = item["valueObject"]
+    return false unless fields.is_a?(Hash)
+
+    price = provider_decimal(fields.dig("Price", "valueCurrency", "amount"))
+    quantity = provider_decimal(fields.dig("Quantity", "valueNumber"))
+    total = provider_decimal(fields.dig("TotalPrice", "valueCurrency", "amount"))
+    unit = profile.resolve_quantity_unit(fields.dig("QuantityUnit", "valueString"))
+    price == lexeme_decimal(candidate.dig(:reference_price, :amount)) &&
+      quantity == lexeme_decimal(candidate.dig(:purchased_quantity, :amount)) &&
+      total == lexeme_decimal(candidate.dig(:printed_line_total, :amount)) &&
+      unit&.code == candidate.dig(:purchased_quantity, :unit_code)
+  end
+
+  def promotional_discount_label?(line)
+    line.match?(profile.ocr_item_discount_keyword_pattern) &&
+      !line.match?(PROMOTIONAL_DISCOUNT_LABEL_VALUE_PATTERN)
+  end
+
+  def promotional_note_matches_reference?(match, candidate)
+    basis_quantity = lexeme_decimal(match[:basis_quantity].presence || "1")
+    reference_quantity = lexeme_decimal(candidate.dig(:reference_quantity, :amount))
+    unit = profile.resolve_quantity_unit(match[:unit])
+
+    basis_quantity && reference_quantity && basis_quantity == reference_quantity &&
+      unit&.code == candidate.dig(:reference_quantity, :unit_code)
+  end
+
+  def reference_component_path?(candidate, component, item_index, field_name)
+    candidate.dig(component, :evidence, :source_field_path) ==
+      "documents[0].fields.Items[#{item_index}].#{field_name}"
+  end
+
+  def provider_content_lines(value, parent_span)
+    return unless parent_span
+
+    parts = value.split(LINE_BREAK_CAPTURE_PATTERN, -1)
+    provider_offset = parent_span.begin
+    lines = parts.each_slice(2).map do |line, separator|
+      line_length = mapper.length(line)
+      line_span = provider_offset...(provider_offset + line_length)
+      provider_offset = line_span.end
+      provider_offset += mapper.length(separator) if separator
+      { content: line.strip, provider_span: line_span }
+    end
+    return unless provider_offset == parent_span.end
+
+    lines
+  rescue ArgumentError, EncodingError, TypeError
+    nil
   end
 
   def component_evidence(field_path, span)

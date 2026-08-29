@@ -106,6 +106,16 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     item.fetch('spans').sole['length'] = item.fetch('content').length
   end
 
+  def move_field_span_to_last_occurrence!(item, field_name, string_index_type: 'utf16CodeUnit')
+    content = item.fetch('content')
+    field = item.dig('valueObject', field_name)
+    field_content = field.fetch('content')
+    relative_offset = content.rindex(field_content)
+    prefix = content[0...relative_offset]
+    field.fetch('spans').sole['offset'] = item.fetch('spans').sole.fetch('offset') +
+      provider_length(prefix, string_index_type)
+  end
+
   def currency_field(amount, content, offset, currency: 'JPY', symbol: nil)
     {
       'valueCurrency' => {
@@ -120,6 +130,57 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
 
   def modes(candidate)
     candidate.fetch(:options).map { |option| option.fetch(:pricing_source_kind) }
+  end
+
+  def valid_native_reference_candidate(
+    item_index: 0,
+    reference_quantity: '1',
+    reference_unit: 'liter',
+    tax_inclusion: 'gross',
+    projected_amount: 3318
+  )
+    {
+      candidate_id: "azure_items_#{item_index}_reference_pricing",
+      item_index: item_index,
+      validation_state: 'valid',
+      rejection_reasons: [],
+      reference_price: {
+        amount: '160',
+        evidence: {
+          source_field_path: "documents[0].fields.Items[#{item_index}].Price"
+        }
+      },
+      reference_quantity: {
+        amount: reference_quantity,
+        unit_code: reference_unit,
+        origin: 'implicit_per_unit',
+        evidence: {
+          source_field_path: "documents[0].fields.Items[#{item_index}].QuantityUnit"
+        }
+      },
+      purchased_quantity: {
+        amount: '20.74',
+        unit_code: reference_unit,
+        evidence: {
+          source_field_path: "documents[0].fields.Items[#{item_index}].Quantity"
+        }
+      },
+      reference_price_tax_inclusion: tax_inclusion,
+      tax_inclusion_evidence: {
+        kind: 'single_item_receipt_inner_tax_summary'
+      },
+      printed_line_total: {
+        amount: projected_amount.to_s,
+        evidence: {
+          source_field_path: "documents[0].fields.Items[#{item_index}].TotalPrice"
+        }
+      },
+      corroboration: {
+        projected_amount: projected_amount,
+        printed_line_total: projected_amount.to_s,
+        rounding_matches: %w[floor half_up]
+      }
+    }
   end
 
   describe '.call' do
@@ -348,6 +409,131 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
           expect(extract.sole[:options]).to be_empty
           expect(extract.sole[:conflicts]).to eq([ 'reference_expression' ])
         end
+      end
+
+      it 'does not treat an exact per-unit promotion block as an applied item discount' do
+        items.replace([
+          exact_item(price: 160, quantity: 20.74, unit: 'L', total: 3318, price_content: '@160')
+        ])
+        append_item_content!(items.first, "値引情報L\n@160\n@3円/L引")
+        move_field_span_to_last_occurrence!(items.first, 'Price')
+        reference_pricing_candidates << valid_native_reference_candidate
+
+        expect(extract.sole[:conflicts]).to eq([ 'reference_expression' ])
+      end
+
+      it 'keeps real, malformed, and mismatched discounts as conflicts' do
+        cases = [
+          [ "値引情報L\n@160\n@3円/100L引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/ml引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L引", [ 0 ], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L引", [], valid_native_reference_candidate(tax_inclusion: 'net') ],
+          [ "値引情報L\n@160\n@3円/L引", [], valid_native_reference_candidate(projected_amount: 3317) ],
+          [ "値引情報L\n@160\n@3円/L引", [], valid_native_reference_candidate.merge(
+            validation_state: 'ambiguous',
+            rejection_reasons: [ 'ambiguous_tax_inclusion' ]
+          ) ],
+          [ "値引情報L\n\n@160\n@3円/L引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L引\n@4円/L引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L引\n割引対象 100円", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@-3円/L引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n3%引", [], valid_native_reference_candidate ]
+        ]
+
+        results = cases.map do |suffix, discount_item_indexes, reference_candidate|
+          item = exact_item(
+            price: 160,
+            quantity: 20.74,
+            unit: 'L',
+            total: 3318,
+            price_content: '@160'
+          )
+          append_item_content!(item, suffix)
+          move_field_span_to_last_occurrence!(item, 'Price')
+          described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: [ reference_candidate ],
+            discount_item_indexes: discount_item_indexes
+          )
+        end
+
+        expect(results.map { |result| result.sole[:conflicts] }).to all(
+          include('discount')
+        )
+      end
+
+      it 'does not bind a duplicate price string outside the provider Price span' do
+        items.replace([
+          exact_item(price: 160, quantity: 20.74, unit: 'L', total: 3318, price_content: '@160')
+        ])
+        append_item_content!(items.first, "値引情報L\n@160\n@3円/L引")
+        reference_pricing_candidates << valid_native_reference_candidate
+
+        expect(extract.sole[:conflicts]).to include('discount')
+      end
+
+      it 'does not exempt a per-unit promotion block in a multi-item receipt' do
+        first_item = exact_item(
+          price: 160,
+          quantity: 20.74,
+          unit: 'L',
+          total: 3318,
+          price_content: '@160'
+        )
+        append_item_content!(first_item, "値引情報L\n@160\n@3円/L引")
+        move_field_span_to_last_occurrence!(first_item, 'Price')
+        items.replace([ first_item, exact_item(offset: 500) ])
+        reference_pricing_candidates << valid_native_reference_candidate
+
+        expect(extract.first[:conflicts]).to include('discount')
+      end
+
+      it 'uses the injected per-unit promotion pattern' do
+        item = exact_item(
+          price: 160,
+          quantity: 20.74,
+          unit: 'L',
+          total: 3318,
+          price_content: '@160'
+        )
+        append_item_content!(item, "値引情報L\n@160\n@3円/L引")
+        move_field_span_to_last_occurrence!(item, 'Price')
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_reference_pricing_item_layout_per_unit_discount_note_pattern)
+          .and_return(/\A(?!)/)
+
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: profile,
+          reference_pricing_candidates: [ valid_native_reference_candidate ]
+        )
+
+        expect(result.sole[:conflicts]).to include('discount')
+      end
+
+      it 'uses the injected discount-conflict pattern inside the promotion block' do
+        item = exact_item(
+          price: 160,
+          quantity: 20.74,
+          unit: 'L',
+          total: 3318,
+          price_content: '@160'
+        )
+        append_item_content!(item, "値引情報L\n@160\n@3円/L引")
+        move_field_span_to_last_occurrence!(item, 'Price')
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_reference_pricing_line_group_discount_conflict_pattern)
+          .and_return(/@3/)
+
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: profile,
+          reference_pricing_candidates: [ valid_native_reference_candidate ]
+        )
+
+        expect(result.sole[:conflicts]).to include('discount')
       end
 
       it 'does not create an empty carrier for an ambiguous structured reference' do
