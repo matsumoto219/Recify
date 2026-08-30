@@ -237,7 +237,7 @@ module GeneratedReceipts
       return unless quantity&.between?(1, MeasurementContract::MAX_QUANTITY.to_i)
 
       projected = price * quantity
-      discount = bounded_discount(source_item["discount_amount"], projected)
+      discount = bounded_discount(source_item, projected)
       discount ? projected - discount : nil
     end
 
@@ -333,7 +333,7 @@ module GeneratedReceipts
       end
 
       projected = price * quantity
-      discount = bounded_discount(source_item["discount_amount"], projected)
+      discount = bounded_discount(source_item, projected)
       if discount.nil?
         add_error("source.items[#{source_index}].discount_amount", "must be bounded by the projected count amount")
         return
@@ -497,11 +497,16 @@ module GeneratedReceipts
       nil
     end
 
-    def bounded_discount(value, projected)
-      return 0 if value.nil?
-      return unless value.is_a?(Integer) && value.between?(0, projected)
+    def bounded_discount(source_item, projected)
+      discount = MeasurementContract.project_discount(
+        source_item: source_item,
+        projected_amount: projected,
+        rounding: expected.dig("rounding", "discount")
+      )
+      declared_amount = source_item["discount_amount"]
+      return if !declared_amount.nil? && declared_amount != discount
 
-      value
+      discount
     end
 
     def add_error(path, message)

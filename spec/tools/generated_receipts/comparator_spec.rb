@@ -40,6 +40,25 @@ RSpec.describe GeneratedReceipts::Comparator do
     end
   end
 
+  it "compares an explicitly declared discount rate independently of the discount amount" do
+    case_data = load_case("g001_normal_included_10_cash")
+    case_data.fetch("expected").fetch("items").first["discount_rate"] = "0.27"
+    actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
+    actual.fetch("items").first["discount_rate"] = "0.2700"
+
+    aggregate_failures do
+      expect(described_class.call(case_data, actual).status).to eq("PASS")
+
+      [ nil, "0.01", "27", "invalid" ].each do |rate|
+        actual.fetch("items").first["discount_rate"] = rate
+
+        expect(described_class.call(case_data, actual).diffs).to include(
+          hash_including(path: "item_amounts", severity: "FAIL")
+        )
+      end
+    end
+  end
+
   it "keeps a safer review_needed result as a warning when completed was expected" do
     case_data = load_case("g001_normal_included_10_cash")
     actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
@@ -290,6 +309,7 @@ RSpec.describe GeneratedReceipts::Comparator do
       original_line_total: 4_100,
       tax_rate: BigDecimal("0.08"),
       discount_amount: nil,
+      discount_rate: BigDecimal("0.27"),
       pricing_source_kind: "reference_quantity_price",
       reference_price_amount: BigDecimal("3280.500000"),
       reference_quantity: BigDecimal("1.000"),
@@ -327,6 +347,7 @@ RSpec.describe GeneratedReceipts::Comparator do
         "reference_quantity_unit_code" => "kilogram",
         "reference_price_tax_inclusion" => "gross",
         "original_line_total" => 4_100,
+        "discount_rate" => "0.27",
         "needs_review" => true,
         "review_reasons" => [ "item_pricing_mode_uncertain", "item_quantity_uncertain" ]
       )

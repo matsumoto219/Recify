@@ -92,6 +92,7 @@
               "line_total": { "type": ["integer", "null"] },
               "tax_rate": { "type": ["number", "null"] },
               "discount_amount": { "type": ["integer", "null"] },
+              "discount_rate": { "type": ["string", "null"], "maxLength": 64, "pattern": "^(?:0(?:\\.\\d{1,6})?|1(?:\\.0{1,6})?)$" },
               "tax_inclusion": { "enum": ["gross", "net"] },
               "needs_review": { "type": "boolean" },
               "review_reasons": {

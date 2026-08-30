@@ -31,6 +31,7 @@ module GeneratedReceipts
       reference_quantity_unit_code
       reference_price_tax_inclusion
       original_line_total
+      discount_rate
     ].freeze
     OPTIONAL_ITEM_REVIEW_KEYS = %w[needs_review review_reasons].freeze
     ITEM_REVIEW_REASON_LIMIT = 20
@@ -64,7 +65,7 @@ module GeneratedReceipts
     ].freeze
     ACTUAL_ITEM_KEYS = %w[
       name unit_price quantity quantity_unit_code line_total original_line_total
-      tax_rate discount_amount pricing_source_kind reference_price_amount
+      tax_rate discount_amount discount_rate pricing_source_kind reference_price_amount
       reference_quantity reference_quantity_unit_code reference_price_tax_inclusion
       tax_inclusion needs_review review_reasons
     ].freeze
@@ -128,6 +129,11 @@ module GeneratedReceipts
               "original_line_total" => item.original_line_total&.to_i,
               "tax_rate" => item.tax_rate&.to_s,
               "discount_amount" => item.discount_amount&.to_i,
+              "discount_rate" => exact_decimal_string(
+                item.discount_rate,
+                maximum: BigDecimal("1"),
+                max_scale: 6
+              ),
               "pricing_source_kind" => item.pricing_source_kind,
               "reference_price_amount" => exact_decimal_string(
                 item.reference_price_amount,
@@ -1007,7 +1013,7 @@ module GeneratedReceipts
 
     def normalize_optional_item_amount(key, value)
       case key
-      when "reference_price_amount", "reference_quantity"
+      when "reference_price_amount", "reference_quantity", "discount_rate"
         normalize_exact_decimal(value)
       when "original_line_total"
         normalize_snapshot_integer(value)

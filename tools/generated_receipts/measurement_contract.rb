@@ -60,9 +60,9 @@ module GeneratedReceipts
         projected_amount = round_value(exact_amount, "round")
         return nil unless projected_amount.between?(0, MAX_LINE_TOTAL)
 
-        discount = projected_discount(
-          source,
-          projected_amount,
+        discount = project_discount(
+          source_item: source,
+          projected_amount: projected_amount,
           rounding: discount_rounding
         )
         return nil if discount.nil? || discount.negative? || discount > projected_amount
@@ -84,6 +84,17 @@ module GeneratedReceipts
           projected_gross_line_total: gross_amount
         )
       rescue ArgumentError, TypeError, ZeroDivisionError, FloatDomainError, RangeError
+        nil
+      end
+
+      def project_discount(source_item:, projected_amount:, rounding:)
+        return nil unless source_item.is_a?(Hash)
+        return nil unless projected_amount.is_a?(Integer) && projected_amount.between?(0, MAX_LINE_TOTAL)
+        return nil unless %w[floor round ceil].include?(rounding)
+
+        discount = projected_discount(source_item, projected_amount, rounding: rounding)
+        discount if discount && discount.between?(0, projected_amount)
+      rescue ArgumentError, TypeError, FloatDomainError, RangeError
         nil
       end
 

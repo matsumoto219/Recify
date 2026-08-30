@@ -70,6 +70,7 @@ module GeneratedReceipts
       line_total
       tax_rate
       discount_amount
+      discount_rate
       tax_inclusion
       quantity_unit_code
       pricing_source_kind
@@ -244,6 +245,7 @@ module GeneratedReceipts
     CASE_ID_PATTERN = /\Ag\d{3}_[a-z0-9_]+\z/.freeze
     ARTIFACT_EXTENSION_PATTERN = /\A[a-z0-9]+\z/.freeze
     EXACT_DECIMAL_PATTERN = /\A(?:0|[1-9]\d*)(?:\.\d+)?\z/.freeze
+    EXACT_RATE_PATTERN = /\A(?:0(?:\.\d{1,6})?|1(?:\.0{1,6})?)\z/.freeze
     EXACT_INTEGER_PATTERN = /\A(?:0|[1-9]\d*)\z/.freeze
     CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F-\u009F]/.freeze
     FIXTURE_TEXT_CONTROL_PATTERN = /[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F-\u009F]/.freeze
@@ -426,6 +428,7 @@ module GeneratedReceipts
         validate_optional_integer("expected.items[#{index}].line_total", item["line_total"])
         validate_optional_number("expected.items[#{index}].tax_rate", item["tax_rate"])
         validate_optional_integer("expected.items[#{index}].discount_amount", item["discount_amount"])
+        validate_bounded_rate_token("expected.items[#{index}].discount_rate", item["discount_rate"])
         validate_bounded_token("expected.items[#{index}].quantity_unit_code", item["quantity_unit_code"])
         validate_optional_inclusion(
           "expected.items[#{index}].quantity_unit_code",
@@ -1684,6 +1687,15 @@ module GeneratedReceipts
       return if token && token.match?(EXACT_DECIMAL_PATTERN)
 
       add_error(path, "must be an exact decimal within the approved bounds")
+    end
+
+    def validate_bounded_rate_token(path, value)
+      return if value.nil?
+
+      token = bounded_exact_token(value, allow_numeric: false)
+      return if token && token.match?(EXACT_RATE_PATTERN)
+
+      add_error(path, "must be an exact rate between zero and one with at most six decimal places")
     end
 
     def validate_bounded_integer_token(path, value, maximum: nil)

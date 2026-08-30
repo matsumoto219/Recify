@@ -469,6 +469,24 @@ RSpec.describe GeneratedReceipts::Validator do
     end
   end
 
+  it "allows only bounded exact optional discount-rate expectations" do
+    data = deep_dup(load_case("g001_normal_included_10_cash"))
+    item = data.fetch("expected").fetch("items").first
+
+    aggregate_failures do
+      [ nil, "0", "0.01", "0.27", "0.99", "1" ].each do |rate|
+        item["discount_rate"] = rate
+        expect(described_class.call(data).errors).to eq([])
+      end
+      [ "27", "1.01", "0.2700001", "-0.01", "NaN", 0.27 ].each do |rate|
+        item["discount_rate"] = rate
+        expect(described_class.call(data).errors).to include(
+          a_string_starting_with("expected.items[0].discount_rate:")
+        )
+      end
+    end
+  end
+
   it "validates the additive Measurement cases separately from the existing 112 cases" do
     results = measurement_case_paths.map do |path|
       [ File.basename(path), described_class.call(described_class.load_file(path)) ]

@@ -81,6 +81,45 @@ RSpec.describe GeneratedReceipts::CalculationModeContract do
     )
   end
 
+  it "independently calculates count rate discounts at the HALF_UP boundary" do
+    [ [ 49, 13, 36 ], [ 50, 14, 36 ], [ 51, 14, 37 ] ].each do |price, discount, total|
+      data = calculation_case(
+        source: source_item(
+          count_unit_price_amount: price.to_s,
+          purchased_quantity: "1",
+          discount_rate: "0.27",
+          printed_line_total: total
+        ),
+        expected: expected_item(
+          unit_price: price,
+          quantity: "1",
+          original_line_total: price,
+          discount_amount: discount,
+          line_total: total
+        )
+      )
+
+      expect(validate(data)).to eq([])
+    end
+  end
+
+  it "rejects a declared discount amount that contradicts the exact rate" do
+    data = calculation_case(
+      source: source_item(discount_rate: "0.27", discount_amount: 100, printed_line_total: 900),
+      expected: expected_item(discount_amount: 100, line_total: 900)
+    )
+
+    expect(validate(data)).not_to be_empty
+  end
+
+  it "rejects malformed, excessive, and overprecise count discount rates" do
+    [ "27", "1.01", "-0.1", "0.2700001", "NaN", "0" * 65, 0.27 ].each do |rate|
+      data = calculation_case(source: source_item(discount_rate: rate, discount_amount: 0))
+
+      expect(validate(data)).not_to be_empty
+    end
+  end
+
   it "prefers a complete matching count formula over explicit line-total authority" do
     data = calculation_case(
       expected: expected_item(
