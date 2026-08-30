@@ -1029,11 +1029,20 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         )
         if structured_matches.empty?
           numeric_only = quantity_content.match(/\A[ \t]*(?<quantity>#{DECIMAL_SOURCE})[ \t]*\z/u)
-          matches << structured_quantity_without_unit_match(
-            numeric_only,
-            quantity_span: quantity_span,
-            item_index: item_index
-          ) if numeric_only
+          if numeric_only
+            structured_match = separate_structured_quantity_match(
+              value_object,
+              item_content:,
+              parent_span:,
+              item_index:,
+              reference_match:
+            ) || structured_quantity_without_unit_match(
+              numeric_only,
+              quantity_span: quantity_span,
+              item_index: item_index
+            )
+            matches << structured_match
+          end
         else
           matches.concat(structured_matches)
         end
@@ -1056,6 +1065,59 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     evidence_errors << "ambiguous_purchased_quantity" if raw_match_budget[:exceeded]
 
     [ deduplicate_purchased_matches(matches), evidence_errors ]
+  end
+
+  def separate_structured_quantity_match(value_object, item_content:, parent_span:, item_index:, reference_match:)
+    quantity_field = value_object["Quantity"]
+    unit_field = value_object["QuantityUnit"]
+    return unless quantity_field.is_a?(Hash) && unit_field.is_a?(Hash)
+
+    purchased = structured_decimal_lexeme(
+      quantity_field,
+      item_content:,
+      parent_span:,
+      item_index:,
+      field_name: "Quantity"
+    )
+    unit = structured_measurement_unit_lexeme(
+      unit_field,
+      item_content:,
+      parent_span:,
+      item_index:
+    )
+    return if purchased.nil? || unit.nil?
+    return unless provider_slice_for_span(item_content, unit[:field_span], parent_span)&.strip == unit[:text]
+    return unless structured_number_value_matches?(quantity_field, purchased[:amount])
+    return unless structured_unit_value_matches?(unit_field, unit[:unit_code])
+    return if structured_quantity_conflicts_with_description?(
+      value_object["Description"],
+      item_content:,
+      purchased:,
+      unit:,
+      purchased_span: purchased[:field_span],
+      unit_span: unit[:field_span],
+      parent_span:
+    )
+
+    quantity_start = purchased.dig(:evidence, :provider_span_start)
+    quantity_end = purchased.dig(:evidence, :provider_span_end)
+    unit_start = unit.dig(:evidence, :provider_span_start)
+    unit_end = unit.dig(:evidence, :provider_span_end)
+    return if unit_start < quantity_end
+    return if ranges_overlap?(
+      quantity_start, unit_end,
+      reference_match[:expression_start], reference_match[:expression_end]
+    )
+
+    gap = mapper.slice(item_content, offset: quantity_end - span_offset(parent_span), length: unit_start - quantity_end)
+    return unless gap&.match?(/\A[ \t]*\z/)
+
+    {
+      quantity_text: purchased[:amount],
+      unit_text: unit[:text],
+      evidence: purchased[:evidence],
+      priority: 0
+    }
   end
 
   def scan_purchased_quantities(
