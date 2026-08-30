@@ -97,6 +97,7 @@ module Amounts
         discount_rounding_mode: profile[:discount_rounding_mode] || Amounts::Rounding::DISCOUNT_DEFAULT_MODE,
         receipt_tax_basis: profile[:receipt_tax_basis] || receipt_tax_basis_for(candidate),
         item_amount_basis: profile[:item_amount_basis] || item_amount_basis_for(candidate),
+        tax_detail_amount_basis: receipt[:tax_detail_amount_basis].to_s == "net" ? "net" : nil,
         item_amount_basis_assignments: profile[:item_amount_basis_assignments]
       }.compact
     end

@@ -23,7 +23,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         success: snapshot[:success] == true,
         lines: Array(snapshot[:lines]).map(&:to_s),
         case_preserved_lines: Array(snapshot[:case_preserved_lines]).map(&:to_s),
-        candidates: normalized_hash(snapshot[:candidates]).to_h,
+        candidates: rehydrate_ocr_candidates(snapshot),
         candidate_counts: normalized_hash(snapshot[:candidate_counts]).to_h,
         error_code: snapshot[:error_code].presence,
         meta: normalized_hash(snapshot[:meta]).to_h,
@@ -57,6 +57,19 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
     end
 
     private
+
+    def rehydrate_ocr_candidates(snapshot)
+      candidates = normalized_hash(snapshot[:candidates]).dup
+      basis = candidates.delete(:tax_detail_amount_basis)
+      counts = normalized_hash(normalized_hash(snapshot[:candidate_counts])[:tax_details])
+      count = Array(candidates[:tax_details]).size
+      if basis == "net" && count.positive? &&
+          normalized_hash(snapshot[:truncated])[:tax_details] != true &&
+          counts[:actual_count] == count && counts[:snapshot_count] == count
+        candidates[:tax_detail_amount_basis] = "net"
+      end
+      candidates.to_h
+    end
 
     def rehydrate_ocr_truncation(value)
       normalized = normalized_hash(value)

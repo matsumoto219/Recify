@@ -1234,12 +1234,14 @@ class ReceiptAmountService
   end
 
   def normalize_tax_detail(t)
-    {
+    normalized = {
       amount: to_i_or_nil(fetch_value(t, :amount)),
       rate: fetch_value(t, :rate),
       net_amount: to_i_or_nil(fetch_value(t, :net_amount)),
       description: fetch_value(t, :description)
     }
+    normalized[:tax_detail_amount_basis] = "net" if @receipt[:tax_detail_amount_basis].to_s == "net"
+    normalized
   end
 
   def fetch_value(obj, key, default = nil)

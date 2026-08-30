@@ -43,6 +43,53 @@ RSpec.describe ReceiptAmountService do
     end
   end
 
+  describe '正規化済み税抜対象額のownership' do
+    def normalized_tax_target_result(basis: nil, context: :analysis)
+      call_service(
+        receipt: {
+          subtotal_amount: 108,
+          tax_amount: 1,
+          total_amount: 109,
+          receipt_tax_basis: 'total_includes_tax',
+          item_amount_basis: 'line_total_as_recorded',
+          tax_detail_amount_basis: basis
+        },
+        receipt_items: [
+          { price: 109, quantity: 1, quantity_unit_code: 'each', line_total: 109, tax_rate: BigDecimal('0.01') }
+        ],
+        receipt_tax_details: [
+          { description: '1%対象', net_amount: 108, amount: 1, rate: BigDecimal('0.01') }
+        ],
+        context: context
+      )
+    end
+
+    it 'producerがnetと確定した対象額から税を二重控除しない' do
+      result = normalized_tax_target_result(basis: 'net')
+
+      expect(result[:resolved]).to include(subtotal: 108, tax: 1, total: 109)
+      expect(result[:computed][:item_amount_basis]).to eq(:line_total_as_recorded)
+      expect(described_class.calculation_profile_snapshot(result).dig(:profile, :tax_detail_amount_basis)).to eq('net')
+    end
+
+    it 'basis未指定の既存gross対象額は従来どおり解釈する' do
+      expect(normalized_tax_target_result[:resolved]).to include(subtotal: 107, tax: 1, total: 108)
+    end
+
+    %w[gross unknown mixed invalid].each do |basis|
+      it "#{basis}を正規化済みnetとして扱わない" do
+        expect(normalized_tax_target_result(basis: basis)[:resolved]).to include(subtotal: 107, tax: 1, total: 108)
+      end
+    end
+
+    it '保存後の編集でもrecorded itemと正規化済みnetを維持する' do
+      result = normalized_tax_target_result(basis: 'net', context: :edit_save)
+
+      expect(result[:resolved]).to include(subtotal: 108, tax: 1, total: 109)
+      expect(result[:computed][:item_amount_basis]).to eq(:line_total_as_recorded)
+    end
+  end
+
   describe '.parse_amount_or_nil' do
     it '金額文字列をBigDecimalへ正規化する' do
       expect(described_class.parse_amount_or_nil('1,234円')).to eq(BigDecimal('1234'))

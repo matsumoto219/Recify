@@ -40,11 +40,15 @@ module Analysis
           lines,
           receipt_total: receipt_attributes[:total_amount]
         )
-        receipt_tax_details_attributes = recover_receipt_tax_details_from_lines(
+        tax_detail_result = recover_receipt_tax_details_result_from_lines(
           build_receipt_tax_details_attributes(candidates),
           lines,
           receipt_attributes
         )
+        receipt_tax_details_attributes = tax_detail_result[:tax_details]
+        recovered_tax_detail_values = if tax_detail_result[:tax_detail_amount_basis] == "net"
+          tax_detail_source_values(receipt_tax_details_attributes)
+        end
         source_evidence_index = SourceEvidenceIndex.call(
           lines: lines,
           money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
@@ -118,6 +122,14 @@ module Analysis
           tax_rate_correction: tax_rate_correction
         )
         receipt_adjustments_attributes = tax_allocation_result.adjustments
+        if normalized_tax_detail_basis_preserved?(
+          normalized_ocr_result,
+          candidates,
+          receipt_tax_details_attributes,
+          recovered_source_values: recovered_tax_detail_values
+        )
+          amount_hints[:tax_detail_amount_basis] = "net"
+        end
         invalid_adjustment_review_reasons = tax_allocation_result.review_reasons
         ownership_contract = OwnershipConsistencyGuard.contract_for(tax_allocation_result)
         review_reasons = (
@@ -287,6 +299,42 @@ module Analysis
           settlement_total_from_deposit_change: true,
           settlement_total: receipt_attributes[:total_amount]
         }
+      end
+
+      def normalized_tax_detail_basis_preserved?(ocr_result, candidates, tax_details, recovered_source_values: nil)
+        return false unless candidates[:tax_detail_amount_basis] == "net" || recovered_source_values.present?
+
+        truncated = ocr_result[:truncated]
+        return false unless truncated.nil? || truncated.is_a?(Hash)
+        return false if truncated && (truncated[:tax_details] == true || truncated[:lines] == true)
+
+        source = Array(candidates[:tax_details])
+        candidate_counts = ocr_result[:candidate_counts]
+        return false unless candidate_counts.nil? || candidate_counts.is_a?(Hash)
+
+        counts = candidate_counts && candidate_counts[:tax_details]
+        if candidate_counts&.key?(:tax_details)
+          return false unless counts.is_a?(Hash)
+          return false unless counts[:actual_count] == source.size && counts[:snapshot_count] == source.size
+        end
+
+        source_values = recovered_source_values || tax_detail_source_values(source)
+        source_values.present? && source_values == tax_detail_source_values(tax_details)
+      end
+
+      def tax_detail_source_values(tax_details)
+        values = Array(tax_details).map do |detail|
+          return nil unless detail.is_a?(Hash)
+
+          detail = detail.with_indifferent_access
+          rate = normalize_rate(detail[:rate])
+          net = normalize_amount(detail[:net_amount])
+          tax = normalize_amount(detail[:amount])
+          return nil unless rate&.positive? && net&.positive? && tax && tax >= 0
+
+          [ rate, net, tax ]
+        end
+        values.sort
       end
 
       def settlement_receipt_total_restored?(ai_receipt_attributes, candidates, lines, receipt_attributes)
@@ -1230,16 +1278,16 @@ module Analysis
         end
       end
 
-      def recover_receipt_tax_details_from_lines(tax_details, lines, receipt_attributes)
+      def recover_receipt_tax_details_result_from_lines(tax_details, lines, receipt_attributes)
         tax_details = apply_tax_rate_target_labels_from_lines(tax_details, lines)
-        return tax_details if complete_multi_rate_tax_details?(tax_details)
+        return { tax_details: tax_details } if complete_multi_rate_tax_details?(tax_details)
 
         inferred_tax_details = tax_details_from_rate_targets(lines, receipt_attributes, tax_details)
         inferred_tax_details = tax_details_from_rate_summary_lines(lines, receipt_attributes, tax_details) if inferred_tax_details.blank?
         inferred_tax_details = tax_details_from_tax_section_pairs(lines, receipt_attributes) if inferred_tax_details.blank?
-        return tax_details if inferred_tax_details.blank?
+        return { tax_details: tax_details } if inferred_tax_details.blank?
 
-        inferred_tax_details
+        { tax_details: inferred_tax_details, tax_detail_amount_basis: "net" }
       end
 
       def apply_tax_rate_target_labels_from_lines(tax_details, lines)

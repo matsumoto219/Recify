@@ -400,6 +400,9 @@ module Receipts::Processing::Runs
       }.compact
       snapshot[:adoption_proposals] = adoption_proposals_snapshot(result, snapshot).presence
       snapshot[:candidate_counts][:item_calculation_mode_candidates][:snapshot_count] = Array(snapshot.dig(:adoption_proposals, :item_calculation_modes)).size
+      if normalized_tax_detail_basis_preserved?(result, candidates, snapshot)
+        candidates_snapshot[:tax_detail_amount_basis] = "net"
+      end
 
       sanitize_hash(snapshot.compact)
     end
@@ -649,6 +652,17 @@ module Receipts::Processing::Runs
         review_reasons: limited_strings(candidates[:review_reasons], snapshot_review_reasons_limit),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
       }.compact
+    end
+
+    def normalized_tax_detail_basis_preserved?(result, candidates, snapshot)
+      return false unless candidates[:tax_detail_amount_basis] == "net"
+      return false if normalized_hash(result[:truncated])[:tax_details] == true || snapshot.dig(:truncated, :tax_details)
+
+      count = Array(candidates[:tax_details]).size
+      return false unless count.positive? && count == Array(snapshot.dig(:candidates, :tax_details)).size
+
+      counts = normalized_hash(normalized_hash(result[:candidate_counts])[:tax_details])
+      counts.blank? || (counts[:actual_count] == count && counts[:snapshot_count] == count)
     end
 
     def ocr_candidate_counts(candidates, snapshot, stored_result: nil)

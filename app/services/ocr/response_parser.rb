@@ -114,7 +114,8 @@ class Ocr::ResponseParser
       authority_lines,
       reference_pricing_candidates:
     )
-    tax_details = extract_tax_details(authority_response, authority_lines)
+    tax_detail_result = extract_tax_detail_result(authority_response, authority_lines)
+    tax_details = tax_detail_result[:tax_details]
     tax_amount = extract_tax_amount(authority_response, authority_lines, tax_details:)
     adjustment_candidates = extract_adjustment_candidates(authority_response, authority_lines)
     reference_pricing_candidates = promote_single_structured_item_gross_reference_pricing(
@@ -181,6 +182,7 @@ class Ocr::ResponseParser
         receipt_type: extract_receipt_type(authority_response),
         payments: extract_payments(authority_response),                                                             # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
         tax_details: tax_details,
+        tax_detail_amount_basis: tax_detail_result[:tax_detail_amount_basis],
         adjustment_candidates: adjustment_candidates,
         reference_pricing_candidates: reference_pricing_candidates,
         reference_pricing_block_line_indexes: reference_pricing_block_line_indexes(reference_pricing_blocks),
@@ -1276,7 +1278,7 @@ class Ocr::ResponseParser
   end
 
   def extract_tax_amount_from_tax_details(parsed_response, lines, tax_details: nil)
-    details = tax_details || extract_tax_details(parsed_response, lines)
+    details = tax_details || extract_tax_detail_result(parsed_response, lines)[:tax_details]
     amounts = Array(details).filter_map do |tax_detail|
       next if normalize_rate_value(tax_detail[:rate]).blank?
       next if tax_detail[:net_amount].present? && tax_detail[:net_amount].to_i <= 0
@@ -1854,7 +1856,7 @@ class Ocr::ResponseParser
   end
 
   # 税詳細は取得できる場合のみ保存し、金額計算/サマリー表示の補助情報として利用する。
-  def extract_tax_details(parsed_response, lines = [])
+  def extract_tax_detail_result(parsed_response, lines = [])
     fields = extract_fields(parsed_response)
     details = fields.dig("TaxDetails", "valueArray")
     details = [] unless details.is_a?(Array)
@@ -1891,11 +1893,13 @@ class Ocr::ResponseParser
     end
 
     inferred_from_lines = infer_included_tax_details_from_rate_targets(fields, details, lines)
-    return inferred_from_lines if inferred_from_lines.present? && !complete_multi_rate_tax_details?(tax_details)
+    if inferred_from_lines.present? && !complete_multi_rate_tax_details?(tax_details)
+      return { tax_details: inferred_from_lines, tax_detail_amount_basis: "net" }
+    end
 
-    deduplicate_inferred_tax_details(tax_details).map { |tax_detail| tax_detail.except(:_net_amount_inferred) }
+    { tax_details: deduplicate_inferred_tax_details(tax_details).map { |tax_detail| tax_detail.except(:_net_amount_inferred) } }
   rescue NoMethodError, TypeError
-    []
+    { tax_details: [] }
   end
 
   def complete_multi_rate_tax_details?(tax_details)

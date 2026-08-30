@@ -443,8 +443,12 @@ class Receipts::Processing::Pipeline
     end
 
     def calculate_analysis_amount_result(params)
+      receipt_attributes = params[:receipt_attributes]
+      if normalized_hash(params[:amount_hints])[:tax_detail_amount_basis] == "net"
+        receipt_attributes = receipt_attributes.merge(tax_detail_amount_basis: "net")
+      end
       result = ReceiptAmountService.call(
-        receipt: params[:receipt_attributes],
+        receipt: receipt_attributes,
         receipt_items: params[:receipt_items_attributes],
         receipt_tax_details: params[:receipt_tax_details_attributes],
         receipt_adjustments: params[:receipt_adjustments_attributes],

@@ -20,6 +20,28 @@ RSpec.describe Receipt, type: :model do
   end
 
   describe '#amount_source_semantics_for_edit' do
+    it 'recorded itemへ戻してもproducerが確定した税詳細net basisを保持する' do
+      receipt = build_stubbed(
+        :receipt,
+        amount_calculation_profile: {
+          schema_version: 1,
+          selected_candidate_status: 'accepted',
+          profile: {
+            receipt_tax_basis: 'tax_added_to_subtotal',
+            item_amount_basis: 'line_total_as_recorded',
+            tax_detail_amount_basis: 'net'
+          }
+        }
+      )
+      allow(receipt).to receive(:external_tax_basis_from_details?).and_return(false)
+
+      expect(receipt.amount_source_semantics_for_edit).to eq(
+        'receipt_tax_basis' => 'total_includes_tax',
+        'item_amount_basis' => 'line_total_as_recorded',
+        'tax_detail_amount_basis' => 'net'
+      )
+    end
+
     it '保存profileからbasis semanticsだけをallowlist抽出する' do
       receipt = build_stubbed(
         :receipt,
