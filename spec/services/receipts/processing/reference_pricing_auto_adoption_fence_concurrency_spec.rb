@@ -53,7 +53,13 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
   end
 
   after do
+    blob_ids = ActiveStorage::Attachment.where(
+      record_type: 'Receipt',
+      record_id: @receipt&.id,
+      name: 'image'
+    ).pluck(:blob_id)
     Receipt.where(id: @receipt&.id).destroy_all
+    ActiveStorage::Blob.where(id: blob_ids).find_each(&:purge)
     SystemSetting.where(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY).delete_all
     User.where(id: @user&.id).destroy_all
   end
