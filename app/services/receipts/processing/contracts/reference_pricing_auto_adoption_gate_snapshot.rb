@@ -12,6 +12,7 @@ module Receipts::Processing::Contracts
     LEGACY_WRITER_CONTRACT_VERSION = "reference_pricing_auto_adoption_writer_v1"
     LINE_GROUP_BINDING_KIND = "azure_line_group"
     STRUCTURED_ITEM_BINDING_KIND = "azure_structured_item_reference"
+    ITEM_SET_BINDING_KIND = "azure_item_reference_set"
     SUPPORTED_RUN_SOURCES = %w[upload batch_upload].freeze
     MAX_SERIALIZED_BYTES = 1280
     MAX_SEMANTIC_RECEIPT_BYTES = 64.kilobytes
@@ -41,6 +42,9 @@ module Receipts::Processing::Contracts
     STRUCTURED_ITEM_BINDING_KEYS = %w[
       binding_kind candidate_identity destination_identity selected_proposal_identity
       decision_contract_version proposal_checksum receipt_lock_version
+    ].freeze
+    ITEM_SET_BINDING_KEYS = %w[
+      binding_kind item_count decision_contract_version proposal_checksum receipt_lock_version
     ].freeze
     STRUCTURED_ITEM_CANDIDATE_ID_PATTERN = /
       \A(?:
@@ -194,7 +198,11 @@ module Receipts::Processing::Contracts
         )
         return line_group if schema_version == LEGACY_SCHEMA_VERSION
 
-        structured_item = structured_item_binding_for(ocr_snapshot:, receipt_lock_version:)
+        structured_item = structured_item_binding_for(
+          ocr_snapshot:,
+          receipt_lock_version:,
+          allow_multiple: schema_version == SCHEMA_VERSION
+        )
         bindings = [ line_group, structured_item ].compact
 
         bindings.sole if bindings.one?
@@ -239,11 +247,15 @@ module Receipts::Processing::Contracts
           return true unless proposals.is_a?(Array)
         end
 
-        structured = structured_item_binding_for(ocr_snapshot:, receipt_lock_version: 0)
+        structured = structured_item_binding_for(
+          ocr_snapshot:,
+          receipt_lock_version: 0,
+          allow_multiple: schema_version == SCHEMA_VERSION
+        )
         line_group.present? && structured.present?
       end
 
-      def structured_item_binding_for(ocr_snapshot:, receipt_lock_version:)
+      def structured_item_binding_for(ocr_snapshot:, receipt_lock_version:, allow_multiple:)
         adoption_proposals = hash_value(ocr_snapshot, "adoption_proposals")
         stored_proposals = hash_value(adoption_proposals, "item_calculation_modes")
         return nil if stored_proposals.nil?
@@ -263,10 +275,33 @@ module Receipts::Processing::Contracts
         decisions = batch.decisions.select do |decision|
           decision.confirmed? && decision.selected_pricing_source_kind == "reference_quantity_price"
         end
-        return nil unless decisions.one?
+        return nil if decisions.empty?
+        return nil unless decisions.one? || allow_multiple
 
-        decision = decisions.sole
-        proposal = batch.proposals.find { |entry| entry["item_identity"] == decision.item_identity }
+        proposals_by_identity = batch.proposals.index_by { |entry| entry["item_identity"] }
+        bindings = decisions.map do |decision|
+          structured_decision_binding_for(decision, proposals_by_identity:, receipt_lock_version:)
+        end
+        return nil if bindings.any?(&:nil?)
+        return bindings.sole if bindings.one?
+        return nil unless bindings.all? do |binding|
+          structured_item_binding_valid?(binding, receipt_lock_version:)
+        end
+
+        sources = bindings.map { |binding| binding.except("receipt_lock_version") }
+          .sort_by { |binding| binding.fetch("destination_identity") }
+
+        {
+          "binding_kind" => ITEM_SET_BINDING_KIND,
+          "item_count" => sources.size,
+          "decision_contract_version" => ItemCalculationModeDecision::CONTRACT_VERSION,
+          "proposal_checksum" => Digest::SHA256.hexdigest(JSON.generate(sources)),
+          "receipt_lock_version" => receipt_lock_version
+        }
+      end
+
+      def structured_decision_binding_for(decision, proposals_by_identity:, receipt_lock_version:)
+        proposal = proposals_by_identity[decision.item_identity]
         return nil unless proposal && proposal["candidate_id"] == decision.candidate_id
 
         options = proposal["options"].select do |option|
@@ -328,6 +363,8 @@ module Receipts::Processing::Contracts
           line_group_binding_valid?(binding, receipt_lock_version:)
         when STRUCTURED_ITEM_BINDING_KIND
           structured_item_binding_valid?(binding, receipt_lock_version:)
+        when ITEM_SET_BINDING_KIND
+          schema_version == SCHEMA_VERSION && item_set_binding_valid?(binding, receipt_lock_version:)
         else
           false
         end
@@ -375,6 +412,16 @@ module Receipts::Processing::Contracts
           /_item_calculation_mode\z/,
           "_reference_quantity_price"
         )
+      end
+
+      def item_set_binding_valid?(binding, receipt_lock_version:)
+        exact_keys?(binding, ITEM_SET_BINDING_KEYS) &&
+          binding["binding_kind"] == ITEM_SET_BINDING_KIND &&
+          binding["item_count"].is_a?(Integer) &&
+          binding["item_count"].between?(2, ItemCalculationModeProposalSet::MAX_SETS) &&
+          binding["decision_contract_version"] == ItemCalculationModeDecision::CONTRACT_VERSION &&
+          bounded_string?(binding["proposal_checksum"], max_bytes: 64, pattern: CHECKSUM_PATTERN) &&
+          binding["receipt_lock_version"] == receipt_lock_version
       end
 
       def receipt_start_state_valid?(snapshot)

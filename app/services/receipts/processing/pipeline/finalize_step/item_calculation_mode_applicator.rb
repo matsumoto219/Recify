@@ -350,13 +350,23 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
 
   def reference_selection_authorized?(decision, proposal)
     gate = reference_pricing_gate_result
-    gate.is_a?(Receipts::Processing::ReferencePricingAutoAdoptionFence::Result) &&
-      gate.enabled? &&
-      gate.binding_kind == GATE_CONTRACT::STRUCTURED_ITEM_BINDING_KIND &&
+    return false unless gate.is_a?(Receipts::Processing::ReferencePricingAutoAdoptionFence::Result) && gate.enabled?
+    return reference_item_set_authorized?(gate) if gate.binding_kind == GATE_CONTRACT::ITEM_SET_BINDING_KIND
+
+    gate.binding_kind == GATE_CONTRACT::STRUCTURED_ITEM_BINDING_KIND &&
       gate.candidate_identity == decision.candidate_id &&
       gate.destination_identity == decision.item_identity &&
       gate.selected_proposal_identity == decision.selected_proposal_id &&
       gate.proposal_checksum == proposal["integrity_checksum"]
+  end
+
+  def reference_item_set_authorized?(gate)
+    return @reference_item_set_authorized if defined?(@reference_item_set_authorized)
+
+    binding = GATE_CONTRACT.proposal_binding_for(ocr_snapshot: ocr_result, receipt_lock_version: 0)
+    @reference_item_set_authorized = binding.is_a?(Hash) &&
+      binding["binding_kind"] == GATE_CONTRACT::ITEM_SET_BINDING_KIND &&
+      binding["proposal_checksum"] == gate.proposal_checksum
   end
 
   def reference_selection(decision, proposal, option, attributes, item_index:, review_reason:)
