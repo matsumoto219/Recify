@@ -1916,7 +1916,7 @@ module Receipts::Processing::Runs
           ocr_item_identity: bounded_string(
             item[:ocr_item_identity],
             max_bytes: ITEM_CALCULATION_MODE_ITEM_IDENTITY_MAX_BYTES,
-            pattern: /\A(?:azure_structured_item_i\d+_s\d+_e\d+|azure_item_layout_item_p\d+_name_l\d+_s\d+_e\d+_ref_l\d+_qty_l\d+_total_l\d+)\z/
+            pattern: /\A(?:azure_calculation_layout_p0_name_l\d+_s\d+_e\d+_block_e\d+|azure_structured_item_i\d+_s\d+_e\d+|azure_item_layout_item_p\d+_name_l\d+_s\d+_e\d+_ref_l\d+_qty_l\d+_total_l\d+)\z/
           ),
           product_code: safe_string(item[:product_code]),
           line_total: safe_value(item[:line_total]),

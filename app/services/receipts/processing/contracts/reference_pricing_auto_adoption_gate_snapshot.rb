@@ -53,7 +53,11 @@ module Receipts::Processing::Contracts
           _name_l(?:0|[1-9]\d*)
           _ref_l(?:0|[1-9]\d*)
           _qty_l(?:0|[1-9]\d*)
-          _total_l(?:0|[1-9]\d*)
+          _total_l(?:0|[1-9]\d*) |
+        azure_calculation_layout_p0_name_l(?:0|[1-9]\d*)
+          _s(?:0|[1-9]\d*)
+          _e(?:0|[1-9]\d*)
+          _block_e(?:0|[1-9]\d*)
       )_item_calculation_mode\z
     /x.freeze
 
@@ -388,11 +392,7 @@ module Receipts::Processing::Contracts
         exact_keys?(binding, STRUCTURED_ITEM_BINDING_KEYS) &&
           binding["binding_kind"] == STRUCTURED_ITEM_BINDING_KIND &&
           structured_item_proposal_identities_valid?(binding) &&
-          bounded_string?(
-            binding["destination_identity"],
-            max_bytes: MAX_ID_BYTES,
-            pattern: /\Aazure_structured_item_i\d+_s\d+_e\d+\z/
-          ) &&
+          structured_item_destination_valid?(binding) &&
           binding["decision_contract_version"] == ItemCalculationModeDecision::CONTRACT_VERSION &&
           bounded_string?(binding["proposal_checksum"], max_bytes: 64, pattern: CHECKSUM_PATTERN) &&
           binding["receipt_lock_version"] == receipt_lock_version
@@ -412,6 +412,28 @@ module Receipts::Processing::Contracts
           /_item_calculation_mode\z/,
           "_reference_quantity_price"
         )
+      end
+
+      def structured_item_destination_valid?(binding)
+        identity = binding["destination_identity"]
+        return false unless bounded_string?(identity, max_bytes: MAX_ID_BYTES)
+        return true if identity.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
+        return false unless binding["candidate_identity"] == "#{identity}_item_calculation_mode"
+
+        match = ItemCalculationModeProposalSet::CALCULATION_LAYOUT_IDENTITY_PATTERN.match(identity)
+        return false if match.nil?
+
+        name_line_index = Integer(match[:name_line_index], 10)
+        span_start = Integer(match[:span_start], 10)
+        name_span_end = Integer(match[:name_end], 10)
+        span_end = Integer(match[:span_end], 10)
+
+        name_line_index.between?(0, ItemCalculationModeProposalSet::MAX_LAYOUT_LINE_INDEX) &&
+          span_start.between?(0, ItemCalculationModeProposalSet::MAX_PROVIDER_SPAN) &&
+          span_end.between?(1, ItemCalculationModeProposalSet::MAX_PROVIDER_SPAN) &&
+          span_start < name_span_end && name_span_end < span_end
+      rescue ArgumentError
+        false
       end
 
       def item_set_binding_valid?(binding, receipt_lock_version:)

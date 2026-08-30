@@ -309,6 +309,9 @@ module ReceiptAnalysisProfiles
     OCR_ITEM_CALCULATION_COUNT_QUANTITY_LINE_PATTERN = /\A[ \t]*(?:(?<label>数量)[ \t:：]*)?(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})?[ \t]*\z/u.freeze
     OCR_ITEM_CALCULATION_DISCOUNT_LINE_PATTERN = /\A[ \t]*(?:(?:商品|明細)?(?:値引(?:き)?|割引)|discount|off)[ \t:：]*(?<rate>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*[%％][ \t]*[-−▲－][ \t]*[¥￥]?[ \t]*(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+))(?:[ \t]*円)?[ \t]*\z/iu.freeze
     OCR_ITEM_CALCULATION_TAX_MARKER_PREFIX_PATTERN = /\A[*＊]\s*/.freeze
+    OCR_ITEM_CALCULATION_LAYOUT_PRICE_LINE_PATTERN = /\A[ \t]*単価[ \t:：]*[@＠]?[ \t]*[¥￥]?[ \t]*(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*円[ \t]*\z/.freeze
+    OCR_ITEM_CALCULATION_LAYOUT_REFERENCE_LINE_PATTERN = /\A[ \t]*(?<tax>税込|内税|税抜|外税)[ \t]*[¥￥]?[ \t]*(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*円[ \t]*[\/／][ \t]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})[ \t]*\z/u.freeze
+    OCR_ITEM_CALCULATION_LAYOUT_NAME_TAX_PATTERN = /\A(?<name>[^()（）]+)[(（](?<tax>税込|内税|税抜|外税)[ \t]*(?<rate>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*[%％][)）]\z/.freeze
     OCR_POST_DISCOUNT_PRICE_BASIS_PATTERN = /(?:値引|割引)(?:き)?(?:後|済み?)|discounted/i.freeze
     OCR_REFERENCE_PRICING_LINE_GROUP_PURCHASED_QUANTITY_LINE_PATTERN = /\A[ \t]*計量[ \t:：]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})[ \t]*\z/u.freeze
     OCR_REFERENCE_PRICING_LINE_GROUP_PACKAGE_OR_UNCERTAIN_PATTERN = /(?:内容量|正味量|入(?:り)?|詰|パック|セット|約|およそ|前後|程度|目安|(?:く|ぐ)らい|以上|以下|未満|超(?:過)?|概算|暫定|予定|参考|推定|見込(?:み)?|仮(?:値|価格)|試算|通常|希望|定価|メーカー希望|[〜～~±]|プラスマイナス|風袋|総重量|tare|gross\s*weight|approx(?:imately)?|about|at\s+least|at\s+most|up\s+to|estimated?|provisional|tentative)/i.freeze
@@ -861,6 +864,18 @@ module ReceiptAnalysisProfiles
 
       def ocr_item_calculation_tax_marker_prefix_pattern
         OCR_ITEM_CALCULATION_TAX_MARKER_PREFIX_PATTERN
+      end
+
+      def ocr_item_calculation_layout_price_line_pattern
+        OCR_ITEM_CALCULATION_LAYOUT_PRICE_LINE_PATTERN
+      end
+
+      def ocr_item_calculation_layout_reference_line_pattern
+        OCR_ITEM_CALCULATION_LAYOUT_REFERENCE_LINE_PATTERN
+      end
+
+      def ocr_item_calculation_layout_name_tax_pattern
+        OCR_ITEM_CALCULATION_LAYOUT_NAME_TAX_PATTERN
       end
 
       def ocr_post_discount_price_basis_pattern

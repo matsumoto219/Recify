@@ -15,6 +15,10 @@ module Analysis
       _qty_l(?<quantity_line_index>\d+)
       _total_l(?<total_line_index>\d+)\z
     /x.freeze
+    OCR_CALCULATION_LAYOUT_IDENTITY_PATTERN = /
+      \Aazure_calculation_layout_p0_name_l(?<name_line_index>0|[1-9]\d*)
+      _s(?<span_start>0|[1-9]\d*)_e(?<name_span_end>0|[1-9]\d*)_block_e(?<span_end>0|[1-9]\d*)\z
+    /x.freeze
 
     class << self
       def call(ocr_result:, ai_result: nil)
@@ -2317,7 +2321,24 @@ module Analysis
         return nil if identity.bytesize > OCR_ITEM_IDENTITY_MAX_BYTES
         return identity if identity.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
 
-        identity if valid_ocr_item_layout_identity?(identity)
+        identity if valid_ocr_item_layout_identity?(identity) || valid_ocr_calculation_layout_identity?(identity)
+      end
+
+      def valid_ocr_calculation_layout_identity?(identity)
+        match = OCR_CALCULATION_LAYOUT_IDENTITY_PATTERN.match(identity)
+        return false if match.nil?
+
+        name_line_index = Integer(match[:name_line_index], 10)
+        span_start = Integer(match[:span_start], 10)
+        name_span_end = Integer(match[:name_span_end], 10)
+        span_end = Integer(match[:span_end], 10)
+
+        name_line_index.between?(0, OCR_ITEM_LAYOUT_MAX_LINE_INDEX) &&
+          span_start.between?(0, OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN) &&
+          span_end.between?(1, OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN) &&
+          span_start < name_span_end && name_span_end < span_end
+      rescue ArgumentError
+        false
       end
 
       def valid_ocr_item_layout_identity?(identity)

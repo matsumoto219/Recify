@@ -458,6 +458,26 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
+    it 'owns the fixed calculation layout labels and item-local tax suffix' do
+      aggregate_failures do
+        expect('単価 @193円'.match(profile.ocr_item_calculation_layout_price_line_pattern).named_captures).to eq('amount' => '193')
+        expect('通常単価 @193円').not_to match(profile.ocr_item_calculation_layout_price_line_pattern)
+        expect('税込 317円/100g'.match(profile.ocr_item_calculation_layout_reference_line_pattern).named_captures).to eq(
+          'tax' => '税込',
+          'amount' => '317',
+          'quantity' => '100',
+          'unit' => 'g'
+        )
+        expect('税込 317円/g').not_to match(profile.ocr_item_calculation_layout_reference_line_pattern)
+        expect('検証商品(税込0.5%)'.match(profile.ocr_item_calculation_layout_name_tax_pattern).named_captures).to eq(
+          'name' => '検証商品',
+          'tax' => '税込',
+          'rate' => '0.5'
+        )
+        expect('検証商品(税込1%)(税込27%)').not_to match(profile.ocr_item_calculation_layout_name_tax_pattern)
+      end
+    end
+
     it 'owns the strong item-total label without treating receipt summaries as item totals' do
       pattern = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern
 

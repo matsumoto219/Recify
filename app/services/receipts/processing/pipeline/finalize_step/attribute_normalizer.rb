@@ -17,6 +17,12 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     _total_l(?<total_line_index>0|[1-9]\d*)
     _explicit_line_total\z
   /x.freeze
+  CALCULATION_LAYOUT_IDENTITY_PATTERN = /
+    \Aazure_calculation_layout_p0_name_l(?<name_line_index>0|[1-9]\d*)
+    _s(?<span_start>0|[1-9]\d*)
+    _e(?<name_end>0|[1-9]\d*)
+    _block_e(?<span_end>0|[1-9]\d*)\z
+  /x.freeze
   STRUCTURED_ITEM_IDENTITY_PATTERN = /
     \Aazure_structured_item_i(?<item_index>0|[1-9]\d*)
     _s(?<provider_span_start>0|[1-9]\d*)
@@ -363,13 +369,17 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       return false if value.bytesize > Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
       return true if value.match?(STRUCTURED_ITEM_IDENTITY_PATTERN)
 
-      layout_item_identity_valid?(value)
+      layout_item_identity_valid?(value) || calculation_layout_item_identity_valid?(value)
     end
 
     def valid_item_calculation_mode_proposal_id?(selection)
       value = selection.proposal_id
       return false unless value.is_a?(String)
       return false if value.bytesize > Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
+      if calculation_layout_item_identity_valid?(selection.item_identity)
+        return value == "#{selection.item_identity}_#{selection.pricing_source_kind}"
+      end
+
       structured_identity = STRUCTURED_ITEM_IDENTITY_PATTERN.match(selection.item_identity)
       if structured_identity
         return structured_item_proposal_link_valid?(selection, structured_identity:)
@@ -400,6 +410,21 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
           Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_LAYOUT_LINE_INDEX
         )
       end
+    end
+
+    def calculation_layout_item_identity_valid?(value)
+      match = CALCULATION_LAYOUT_IDENTITY_PATTERN.match(value)
+      return false if match.nil?
+
+      name_line_index = Integer(match[:name_line_index], 10)
+      span_start = Integer(match[:span_start], 10)
+      name_end = Integer(match[:name_end], 10)
+      span_end = Integer(match[:span_end], 10)
+
+      name_line_index.between?(0, Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_LAYOUT_LINE_INDEX) &&
+        span_start.between?(0, Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_PROVIDER_SPAN) &&
+        span_end.between?(1, Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_PROVIDER_SPAN) &&
+        span_start < name_end && name_end < span_end
     end
 
     def layout_item_identity_valid?(value)

@@ -152,6 +152,23 @@ class Ocr::ResponseParser
       item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
       reference_conflict_item_indexes: item_layout_resolution.fetch(:conflict_item_indexes)
     )
+    calculation_layout = calculation_layout_fallback(
+      analyze_result:,
+      candidates: item_calculation_mode_candidates,
+      reference_candidates: reference_pricing_candidates
+    )
+    if calculation_layout
+      item_calculation_mode_candidates = calculation_layout.fetch(:candidates)
+      reference_pricing_candidates = []
+      reference_pricing_blocks += calculation_layout.fetch(:blocks)
+      authority_response = response_without_reference_pricing_block_fields(parsed_response, reference_pricing_blocks)
+      authority_lines = lines_without_reference_pricing_blocks(normalized_lines, reference_pricing_blocks)
+      total_amount = extract_total_amount(authority_response, authority_lines)
+      tax_detail_result = extract_tax_detail_result(authority_response, authority_lines)
+      tax_details = tax_detail_result[:tax_details]
+      tax_amount = extract_tax_amount(authority_response, authority_lines, tax_details:)
+      adjustment_candidates = extract_adjustment_candidates(authority_response, authority_lines)
+    end
     authority_raw_text = authority_lines.reject(&:blank?).join("\n")
 
     {
@@ -193,7 +210,7 @@ class Ocr::ResponseParser
         item_calculation_mode_source_truncated:
           structured_items.is_a?(Array) &&
             structured_items.size > Ocr::ResponseParser::ItemCalculationModeCandidateExtractor::MAX_ITEMS,
-        items: extract_items(
+        items: calculation_layout&.fetch(:items) || extract_items(
           authority_response,
           authority_lines,
           item_calculation_mode_candidates: item_calculation_mode_candidates,
@@ -899,6 +916,165 @@ class Ocr::ResponseParser
     value if %w[gross net].include?(value)
   end
 
+  def calculation_layout_fallback(analyze_result:, candidates:, reference_candidates:)
+    descriptors = Ocr::ResponseParser::ItemCalculationModeLayoutExtractor.call(analyze_result:, profile:)
+    return if descriptors.empty?
+
+    candidates_by_index = candidates.group_by { |candidate| candidate[:item_index] }
+    reference_item_indexes = reference_candidates.filter_map do |candidate|
+      candidate[:item_index] if complete_structured_reference_pricing_candidate?(candidate)
+    end.to_set
+    return if descriptors.all? do |descriptor|
+      calculation_layout_has_complete_structured_source?(descriptor, candidates_by_index:, reference_item_indexes:)
+    end
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    entries = descriptors.map.with_index do |descriptor, item_index|
+      calculation_layout_entry(descriptor, item_index:, analyze_result:, mapper:)
+    end
+    return if entries.any?(&:nil?)
+
+    {
+      items: entries.map { |entry| entry.fetch(:item) },
+      candidates: entries.filter_map { |entry| entry[:candidate] },
+      blocks: descriptors.map do |descriptor|
+        descriptor.slice(:block_provider_span_start, :block_provider_span_end, :owned_line_indexes)
+          .merge(source_kind: "azure_calculation_layout")
+      end
+    }
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    nil
+  end
+
+  def calculation_layout_has_complete_structured_source?(descriptor, candidates_by_index:, reference_item_indexes:)
+    indexes = descriptor[:structured_item_indexes]
+    return false unless indexes.is_a?(Array) && indexes.one?
+
+    item_index = indexes.sole
+    existing = candidates_by_index.fetch(item_index, [])
+    return false unless existing.one?
+
+    modes = existing.sole.fetch(:options).map { |option| option[:pricing_source_kind] }
+    modes << "reference_quantity_price" if reference_item_indexes.include?(item_index)
+    descriptor.fetch(:options).all? { |option| modes.include?(option[:pricing_source_kind]) }
+  end
+
+  def calculation_layout_entry(descriptor, item_index:, analyze_result:, mapper:)
+    return unless descriptor[:source_provider] == "azure_calculation_layout"
+
+    identity = descriptor.fetch(:item_identity)
+    destination = calculation_layout_component(descriptor[:destination_evidence], analyze_result:, mapper:)
+    return if destination.nil?
+    tax_evidence = descriptor[:item_tax_evidence]
+    return if tax_evidence && calculation_layout_component(tax_evidence, analyze_result:, mapper:).nil?
+
+    options = descriptor.fetch(:options).map do |option|
+      evidence = option.fetch(:evidence).to_h do |role, component|
+        sanitized = calculation_layout_component(component, analyze_result:, mapper:)
+        return if sanitized.nil?
+
+        [ role, sanitized ]
+      end
+      source = option.fetch(:source).deep_dup
+      mode = option.fetch(:pricing_source_kind)
+      if mode == "reference_quantity_price"
+        source[:reference_quantity_origin] = "explicit"
+        evidence[:purchased_quantity] = evidence.delete(:quantity)
+        evidence[:purchased_unit] = evidence.delete(:quantity_unit)
+      end
+      {
+        proposal_id: "#{identity}_#{mode}",
+        pricing_source_kind: mode,
+        source: source,
+        evidence: evidence
+      }
+    end
+    total_option = options.find { |option| option[:pricing_source_kind] == "explicit_line_total" }
+    layout_item = descriptor.fetch(:layout_item)
+    unit = ReceiptQuantityUnit.unit_for(layout_item[:quantity_unit_code])
+    item = layout_item.slice(:price, :quantity, :quantity_unit_code, :line_total, :tax_rate, :ocr_item_identity).merge(
+      raw_text: layout_item.fetch(:name),
+      original_line_total: layout_item[:line_total],
+      quantity_unit_status: unit ? "known" : "blank"
+    )
+    return { item: item } if options.empty?
+    return if total_option.nil?
+
+    candidate = {
+      candidate_id: "#{identity}_item_calculation_mode",
+      item_identity: identity,
+      item_index: item_index,
+      source_provider: "azure_calculation_layout",
+      provider_model_id: analyze_result["modelId"],
+      provider_api_version: analyze_result["apiVersion"],
+      string_index_type: analyze_result["stringIndexType"],
+      source_field_path: descriptor[:source_field_path],
+      provider_span_start: descriptor[:block_provider_span_start],
+      provider_span_end: descriptor[:block_provider_span_end],
+      destination_evidence: destination,
+      printed_line_total: {
+        amount: total_option.dig(:source, :line_total_amount),
+        evidence: total_option.dig(:evidence, :line_total)
+      },
+      conflicts: [],
+      options: options
+    }
+    { item: item, candidate: candidate }
+  end
+
+  def calculation_layout_component(evidence, analyze_result:, mapper:)
+    return unless evidence.is_a?(Hash) && evidence[:page_index] == 0
+
+    line_index = evidence[:line_index]
+    return unless line_index.is_a?(Integer) && line_index.between?(0, MAX_REFERENCE_PRICING_TOTAL_LINES - 1)
+    return unless evidence[:source_field_path] == "pages[0].lines[#{line_index}]"
+
+    line = analyze_result.dig("pages", 0, "lines", line_index)
+    content = analyze_result["content"]
+    line_span = exact_structured_authority_span(line, content:, mapper:)
+    return if line_span.nil?
+
+    span_start = evidence[:provider_span_start]
+    span_end = evidence[:provider_span_end]
+    return unless span_start.is_a?(Integer) && span_end.is_a?(Integer) && span_end > span_start
+    return unless span_start >= line_span.first && span_end <= line_span.last
+    return unless calculation_layout_word_coverage?(evidence, analyze_result:, mapper:, line_span:)
+
+    evidence.slice(:source_field_path, :provider_span_start, :provider_span_end)
+  end
+
+  def calculation_layout_word_coverage?(evidence, analyze_result:, mapper:, line_span:)
+    word_spans = evidence[:word_spans]
+    return false unless word_spans.is_a?(Array) && word_spans.size.between?(1, Ocr::ResponseParser::ItemCalculationModeLayoutExtractor::MAX_WORDS)
+
+    words = analyze_result.dig("pages", 0, "words")
+    span_start = evidence[:provider_span_start]
+    span_end = evidence[:provider_span_end]
+    validated = word_spans.all? do |word_span|
+      next false unless word_span.is_a?(Hash)
+
+      index = word_span[:word_index]
+      next false unless index.is_a?(Integer) && index.between?(0, words.size - 1)
+
+      word = words[index]
+      word_span_start = word_span[:provider_span_start]
+      word_span_end = word_span[:provider_span_end]
+      next false unless word_span_start.is_a?(Integer) && word_span_end.is_a?(Integer) && word_span_end > word_span_start
+      next false unless word_span_start >= line_span.first && word_span_end <= line_span.last
+      next false unless word_span_start < span_end && word_span_end > span_start
+
+      word.dig("span", "offset") == word_span_start && word.dig("span", "length") == word_span_end - word_span_start
+    end
+    return false unless validated
+    return false unless word_spans.first[:provider_span_start] <= span_start && word_spans.last[:provider_span_end] >= span_end
+
+    word_spans.each_cons(2).all? do |left, right|
+      gap_start = left[:provider_span_end]
+      gap_end = right[:provider_span_start]
+      gap_start <= gap_end && mapper.slice(analyze_result["content"], offset: gap_start, length: gap_end - gap_start)&.match?(/\A[ \t]*\z/)
+    end
+  end
+
   def lines_without_reference_pricing_blocks(lines, blocks)
     source_lines = Array(lines)
     excluded_indexes = reference_pricing_block_line_indexes(blocks).select do |index|
@@ -923,7 +1099,7 @@ class Ocr::ResponseParser
         next if reference_index.negative?
 
         [ reference_index, purchased_index ]
-      when "azure_item_layout"
+      when "azure_item_layout", "azure_calculation_layout"
         indexes = block[:owned_line_indexes]
         next unless indexes.is_a?(Array) && indexes.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_LINES)
         next unless indexes.all? { |index| index.is_a?(Integer) && index.between?(0, MAX_REFERENCE_PRICING_TOTAL_LINES - 1) }
@@ -933,7 +1109,7 @@ class Ocr::ResponseParser
     end.flatten.uniq.sort
   end
 
-  # A strict reference-pricing block is diagnostic evidence only. Azure occasionally assigns
+  # Item-pricing blocks own item-local evidence. Azure occasionally assigns
   # receipt-level fields to the same glyphs, so those fields must prove ownership outside
   # the candidate block before any receipt authority extractor can consume them.
   def response_without_reference_pricing_block_fields(parsed_response, blocks)
@@ -995,7 +1171,7 @@ class Ocr::ResponseParser
   def reference_pricing_block_ranges(blocks)
     Array(blocks).filter_map do |block|
       next unless block.is_a?(Hash)
-      next unless %w[azure_item_layout azure_line_group].include?(block[:source_kind])
+      next unless %w[azure_item_layout azure_line_group azure_calculation_layout].include?(block[:source_kind])
 
       range_start = block[:block_provider_span_start]
       range_end = block[:block_provider_span_end]

@@ -7,7 +7,8 @@ module Receipts::Processing::Contracts
     CREATION_STAGE = "ocr_validation"
     SOURCE_PROVIDER = "azure_structured"
     LAYOUT_SOURCE_PROVIDER = "azure_item_layout"
-    SOURCE_PROVIDERS = [ SOURCE_PROVIDER, LAYOUT_SOURCE_PROVIDER ].freeze
+    CALCULATION_LAYOUT_SOURCE_PROVIDER = "azure_calculation_layout"
+    SOURCE_PROVIDERS = [ SOURCE_PROVIDER, LAYOUT_SOURCE_PROVIDER, CALCULATION_LAYOUT_SOURCE_PROVIDER ].freeze
     PROVIDER_MODEL_ID = "prebuilt-receipt"
     PROVIDER_API_VERSION = "2024-11-30"
     SUPPORTED_STRING_INDEX_TYPES = %w[utf16CodeUnit textElements].freeze
@@ -62,6 +63,9 @@ module Receipts::Processing::Contracts
     ].freeze
     REFERENCE_EVIDENCE_KEYS = %w[
       reference_price reference_quantity purchased_quantity tax_inclusion
+    ].freeze
+    CALCULATION_LAYOUT_REFERENCE_EVIDENCE_KEYS = %w[
+      reference_price reference_quantity reference_unit purchased_quantity purchased_unit tax_inclusion
     ].freeze
     EXPLICIT_SOURCE_KEYS = %w[line_total_amount].freeze
     EXPLICIT_EVIDENCE_KEYS = %w[line_total].freeze
@@ -157,6 +161,10 @@ module Receipts::Processing::Contracts
     LAYOUT_ITEM_IDENTITY_PATTERN = /
       \Aazure_item_layout_item_p0_name_l(?<name>\d+)_s(?<name_start>\d+)_e(?<name_end>\d+)
       _ref_l(?<reference>\d+)_qty_l(?<quantity>\d+)_total_l(?<total>\d+)\z
+    /x.freeze
+    CALCULATION_LAYOUT_IDENTITY_PATTERN = /
+      \Aazure_calculation_layout_p0_name_l(?<name_line_index>0|[1-9]\d*)
+      _s(?<span_start>0|[1-9]\d*)_e(?<name_end>0|[1-9]\d*)_block_e(?<span_end>0|[1-9]\d*)\z
     /x.freeze
     STRUCTURED_ITEM_IDENTITY_PATTERN = /
       \Aazure_structured_item_i(?<item>\d+)_s(?<span_start>\d+)_e(?<span_end>\d+)\z
@@ -280,6 +288,7 @@ module Receipts::Processing::Contracts
       end
 
       def reference_option_for(candidate, context:)
+        return if calculation_layout_candidate?(candidate)
         return if layout_only_candidate?(candidate)
         return unless SUPPORTED_STRING_INDEX_TYPES.include?(candidate["string_index_type"])
 
@@ -425,6 +434,8 @@ module Receipts::Processing::Contracts
         case proposal["source_provider"]
         when SOURCE_PROVIDER
           !proposal.key?("destination_kind")
+        when CALCULATION_LAYOUT_SOURCE_PROVIDER
+          !proposal.key?("destination_kind")
         when LAYOUT_SOURCE_PROVIDER
           if proposal["item_identity"].to_s.match?(LAYOUT_ITEM_IDENTITY_PATTERN)
             proposal["destination_kind"] == "azure_layout_item"
@@ -439,6 +450,8 @@ module Receipts::Processing::Contracts
       end
 
       def proposal_identity_valid?(proposal, item_index:, parent_start:, parent_end:)
+        return calculation_layout_identity_valid?(proposal) if calculation_layout_candidate?(proposal)
+
         if hybrid_layout_candidate?(proposal)
           metadata = layout_candidate_metadata(proposal)
           identity = structured_item_identity_metadata(proposal["item_identity"])
@@ -468,6 +481,15 @@ module Receipts::Processing::Contracts
       end
 
       def destination_evidence_valid?(proposal, parent_start:, parent_end:)
+        if calculation_layout_candidate?(proposal)
+          return component_evidence_valid?(
+            proposal["destination_evidence"],
+            expected_path: proposal["source_field_path"],
+            parent_start: parent_start,
+            parent_end: parent_end
+          )
+        end
+
         if layout_candidate?(proposal)
           metadata = if hybrid_layout_candidate?(proposal)
             layout_candidate_metadata(proposal)
@@ -826,6 +848,146 @@ module Receipts::Processing::Contracts
         false
       end
 
+      def calculation_layout_candidate?(value)
+        value["source_provider"] == CALCULATION_LAYOUT_SOURCE_PROVIDER
+      end
+
+      def calculation_layout_identity_metadata(value)
+        return unless value.is_a?(String) && value.bytesize <= MAX_ID_BYTES
+
+        match = CALCULATION_LAYOUT_IDENTITY_PATTERN.match(value)
+        return if match.nil?
+
+        metadata = {
+          name_line_index: Integer(match[:name_line_index], 10),
+          span_start: Integer(match[:span_start], 10),
+          name_end: Integer(match[:name_end], 10),
+          span_end: Integer(match[:span_end], 10)
+        }
+        return unless metadata[:name_line_index].between?(0, MAX_LAYOUT_LINE_INDEX)
+        return unless valid_span?(metadata[:span_start], metadata[:name_end])
+        return unless valid_span?(metadata[:name_end], metadata[:span_end])
+
+        metadata
+      end
+
+      def calculation_layout_identity_valid?(proposal)
+        metadata = calculation_layout_identity_metadata(proposal["item_identity"])
+        return false if metadata.nil?
+        return false unless bounded_string?(proposal["candidate_id"], maximum: MAX_ID_BYTES)
+        return false unless proposal["candidate_id"] == "#{proposal['item_identity']}_item_calculation_mode"
+        return false unless proposal["source_field_path"] == layout_line_path(metadata[:name_line_index])
+        return false unless proposal["provider_span_start"] == metadata[:span_start]
+        return false unless proposal["provider_span_end"] == metadata[:span_end]
+
+        destination = normalized_hash(proposal["destination_evidence"])
+        destination["provider_span_start"] == metadata[:span_start] &&
+          destination["provider_span_end"] == metadata[:name_end]
+      end
+
+      def calculation_layout_options_valid?(proposal)
+        options = proposal["options"]
+        return false unless proposal["conflicts"] == []
+        return false unless options.is_a?(Array) && options.size.between?(1, MAX_OPTIONS)
+
+        modes = options.map { |option| normalized_hash(option)["pricing_source_kind"] }
+        return false unless [
+          %w[explicit_line_total],
+          %w[count_unit_price explicit_line_total],
+          %w[reference_quantity_price explicit_line_total]
+        ].include?(modes)
+        return false unless proposal["printed_line_total"].is_a?(Hash)
+
+        valid = options.all? do |option|
+          return false unless exact_keys?(option, OPTION_KEYS)
+          return false unless bounded_string?(option["proposal_id"], maximum: MAX_ID_BYTES)
+          return false unless option["proposal_id"] == "#{proposal['item_identity']}_#{option['pricing_source_kind']}"
+
+          source = normalized_hash(option["source"])
+          evidence = normalized_hash(option["evidence"])
+          case option["pricing_source_kind"]
+          when "count_unit_price"
+            unit = ReceiptQuantityUnit.unit_for(source["quantity_unit_code"])
+            exact_keys?(source, COUNT_SOURCE_KEYS) &&
+              exact_keys?(evidence, COUNT_EVIDENCE_KEYS) &&
+              exact_integer?(source["price_amount"], maximum: MAX_AMOUNT, allow_zero: true) &&
+              exact_integer?(source["quantity"], maximum: MAX_QUANTITY, allow_zero: false) &&
+              unit&.code == source["quantity_unit_code"] && unit.kind == :countable &&
+              calculation_layout_evidence_valid?(evidence, proposal: proposal, offsets: { "price" => 1, "quantity" => 2, "quantity_unit" => 2 })
+          when "reference_quantity_price"
+            exact_keys?(source, REFERENCE_SOURCE_KEYS) &&
+              exact_keys?(evidence, CALCULATION_LAYOUT_REFERENCE_EVIDENCE_KEYS) &&
+              source["reference_quantity_origin"] == "explicit" &&
+              reference_source_valid?(source) &&
+              reference_projection(source).present? &&
+              calculation_layout_evidence_valid?(
+                evidence,
+                proposal: proposal,
+                offsets: {
+                  "reference_price" => 1,
+                  "reference_quantity" => 1,
+                  "reference_unit" => 1,
+                  "tax_inclusion" => 1,
+                  "purchased_quantity" => 2,
+                  "purchased_unit" => 2
+                }
+              )
+          when "explicit_line_total"
+            total_offset = modes.one? ? nil : 3
+            exact_keys?(source, EXPLICIT_SOURCE_KEYS) &&
+              exact_keys?(evidence, EXPLICIT_EVIDENCE_KEYS) &&
+              exact_integer?(source["line_total_amount"], maximum: MAX_AMOUNT, allow_zero: true) &&
+              calculation_layout_evidence_valid?(evidence, proposal: proposal, offsets: { "line_total" => total_offset })
+          end
+        end
+        valid && all_evidence_nonoverlapping?(proposal) && calculation_layout_evidence_order_valid?(proposal)
+      end
+
+      def calculation_layout_evidence_order_valid?(proposal)
+        evidence = [ proposal["destination_evidence"] ]
+        proposal["options"].each do |option|
+          components = option["evidence"]
+          quantity, unit = if option["pricing_source_kind"] == "count_unit_price"
+            components.values_at("quantity", "quantity_unit")
+          elsif option["pricing_source_kind"] == "reference_quantity_price"
+            return false if components["reference_quantity"]["provider_span_end"] > components["reference_unit"]["provider_span_start"]
+
+            components.values_at("purchased_quantity", "purchased_unit")
+          end
+          return false if quantity && quantity["provider_span_end"] > unit["provider_span_start"]
+
+          evidence.concat(components.values)
+        end
+        lines = evidence.group_by do |component|
+          Integer(component["source_field_path"][/\[(\d+)\]\z/, 1], 10)
+        end.sort_by(&:first)
+        lines.each_cons(2).all? do |(_, previous), (_, following)|
+          previous.map { |component| component["provider_span_end"] }.max <=
+            following.map { |component| component["provider_span_start"] }.min
+        end
+      end
+
+      def calculation_layout_evidence_valid?(evidence, proposal:, offsets:)
+        metadata = calculation_layout_identity_metadata(proposal["item_identity"])
+        return false if metadata.nil?
+
+        offsets.all? do |role, offset|
+          component = normalized_hash(evidence[role])
+          match = /\Apages\[0\]\.lines\[(0|[1-9]\d*)\]\z/.match(component["source_field_path"].to_s)
+          next false if match.nil?
+
+          index = Integer(match[1], 10)
+          valid_line = offset ? index == metadata[:name_line_index] + offset : index.between?(metadata[:name_line_index] + 1, metadata[:name_line_index] + 2)
+          valid_line && index <= MAX_LAYOUT_LINE_INDEX &&
+            component_evidence_valid?(
+              component,
+              expected_path: layout_line_path(index),
+              parent_start: metadata[:span_start],
+              parent_end: metadata[:span_end]
+            )
+        end
+      end
+
       def conflicts_valid?(value)
         value.is_a?(Array) &&
           value.uniq == value &&
@@ -834,6 +996,8 @@ module Receipts::Processing::Contracts
       end
 
       def options_valid?(proposal, parent_start:, parent_end:)
+        return calculation_layout_options_valid?(proposal) if calculation_layout_candidate?(proposal)
+
         options = proposal["options"]
         return false unless options.is_a?(Array) && options.size.between?(1, MAX_OPTIONS)
 
@@ -1005,30 +1169,7 @@ module Receipts::Processing::Contracts
           "azure_items_#{item_index}_reference_pricing"
         end
         return false unless option["source_candidate_id"] == expected_candidate_id
-        return false unless exact_decimal?(
-          source["reference_price_amount"],
-          maximum: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX,
-          maximum_scale: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX_SCALE,
-          allow_zero: true
-        )
-        return false unless exact_decimal?(
-          source["reference_quantity"],
-          maximum: ReceiptItem::REFERENCE_QUANTITY_MAX,
-          maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
-          allow_zero: false
-        )
-        return false unless exact_decimal?(
-          source["purchased_quantity"],
-          maximum: ReceiptItem::REFERENCE_QUANTITY_MAX,
-          maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
-          allow_zero: false
-        )
-        return false unless REFERENCE_QUANTITY_ORIGINS.include?(source["reference_quantity_origin"])
-        return false unless REFERENCE_TAX_INCLUSIONS.include?(source["reference_price_tax_inclusion"])
-        return false unless compatible_reference_units?(
-          source["reference_quantity_unit_code"],
-          source["purchased_quantity_unit_code"]
-        )
+        return false unless reference_source_valid?(source)
 
         if hybrid_layout_candidate?(proposal)
           return false unless hybrid_reference_option_evidence_valid?(
@@ -1075,6 +1216,35 @@ module Receipts::Processing::Contracts
         end
 
         reference_projection(source).present?
+      end
+
+      def reference_source_valid?(source)
+        return false unless exact_decimal?(
+          source["reference_price_amount"],
+          maximum: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX,
+          maximum_scale: ReceiptItem::REFERENCE_PRICE_AMOUNT_MAX_SCALE,
+          allow_zero: true
+        )
+        return false unless exact_decimal?(
+          source["reference_quantity"],
+          maximum: ReceiptItem::REFERENCE_QUANTITY_MAX,
+          maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+          allow_zero: false
+        )
+        return false unless exact_decimal?(
+          source["purchased_quantity"],
+          maximum: ReceiptItem::REFERENCE_QUANTITY_MAX,
+          maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+          allow_zero: false
+        )
+        return false unless REFERENCE_QUANTITY_ORIGINS.include?(source["reference_quantity_origin"])
+        return false unless REFERENCE_TAX_INCLUSIONS.include?(source["reference_price_tax_inclusion"])
+        return false unless compatible_reference_units?(
+          source["reference_quantity_unit_code"],
+          source["purchased_quantity_unit_code"]
+        )
+
+        true
       end
 
       def hybrid_reference_option_evidence_valid?(evidence, proposal:, parent_start:, parent_end:)
@@ -1372,6 +1542,7 @@ module Receipts::Processing::Contracts
       end
 
       def reference_options_match_context?(proposal, context:)
+        return true if calculation_layout_candidate?(proposal)
         return true if layout_only_candidate?(proposal)
 
         references = context.dig("candidates", "reference_pricing_candidates").select do |candidate|
@@ -1917,6 +2088,11 @@ module Receipts::Processing::Contracts
       end
 
       def explicit_total_path(proposal)
+        if calculation_layout_candidate?(proposal)
+          explicit = proposal["options"].find { |option| option["pricing_source_kind"] == "explicit_line_total" }
+          return explicit&.dig("evidence", "line_total", "source_field_path")
+        end
+
         if layout_candidate?(proposal)
           metadata = if hybrid_layout_candidate?(proposal)
             layout_candidate_metadata(proposal)
@@ -2001,6 +2177,7 @@ module Receipts::Processing::Contracts
 
       def collection_valid?(proposals, context:)
         return false unless proposals.is_a?(Array) && proposals.size <= MAX_SETS
+        return false unless calculation_layout_blocks_nonoverlapping?(proposals)
 
         candidate_ids = proposals.map { |proposal| proposal["candidate_id"] }
         item_identities = proposals.map { |proposal| proposal["item_identity"] }
@@ -2013,6 +2190,14 @@ module Receipts::Processing::Contracts
           item_indexes == item_indexes.sort &&
           counts["actual_count"] == proposals.size &&
           counts["snapshot_count"] == proposals.size
+      end
+
+      def calculation_layout_blocks_nonoverlapping?(proposals)
+        layouts = proposals.select { |proposal| calculation_layout_candidate?(proposal) }
+          .sort_by { |proposal| proposal["provider_span_start"] }
+        layouts.each_cons(2).all? do |previous, following|
+          previous["provider_span_end"] <= following["provider_span_start"]
+        end
       end
 
       def ocr_context(value)
@@ -2106,7 +2291,8 @@ module Receipts::Processing::Contracts
       end
 
       def context_item_identity_valid?(identity)
-        identity.match?(STRUCTURED_ITEM_IDENTITY_PATTERN) || identity.match?(LAYOUT_ITEM_IDENTITY_PATTERN)
+        identity.match?(STRUCTURED_ITEM_IDENTITY_PATTERN) || identity.match?(LAYOUT_ITEM_IDENTITY_PATTERN) ||
+          calculation_layout_identity_metadata(identity).present?
       end
 
       def bounded_context_amount(value, allow_zero:)
