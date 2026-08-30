@@ -217,13 +217,15 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       return false unless selection.projected_line_total.between?(0, item_line_total_limit)
       return false unless trusted_item_calculation_mode_review_valid?(item, selection)
       return false unless item[:pricing_source_kind] == selection.pricing_source_kind
-      return false unless item[:discount_amount].nil? && item[:discount_rate].nil?
+      unless selection.pricing_source_kind == "count_unit_price"
+        return false unless item[:discount_amount].nil? && item[:discount_rate].nil?
+      end
 
       case selection.pricing_source_kind
       when "count_unit_price"
         return false unless reference_source_absent?(item)
 
-        trusted_count_source_valid?(item, selection, item_price_limit:)
+        trusted_count_source_valid?(item, selection, item_price_limit:, item_line_total_limit:)
       when "reference_quantity_price"
         trusted_reference_item_calculation_source_valid?(item, selection)
       when "explicit_line_total"
@@ -247,7 +249,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       end
     end
 
-    def trusted_count_source_valid?(item, selection, item_price_limit:)
+    def trusted_count_source_valid?(item, selection, item_price_limit:, item_line_total_limit:)
       unit = ReceiptQuantityUnit.unit_for(selection.quantity_unit_code)
 
       selection.price.is_a?(Integer) &&
@@ -259,7 +261,33 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         item[:quantity].is_a?(BigDecimal) && item[:quantity] == selection.quantity &&
         item[:quantity_unit_code] == selection.quantity_unit_code &&
         item[:quantity_unit_raw].nil? &&
-        exact_item_total_matches?(item, selection.projected_line_total)
+        trusted_count_totals_valid?(item, selection, item_line_total_limit:)
+    end
+
+    def trusted_count_totals_valid?(item, selection, item_line_total_limit:)
+      if selection.discount_amount.nil? && selection.discount_rate.nil?
+        return item[:discount_amount].nil? && item[:discount_rate].nil? &&
+          exact_item_total_matches?(item, selection.projected_line_total)
+      end
+      return false unless selection.original_line_total.is_a?(Integer)
+      return false unless selection.original_line_total.between?(0, item_line_total_limit)
+      return false unless item[:original_line_total].is_a?(Integer) && item[:line_total].is_a?(Integer)
+      return false unless item[:discount_amount].is_a?(Integer) && item[:discount_rate].is_a?(BigDecimal)
+      return false unless item[:discount_amount] == selection.discount_amount && item[:discount_rate] == selection.discount_rate
+
+      projection = ReceiptAmountService.count_item_extension_projection(
+        price_amount: selection.price,
+        purchased_quantity: selection.quantity,
+        purchased_unit_code: selection.quantity_unit_code,
+        discount_amount: selection.discount_amount,
+        discount_rate: selection.discount_rate
+      )
+      item[:original_line_total] == projection[:original_line_total] &&
+        selection.original_line_total == projection[:original_line_total] &&
+        item[:line_total] == projection[:projected_amount] &&
+        selection.projected_line_total == projection[:projected_amount]
+    rescue ReceiptAmountService::InvalidItemSourceError
+      false
     end
 
     def trusted_explicit_source_valid?(item, selection)

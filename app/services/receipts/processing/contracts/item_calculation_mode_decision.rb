@@ -249,13 +249,19 @@ module Receipts::Processing::Contracts
         price = exact_integer(source["price_amount"])
         return unless price && price <= item_price_limit
 
-        projection = ReceiptAmountService.count_item_extension_projection(
+        projection_arguments = {
           price_amount: source["price_amount"],
           purchased_quantity: source["quantity"],
           purchased_unit_code: source["quantity_unit_code"]
-        )
+        }
+        if option.key?("discount")
+          projection_arguments[:discount_amount] = option.dig("discount", "amount")
+          projection_arguments[:discount_rate] = option.dig("discount", "rate")
+        end
+        projection = ReceiptAmountService.count_item_extension_projection(**projection_arguments)
         amount = projection.fetch(:projected_amount)
         return unless amount.between?(0, item_line_total_limit)
+        return unless projection.fetch(:original_line_total, amount).between?(0, item_line_total_limit)
 
         projected_option(option, amount)
       rescue ReceiptAmountService::InvalidItemSourceError

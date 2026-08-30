@@ -180,6 +180,84 @@ RSpec.describe ReceiptAmountService do
   end
 
   describe '.count_item_extension_projection' do
+    it '印字割引額を率だけのHALF_UP計算で検証し割引前後の金額を分離する' do
+      [
+        { price: '49', amount: '13', total: 36 },
+        { price: '50', amount: '14', total: 36 },
+        { price: '51', amount: '14', total: 37 }
+      ].each do |values|
+        expect(described_class.count_item_extension_projection(
+          price_amount: values[:price],
+          purchased_quantity: '1',
+          purchased_unit_code: 'piece',
+          discount_amount: values[:amount],
+          discount_rate: '0.27'
+        )).to eq(
+          exact_amount: Rational(values[:price], 1),
+          original_line_total: values[:price].to_i,
+          projected_amount: values[:total],
+          discount_amount: values[:amount].to_i
+        )
+      end
+    end
+
+    it '正の率から丸められた明示0円割引を欠損と区別する' do
+      expect(described_class.count_item_extension_projection(
+        price_amount: '1',
+        purchased_quantity: '1',
+        purchased_unit_code: 'piece',
+        discount_amount: '0',
+        discount_rate: '0.01'
+      )).to eq(
+        exact_amount: Rational(1, 1),
+        original_line_total: 1,
+        projected_amount: 1,
+        discount_amount: 0
+      )
+    end
+
+    it '不完全・過精度・範囲外・丸め不一致の割引sourceを拒否する' do
+      invalid_discounts = [
+        { discount_amount: nil, discount_rate: '0.27' },
+        { discount_amount: '14', discount_rate: nil },
+        { discount_amount: '14', discount_rate: '0' },
+        { discount_amount: '50', discount_rate: '1' },
+        { discount_amount: '14', discount_rate: '0.2701' },
+        { discount_amount: '13', discount_rate: '0.27' },
+        { discount_amount: '51', discount_rate: '0.27' },
+        { discount_amount: '-1', discount_rate: '0.27' },
+        { discount_amount: '14.1', discount_rate: '0.27' },
+        { discount_amount: 14.0, discount_rate: '0.27' },
+        { discount_amount: '14', discount_rate: 0.27 },
+        { discount_amount: [], discount_rate: '0.27' },
+        { discount_amount: '14', discount_rate: '9' * 65 }
+      ]
+
+      invalid_discounts.each do |discount|
+        expect {
+          described_class.count_item_extension_projection(
+            price_amount: '50',
+            purchased_quantity: '1',
+            purchased_unit_code: 'piece',
+            **discount
+          )
+        }.to raise_error(described_class::InvalidItemSourceError)
+      end
+    end
+
+    it '割引引数が両方nilなら既存projectionの返却shapeを維持する' do
+      expect(described_class.count_item_extension_projection(
+        price_amount: '50',
+        purchased_quantity: '1',
+        purchased_unit_code: 'piece',
+        discount_amount: nil,
+        discount_rate: nil
+      )).to eq(
+        exact_amount: Rational(50, 1),
+        projected_amount: 50
+      )
+    end
+
     it 'count sourceをexactのまま既存Amount計算へ委譲する' do
       result = described_class.count_item_extension_projection(
         price_amount: '220',

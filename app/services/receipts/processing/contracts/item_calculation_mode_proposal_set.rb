@@ -32,6 +32,7 @@ module Receipts::Processing::Contracts
     MAX_AMOUNT = BigDecimal("999999999999")
     MAX_QUANTITY = BigDecimal("9999")
     MAX_TAX_RATE_SCALE = 6
+    MAX_DISCOUNT_RATE_SCALE = 3
 
     PRICING_SOURCE_KINDS = %w[
       count_unit_price
@@ -47,9 +48,13 @@ module Receipts::Processing::Contracts
     ROOT_OPTIONAL_KEYS = %w[destination_kind printed_line_total].freeze
     ROOT_KEYS = (ROOT_REQUIRED_KEYS + ROOT_OPTIONAL_KEYS).freeze
     OPTION_KEYS = %w[proposal_id pricing_source_kind source evidence].freeze
+    DISCOUNTED_COUNT_OPTION_KEYS = (OPTION_KEYS + %w[discount]).freeze
     REFERENCE_OPTION_KEYS = (OPTION_KEYS + %w[source_candidate_id]).freeze
     COUNT_SOURCE_KEYS = %w[price_amount quantity quantity_unit_code].freeze
     COUNT_EVIDENCE_KEYS = %w[price quantity quantity_unit].freeze
+    COUNT_DISCOUNT_KEYS = %w[amount rate printed_total_stage evidence].freeze
+    COUNT_DISCOUNT_EVIDENCE_KEYS = %w[amount rate].freeze
+    COUNT_DISCOUNT_STAGE = "after_item_discount"
     REFERENCE_SOURCE_KEYS = %w[
       reference_price_amount reference_quantity reference_quantity_unit_code
       reference_quantity_origin purchased_quantity purchased_quantity_unit_code
@@ -730,7 +735,8 @@ module Receipts::Processing::Contracts
           when "count_unit_price"
             context_integer_matches?(item["price"], source["price_amount"], maximum: MAX_AMOUNT, allow_zero: true) &&
               context_integer_matches?(item["quantity"], source["quantity"], maximum: MAX_QUANTITY, allow_zero: false) &&
-              item["quantity_unit_code"] == source["quantity_unit_code"]
+              item["quantity_unit_code"] == source["quantity_unit_code"] &&
+              count_discount_matches_context?(option, item)
           when "reference_quantity_price"
             context_decimal_matches?(
               item["price"],
@@ -748,8 +754,11 @@ module Receipts::Processing::Contracts
               ) &&
               item["quantity_unit_code"] == source["purchased_quantity_unit_code"]
           when "explicit_line_total"
+            discounted_count = options.any? do |entry|
+              entry["pricing_source_kind"] == "count_unit_price" && entry.key?("discount")
+            end
             context_integer_matches?(
-              item["original_line_total"],
+              item[discounted_count ? "line_total" : "original_line_total"],
               source["line_total_amount"],
               maximum: MAX_AMOUNT,
               allow_zero: true
@@ -758,6 +767,25 @@ module Receipts::Processing::Contracts
             false
           end
         end
+      end
+
+      def count_discount_matches_context?(option, item)
+        return true unless option.key?("discount")
+
+        discount = normalized_hash(option["discount"])
+        projection = count_discount_projection(option)
+        return false unless projection
+        return false unless context_integer_matches?(item["discount_amount"], discount["amount"], maximum: MAX_AMOUNT, allow_zero: true)
+        return false unless context_decimal_matches?(
+          item["discount_rate"],
+          discount["rate"],
+          maximum: 1,
+          maximum_scale: MAX_DISCOUNT_RATE_SCALE,
+          allow_zero: false
+        )
+
+        context_integer_matches?(item["original_line_total"], projection[:original_line_total].to_s, maximum: MAX_AMOUNT, allow_zero: true) &&
+          context_integer_matches?(item["line_total"], projection[:projected_amount].to_s, maximum: MAX_AMOUNT, allow_zero: true)
       end
 
       def context_integer_matches?(value, exact, maximum:, allow_zero:)
@@ -819,7 +847,10 @@ module Receipts::Processing::Contracts
           return false unless proposal["conflicts"] == []
         end
         unless layout_candidate?(proposal)
-          return false if proposal["conflicts"].any? && modes.include?("count_unit_price")
+          if modes.include?("count_unit_price") && proposal["conflicts"].any?
+            count = options.find { |option| option["pricing_source_kind"] == "count_unit_price" }
+            return false unless proposal["conflicts"] == [ "discount" ] && count.key?("discount")
+          end
           if modes.include?("reference_quantity_price")
             return false unless proposal["conflicts"] == [ "reference_expression" ]
             return false if modes.include?("count_unit_price")
@@ -846,7 +877,12 @@ module Receipts::Processing::Contracts
 
         case kind
         when "count_unit_price"
-          return false unless exact_keys?(option, OPTION_KEYS)
+          expected_keys = option.key?("discount") ? DISCOUNTED_COUNT_OPTION_KEYS : OPTION_KEYS
+          return false unless exact_keys?(option, expected_keys)
+          if option.key?("discount")
+            return false unless proposal["conflicts"] == [ "discount" ]
+            return false unless count_discount_valid?(option, proposal: proposal, parent_start: parent_start, parent_end: parent_end)
+          end
 
           count_option_valid?(option, item_index: item_index, parent_start: parent_start, parent_end: parent_end)
         when "reference_quantity_price"
@@ -913,6 +949,49 @@ module Receipts::Processing::Contracts
             parent_end: parent_end
           )
         end
+      end
+
+      def count_discount_valid?(option, proposal:, parent_start:, parent_end:)
+        discount = normalized_hash(option["discount"])
+        return false unless exact_keys?(discount, COUNT_DISCOUNT_KEYS)
+        return false unless discount["printed_total_stage"] == COUNT_DISCOUNT_STAGE
+
+        evidence = normalized_hash(discount["evidence"])
+        return false unless exact_keys?(evidence, COUNT_DISCOUNT_EVIDENCE_KEYS)
+        return false unless evidence.values.all? do |entry|
+          component_evidence_valid?(
+            entry,
+            expected_path: proposal["source_field_path"],
+            parent_start: parent_start,
+            parent_end: parent_end
+          )
+        end
+
+        projection = count_discount_projection(option)
+        projection && normalized_hash(proposal["printed_line_total"])["amount"] == projection[:projected_amount].to_s
+      end
+
+      def count_discount_projection(option)
+        discount = normalized_hash(option["discount"])
+        return unless exact_integer?(discount["amount"], maximum: MAX_AMOUNT, allow_zero: true)
+        return unless exact_decimal?(
+          discount["rate"],
+          maximum: 1,
+          maximum_scale: MAX_DISCOUNT_RATE_SCALE,
+          allow_zero: false
+        )
+        return unless BigDecimal(discount["rate"]) < 1
+
+        source = normalized_hash(option["source"])
+        ReceiptAmountService.count_item_extension_projection(
+          price_amount: source["price_amount"],
+          purchased_quantity: source["quantity"],
+          purchased_unit_code: source["quantity_unit_code"],
+          discount_amount: discount["amount"],
+          discount_rate: discount["rate"]
+        )
+      rescue ReceiptAmountService::InvalidItemSourceError
+        nil
       end
 
       def reference_option_valid?(option, proposal:, item_index:, parent_start:, parent_end:)
@@ -1878,6 +1957,9 @@ module Receipts::Processing::Contracts
       def all_evidence_nonoverlapping?(proposal)
         evidence = [ proposal["destination_evidence"] ]
         proposal["options"].each do |option|
+          if option.key?("discount")
+            evidence.concat(normalized_hash(normalized_hash(option["discount"])["evidence"]).values)
+          end
           normalized_hash(option["evidence"]).each_value do |entry|
             normalized = normalized_hash(entry)
             if normalized["kind"] == SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND
@@ -1979,6 +2061,8 @@ module Receipts::Processing::Contracts
             "price" => item["price"],
             "quantity" => item["quantity"],
             "quantity_unit_code" => item["quantity_unit_code"],
+            "discount_amount" => item["discount_amount"],
+            "discount_rate" => item["discount_rate"],
             "line_total" => item["line_total"],
             "original_line_total" => item["original_line_total"]
           }.compact

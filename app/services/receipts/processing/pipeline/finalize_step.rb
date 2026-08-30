@@ -631,8 +631,8 @@ class Receipts::Processing::Pipeline
       )
       return false unless calculation_review_present == selection.reviewable?
       return false if selection.reviewable? && !item.needs_review?
-      return false unless item.discount_amount.nil? && item.discount_rate.nil?
-      return false unless item.original_line_total == selection.projected_line_total
+      return false unless item_calculation_mode_discount_matches?(item, selection)
+      return false unless item.original_line_total == (selection.original_line_total || selection.projected_line_total)
       return false unless item.line_total == selection.projected_line_total
 
       case selection.pricing_source_kind
@@ -665,6 +665,26 @@ class Receipts::Processing::Pipeline
 
         item.price.nil? && item.original_line_total == selection.explicit_line_total
       end
+    end
+
+    def item_calculation_mode_discount_matches?(item, selection)
+      if selection.discount_amount.nil? && selection.discount_rate.nil?
+        return item.discount_amount.nil? && item.discount_rate.nil?
+      end
+      return false unless selection.pricing_source_kind == "count_unit_price"
+      return false unless item.discount_amount == selection.discount_amount && item.discount_rate == selection.discount_rate
+
+      projection = ReceiptAmountService.count_item_extension_projection(
+        price_amount: selection.price,
+        purchased_quantity: selection.quantity,
+        purchased_unit_code: selection.quantity_unit_code,
+        discount_amount: selection.discount_amount,
+        discount_rate: selection.discount_rate
+      )
+      item.original_line_total == projection[:original_line_total] &&
+        item.line_total == projection[:projected_amount]
+    rescue ReceiptAmountService::InvalidItemSourceError
+      false
     end
 
     def raise_item_calculation_mode_persistence_invariant!
