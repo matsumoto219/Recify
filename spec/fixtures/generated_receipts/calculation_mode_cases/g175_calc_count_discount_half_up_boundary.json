@@ -1,0 +1,108 @@
+{
+  "case_id": "g175_calc_count_discount_half_up_boundary",
+  "category": "calculation_mode",
+  "intent": "At 27% discount, extensions 49,50,51 yield discount 13,14,14; preserve HALF_UP below, at, and above half yen. Fixed before render: required rates 1%,27%; LCG32 seed 20260830 draws 96%,75%,31%,60% from 1..99 except 1,8,10,27. Synthetic, not statutory rates.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示端数下 (税込1%)", "単価 @49円", "数量 1個", "明細値引 27% -13円", "明細計 36円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "49",
+        "printed_line_total": 36,
+        "discount_rate": "0.27",
+        "discount_amount": 13
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["例示端数境 (税込1%)", "単価 @50円", "数量 1個", "明細値引 27% -14円", "明細計 36円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "50",
+        "printed_line_total": 36,
+        "discount_rate": "0.27",
+        "discount_amount": 14
+      },
+      {
+        "item_index": 2,
+        "printed_lines": ["例示端数上 (税込1%)", "単価 @51円", "数量 1個", "明細値引 27% -14円", "明細計 37円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "51",
+        "printed_line_total": 37,
+        "discount_rate": "0.27",
+        "discount_amount": 14
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空計数検証店",
+    "store_address": "架空県例示市検証町1-1",
+    "purchased_at": "2026-08-01T09:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.01,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示端数下",
+        "unit_price": 49,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 49,
+        "line_total": 36,
+        "tax_rate": 0.01,
+        "discount_amount": 13,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示端数境",
+        "unit_price": 50,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 50,
+        "line_total": 36,
+        "tax_rate": 0.01,
+        "discount_amount": 14,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示端数上",
+        "unit_price": 51,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 51,
+        "line_total": 37,
+        "tax_rate": 0.01,
+        "discount_amount": 14,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.01, "net": 108, "tax": 1, "gross": 109, "basis": "gross", "label": "1%対象計"}],
+    "subtotal": 108,
+    "tax": 1,
+    "total": 109,
+    "payments": [{"method": "cash", "label": "現金", "amount": 109}],
+    "payment_sum": 109,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "item_review_states"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

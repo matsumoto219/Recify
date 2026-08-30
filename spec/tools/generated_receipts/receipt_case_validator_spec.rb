@@ -492,8 +492,8 @@ RSpec.describe GeneratedReceipts::Validator do
     aggregate_failures do
       expect(case_paths.size).to eq(112)
       expect(measurement_case_paths.size).to eq(10)
-      expect(results.size).to eq(29)
-      expect(GeneratedReceipts.case_paths.size).to eq(151)
+      expect(results.size).to eq(43)
+      expect(GeneratedReceipts.case_paths.size).to eq(165)
       results.each do |filename, result|
         expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
       end

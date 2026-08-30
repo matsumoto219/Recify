@@ -110,8 +110,8 @@ RSpec.describe GeneratedReceipts::AdoptionEvidence::Validator do
       expect(GeneratedReceipts.legacy_case_paths.size).to eq(112)
       expect(GeneratedReceipts.measurement_case_paths.size).to eq(10)
       expect(GeneratedReceipts.legacy_case_paths.size + GeneratedReceipts.measurement_case_paths.size).to eq(122)
-      expect(GeneratedReceipts.calculation_mode_case_paths.size).to eq(29)
-      expect(GeneratedReceipts.case_paths.size).to eq(151)
+      expect(GeneratedReceipts.calculation_mode_case_paths.size).to eq(43)
+      expect(GeneratedReceipts.case_paths.size).to eq(165)
       expect(GeneratedReceipts.adoption_evidence_case_paths).to all(
         start_with("#{GeneratedReceipts::ADOPTION_EVIDENCE_CASES_DIR}/")
       )

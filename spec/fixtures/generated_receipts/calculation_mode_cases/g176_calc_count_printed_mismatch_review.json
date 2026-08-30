@@ -1,0 +1,102 @@
+{
+  "case_id": "g176_calc_count_printed_mismatch_review",
+  "category": "calculation_mode",
+  "intent": "A one-yen difference on either side preserves strong printed authority and reviews only mode; matching neighbors remain count. Fixed before render: required rates 1%,27%; LCG32 seed 20260830 draws 96%,75%,31%,60% from 1..99 except 1,8,10,27. Synthetic, not statutory rates.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示一致品 (税込60%)", "単価 @401円", "数量 1個", "明細計 401円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "401",
+        "printed_line_total": 401
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["例示不足差 (税込60%)", "単価 @401円", "数量 1個", "明細計 400円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "401",
+        "printed_line_total": 400
+      },
+      {
+        "item_index": 2,
+        "printed_lines": ["例示超過差 (税込60%)", "単価 @401円", "数量 1個", "明細計 402円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "401",
+        "printed_line_total": 402
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空計数検証店",
+    "store_address": "架空県例示市検証町1-1",
+    "purchased_at": "2026-08-01T09:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.6,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示一致品",
+        "unit_price": 401,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 401,
+        "line_total": 401,
+        "tax_rate": 0.6,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示不足差",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 400,
+        "line_total": 400,
+        "tax_rate": 0.6,
+        "discount_amount": 0,
+        "needs_review": true,
+        "review_reasons": ["item_pricing_mode_uncertain"]
+      },
+      {
+        "name": "例示超過差",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 402,
+        "line_total": 402,
+        "tax_rate": 0.6,
+        "discount_amount": 0,
+        "needs_review": true,
+        "review_reasons": ["item_pricing_mode_uncertain"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.6, "net": 752, "tax": 451, "gross": 1203, "basis": "gross", "label": "60%対象計"}],
+    "subtotal": 752,
+    "tax": 451,
+    "total": 1203,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1203}],
+    "payment_sum": 1203,
+    "payment_method": "cash",
+    "status": "review_needed",
+    "review_reasons": ["item_pricing_mode_uncertain"]
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "item_review_states"], "allow_review_reasons": ["item_pricing_mode_uncertain"], "allow_item_name_minor_diff": false}
+}

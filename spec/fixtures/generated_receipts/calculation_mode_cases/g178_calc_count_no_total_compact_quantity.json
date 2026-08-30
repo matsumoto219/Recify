@@ -1,0 +1,123 @@
+{
+  "case_id": "g178_calc_count_no_total_compact_quantity",
+  "category": "calculation_mode",
+  "intent": "An exact count formula without printed item total remains count. Explicit multiplication quantity without a unit label is a semantic count positive, not fallback one. Zero price and maximum 9999 count are boundaries. Fixed before render: required rates 1%,27%; LCG32 seed 20260830 draws 96%,75%,31%,60% from 1..99 except 1,8,10,27. Synthetic, not statutory rates.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示印字合計なし (税込27%)", "単価 @103円", "数量 2個"],
+        "purchased_quantity": "2",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "103"
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["例示乗算数量 (税込27%)", "単価 @137円", "数量 3", "明細計 411円"],
+        "purchased_quantity": "3",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "137",
+        "printed_line_total": 411
+      },
+      {
+        "item_index": 2,
+        "printed_lines": ["例示無料個数品 (税込27%)", "単価 @0円", "数量 1個", "明細計 0円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "0",
+        "printed_line_total": 0
+      },
+      {
+        "item_index": 3,
+        "printed_lines": ["例示最大個数品 (税込27%)", "単価 @1円", "数量 9999個", "明細計 9999円"],
+        "purchased_quantity": "9999",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "1",
+        "printed_line_total": 9999
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空計数検証店",
+    "store_address": "架空県例示市検証町1-1",
+    "purchased_at": "2026-08-01T09:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.27,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示印字合計なし",
+        "unit_price": 103,
+        "quantity": "2",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 206,
+        "line_total": 206,
+        "tax_rate": 0.27,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示乗算数量",
+        "unit_price": 137,
+        "quantity": "3",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 411,
+        "line_total": 411,
+        "tax_rate": 0.27,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示無料個数品",
+        "unit_price": 0,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 0,
+        "line_total": 0,
+        "tax_rate": 0.27,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示最大個数品",
+        "unit_price": 1,
+        "quantity": "9999",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 9999,
+        "line_total": 9999,
+        "tax_rate": 0.27,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.27, "net": 8360, "tax": 2256, "gross": 10616, "basis": "gross", "label": "27%対象計"}],
+    "subtotal": 8360,
+    "tax": 2256,
+    "total": 10616,
+    "payments": [{"method": "cash", "label": "現金", "amount": 10616}],
+    "payment_sum": 10616,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "80mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "item_review_states"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}
