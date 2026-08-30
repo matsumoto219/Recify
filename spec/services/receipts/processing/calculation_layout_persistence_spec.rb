@@ -95,7 +95,10 @@ RSpec.describe 'Calculation layout persistence' do
       expect(result.next_step).to eq(:done)
       expect(items.size).to eq(4)
       expect(items.pluck(:pricing_source_kind)).to eq([ 'count_unit_price', 'explicit_line_total', 'explicit_line_total', nil ])
-      expect(items.pluck(:line_total)).to eq([ 200, 90, 0, 0 ])
+      expect(items.pluck(:line_total)).to eq([ 200, 90, 0, nil ])
+      expect(items.pluck(:original_line_total)).to eq([ 200, 90, 0, nil ])
+      expect(items.last.price).to be_nil
+      expect(run.receipt.total_amount).to eq(290)
       expect(items.last.review_reasons).to include('item_pricing_mode_uncertain')
       expect(run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').size).to eq(3)
     end

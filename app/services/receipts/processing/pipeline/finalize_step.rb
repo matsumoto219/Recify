@@ -434,7 +434,8 @@ class Receipts::Processing::Pipeline
       return false unless calculated_item[:amount_line_total_present] == false
       return false if reference_formula_item?(source_item)
 
-      source_item[:quantity_unit_status] == "unknown" ||
+      source_item[:price].nil? ||
+        source_item[:quantity_unit_status] == "unknown" ||
         !ReceiptQuantityUnit.countable?(source_item[:quantity_unit_code])
     end
 

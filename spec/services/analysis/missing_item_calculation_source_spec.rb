@@ -18,6 +18,33 @@ RSpec.describe '金額source欠損明細の限定review' do
     ).fetch(:receipt_items_attributes).sole
   end
 
+  def prepare_missing_amount_run(items:, **receipt_attributes)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = Receipts::Processing.start(receipt:, source: 'upload').run
+    Receipts::Processing.record_ocr_snapshot(
+      run,
+      {
+        success: true,
+        lines: [],
+        candidates: {
+          country_region: 'JPN',
+          items: items
+        }.merge(receipt_attributes)
+      }
+    )
+    decision = Receipts::Processing::Contracts::FinalizeDecision.new(
+      finalize_strategy: 'ocr_only',
+      error_code: nil,
+      error_message: nil,
+      receipt_attributes: {},
+      ocr_result: nil,
+      ai_result: nil,
+      metadata: {}
+    )
+    Receipts::Processing.record_finalize_decision(run, decision)
+    run.reload
+  end
+
   it '金額sourceがない場合だけ計算方式欄を要確認にし金額を発明しない' do
     item = build_missing_source_item
 
@@ -48,36 +75,48 @@ RSpec.describe '金額source欠損明細の限定review' do
     expect(item[:review_reasons]).to contain_exactly('item_name_uncertain', 'item_pricing_mode_uncertain')
   end
 
-  it 'Finalize後も金額欠損の確認理由を保ちlegacyの0円をexplicit authorityへ昇格しない' do
-    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
-    run = Receipts::Processing.start(receipt:, source: 'upload').run
-    Receipts::Processing.record_ocr_snapshot(
-      run,
-      {
-        success: true,
-        lines: [],
-        candidates: {
-          country_region: 'JPN',
-          total_amount: 0,
-          items: [ build_missing_source_item.merge(needs_review: false, review_reasons: []) ]
-        }
-      }
-    )
-    decision = Receipts::Processing::Contracts::FinalizeDecision.new(
-      finalize_strategy: 'ocr_only',
-      error_code: nil,
-      error_message: nil,
-      receipt_attributes: {},
-      ocr_result: nil,
-      ai_result: nil,
-      metadata: {}
-    )
-    Receipts::Processing.record_finalize_decision(run, decision)
+  [ nil, 0, 688 ].each do |receipt_total|
+    it "Finalizeで金額source欠損を未設定のまま保存しreceipt total #{receipt_total.inspect}を借用しない" do
+      run = prepare_missing_amount_run(
+        items: [ build_missing_source_item.merge(needs_review: false, review_reasons: []) ],
+        total_amount: receipt_total
+      )
+      snapshot = run.ocr_result_snapshot.deep_dup
 
-    Receipts::Processing.run_finalize(run.reload)
-    item = receipt.reload.receipt_items.sole
+      first_result = Receipts::Processing.run_finalize(run)
+      receipt = run.receipt.reload
+      item = receipt.receipt_items.sole
+      saved_attributes = item.attributes
+      retry_result = Receipts::Processing.run_finalize(run.reload)
 
-    expect(item).to have_attributes(pricing_source_kind: nil, line_total: 0, original_line_total: 0, needs_review: true)
-    expect(item.review_reasons).to include('item_pricing_mode_uncertain')
+      aggregate_failures do
+        expect(first_result.next_step).to eq(:done)
+        expect(item).to have_attributes(pricing_source_kind: nil, price: nil, line_total: nil, original_line_total: nil, needs_review: true)
+        expect(item.review_reasons).to include('item_pricing_mode_uncertain')
+        expect(receipt.total_amount).to eq(receipt_total)
+        expect(receipt.status).to eq('review_needed')
+        expect(retry_result.next_step).to eq(:skipped)
+        expect(item.reload.attributes).to eq(saved_attributes)
+        expect(run.reload.ocr_result_snapshot).to eq(snapshot)
+      end
+    end
+  end
+
+  [ 0, 257 ].each do |amount|
+    it "Finalizeで明示明細金額#{amount}円を未設定へ変えない" do
+      run = prepare_missing_amount_run(items: [ build_missing_source_item(line_total: amount) ], total_amount: amount)
+
+      Receipts::Processing.run_finalize(run)
+
+      expect(run.receipt.reload.receipt_items.sole).to have_attributes(line_total: amount, original_line_total: amount)
+    end
+
+    it "Finalizeで印字合計なしの単価#{amount}円と数量から計算した金額を維持する" do
+      run = prepare_missing_amount_run(items: [ build_missing_source_item(price: amount) ], total_amount: amount * 2)
+
+      Receipts::Processing.run_finalize(run)
+
+      expect(run.receipt.reload.receipt_items.sole).to have_attributes(price: amount, line_total: amount * 2, original_line_total: amount * 2)
+    end
   end
 end
