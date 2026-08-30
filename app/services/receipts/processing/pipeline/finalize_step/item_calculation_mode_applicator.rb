@@ -263,7 +263,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     amount_engine = normalized_hash(preliminary_amount_result[:amount_engine])
     selected_status = preliminary_amount_result[:selected_candidate_status].to_s
 
-    return "unknown" unless profile[:receipt_tax_basis].to_s == "total_includes_tax"
+    return "unknown" unless %w[total_includes_tax tax_added_to_subtotal].include?(profile[:receipt_tax_basis].to_s)
     return "unknown" unless profile[:item_amount_basis].to_s == "line_total_as_recorded"
     return "unknown" unless computed[:item_amount_basis].to_s == "line_total_as_recorded"
     return "unknown" unless selected_status == "accepted"

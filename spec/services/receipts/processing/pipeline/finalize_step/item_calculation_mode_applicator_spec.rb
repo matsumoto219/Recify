@@ -139,6 +139,60 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     end
   end
 
+  it '税詳細のnetから合計を組み立てても明細金額がas-recordedなら一致するcountを要確認にしない' do
+    mutate_raw = lambda do |raw|
+      analyze_result = raw.fetch('analyzeResult')
+      items = analyze_result.dig('documents', 0, 'fields', 'Items', 'valueArray')
+      subtotal = analyze_result.dig('documents', 0, 'fields', 'Subtotal')
+      subtotal_span = subtotal.fetch('spans').sole
+      analyze_result.fetch('content')[subtotal_span.fetch('offset'), subtotal_span.fetch('length')] = '¥700'
+      subtotal['content'] = '¥700'
+      subtotal.fetch('valueCurrency')['amount'] = 700
+      [ [ 1, -1 ], [ 2, 1 ] ].each do |index, difference|
+        item = items.fetch(index)
+        total = item.dig('valueObject', 'TotalPrice')
+        replacement = total.dig('valueCurrency', 'amount') + difference
+        content = "¥#{replacement}"
+        raise 'replacement must preserve fixture span length' unless content.length == total.fetch('content').length
+
+        span = total.fetch('spans').sole
+        parent_offset = item.fetch('spans').sole.fetch('offset')
+        analyze_result.fetch('content')[span.fetch('offset'), span.fetch('length')] = content
+        item.fetch('content')[span.fetch('offset') - parent_offset, span.fetch('length')] = content
+        total['content'] = content
+        total.fetch('valueCurrency')['amount'] = replacement
+      end
+    end
+    context = fixture_context('single_tax_receipt', mutate_raw: mutate_raw)
+    result = result_for(context)
+
+    aggregate_failures do
+      expect(context.dig(:amount_result, :calculation_profile)).to include(
+        receipt_tax_basis: :tax_added_to_subtotal,
+        item_amount_basis: :line_total_as_recorded
+      )
+      expect(context.dig(:amount_result, :computed, :item_amount_basis)).to eq(:line_total_as_recorded)
+      expect(context.dig(:amount_result, :amount_engine, :selected_basis)).to eq('printed_tax_details_net')
+      expect(result).to be_applied
+      expect(result.decisions.map(&:state)).to eq(%w[confirmed reviewable reviewable confirmed])
+      expect(result.selections.map(&:pricing_source_kind)).to eq(%w[
+        count_unit_price
+        explicit_line_total
+        explicit_line_total
+        count_unit_price
+      ])
+      expect(result.selections.map(&:review_reason)).to eq([
+        nil,
+        'item_pricing_mode_uncertain',
+        'item_pricing_mode_uncertain',
+        nil
+      ])
+      expect(result.params.fetch(:receipt_items_attributes).map { |item| item[:line_total] }).to eq([ 220, 131, 111, 308 ])
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+      expect(result.amount_result[:resolved]).to include(subtotal: 700, tax: 70, total: 770)
+    end
+  end
+
   it '強くItemに帰属する印字合計だけなら0円を含めexplicit authorityを適用する' do
     context = fixture_context('receipt_sample')
 
@@ -183,18 +237,33 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
 
   it 'countの税semanticsを保存済みprofileから再現できない場合は適用しない' do
     context = fixture_context('single_tax_receipt')
-    amount_result = context.fetch(:amount_result).deep_dup
-    amount_result[:calculation_profile] = {
-      receipt_tax_basis: :tax_added_to_subtotal,
-      item_amount_basis: :line_total_as_recorded
-    }
+    invalid_states = [
+      { calculation_profile: { item_amount_basis: :line_total_as_net } },
+      { calculation_profile: { item_amount_basis: :mixed_by_tax_rate_group } },
+      { calculation_profile: { item_amount_basis: nil } },
+      { calculation_profile: { item_amount_basis: :unknown } },
+      { computed: { item_amount_basis: :line_total_as_net } },
+      { computed: { item_amount_basis: :mixed_by_tax_rate_group } },
+      { computed: { item_amount_basis: nil } },
+      { computed: { item_amount_basis: :unknown } },
+      { calculation_profile: { receipt_tax_basis: nil } },
+      { calculation_profile: { receipt_tax_basis: :unknown } },
+      { selected_candidate_status: 'rejected' },
+      { selected_candidate_status: nil },
+      { amount_engine: { no_safe_candidate: true } },
+      { amount_engine: { no_safe_candidate: nil } }
+    ]
 
-    result = result_for(context, amount_result: amount_result)
+    invalid_states.each do |overrides|
+      amount_result = context.fetch(:amount_result).deep_merge(overrides)
+      result = result_for(context, amount_result: amount_result)
 
-    aggregate_failures do
-      expect(result).not_to be_applied
-      expect(result.params).to equal(context.fetch(:params))
-      expect(result.amount_result).to equal(amount_result)
+      aggregate_failures(overrides.to_s) do
+        expect(result.decisions).to all(have_attributes(state: 'reviewable', reason: 'count_tax_semantics_unknown'))
+        expect(result).not_to be_applied
+        expect(result.params).to equal(context.fetch(:params))
+        expect(result.amount_result).to equal(amount_result)
+      end
     end
   end
 
