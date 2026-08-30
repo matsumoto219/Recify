@@ -38,6 +38,21 @@ RSpec.describe 'Reference pricing automatic adoption pipeline' do
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
+  def structured_reference_ocr_result
+    raw = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
+    )
+
+    Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+  end
+
+  def uploaded_receipt_fixture
+    Rack::Test::UploadedFile.new(
+      Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
+      'image/jpeg'
+    )
+  end
+
   def finalize_decision
     Receipts::Processing::Contracts::FinalizeDecision.new(
       finalize_strategy: :ocr_only,
@@ -156,6 +171,85 @@ RSpec.describe 'Reference pricing automatic adoption pipeline' do
       expect(run.final_result_summary).to include('item_count' => 1)
       expect(run.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to be_present
       expect(run.ocr_result_snapshot.dig('adoption_proposals', 'reference_pricing')).to eq(proposal_before)
+    end
+  end
+
+  it 'run開始後のActive Storage画像解析touchをsemantic変更と誤認せず採用する' do
+    create_setting(true)
+    allow(ReceiptOcrJob).to receive(:perform_later)
+
+    upload = Receipts::Uploads.batch(user: create(:user), files: [ uploaded_receipt_fixture ])
+    receipt = upload.created_receipts.sole
+    run = receipt.receipt_analysis_runs.sole
+    start_lock_version = receipt.reload.lock_version
+
+    ActiveStorage::AnalyzeJob.perform_now(receipt.image.blob)
+    receipt.reload
+    Receipts::Processing.record_ocr_snapshot(run, destination_ocr_result)
+    Receipts::Processing.record_finalize_decision(run, finalize_decision)
+
+    result = Receipts::Processing.run_finalize(run.reload)
+
+    aggregate_failures do
+      expect(upload).to be_success
+      expect(run.source).to eq('batch_upload')
+      expect(receipt.image.blob.reload).to be_analyzed
+      expect(receipt.lock_version).to eq(start_lock_version + 1)
+      expect(result.next_step).to eq(:done)
+      expect(receipt.reload.receipt_items.sole.pricing_source_kind).to eq('reference_quantity_price')
+      expect(run.reload).to have_attributes(status: 'succeeded', stage: 'completed')
+    end
+  end
+
+  it 'structured proposal binding後のActive Storage画像解析touchでも同じauthorityを採用する' do
+    create_setting(true)
+    allow(ReceiptOcrJob).to receive(:perform_later)
+
+    upload = Receipts::Uploads.single(user: create(:user), image: uploaded_receipt_fixture)
+    receipt = upload.receipt
+    run = receipt.receipt_analysis_runs.sole
+    Receipts::Processing.record_ocr_snapshot(run, structured_reference_ocr_result)
+    Receipts::Processing.record_finalize_decision(run, finalize_decision)
+    start_lock_version = receipt.reload.lock_version
+
+    ActiveStorage::AnalyzeJob.perform_now(receipt.image.blob)
+    result = Receipts::Processing.run_finalize(run.reload)
+
+    aggregate_failures do
+      expect(upload).to be_saved
+      expect(upload).to be_enqueue_succeeded
+      expect(run.source).to eq('upload')
+      expect(receipt.reload.lock_version).to be > start_lock_version
+      expect(result.next_step).to eq(:done)
+      expect(receipt.receipt_items.sole).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: BigDecimal('498'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        quantity: BigDecimal('342'),
+        quantity_unit_code: 'gram',
+        original_line_total: 1703,
+        line_total: 1703
+      )
+      expect(run.reload).to have_attributes(status: 'succeeded', stage: 'completed')
+    end
+  end
+
+  it '画像解析とsemantic editが両方あるrunは引き続きstaleとしてauthorityを書かない' do
+    create_setting(true)
+
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(receipt, ocr_result: structured_reference_ocr_result)
+    ActiveStorage::AnalyzeJob.perform_now(receipt.image.blob)
+    receipt.reload.update!(memo: 'user changed after proposal binding')
+
+    result = Receipts::Processing.run_finalize(run.reload)
+
+    aggregate_failures do
+      expect(result.skip_reason).to eq(:analysis_stale_run)
+      expect(receipt.reload.receipt_items).to be_empty
+      expect(receipt).to have_attributes(status: 'failed', processing_error_code: 'analysis_stale_run')
+      expect(run.reload.status).to eq('failed')
     end
   end
 
@@ -373,7 +467,8 @@ RSpec.describe 'Reference pricing automatic adoption pipeline' do
     run = Receipts::Processing.start(receipt:, source: 'upload').run
     start_version = run.metadata.dig(
       'reference_pricing_auto_adoption_gate',
-      'receipt_lock_version_at_start'
+      'receipt_state_at_start',
+      'lock_version'
     )
     receipt.update!(memo: 'changed before proposal binding')
     Receipts::Processing.record_ocr_snapshot(run, destination_ocr_result)
@@ -385,8 +480,8 @@ RSpec.describe 'Reference pricing automatic adoption pipeline' do
       expect(start_version).to be < receipt.lock_version
       expect(run.reload.metadata.dig(
         'reference_pricing_auto_adoption_gate',
-        'proposal_binding',
-        'receipt_lock_version'
+        'receipt_state_at_start',
+        'lock_version'
       )).to eq(start_version)
       expect(result.next_step).to eq(:skipped)
       expect(result.skip_reason).to eq(:analysis_stale_run)

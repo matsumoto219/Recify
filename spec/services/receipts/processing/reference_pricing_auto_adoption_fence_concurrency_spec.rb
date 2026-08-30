@@ -42,7 +42,7 @@ RSpec.describe 'Reference pricing auto adoption fence concurrency' do
       key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
       value: SystemSettings.stored_value(true)
     )
-    @receipt = create(:receipt)
+    @receipt = create(:receipt, :with_image)
     @user = @receipt.user
     @run = Receipts::Processing::Runs.start(receipt: @receipt, source: 'upload').run
     Receipts::Processing::Runs.record_ocr_snapshot(@run, destination_ocr_result)

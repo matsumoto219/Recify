@@ -1,15 +1,20 @@
+require "digest"
+
 module Receipts::Processing::Contracts
   class ReferencePricingAutoAdoptionGateSnapshot
-    SCHEMA_VERSION = "reference_pricing_auto_adoption_gate_v3"
+    SCHEMA_VERSION = "reference_pricing_auto_adoption_gate_v4"
+    PREVIOUS_SCHEMA_VERSION = "reference_pricing_auto_adoption_gate_v3"
     LEGACY_SCHEMA_VERSION = "reference_pricing_auto_adoption_gate_v2"
     METADATA_KEY = "reference_pricing_auto_adoption_gate"
     CAPTURE_STAGE = "run_start"
-    WRITER_CONTRACT_VERSION = "reference_pricing_auto_adoption_writer_v2"
+    WRITER_CONTRACT_VERSION = "reference_pricing_auto_adoption_writer_v3"
+    PREVIOUS_WRITER_CONTRACT_VERSION = "reference_pricing_auto_adoption_writer_v2"
     LEGACY_WRITER_CONTRACT_VERSION = "reference_pricing_auto_adoption_writer_v1"
     LINE_GROUP_BINDING_KIND = "azure_line_group"
     STRUCTURED_ITEM_BINDING_KIND = "azure_structured_item_reference"
     SUPPORTED_RUN_SOURCES = %w[upload batch_upload].freeze
-    MAX_SERIALIZED_BYTES = 1024
+    MAX_SERIALIZED_BYTES = 1280
+    MAX_SEMANTIC_RECEIPT_BYTES = 64.kilobytes
     MAX_ID_BYTES = 160
     MAX_DATABASE_ID = (2**63) - 1
     RUN_KEY_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/.freeze
@@ -17,7 +22,15 @@ module Receipts::Processing::Contracts
     ROOT_KEYS = %w[
       schema_version capture_stage setting_key setting_enabled setting_generation
       eligibility_contract_version writer_contract_version
+      run_key run_source receipt_state_at_start proposal_binding
+    ].freeze
+    PREVIOUS_ROOT_KEYS = %w[
+      schema_version capture_stage setting_key setting_enabled setting_generation
+      eligibility_contract_version writer_contract_version
       run_key run_source receipt_lock_version_at_start proposal_binding
+    ].freeze
+    RECEIPT_STATE_KEYS = %w[
+      lock_version semantic_checksum image_attachment_id image_blob_id image_analyzed
     ].freeze
     ROW_GENERATION_KEYS = %w[kind id lock_version].freeze
     ABSENT_GENERATION_KEYS = %w[kind].freeze
@@ -41,9 +54,10 @@ module Receipts::Processing::Contracts
     /x.freeze
 
     class << self
-      def capture_start(run_key:, run_source:, receipt_lock_version:)
+      def capture_start(run_key:, run_source:, receipt:)
         return nil unless SUPPORTED_RUN_SOURCES.include?(run_source.to_s)
-        return nil unless bounded_integer?(receipt_lock_version, minimum: 0)
+        receipt_state = receipt_state_for(receipt, run_key:)
+        return nil unless receipt_state
 
         entry = SystemSettings.fetch(SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY)
         snapshot = {
@@ -56,7 +70,7 @@ module Receipts::Processing::Contracts
           "writer_contract_version" => WRITER_CONTRACT_VERSION,
           "run_key" => run_key,
           "run_source" => run_source.to_s,
-          "receipt_lock_version_at_start" => receipt_lock_version,
+          "receipt_state_at_start" => receipt_state,
           "proposal_binding" => nil
         }
 
@@ -76,7 +90,7 @@ module Receipts::Processing::Contracts
 
         binding = proposal_binding_for(
           ocr_snapshot:,
-          receipt_lock_version: snapshot.fetch("receipt_lock_version_at_start"),
+          receipt_lock_version: receipt_lock_version_for(snapshot),
           schema_version: snapshot.fetch("schema_version")
         )
         return nil if binding.nil? && invalid_or_conflicting_binding_source?(
@@ -94,8 +108,8 @@ module Receipts::Processing::Contracts
 
       def from_snapshot(value, run: nil, require_binding: false)
         snapshot = normalized_hash(value)
-        return nil unless exact_keys?(snapshot, ROOT_KEYS)
-        return nil unless [ LEGACY_SCHEMA_VERSION, SCHEMA_VERSION ].include?(snapshot["schema_version"])
+        return nil unless supported_schema_version?(snapshot["schema_version"])
+        return nil unless exact_keys?(snapshot, root_keys_for(snapshot["schema_version"]))
         return nil unless snapshot["capture_stage"] == CAPTURE_STAGE
         return nil unless snapshot["setting_key"] == SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY
         return nil unless boolean?(snapshot["setting_enabled"])
@@ -104,12 +118,12 @@ module Receipts::Processing::Contracts
         return nil unless contract_versions_valid?(snapshot)
         return nil unless bounded_string?(snapshot["run_key"], max_bytes: 36, pattern: RUN_KEY_PATTERN)
         return nil unless SUPPORTED_RUN_SOURCES.include?(snapshot["run_source"])
-        return nil unless bounded_integer?(snapshot["receipt_lock_version_at_start"], minimum: 0)
+        return nil unless receipt_start_state_valid?(snapshot)
         return nil unless binding_valid?(
           snapshot["proposal_binding"],
           required: require_binding,
           schema_version: snapshot["schema_version"],
-          receipt_lock_version: snapshot["receipt_lock_version_at_start"]
+          receipt_lock_version: receipt_lock_version_for(snapshot)
         )
         return nil if run && (
           snapshot["run_key"] != run.run_key || snapshot["run_source"] != run.source
@@ -117,6 +131,42 @@ module Receipts::Processing::Contracts
         return nil unless JSON.generate(snapshot).bytesize <= MAX_SERIALIZED_BYTES
 
         deep_copy(snapshot)
+      rescue EncodingError, JSON::GeneratorError, ArgumentError, KeyError, TypeError
+        nil
+      end
+
+      def validated_receipt_lock_version(snapshot, receipt:)
+        return nil unless receipt&.persisted?
+
+        snapshot = from_snapshot(snapshot, require_binding: true)
+        return nil unless snapshot
+
+        if snapshot["schema_version"] != SCHEMA_VERSION
+          expected = snapshot.dig("proposal_binding", "receipt_lock_version")
+          return receipt.lock_version if bounded_integer?(expected, minimum: 0) && receipt.lock_version == expected
+
+          return nil
+        end
+
+        start_state = snapshot["receipt_state_at_start"]
+        current_state = receipt_state_for(receipt, run_key: snapshot["run_key"])
+        return nil unless receipt_state_valid?(start_state) && receipt_state_valid?(current_state)
+        return nil unless start_state["semantic_checksum"] == current_state["semantic_checksum"]
+        return nil unless start_state["image_attachment_id"] == current_state["image_attachment_id"]
+        return nil unless start_state["image_blob_id"] == current_state["image_blob_id"]
+
+        start_lock_version = start_state["lock_version"]
+        current_lock_version = current_state["lock_version"]
+        if current_lock_version == start_lock_version
+          return current_lock_version if start_state["image_analyzed"] == current_state["image_analyzed"]
+
+          return nil
+        end
+        return nil unless start_lock_version < MAX_DATABASE_ID
+        return nil unless current_lock_version == start_lock_version + 1
+        return nil unless start_state["image_analyzed"] == false && current_state["image_analyzed"] == true
+
+        current_lock_version
       rescue EncodingError, JSON::GeneratorError, ArgumentError, KeyError, TypeError
         nil
       end
@@ -134,13 +184,13 @@ module Receipts::Processing::Contracts
 
       def proposal_binding_for(ocr_snapshot:, receipt_lock_version:, schema_version: SCHEMA_VERSION)
         return nil unless ocr_snapshot.is_a?(Hash)
+        return nil unless supported_schema_version?(schema_version)
         return nil unless bounded_integer?(receipt_lock_version, minimum: 0)
-        return nil unless [ LEGACY_SCHEMA_VERSION, SCHEMA_VERSION ].include?(schema_version)
 
         line_group = line_group_binding_for(
           ocr_snapshot:,
           receipt_lock_version:,
-          tagged: schema_version == SCHEMA_VERSION
+          tagged: schema_version != LEGACY_SCHEMA_VERSION
         )
         return line_group if schema_version == LEGACY_SCHEMA_VERSION
 
@@ -178,7 +228,7 @@ module Receipts::Processing::Contracts
         line_group = line_group_binding_for(
           ocr_snapshot:,
           receipt_lock_version: 0,
-          tagged: schema_version == SCHEMA_VERSION
+          tagged: schema_version != LEGACY_SCHEMA_VERSION
         )
         return true if stored_line_group && line_group.nil?
         return false if schema_version == LEGACY_SCHEMA_VERSION
@@ -243,6 +293,8 @@ module Receipts::Processing::Contracts
 
         expected_writer_version = if snapshot["schema_version"] == LEGACY_SCHEMA_VERSION
           LEGACY_WRITER_CONTRACT_VERSION
+        elsif snapshot["schema_version"] == PREVIOUS_SCHEMA_VERSION
+          PREVIOUS_WRITER_CONTRACT_VERSION
         else
           WRITER_CONTRACT_VERSION
         end
@@ -325,6 +377,81 @@ module Receipts::Processing::Contracts
         )
       end
 
+      def receipt_start_state_valid?(snapshot)
+        if snapshot["schema_version"] == SCHEMA_VERSION
+          receipt_state_valid?(snapshot["receipt_state_at_start"])
+        else
+          bounded_integer?(snapshot["receipt_lock_version_at_start"], minimum: 0)
+        end
+      end
+
+      def receipt_state_valid?(value)
+        state = normalized_hash(value)
+        exact_keys?(state, RECEIPT_STATE_KEYS) &&
+          bounded_integer?(state["lock_version"], minimum: 0) &&
+          bounded_string?(state["semantic_checksum"], max_bytes: 64, pattern: CHECKSUM_PATTERN) &&
+          bounded_integer?(state["image_attachment_id"], minimum: 1) &&
+          bounded_integer?(state["image_blob_id"], minimum: 1) &&
+          boolean?(state["image_analyzed"])
+      end
+
+      def receipt_state_for(receipt, run_key:)
+        return nil unless receipt&.persisted?
+        return nil unless bounded_string?(run_key, max_bytes: 36, pattern: RUN_KEY_PATTERN)
+
+        attachment = receipt.image.attachment
+        blob = attachment&.blob
+        return nil unless attachment&.persisted? && blob&.persisted?
+
+        semantic_attributes = deep_canonical_value(receipt.attributes.except("updated_at", "lock_version").as_json)
+        serialized = JSON.generate(semantic_attributes)
+        return nil if serialized.bytesize > MAX_SEMANTIC_RECEIPT_BYTES
+
+        {
+          "lock_version" => receipt.lock_version,
+          "semantic_checksum" => Digest::SHA256.hexdigest(JSON.generate([ run_key, semantic_attributes ])),
+          "image_attachment_id" => attachment.id,
+          "image_blob_id" => blob.id,
+          "image_analyzed" => blob.analyzed? == true
+        }
+      end
+
+      def deep_canonical_value(value)
+        case value
+        when Hash
+          normalized = {}
+          value.each do |key, child|
+            normalized_key = key.to_s
+            raise ArgumentError if normalized.key?(normalized_key)
+
+            normalized[normalized_key] = deep_canonical_value(child)
+          end
+          normalized.sort.to_h
+        when Array
+          value.map { |child| deep_canonical_value(child) }
+        when String, Integer, Float, TrueClass, FalseClass, NilClass
+          value
+        else
+          raise ArgumentError
+        end
+      end
+
+      def receipt_lock_version_for(snapshot)
+        if snapshot["schema_version"] == SCHEMA_VERSION
+          snapshot.dig("receipt_state_at_start", "lock_version")
+        else
+          snapshot["receipt_lock_version_at_start"]
+        end
+      end
+
+      def supported_schema_version?(value)
+        [ LEGACY_SCHEMA_VERSION, PREVIOUS_SCHEMA_VERSION, SCHEMA_VERSION ].include?(value)
+      end
+
+      def root_keys_for(schema_version)
+        schema_version == SCHEMA_VERSION ? ROOT_KEYS : PREVIOUS_ROOT_KEYS
+      end
+
       def bounded_integer?(value, minimum:)
         value.is_a?(Integer) && value.between?(minimum, MAX_DATABASE_ID)
       end
@@ -346,7 +473,7 @@ module Receipts::Processing::Contracts
       end
 
       def normalized_hash(value)
-        return {} unless value.is_a?(Hash) && value.size <= ROOT_KEYS.size
+        return {} unless value.is_a?(Hash) && value.size <= [ ROOT_KEYS.size, PREVIOUS_ROOT_KEYS.size ].max
 
         normalized = {}
         value.each do |key, child|

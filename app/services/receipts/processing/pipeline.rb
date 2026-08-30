@@ -217,10 +217,14 @@ class Receipts::Processing::Pipeline
       run: locked_run,
       require_binding: true
     )
-    expected_receipt_lock_version = gate&.dig("proposal_binding", "receipt_lock_version")
+    validated_receipt_lock_version = if gate
+      Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.validated_receipt_lock_version(
+        gate,
+        receipt: locked_receipt
+      )
+    end
 
-    !expected_receipt_lock_version.is_a?(Integer) ||
-      expected_receipt_lock_version != locked_receipt.lock_version ||
+    validated_receipt_lock_version != locked_receipt.lock_version ||
       existing_children.values.any?(&:present?)
   end
 

@@ -49,6 +49,14 @@ RSpec.describe Receipts::Processing::Runs do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  def attach_receipt_image(receipt)
+    receipt.image.attach(
+      io: File.open(Rails.root.join('spec/fixtures/files/receipt_sample.jpg')),
+      filename: 'receipt_sample.jpg',
+      content_type: 'image/jpeg'
+    )
+  end
+
   let(:receipt) { create(:receipt) }
 
   around do |example|
@@ -601,6 +609,7 @@ RSpec.describe Receipts::Processing::Runs do
         key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
         value: SystemSettings.stored_value(true)
       )
+      attach_receipt_image(receipt)
       run = described_class.start(receipt:, source: 'upload').run
       start_gate = run.metadata.fetch('reference_pricing_auto_adoption_gate')
       described_class.record_ocr_snapshot(
@@ -632,6 +641,7 @@ RSpec.describe Receipts::Processing::Runs do
         key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
         value: SystemSettings.stored_value(true)
       )
+      attach_receipt_image(receipt)
       parent_run = described_class.start(receipt:, source: 'upload').run
       described_class.record_ocr_snapshot(
         parent_run,

@@ -25,7 +25,7 @@ RSpec.describe Receipts::Processing::ReferencePricingAutoAdoptionFence do
     else
       SystemSetting.where(key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY).delete_all
     end
-    run = Receipts::Processing::Runs.start(receipt: create(:receipt), source:).run
+    run = Receipts::Processing::Runs.start(receipt: create(:receipt, :with_image), source:).run
     Receipts::Processing::Runs.record_ocr_snapshot(run, ocr_result)
     run.reload
   end

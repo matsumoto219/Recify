@@ -20,7 +20,7 @@ RSpec.describe Receipts::Processing::ReferencePricingAutoAdoptionWriter do
     start_gate = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.capture_start(
       run_key: run.run_key,
       run_source: run.source,
-      receipt_lock_version: receipt.lock_version
+      receipt:
     )
     snapshot = destination_snapshot
     bound_gate = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.bind(

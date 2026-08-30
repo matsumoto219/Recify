@@ -52,6 +52,12 @@ class Receipts::Processing::ReferencePricingAutoAdoptionWriter
 
       gate = gate_snapshot(run)
       return result("ineligible", params: safe_params) if gate.nil?
+      validated_receipt_lock_version =
+        Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.validated_receipt_lock_version(
+          gate,
+          receipt:
+        )
+      return result("ineligible", params: safe_params) unless validated_receipt_lock_version
 
       proposal = destination.proposal
       projection = projection_for(proposal)
@@ -68,7 +74,7 @@ class Receipts::Processing::ReferencePricingAutoAdoptionWriter
           }
         ],
         authority_state: "absent",
-        expected_receipt_lock_version: gate.dig("proposal_binding", "receipt_lock_version"),
+        expected_receipt_lock_version: validated_receipt_lock_version,
         current_receipt_lock_version: receipt.lock_version,
         projected_amount_limit: ReceiptAmountService.receipt_item_line_total_max
       )
