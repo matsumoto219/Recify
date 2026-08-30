@@ -77,7 +77,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     blocking_mismatch_codes: %w[INSUFFICIENT_DATA].freeze,
     review_reasons: %w[insufficient_data].freeze
   }.freeze
-  REVIEWABLE_ALLOWED_REMOVED_REVIEW_VALUES = {
+  RESOLVED_ITEM_TOTAL_ALLOWED_REMOVED_REVIEW_VALUES = {
     inconsistencies: %w[item_total_mismatch].freeze,
     blocking_inconsistencies: %w[item_total_mismatch].freeze,
     mismatch_codes: %w[ITEM_TOTAL_MISMATCH].freeze,
@@ -273,12 +273,24 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     selected_status = preliminary_amount_result[:selected_candidate_status].to_s
 
     return "unknown" unless %w[total_includes_tax tax_added_to_subtotal].include?(profile[:receipt_tax_basis].to_s)
-    return "unknown" unless profile[:item_amount_basis].to_s == "line_total_as_recorded"
-    return "unknown" unless computed[:item_amount_basis].to_s == "line_total_as_recorded"
     return "unknown" unless selected_status == "accepted"
     return "unknown" unless amount_engine[:no_safe_candidate] == false
+    return "reproducible_uniform_net" if uniform_net_profile?(preliminary_amount_result)
+    return "unknown" unless profile[:item_amount_basis].to_s == "line_total_as_recorded"
+    return "unknown" unless computed[:item_amount_basis].to_s == "line_total_as_recorded"
 
     "reproducible_as_recorded"
+  end
+
+  def uniform_net_profile?(amount_result)
+    profile = normalized_hash(amount_result[:calculation_profile])
+    computed = normalized_hash(amount_result[:computed])
+
+    profile[:receipt_tax_basis].to_s == "tax_added_to_subtotal" &&
+      computed[:receipt_tax_basis].to_s == "tax_added_to_subtotal" &&
+      profile[:item_amount_basis].to_s == "line_total_as_net" &&
+      computed[:item_amount_basis].to_s == "line_total_as_net" &&
+      computed[:tax_detail_amount_basis].to_s == "net"
   end
 
   def selections_for(decisions, proposals)
@@ -562,6 +574,9 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     computed_items = Array(final_amount_result.dig(:computed, :items))
     selections.all? do |selection|
       item = normalized_hash(computed_items[selection.item_index])
+      if uniform_net_count_selection?(selection, final_amount_result)
+        next uniform_net_count_computed_item_valid?(item, selection)
+      end
       original_line_total = selection.original_line_total || selection.projected_line_total
       next false unless exact_integer_matches?(item[:original_line_total], original_line_total)
       next false unless exact_integer_matches?(item[:line_total], selection.projected_line_total)
@@ -578,6 +593,23 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         item[:price].nil?
       end
     end
+  end
+
+  def uniform_net_count_selection?(selection, final_amount_result)
+    selection.pricing_source_kind == "count_unit_price" &&
+      selection.discount_amount.nil? && selection.discount_rate.nil? &&
+      count_tax_semantics == "reproducible_uniform_net" &&
+      uniform_net_profile?(final_amount_result)
+  end
+
+  def uniform_net_count_computed_item_valid?(item, selection)
+    preliminary_item = Array(preliminary_amount_result.dig(:computed, :items))[selection.item_index]
+
+    computed_item_signature(item) == computed_item_signature(preliminary_item) &&
+      exact_integer_matches?(item[:original_line_total], selection.projected_line_total) &&
+      exact_integer_matches?(item[:quantity], selection.quantity.to_i) &&
+      item[:quantity_unit_code] == selection.quantity_unit_code &&
+      item[:discount_amount].nil? && item[:discount_rate].nil?
   end
 
   def count_computed_discount_valid?(item, selection)
@@ -603,20 +635,21 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
   def financial_transition_valid?(candidate_params, final_amount_result, selections)
     return true if financial_result_signature(final_amount_result) ==
       financial_result_signature(preliminary_amount_result)
-    return true if reviewable_transition_valid?(final_amount_result, selections)
+    return true if resolved_item_total_transition_valid?(final_amount_result)
 
     no_total_reference_transition_valid?(candidate_params, final_amount_result, selections)
   end
 
-  def reviewable_transition_valid?(final_amount_result, selections)
-    return false unless selections.any?(&:reviewable?)
+  def resolved_item_total_transition_valid?(final_amount_result)
     return false unless financial_value_signature(final_amount_result) ==
       financial_value_signature(preliminary_amount_result)
-    return false unless no_total_amount_result_safe?(final_amount_result)
+    return false unless final_amount_result[:selected_candidate_status].to_s == "accepted"
+    return false unless normalized_hash(final_amount_result[:amount_engine])[:no_safe_candidate] == false
 
     review_transition_valid?(
       final_amount_result,
-      allowed_removed_values: REVIEWABLE_ALLOWED_REMOVED_REVIEW_VALUES
+      allowed_removed_values: RESOLVED_ITEM_TOTAL_ALLOWED_REMOVED_REVIEW_VALUES,
+      allow_remaining_review: true
     )
   end
 
@@ -692,11 +725,12 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       final_amount_result[:needs_review] == false
   end
 
-  def review_transition_valid?(final_amount_result, allowed_removed_values:)
+  def review_transition_valid?(final_amount_result, allowed_removed_values:, allow_remaining_review: false)
     AMOUNT_REVIEW_FIELDS.all? do |field|
       case field
       when :needs_review
-        final_amount_result[field] != true
+        final_amount_result[field] == false ||
+          (allow_remaining_review && final_amount_result[field] == true && preliminary_amount_result[field] == true)
       else
         preliminary_values = Array(preliminary_amount_result[field]).map(&:to_s)
         final_values = Array(final_amount_result[field]).map(&:to_s)

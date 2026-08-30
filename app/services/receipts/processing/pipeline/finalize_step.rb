@@ -403,9 +403,12 @@ class Receipts::Processing::Pipeline
       end
     end
 
-    def apply_amount_item_totals(items_attributes, calculated_items)
+    def apply_amount_item_totals(items_attributes, calculated_items, selections: @item_calculation_mode_selections)
       calculated_items = Array(calculated_items)
       return items_attributes if calculated_items.empty?
+      count_sources = selections.select do |selection|
+        selection.pricing_source_kind == "count_unit_price"
+      end.index_by(&:item_identity)
 
       Array(items_attributes).map.with_index do |item_attributes, index|
         calculated_item = calculated_items[index]
@@ -413,6 +416,11 @@ class Receipts::Processing::Pipeline
 
         source_item = normalized_hash(item_attributes)
         normalized_calculated_item = normalized_hash(calculated_item)
+        normalized_calculated_item = count_source_persistence_item(
+          source_item,
+          normalized_calculated_item,
+          count_sources[source_item[:ocr_item_identity]]
+        )
         calculated_tax_rate = normalize_tax_rate(normalized_calculated_item[:tax_rate])
         preserve_missing_amount = preserve_missing_ocr_item_amount?(source_item, normalized_calculated_item)
 
@@ -427,6 +435,21 @@ class Receipts::Processing::Pipeline
           discount_rate: normalized_calculated_item[:discount_rate]
         )
       end
+    end
+
+    def count_source_persistence_item(source_item, calculated_item, selection)
+      return calculated_item unless selection
+      return calculated_item unless source_item[:pricing_source_kind] == "count_unit_price"
+      return calculated_item unless source_item[:position_index] == selection.position_index
+      return calculated_item unless source_item[:price] == selection.price
+      return calculated_item unless source_item[:quantity] == selection.quantity
+      return calculated_item unless source_item[:quantity_unit_code] == selection.quantity_unit_code
+
+      calculated_item.merge(
+        price: selection.price,
+        original_line_total: selection.original_line_total || selection.projected_line_total,
+        line_total: selection.projected_line_total
+      )
     end
 
     def preserve_missing_ocr_item_amount?(source_item, calculated_item)
@@ -512,7 +535,8 @@ class Receipts::Processing::Pipeline
     )
       source_items = apply_amount_item_totals(
         params[:receipt_items_attributes],
-        amount_result.dig(:computed, :items)
+        amount_result.dig(:computed, :items),
+        selections:
       )
       normalized_items = AttributeNormalizer.items(
         source_items,

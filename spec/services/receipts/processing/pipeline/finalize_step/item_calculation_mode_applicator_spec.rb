@@ -31,6 +31,16 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     )
   end
 
+  def uniform_net_context(tax_details:)
+    context = fixture_context('single_tax_receipt')
+    params = context.fetch(:params)
+    params[:receipt_attributes].merge!(subtotal_amount: 770, tax_amount: 77, total_amount: 847)
+    params[:receipt_tax_details_attributes] = tax_details ? [ { description: '外税10%', net_amount: 770, amount: 77, rate: BigDecimal('0.1') } ] : []
+    params[:receipt_payments_attributes] = []
+    context[:amount_result] = amount_for(params)
+    context
+  end
+
   def result_for(context, **overrides, &amount_calculator)
     described_class.call(
       params: overrides.fetch(:params, context.fetch(:params)),
@@ -139,6 +149,53 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     end
   end
 
+  [ true, false ].each do |tax_details|
+    it "一様な税抜countはsourceを変えずconfirmedにしてReceiptの税込額を維持する（税詳細#{tax_details}）" do
+      context = uniform_net_context(tax_details:)
+      result = result_for(context)
+
+      aggregate_failures do
+        expect(context.dig(:amount_result, :calculation_profile)).to include(
+          receipt_tax_basis: :tax_added_to_subtotal,
+          item_amount_basis: :line_total_as_net
+        )
+        expect(context.dig(:amount_result, :computed, :item_amount_basis)).to eq(:line_total_as_net)
+        expect(result).to be_applied
+        expect(result.decisions).to all(be_confirmed)
+        expect(result.params.fetch(:receipt_items_attributes).map { |item| item[:price] }).to eq([ 220, 132, 110, 308 ])
+        expect(result.params.fetch(:receipt_items_attributes).map { |item| item[:line_total] }).to eq([ 220, 132, 110, 308 ])
+        expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+        expect(result.amount_result[:resolved]).to include(subtotal: 770, tax: 77, total: 847)
+        expect(result.params[:review_reasons]).not_to include('item_pricing_mode_uncertain')
+      end
+    end
+  end
+
+  it '一様な税抜countでも最終computedの単価projectionが変わる場合は全適用を破棄する' do
+    context = uniform_net_context(tax_details: false)
+    result = result_for(context) do |candidate_params|
+      amount_for(candidate_params).deep_dup.tap do |drifted|
+        drifted.dig(:computed, :items).first[:price] += 1
+      end
+    end
+
+    expect(result).not_to be_applied
+  end
+
+  it '税抜profileとcomputedの税基準が一部でも矛盾するcountはconfirmedにしない' do
+    [ :receipt_tax_basis, :item_amount_basis, :tax_detail_amount_basis ].each do |field|
+      context = uniform_net_context(tax_details: false)
+      context[:amount_result][:computed][field] = :unknown
+
+      result = result_for(context)
+
+      aggregate_failures(field) do
+        expect(result.decisions).to all(have_attributes(state: 'reviewable', reason: 'count_tax_semantics_unknown'))
+        expect(result).not_to be_applied
+      end
+    end
+  end
+
   it '税詳細のnetから合計を組み立てても明細金額がas-recordedなら一致するcountを要確認にしない' do
     mutate_raw = lambda do |raw|
       analyze_result = raw.fetch('analyzeResult')
@@ -232,6 +289,75 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
         )
       )
       expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+    end
+  end
+
+  it '全明細がconfirmedでも財務値不変で解消したlegacy item total mismatchだけなら適用する' do
+    context = fixture_context('receipt_sample')
+    context.fetch(:params).fetch(:receipt_items_attributes).first[:price] = 581
+    context[:amount_result] = amount_for(context.fetch(:params))
+
+    result = result_for(context)
+
+    aggregate_failures do
+      expect(context.dig(:amount_result, :review_reasons)).to include('item_total_mismatch')
+      expect(result).to be_applied
+      expect(result.decisions).to all(be_confirmed)
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+      expect(result.amount_result[:review_reasons]).not_to include('item_total_mismatch')
+    end
+  end
+
+  it 'confirmedへの切替でも無関係のreview reasonを除去する結果は適用しない' do
+    context = fixture_context('receipt_sample')
+    context[:amount_result][:review_reasons] |= [ 'tax_amount_mismatch' ]
+
+    result = result_for(context)
+
+    expect(result).not_to be_applied
+  end
+
+  it 'resolved mismatch以外の既存reviewを同じまま残してconfirmedを適用できる' do
+    context = fixture_context('receipt_sample')
+    context.fetch(:params).fetch(:receipt_items_attributes).first[:price] = 581
+    context[:amount_result] = amount_for(context.fetch(:params))
+    context[:amount_result][:review_reasons] |= [ 'tax_amount_mismatch' ]
+    context[:amount_result][:needs_review] = true
+
+    result = result_for(context) do |candidate_params|
+      amount_for(candidate_params).deep_dup.tap do |final_amount|
+        final_amount[:review_reasons] |= [ 'tax_amount_mismatch' ]
+        final_amount[:needs_review] = true
+        final_amount[:safe_to_auto_complete] = false
+      end
+    end
+
+    aggregate_failures do
+      expect(result).to be_applied
+      expect(result.amount_result[:needs_review]).to be(true)
+      expect(result.amount_result[:review_reasons]).to eq([ 'tax_amount_mismatch' ])
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+    end
+  end
+
+  it 'resolved mismatchが消えても新規reason・unsafe candidate・1円差があれば適用しない' do
+    mutations = [
+      ->(result) { result[:review_reasons] |= [ 'tax_amount_mismatch' ] },
+      ->(result) { result[:selected_candidate_status] = 'rejected' },
+      ->(result) { result[:amount_engine][:no_safe_candidate] = true },
+      ->(result) { result[:resolved][:total] += 1 }
+    ]
+
+    mutations.each do |mutation|
+      context = fixture_context('receipt_sample')
+      context.fetch(:params).fetch(:receipt_items_attributes).first[:price] = 581
+      context[:amount_result] = amount_for(context.fetch(:params))
+
+      result = result_for(context) do |candidate_params|
+        amount_for(candidate_params).deep_dup.tap { |final_amount| mutation.call(final_amount) }
+      end
+
+      expect(result).not_to be_applied
     end
   end
 

@@ -360,6 +360,18 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeDecision do
       end
     end
 
+    it '保存profileで一様な税抜sourceを再現できるcountはconfirmedにする' do
+      context = proposal_context_for
+      decision = result_for(context, count_tax_semantics: 'reproducible_uniform_net')
+
+      aggregate_failures do
+        expect(decision).to be_confirmed
+        expect(decision.reason).to eq('formula_matches_printed_total')
+        expect(decision.selected_pricing_source_kind).to eq('count_unit_price')
+        expect(decision.projected_line_total).to eq(220)
+      end
+    end
+
     it 'grossの基準価格formulaが印字合計と一致する場合はreferenceをconfirmedにする' do
       context = proposal_context_for(parsed_structured_reference_result)
       decision = result_for(context, count_tax_semantics: 'unknown')

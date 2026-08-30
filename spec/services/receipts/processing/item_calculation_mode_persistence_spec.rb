@@ -16,6 +16,52 @@ RSpec.describe 'OCR item calculation mode persistence' do
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
+  def uniform_net_count_ocr_result
+    result = ocr_fixture('single_tax_receipt')
+    result.fetch(:candidates).merge!(
+      subtotal_amount: 770,
+      tax_amount: 77,
+      total_amount: 847,
+      tax_rate: BigDecimal('0.1'),
+      tax_details: [],
+      payments: []
+    )
+    result.dig(:candidates, :items).each { |item| item[:tax_rate] = BigDecimal('0.1') }
+    result
+  end
+
+  def save_count_source_edit(receipt, quantity:)
+    items = receipt.receipt_items.order(:position_index)
+    attributes = {
+      'receipt_items_attributes' => items.each_with_index.to_h do |item, index|
+        [ index.to_s, { 'id' => item.id.to_s, 'quantity' => index.zero? ? quantity : item.quantity } ]
+      end
+    }
+    input = Receipts::Editing.build_input(receipt:, permitted: attributes)
+    change_set = Receipts::Editing.change_set(receipt:, permitted: attributes)
+    receipt_amounts = receipt.attributes.symbolize_keys.merge(receipt.amount_source_semantics_for_edit)
+    if change_set.derived_purchase_inputs_changed?
+      receipt_amounts.merge!(subtotal_amount: nil, tax_amount: nil, total_amount: nil)
+    end
+    amount_result = ReceiptAmountService.call(
+      receipt: receipt_amounts,
+      receipt_items: input.receipt_items,
+      receipt_tax_details: change_set.derived_purchase_inputs_changed? ? [] : receipt.receipt_tax_details,
+      receipt_adjustments: input.receipt_adjustments,
+      receipt_payments: input.receipt_payments,
+      context: :edit_save
+    )
+    Receipts::Editing.apply_amount_result!(
+      receipt:,
+      attributes:,
+      amount_result:,
+      context: :edit_save,
+      change_set:,
+      tax_details_recalculated: false
+    )
+    Receipts::Editing.update_manual(receipt:, attributes:, items_missing: false)
+  end
+
   def finalize_decision(strategy, error_code: nil, ocr_result: nil)
     Receipts::Processing::Contracts::FinalizeDecision.new(
       finalize_strategy: strategy.to_s,
@@ -362,6 +408,50 @@ RSpec.describe 'OCR item calculation mode persistence' do
         [ 'count_unit_price' ]
       )
       expect(run.reload.status).to eq('succeeded')
+    end
+  end
+
+  it '一様な税抜countのexact sourceと税込Receipt額を保存し、保存再読込・数量編集でsourceを維持する' do
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(receipt, ocr_result: uniform_net_count_ocr_result, strategy: :ai_success)
+
+    result = Receipts::Processing.run_finalize(run)
+    items = receipt.reload.receipt_items.order(:position_index)
+    sources = items.pluck(:id, :pricing_source_kind, :price, :quantity, :original_line_total, :line_total)
+
+    aggregate_failures do
+      expect(result.next_step).to eq(:done)
+      expect(items.pluck(:pricing_source_kind)).to all(eq('count_unit_price'))
+      expect(items.pluck(:price)).to eq([ 220, 132, 110, 308 ])
+      expect(items.pluck(:original_line_total, :line_total)).to eq(
+        [ 220, 132, 110, 308 ].map { |value| [ value, value ] }
+      )
+      expect(items).to all(
+        satisfy { |item| !item.review_reasons.include?('item_pricing_mode_uncertain') }
+      )
+      expect(receipt).to have_attributes(subtotal_amount: 770, tax_amount: 77, total_amount: 847)
+      expect(receipt.amount_source_semantics_for_edit).to include(
+        'receipt_tax_basis' => 'tax_added_to_subtotal',
+        'item_amount_basis' => 'line_total_as_net'
+      )
+    end
+
+    expect(save_count_source_edit(receipt, quantity: 1)).to be_saved
+    aggregate_failures do
+      expect(receipt.reload.total_amount).to eq(847)
+      expect(receipt.receipt_items.order(:position_index).pluck(:id, :pricing_source_kind, :price, :quantity, :original_line_total, :line_total)).to eq(sources)
+    end
+
+    expect(save_count_source_edit(receipt, quantity: 2)).to be_saved
+    aggregate_failures do
+      expect(receipt.reload).to have_attributes(subtotal_amount: 990, tax_amount: 99, total_amount: 1089)
+      expect(receipt.receipt_items.order(:position_index).first).to have_attributes(
+        pricing_source_kind: 'count_unit_price',
+        price: 220,
+        quantity: BigDecimal('2'),
+        original_line_total: 440,
+        line_total: 440
+      )
     end
   end
 
