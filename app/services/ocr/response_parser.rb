@@ -2299,7 +2299,12 @@ class Ocr::ResponseParser
       value_object.dig("Rate", "valueNumber")
     return explicit_rate if explicit_rate.present?
 
-    rates = item["content"].to_s.unicode_normalize(:nfkc).lines.flat_map do |line|
+    lines = item["content"].to_s.unicode_normalize(:nfkc).lines
+    rates = lines.each_with_index.flat_map do |line, index|
+      if index.positive? && item_discount_keyword_line?(lines[index - 1]) && line.strip.match?(/\A\d+(?:\.\d+)?\s*%\z/)
+        next []
+      end
+
       line.chomp.to_enum(:scan, profile.ocr_item_tax_rate_pattern).filter_map do
         normalize_rate_value(Regexp.last_match[:rate], percentage: true)
       end
@@ -2376,6 +2381,8 @@ class Ocr::ResponseParser
       normalize_text(clean_item_raw_text(raw_text, item))
     end
 
+    purchase_indexes = retained_structured_item_indexes(items).index_with(true)
+    purchase_labels = item_labels.each_with_index.map { |label, index| purchase_indexes[index] ? label : nil }
     item_original_totals = items.map do |item|
       value_object = item["valueObject"] || {}
       value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
@@ -2386,39 +2393,10 @@ class Ocr::ResponseParser
     next_item_index = 0
     waiting_discount = false
     current_discount_rate = nil
-    discount_details_by_index = Hash.new { |hash, key| hash[key] = { amount: 0, rate: nil, original_line_total: nil } }
+    discount_details_by_index = Hash.new { |hash, key| hash[key] = { amount: 0, rate: nil, original_line_total: nil, amount_lines: [] } }
 
     normalized_lines.each do |line|
-      if waiting_discount
-        extracted_rate = extract_discount_rate_from_line(line)
-        if extracted_rate
-          current_discount_rate = extracted_rate
-          next
-        end
-
-        matched_discount_target_index = match_discount_target_item_index_from_line(line, item_labels, current_item_index)
-        if matched_discount_target_index
-          discount_target_item_index = matched_discount_target_index
-          next
-        end
-
-        discount_amount = extract_discount_amount_from_line(line)
-        if discount_amount.positive?
-          target_item_index = discount_target_item_index || current_item_index
-          original_line_total = normalize_amount_for_discount(item_original_totals[target_item_index])
-          detail = discount_details_by_index[target_item_index]
-          detail[:amount] += discount_amount
-          detail[:rate] ||= current_discount_rate
-          detail[:original_line_total] ||= original_line_total if original_line_total.positive?
-
-          waiting_discount = false
-          current_discount_rate = nil
-          discount_target_item_index = nil
-          next
-        end
-      end
-
-      matched_item_index = match_item_index_from_line(line, item_labels, next_item_index)
+      matched_item_index = match_item_index_from_line(line, purchase_labels, next_item_index)
       if matched_item_index
         current_item_index = matched_item_index
         discount_target_item_index = nil
@@ -2432,11 +2410,145 @@ class Ocr::ResponseParser
         waiting_discount = current_item_index.present?
         discount_target_item_index = current_item_index
         current_discount_rate = nil
+      elsif receipt_level_discount_line?(line) || line.match?(profile.ocr_strict_receipt_summary_total_line_pattern)
+        waiting_discount = false
+        current_discount_rate = nil
+        discount_target_item_index = nil
         next
       end
+
+      next unless waiting_discount
+
+      extracted_rate = extract_discount_rate_from_line(line)
+      current_discount_rate = extracted_rate if extracted_rate
+      discount_amount = extract_discount_amount_from_line(line)
+      unless discount_amount.positive?
+        matched_discount_target_index = match_discount_target_item_index_from_line(line, item_labels, current_item_index)
+        discount_target_item_index = matched_discount_target_index if matched_discount_target_index
+        next
+      end
+
+      target_item_index = discount_target_item_index || current_item_index
+      original_line_total = normalize_amount_for_discount(item_original_totals[target_item_index])
+      detail = discount_details_by_index[target_item_index]
+      detail[:amount] += discount_amount
+      detail[:rate] ||= current_discount_rate
+      detail[:original_line_total] ||= original_line_total if original_line_total.positive?
+      detail[:amount_lines] << line
+
+      waiting_discount = false
+      current_discount_rate = nil
+      discount_target_item_index = nil
     end
 
+    discount_details_by_index.each do |index, detail|
+      reconcile_discount_total_stage(items, index, detail)
+      detail.delete(:amount_lines)
+    end
     discount_details_by_index
+  end
+
+  def reconcile_discount_total_stage(items, index, detail)
+    return unless items.size <= MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS
+
+    item = items[index]
+    analyze_result = extract_analyze_result(@parsed_response)
+    pages = analyze_result["pages"]
+    pages = [] unless pages.is_a?(Array) && pages.size <= MAX_REFERENCE_PRICING_TOTAL_PAGES
+
+    total = item.dig("valueObject", "TotalPrice")
+    total_amount = normalize_amount_for_discount(detail[:original_line_total])
+    post_discount_lines = pages.flat_map do |page|
+      lines = page.is_a?(Hash) ? page["lines"] : nil
+      next [] unless lines.is_a?(Array) && lines.size <= MAX_REFERENCE_PRICING_TOTAL_LINES
+
+      lines.each_cons(2).filter_map do |discount_line, total_line|
+        next unless discount_line.is_a?(Hash) && total_line.is_a?(Hash)
+        next unless detail[:amount_lines].include?(normalize_text(discount_line["content"]))
+
+        match = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern.match(total_line["content"].to_s)
+        next unless match && normalize_amount_for_discount(match[:amount]) == total_amount
+
+        [ discount_line, total_line ]
+      end
+    end
+    return if post_discount_lines.empty? && !printed_total_after_discount?(item, detail)
+
+    other_items = items.each_with_index.filter_map { |other, other_index| other unless other_index == index }
+    exact_lines = post_discount_lines.select do |discount_line, total_line|
+      exact_post_discount_total?(analyze_result, item, total, discount_line, total_line, detail, other_items:)
+    end
+    if exact_lines.one? && total_amount + detail[:amount] <= MAX_REFERENCE_PRICING_TOTAL_AMOUNT
+      detail[:original_line_total] = total_amount + detail[:amount]
+    else
+      detail[:amount] = 0
+      detail[:rate] = nil
+    end
+  end
+
+  def printed_total_after_discount?(item, detail)
+    content = item["content"].to_s
+    return true unless content.valid_encoding? && content.bytesize <= Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
+
+    discount_seen = false
+    content.each_line.any? do |line|
+      discount_seen ||= detail[:amount_lines].include?(normalize_text(line))
+      next false unless discount_seen
+
+      match = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern.match(line.chomp)
+      match && normalize_amount_for_discount(match[:amount]) == detail[:original_line_total]
+    end
+  end
+
+  def exact_post_discount_total?(analyze_result, item, total, discount_line, total_line, detail, other_items:)
+    return false unless detail[:amount_lines].one? && total.is_a?(Hash)
+    return false unless analyze_result["modelId"] == "prebuilt-receipt" && analyze_result["apiVersion"] == "2024-11-30"
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    content = analyze_result["content"]
+    return false unless mapper && content.is_a?(String) && mapper.length(content)
+    return false unless total["content"].to_s.match?(ADJUSTMENT_AMOUNT_ONLY_PATTERN)
+    return false unless normalize_amount_for_discount(total["content"]) == detail[:original_line_total]
+
+    total_span = exact_structured_authority_span(total, content:, mapper:)
+    discount_span = exact_structured_authority_span(discount_line, content:, mapper:)
+    total_line_span = exact_structured_authority_span(total_line, content:, mapper:)
+    parent_spans = discount_parent_spans(item, content:, mapper:)
+    return false if [ total_span, discount_span, total_line_span, parent_spans ].any?(&:nil?)
+    return false unless total_span[0] >= total_line_span[0] && total_span[1] <= total_line_span[1]
+    return false unless discount_span[1] <= total_line_span[0]
+    return false unless [ total_span, discount_span ].all? do |span|
+      parent_spans.any? { |parent| span[0] >= parent[0] && span[1] <= parent[1] }
+    end
+
+    other_items.none? do |other|
+      other_parent_spans = discount_parent_spans(other, content:, mapper:)
+      return false unless other_parent_spans
+
+      other_parent_spans.any? do |parent|
+        [ total_span, discount_span ].any? { |span| spans_overlap?(*span, *parent) }
+      end
+    end
+  end
+
+  def discount_parent_spans(item, content:, mapper:)
+    spans = item.is_a?(Hash) ? item["spans"] : nil
+    return unless spans.is_a?(Array) && spans.any? && spans.size <= MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS
+
+    ranges = spans.map do |span|
+      return unless span.is_a?(Hash)
+
+      offset = span["offset"]
+      length = span["length"]
+      return unless offset.is_a?(Integer) && length.is_a?(Integer) && offset >= 0 && length.positive?
+      return unless offset <= MAX_REFERENCE_PRICING_PROVIDER_SPAN && length <= MAX_REFERENCE_PRICING_PROVIDER_SPAN - offset
+      return unless mapper.slice(content, offset:, length:)
+
+      [ offset, offset + length ]
+    end.sort
+    return if ranges.each_cons(2).any? { |left, right| left[1] > right[0] }
+
+    ranges
   end
 
   def match_discount_target_item_index_from_line(line, item_labels, current_item_index)
@@ -2477,18 +2589,21 @@ class Ocr::ResponseParser
   end
 
   def extract_discount_rate_from_line(line)
-    return nil if line.match?(/[-−▲]/)
+    rates = line.to_s.unicode_normalize(:nfkc).scan(/(\d+(?:\.\d+)?)\s*%/).flatten.uniq
+    return nil unless rates.one?
 
-    matched = line.match(/(\d+(?:\.\d+)?)\s*%/)
-    return nil unless matched
-
-    BigDecimal(matched[1]) / 100
+    rate = BigDecimal(rates.sole) / 100
+    rate if rate.between?(0, 1)
   end
 
   def extract_discount_amount_from_line(line)
-    return 0 unless line.match?(/[-−▲]/)
+    text = line.to_s.unicode_normalize(:nfkc).gsub(/\d+(?:\.\d+)?\s*%/, " ")
+    return 0 if text.include?("/")
 
-    line.scan(/\d[\d,]*/).map { |value| ReceiptAmountService.parse_amount(value) }.max.to_i
+    amounts = text.scan(/[-−▲]\s*[¥￥]?\s*(\d[\d,]*)(?![\d,.])/).flatten
+    return 0 unless amounts.one?
+
+    ReceiptAmountService.parse_amount(amounts.sole)
   end
 
   def normalize_amount_for_discount(value)
