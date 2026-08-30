@@ -340,8 +340,9 @@ module ReceiptAnalysisProfiles
     OCR_SUBTOTAL_AMOUNT_LINE_PATTERN = /小計|subtotal|税抜/i.freeze
     OCR_CARD_SLIP_CONTEXT_PATTERN = /クレジットカード売上票|カード会社|お支払方法|支払方法|payment method/i.freeze
     OCR_PAYMENT_RESULT_CONTEXT_PATTERN = /支払|決済|payment/i.freeze
-    OCR_RECEIPT_LEVEL_DISCOUNT_LINE_PATTERN = /クーポン|会員|夜間|ポイント|アプリ|coupon|member|point/i.freeze
+    OCR_RECEIPT_LEVEL_DISCOUNT_LINE_PATTERN = /小計値引|小計割引|クーポン|会員|夜間|ポイント|アプリ|subtotal\s*discount|coupon|member|point/i.freeze
     OCR_ITEM_DISCOUNT_LINE_PATTERN = /値引|割引|discount|off/i.freeze
+    OCR_ITEM_DISCOUNT_PER_UNIT_NOTE_PATTERN = /\A\s*(?:[（(]\s*(?:単品|[0-9０-９]+\s*(?:個|コ|点|本|袋|枚|台|箱|セット))\s*[-−▲]\s*[¥￥]?\s*[0-9０-９][0-9０-９,，]*(?:円)?\s*[）)]|[0-9０-９]+\s*(?:個|コ|点|本|袋|枚|台|箱|セット)\s*[x×]\s*単\s*[-−▲]\s*[¥￥]?\s*[0-9０-９][0-9０-９,，]*(?:円)?)\s*\z/i.freeze
 
     ANALYSIS_FALLBACK_PAYMENT_LINE_PATTERN = /現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i.freeze
@@ -1013,6 +1014,10 @@ module ReceiptAnalysisProfiles
 
       def ocr_item_discount_line_pattern
         OCR_ITEM_DISCOUNT_LINE_PATTERN
+      end
+
+      def ocr_item_discount_per_unit_note_pattern
+        OCR_ITEM_DISCOUNT_PER_UNIT_NOTE_PATTERN
       end
 
       def analysis_fallback_payment_line_pattern

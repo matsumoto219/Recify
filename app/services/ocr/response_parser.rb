@@ -13,6 +13,7 @@ class Ocr::ResponseParser
   MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS = 100
   MAX_REFERENCE_PRICING_AUTHORITY_HASH_ENTRIES = 100
   MAX_REFERENCE_PRICING_AUTHORITY_FIELDS = 100
+  MAX_ITEM_DISCOUNT_SOURCE_REFS = 16
   REFERENCE_PRICING_AUTHORITY_VALUE_KEYS = %w[
     content
     valueAddress
@@ -1772,7 +1773,7 @@ class Ocr::ResponseParser
     return nil unless amount&.positive?
 
     sign_hint = adjustment_sign_hint(label, line)
-    return nil if sign_hint == "discount" && item_discount_amount?(amount, items)
+    return nil if sign_hint == "discount" && item_discount_source?(items, index, amount)
 
     confidence = known_adjustment_label?(label) ? 0.9 : 0.72
 
@@ -1789,11 +1790,14 @@ class Ocr::ResponseParser
   def label_amount_candidate(lines, index, items)
     line = lines[index].to_s
     return nil if amount_only_line?(line)
-    return nil if adjustment_excluded_line?(line) && !explicit_payment_adjustment_line?(line)
+    receipt_discount = receipt_level_discount_line?(line) && line.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
+    return nil if adjustment_excluded_line?(line) && !explicit_payment_adjustment_line?(line) && !receipt_discount
     return nil if line.match?(/\d{4}[\/\-年]\s*\d{1,2}|\d{1,2}[:：]\d{2}/)
 
     known_label = known_adjustment_label?(line)
     signed_same_line = line.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
+    return nil if item_discount_keyword_line?(line) && !signed_same_line &&
+      !line.match?(profile.adjustment_currency_evidence_pattern)
     return nil if bag_item_owned_line?(line) && !signed_same_line
     return nil if item_line_candidate?(line, items) && !known_label && !signed_same_line
     return nil if tax_detail_amount_context?(lines, index) && !known_label && !signed_same_line
@@ -1818,7 +1822,9 @@ class Ocr::ResponseParser
 
     sign_hint = adjustment_sign_hint(line, lines[index + 1], lines[index - 1])
     return nil if sign_hint == "discount" && reason != "label_same_line_amount" && !neighbor_signed
-    return nil if sign_hint == "discount" && item_discount_amount?(amount, items)
+    return nil if sign_hint == "discount" && item_discount_source?(items, index, amount)
+    return nil if sign_hint == "discount" && item_discount_keyword_line?(line) &&
+      [ index, index - 1, index + 1 ].any? { |line_index| item_discount_source?(items, line_index, amount) }
 
     confidence =
       if known_label
@@ -1970,12 +1976,11 @@ class Ocr::ResponseParser
     end
   end
 
-  def item_discount_amount?(amount, items)
-    amount = amount.to_i.abs
-    return false unless amount.positive?
-
+  def item_discount_source?(items, line_index, amount)
     Array(items).any? do |item|
-      item.respond_to?(:[]) && item[:discount_amount].to_i.abs == amount
+      Array(item[:discount_source_refs]).any? do |source|
+        source[:source_line_index] == line_index && source[:amount] == amount.to_i.abs
+      end
     end
   end
 
@@ -1991,6 +1996,9 @@ class Ocr::ResponseParser
   def adjustment_tax_rate_hint(lines, source_line_index)
     context = lines[[ source_line_index - 6, 0 ].max..[ source_line_index + 6, lines.length - 1 ].min].to_a
     rates = context.filter_map do |line|
+      next unless line.to_s.match?(profile.ocr_tax_context_label_pattern)
+      next if item_discount_keyword_line?(line)
+
       line.to_s.scan(/(\d+(?:\.\d+)?)\s*[%％]/).map do |match|
         rate = BigDecimal(match.first) / 100
         rate.positive? ? rate : nil
@@ -2427,6 +2435,7 @@ class Ocr::ResponseParser
         original_line_total: original_line_total,
         discount_amount: discount_amount.positive? || discount_details_by_index.dig(index, :calculation_mode_discount) ? discount_amount : nil,
         discount_rate: discount_details_by_index.dig(index, :rate),
+        discount_source_refs: discount_details_by_index.dig(index, :source_refs),
         tax_rate: extract_item_tax_rate(item, value_object),
         confidence: item["confidence"],
         ocr_item_identity: item_identities_by_index[index],
@@ -2560,10 +2569,140 @@ class Ocr::ResponseParser
     )
   end
 
-  # 割引検出。
-  # lines上で item名 → 金額 → 割引 → 割引率 → 割引額 の順に並ぶケースを対象に、
-  # 割引額・割引率・割引前金額を直前itemへ紐付ける。
   def extract_discount_details_by_item_index(items, lines)
+    return extract_structured_item_discounts(items, lines) if items.any? { |item| item.key?("spans") }
+
+    extract_unstructured_item_discounts(items, lines)
+  end
+
+  def extract_structured_item_discounts(items, lines)
+    purchase_indexes = retained_structured_item_indexes(items)
+    labels = items.each_with_index.map do |item, index|
+      next unless purchase_indexes.include?(index)
+
+      normalize_text(item.dig("valueObject", "Description", "valueString") || item.dig("valueObject", "Description", "content"))
+    end
+    details = {}
+    structured_discount_line_groups(items, lines).each do |index, entries|
+      waiting_discount = false
+      current_rate = nil
+      target_index = nil
+      pending_sources = []
+
+      entries.each do |entry|
+        line = entry[:text]
+        break if receipt_level_discount_line?(line) || line.match?(profile.analysis_previous_subtotal_context_pattern)
+
+        if item_discount_keyword_line?(line)
+          waiting_discount = true
+          current_rate = nil
+          target_index = index if purchase_indexes.include?(index)
+          pending_sources = []
+        end
+        next unless waiting_discount
+
+        current_rate = extract_discount_rate_from_line(line) || current_rate
+        pending_sources.concat(discount_source_refs(line, entry[:line_index]))
+        break if pending_sources.size > MAX_ITEM_DISCOUNT_SOURCE_REFS
+        next if line.match?(profile.ocr_item_discount_per_unit_note_pattern)
+
+        amount = extract_discount_amount_from_line(line)
+        if amount.nil?
+          unless item_discount_keyword_line?(line) || extract_discount_rate_from_line(line)
+            matches = labels.each_index.select { |label_index| labels[label_index].present? && discount_target_line_matches_label?(line, labels[label_index]) }
+            target_index = matches.one? ? matches.sole : nil
+          end
+          next
+        end
+        next if target_index.nil?
+
+        detail = (details[target_index] ||= { amount: 0, rate: nil, original_line_total: nil, amount_lines: [], source_refs: [] })
+        detail[:amount] += amount
+        detail[:rate] ||= current_rate
+        detail[:amount_lines] << line
+        detail[:source_refs].concat(pending_sources)
+        waiting_discount = false
+      end
+    end
+    details.filter_map do |index, detail|
+      next if detail[:amount_lines].empty? || detail[:source_refs].size > MAX_ITEM_DISCOUNT_SOURCE_REFS
+
+      total = items[index].dig("valueObject", "TotalPrice") || {}
+      detail[:original_line_total] = total.dig("valueCurrency", "amount") || total["valueNumber"]
+      reconcile_discount_total_stage(items, index, detail)
+      detail[:source_refs] = [] unless detail[:amount].positive? || detail[:calculation_mode_discount]
+      detail.delete(:amount_lines)
+      [ index, detail ]
+    end.to_h
+  end
+
+  def structured_discount_line_groups(items, lines)
+    return {} if items.size > MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS
+
+    analyze_result = extract_analyze_result(@parsed_response)
+    return {} unless analyze_result["modelId"] == "prebuilt-receipt" && analyze_result["apiVersion"] == "2024-11-30"
+
+    content = analyze_result["content"]
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    return {} unless mapper && content.is_a?(String) && mapper.length(content)
+
+    parents = items.each_with_index.flat_map do |item, index|
+      spans = discount_parent_spans(item, content:, mapper:)
+      return {} unless spans && item["content"].is_a?(String)
+      return {} unless spans.map { |start, finish| mapper.slice(content, offset: start, length: finish - start) }.join("\n") == item["content"]
+
+      spans.map { |start, finish| [ start, finish, index ] }
+    end.sort
+    return {} if parents.each_cons(2).any? { |left, right| left[1] > right[0] }
+
+    pages = analyze_result["pages"]
+    return {} unless pages.is_a?(Array) && pages.size <= MAX_REFERENCE_PRICING_TOTAL_PAGES
+
+    source_lines = pages.flat_map do |page|
+      entries = page.is_a?(Hash) ? page["lines"] : nil
+      return {} unless entries.is_a?(Array) && entries.size <= MAX_REFERENCE_PRICING_TOTAL_LINES
+
+      entries.select { |entry| entry.is_a?(Hash) && entry["content"].is_a?(String) && normalize_text(entry["content"]).present? }
+    end
+    return {} unless source_lines.size == lines.size
+
+    source_lines.each_with_index.each_with_object({}) do |(line, index), groups|
+      next if lines[index].blank?
+      return {} unless normalize_text(line["content"]) == lines[index]
+
+      span = exact_structured_authority_span(line, content:, mapper:)
+      next unless span
+
+      parent_index = (parents.bsearch_index { |parent| parent[0] > span[0] } || parents.size) - 1
+      next if parent_index.negative?
+
+      parent = parents[parent_index]
+      next unless span[1] <= parent[1]
+
+      (groups[parent[2]] ||= []) << { text: lines[index], line_index: index }
+    end
+  end
+
+  def discount_source_refs(line, line_index)
+    Analysis.money_token_matches(
+      text: line,
+      money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+      profile: profile,
+      allow_bare_money: false
+    ).filter_map do |token|
+      next unless token[:raw_text].match?(/[▲△\-−]/)
+
+      {
+        source_line_index: line_index,
+        source_span_start: token[:span_start],
+        source_span_end: token[:span_end],
+        amount: token[:amount]
+      }
+    end
+  end
+
+  # Provider spanを持たない旧入力だけは、完全な商品ラベルを境界として扱う。
+  def extract_unstructured_item_discounts(items, lines)
     normalized_lines = Array(lines)
     return {} if normalized_lines.blank?
 
@@ -2601,18 +2740,20 @@ class Ocr::ResponseParser
         next
       end
 
-      if item_discount_keyword_line?(line)
-        waiting_discount = current_item_index.present?
-        discount_target_item_index = current_item_index
-        current_discount_rate = nil
-      elsif receipt_level_discount_line?(line) || line.match?(profile.ocr_strict_receipt_summary_total_line_pattern)
+      if receipt_level_discount_line?(line) || line.match?(profile.analysis_previous_subtotal_context_pattern)
         waiting_discount = false
         current_discount_rate = nil
         discount_target_item_index = nil
+        current_item_index = nil
         next
+      elsif item_discount_keyword_line?(line)
+        waiting_discount = current_item_index.present?
+        discount_target_item_index = current_item_index
+        current_discount_rate = nil
       end
 
       next unless waiting_discount
+      next if line.match?(profile.ocr_item_discount_per_unit_note_pattern)
 
       extracted_rate = extract_discount_rate_from_line(line)
       current_discount_rate = extracted_rate if extracted_rate
@@ -2811,17 +2952,17 @@ class Ocr::ResponseParser
   def discount_target_line_matches_label?(line, label)
     normalized_line = normalize_text(line)
     normalized_label = normalize_text(label)
-    return true if normalized_line.include?(normalized_label) || normalized_label.include?(normalized_line)
+    return true if normalized_line == normalized_label || normalized_label.start_with?("#{normalized_line} ")
 
-    key = normalized_line.split(/[[:space:]　(（]/).first
-    key.present? && key.length >= 2 && normalized_label.include?(key)
+    key = normalized_line.split(/[（(]/).first
+    key.present? && key.length >= 2 && normalized_label.start_with?("#{key} ")
   end
 
   def match_item_index_from_line(line, item_labels, start_index)
     item_labels.each_with_index.drop(start_index).find do |label, _index|
       next false if label.blank?
 
-      line.include?(label) || label.include?(line)
+      line == label || line.start_with?("#{label} ")
     end&.last
   end
 

@@ -11,7 +11,12 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeDecision do
     result = result.deep_dup
     result[:candidates] = result.fetch(:candidates).deep_dup
     builder = Receipts::Processing::Runs::SnapshotBuilder.new
-    candidates = builder.send(:ocr_candidates_snapshot, result.fetch(:candidates).deep_symbolize_keys)
+    candidates = builder.send(
+      :ocr_candidates_snapshot,
+      result.fetch(:candidates).deep_symbolize_keys,
+      lines: Array(result[:lines]),
+      source_lines: Array(result[:lines])
+    )
     candidate_counts = builder.send(
       :ocr_candidate_counts,
       result.fetch(:candidates).deep_symbolize_keys,

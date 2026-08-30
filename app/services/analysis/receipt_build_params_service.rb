@@ -607,7 +607,11 @@ module Analysis
             review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
           end
           explicit_tax_rate = normalize_rate(normalized[:tax_rate] || normalized[:tax_rate_hint])
-          inferred_tax_rate = infer_tax_rate_from_text(adjustment_text)
+          tax_context = lines_around(lines, source_line_index, before: 1, after: 1)
+          if adjustment_percentage_without_tax_evidence?(explicit_tax_rate, adjustment_text, tax_context)
+            explicit_tax_rate = nil
+          end
+          inferred_tax_rate = infer_tax_rate_from_text(Array(lines)[source_line_index])
           tax_rate = explicit_tax_rate || inferred_tax_rate
           tax_rate_source = :explicit if tax_rate
 
@@ -2286,10 +2290,26 @@ module Analysis
       end
 
       def infer_tax_rate_from_text(text)
-        match = text.to_s.unicode_normalize(:nfkc).match(profile.analysis_tax_rate_hint_pattern)
-        return nil unless match
+        source = text.to_s.unicode_normalize(:nfkc)
+        rates = source.to_enum(:scan, profile.ocr_item_tax_rate_pattern).filter_map do
+          match = Regexp.last_match
+          next if match[0].strip.match?(/\A[0-9]+(?:\.[0-9]+)?\s*%\z/)
 
-        BigDecimal(match[1]) / 100
+          normalize_rate(BigDecimal(match[:rate]) / 100)
+        end.uniq
+        rates.one? ? rates.first : nil
+      end
+
+      def adjustment_percentage_without_tax_evidence?(rate, text, context_lines)
+        return false if rate.nil?
+        return false if context_lines.any? { |line| infer_tax_rate_from_text(line) }
+        return false unless text.match?(profile.ocr_adjustment_discount_label_pattern) || text.match?(profile.ocr_adjustment_surcharge_label_pattern)
+
+        context_lines.any? do |line|
+          line.to_s.unicode_normalize(:nfkc).scan(/([0-9]+(?:\.[0-9]+)?)\s*%/).any? do |percentage|
+            BigDecimal(percentage.first) / 100 == rate
+          end
+        end
       end
 
       def non_taxable_item_text?(raw_text, item)

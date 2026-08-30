@@ -55,5 +55,13 @@ RSpec.describe Analysis::SourceEvidenceAttributeExtractor do
 
       expect(value).to eq(original)
     end
+
+    it 'preserves bounded discount token references without raw source attributes' do
+      references = [ { source_line_index: 2, source_span_start: 0, source_span_end: 4, amount: 120 } ]
+
+      expect(described_class.call(discount_source_refs: references, raw_response: 'private')).to eq(
+        discount_source_refs: references.map(&:stringify_keys)
+      )
+    end
   end
 end

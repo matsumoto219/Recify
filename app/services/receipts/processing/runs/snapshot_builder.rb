@@ -33,6 +33,8 @@ module Receipts::Processing::Runs
     MAX_PAYMENT_CANDIDATES = 10
     MAX_TAX_DETAILS = 10
     MAX_REVIEW_REASONS = 20
+    MAX_OCR_ITEM_DISCOUNT_SOURCE_REFS = 16
+    OCR_ITEM_DISCOUNT_SOURCE_REF_KEYS = %w[source_line_index source_span_start source_span_end amount].freeze
     MAX_REFERENCE_PRICING_CANDIDATES = 100
     MAX_ITEM_CALCULATION_MODE_CANDIDATES = Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_SETS
     ITEM_CALCULATION_MODE_ITEM_IDENTITY_MAX_BYTES = Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
@@ -373,7 +375,7 @@ module Receipts::Processing::Runs
       ocr_lines_limit = snapshot_ocr_lines_limit
       lines = limited_strings(result[:lines], ocr_lines_limit)
       case_preserved_lines = limited_strings(result[:case_preserved_lines], ocr_lines_limit)
-      candidates_snapshot = ocr_candidates_snapshot(candidates)
+      candidates_snapshot = ocr_candidates_snapshot(candidates, lines: lines, source_lines: Array(result[:lines]))
       snapshot = {
         schema_version: OCR_RESULT_SCHEMA_VERSION,
         success: result[:success] == true,
@@ -619,7 +621,7 @@ module Receipts::Processing::Runs
       }
     end
 
-    def ocr_candidates_snapshot(candidates)
+    def ocr_candidates_snapshot(candidates, lines:, source_lines:)
       purchase_candidates_limit = snapshot_purchase_candidates_limit
       payment_candidates_limit = snapshot_payment_candidates_limit
 
@@ -648,7 +650,12 @@ module Receipts::Processing::Runs
         reference_pricing_block_line_indexes: reference_pricing_block_line_indexes_snapshot(
           candidates[:reference_pricing_block_line_indexes]
         ),
-        items: limited_ocr_items(candidates[:items]),
+        items: limited_ocr_items(
+          candidates[:items],
+          lines: lines,
+          source_lines: source_lines,
+          profile: ReceiptAnalysisProfiles.for_country(candidates[:country_region])
+        ),
         review_reasons: limited_strings(candidates[:review_reasons], snapshot_review_reasons_limit),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
       }.compact
@@ -1900,7 +1907,7 @@ module Receipts::Processing::Runs
       }.compact
     end
 
-    def limited_ocr_items(items)
+    def limited_ocr_items(items, lines:, source_lines:, profile:)
       Array(items).first(ocr_items_snapshot_limit).filter_map do |item|
         item = normalized_hash(item)
         next if item.blank?
@@ -1923,10 +1930,53 @@ module Receipts::Processing::Runs
           original_line_total: safe_value(item[:original_line_total]),
           discount_amount: safe_value(item[:discount_amount]),
           discount_rate: safe_value(item[:discount_rate]),
+          discount_source_refs: discount_source_refs_snapshot(
+            item[:discount_source_refs],
+            lines: lines,
+            source_lines: source_lines,
+            profile: profile
+          ),
           tax_rate: safe_value(item[:tax_rate]),
           confidence: safe_value(item[:confidence])
         }.compact
       end
+    end
+
+    def discount_source_refs_snapshot(value, lines:, source_lines:, profile:)
+      return nil unless profile && value.is_a?(Array) && value.size.between?(1, MAX_OCR_ITEM_DISCOUNT_SOURCE_REFS)
+      return nil unless source_lines.first(lines.size) == lines
+
+      references = value.map do |entry|
+        return nil unless entry.is_a?(Hash) && entry.keys.map(&:to_s).sort == OCR_ITEM_DISCOUNT_SOURCE_REF_KEYS.sort
+
+        reference = normalized_hash(entry)
+        return nil unless reference.values.all? { |component| component.is_a?(Integer) }
+
+        line_index = reference[:source_line_index]
+        return nil unless line_index.between?(0, lines.size - 1)
+
+        line = lines[line_index]
+        return nil unless line == source_lines[line_index] && safe_utf8_string?(line)
+        return nil unless reference[:source_span_start].between?(0, line.length - 1)
+        return nil unless reference[:source_span_end].between?(reference[:source_span_start] + 1, line.length)
+        return nil unless reference[:amount].between?(1, MAX_REFERENCE_PRICING_RECEIPT_AMOUNT)
+
+        tokens = Analysis.money_token_matches(
+          text: line,
+          money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+          profile: profile,
+          allow_bare_money: false
+        )
+        return nil unless tokens.any? do |token|
+          token[:span_start] == reference[:source_span_start] && token[:span_end] == reference[:source_span_end] &&
+            token[:amount] == reference[:amount] && token[:raw_text].match?(profile.adjustment_sign_evidence_pattern)
+        end
+
+        reference.to_h
+      end
+      return nil unless references.uniq.size == references.size
+
+      references
     end
 
     def safe_quantity_unit_status(value)

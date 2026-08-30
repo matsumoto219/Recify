@@ -145,6 +145,23 @@ RSpec.describe ReceiptAnalysisProfiles do
   end
 
   describe 'JPN profile OCR per-unit discount notes' do
+    it '個数商品の単品値引注記とレシート全体値引をprofile側で区別する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect('(単品 -75)').to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('(1コ-75)').to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('(2個 -150円)').to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('2コ×単-75').to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('2コ×単75').not_to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('2L×単-75').not_to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('明細値引 -150円').not_to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('小計値引 -150円').to match(profile.ocr_receipt_level_discount_line_pattern)
+        expect('subtotal discount -150').to match(profile.ocr_receipt_level_discount_line_pattern)
+        expect('明細値引 -150円').not_to match(profile.ocr_receipt_level_discount_line_pattern)
+      end
+    end
+
     it 'standaloneの@付き単位当たり販促注記だけを許可する' do
       pattern = described_class.fetch('JPN').ocr_reference_pricing_item_layout_per_unit_discount_note_pattern
 

@@ -6,6 +6,7 @@ module Analysis
       source_line_index
       source_span_start
       source_span_end
+      discount_source_refs
     ].freeze
 
     def self.call(value)
