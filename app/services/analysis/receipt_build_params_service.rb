@@ -460,7 +460,8 @@ module Analysis
             normalized_item,
             tax_rate_confidence:,
             category_uncertain:,
-            quantity_fraction_invalid: quantity_fraction_invalid || quantity_source_uncertain
+            quantity_fraction_invalid: quantity_fraction_invalid || quantity_source_uncertain,
+            calculation_source_missing: price.nil? && original_line_total.nil? && line_total.nil?
           )
 
           {
@@ -2503,6 +2504,7 @@ module Analysis
       def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:, category_uncertain:, quantity_fraction_invalid: false)
         return true if category_uncertain
         return true if quantity_fraction_invalid
+        return true if Array(review_reasons).include?("item_pricing_mode_uncertain")
         return true if tax_rate.blank? && tax_rate_confidence_low?(tax_rate_confidence)
 
         if tax_rate.present? && tax_rate_confidence_low?(tax_rate_confidence)
@@ -2517,10 +2519,11 @@ module Analysis
         end
       end
 
-      def item_review_reasons(normalized_item, tax_rate_confidence:, category_uncertain: false, quantity_fraction_invalid: false)
+      def item_review_reasons(normalized_item, tax_rate_confidence:, category_uncertain: false, quantity_fraction_invalid: false, calculation_source_missing: false)
         normalize_review_reasons(normalized_item[:review_reasons]).tap do |reasons|
           reasons << "item_category_uncertain" if category_uncertain
           reasons << "item_quantity_uncertain" if quantity_fraction_invalid
+          reasons << "item_pricing_mode_uncertain" if calculation_source_missing
           reasons << "item_tax_rate_uncertain" if tax_rate_confidence_low?(tax_rate_confidence)
           reasons.uniq!
         end
