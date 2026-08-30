@@ -933,6 +933,13 @@ class Receipts::Processing::Pipeline
       return [] unless item_total_drift_selected_basis?(amount_result)
       return [] if item_total_drift_suppressed?(params, amount_result)
 
+      comparable_totals = item_total_drift_comparable_totals(params, amount_result)
+      if comparable_totals
+        return [] if item_total_drift_within_tolerance?(*comparable_totals)
+
+        return [ ITEM_TOTAL_DRIFT_REVIEW_REASON ]
+      end
+
       item_totals = item_total_drift_item_totals(params, amount_result)
       comparison_totals = item_total_drift_comparison_totals(params, amount_result)
       return [] if item_totals.blank? || comparison_totals.blank?
@@ -962,6 +969,37 @@ class Receipts::Processing::Pipeline
       ].flatten.compact.map(&:to_s)
 
       reasons.intersect?(ITEM_TOTAL_DRIFT_SUPPRESSION_REASONS)
+    end
+
+    def item_total_drift_comparable_totals(params, amount_result)
+      return if Array(params[:receipt_items_attributes]).any? { |item| reference_formula_item?(item) }
+
+      calculation_profile = normalized_hash(amount_result[:calculation_profile])
+      computed = normalized_hash(amount_result[:computed])
+      item_basis = computed[:item_amount_basis].to_s
+      receipt_basis = computed[:receipt_tax_basis].to_s
+      return unless calculation_profile[:item_amount_basis].to_s == item_basis
+      return unless calculation_profile[:receipt_tax_basis].to_s == receipt_basis
+
+      comparison_key =
+        if item_basis == "line_total_as_net" && receipt_basis == "tax_added_to_subtotal"
+          :subtotal
+        elsif item_basis == "line_total_as_recorded" && receipt_basis == "total_includes_tax"
+          :total
+        end
+      return unless comparison_key
+
+      computed_items = Array(amount_result.dig(:computed, :items))
+      adjustment = normalize_amount(amount_result.dig(:computed, :purchase_adjustment_total))
+      comparison_total = normalize_amount(amount_result.dig(:resolved, comparison_key))
+      return if computed_items.empty? || adjustment.nil? || !comparison_total&.positive?
+
+      item_total = computed_items.sum do |item|
+        normalize_amount(normalized_hash(item)[:line_total])&.to_i || 0
+      end
+      adjusted_item_total = [ item_total + adjustment.to_i, 0 ].max
+
+      [ adjusted_item_total, comparison_total.to_i ]
     end
 
     def item_total_drift_item_totals(params, amount_result)
