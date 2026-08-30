@@ -7,6 +7,15 @@ RSpec.describe 'OCR item calculation mode persistence' do
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
+  def count_without_quantity_unit_field_ocr_result
+    raw = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
+    raw.dig('analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray').each do |item|
+      item.fetch('valueObject').delete('QuantityUnit')
+    end
+
+    Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+  end
+
   def finalize_decision(strategy, error_code: nil, ocr_result: nil)
     Receipts::Processing::Contracts::FinalizeDecision.new(
       finalize_strategy: strategy.to_s,
@@ -309,6 +318,35 @@ RSpec.describe 'OCR item calculation mode persistence' do
       )
       expect(receipt.amount_calculation_profile.dig('profile', 'receipt_tax_basis')).to eq('total_includes_tax')
       expect(run.reload).to have_attributes(status: 'succeeded', stage: 'completed')
+    end
+  end
+
+  it 'QuantityUnit field欠損時も同一明細の印字単位を保持してcountを保存しretryで変更しない' do
+    ocr_result = count_without_quantity_unit_field_ocr_result
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(receipt, ocr_result: ocr_result, strategy: :ocr_only)
+    snapshot = run.ocr_result_snapshot.deep_dup
+
+    first_result = Receipts::Processing.run_finalize(run)
+    items = receipt.reload.receipt_items.order(:position_index)
+    saved_sources = items.pluck(:id, :pricing_source_kind, :price, :quantity, :quantity_unit_code, :original_line_total, :line_total)
+    second_result = Receipts::Processing.run_finalize(run.reload)
+    reloaded_sources = receipt.reload.receipt_items.order(:position_index).pluck(:id, :pricing_source_kind, :price, :quantity, :quantity_unit_code, :original_line_total, :line_total)
+
+    aggregate_failures do
+      expect(ocr_result.dig(:candidates, :items)).to all(include(quantity_unit_code: 'item', quantity_unit_status: 'known'))
+      expect(first_result.next_step).to eq(:done)
+      expect(second_result.next_step).to eq(:skipped)
+      expect(items.size).to eq(4)
+      expect(items.pluck(:pricing_source_kind)).to all(eq('count_unit_price'))
+      expect(items.pluck(:quantity_unit_code)).to all(eq('item'))
+      expect(items.pluck(:price)).to eq([ 220, 132, 110, 308 ])
+      expect(items.pluck(:original_line_total, :line_total)).to eq(
+        [ 220, 132, 110, 308 ].map { |amount| [ amount, amount ] }
+      )
+      expect(receipt.reload.total_amount).to eq(770)
+      expect(run.reload.ocr_result_snapshot).to eq(snapshot)
+      expect(reloaded_sources).to eq(saved_sources)
     end
   end
 

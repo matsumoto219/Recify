@@ -30,6 +30,7 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     price_content: nil,
     total_content: nil,
     quantity_content: nil,
+    quantity_prefix: '',
     price_symbol: nil,
     total_symbol: nil,
     content: nil,
@@ -40,9 +41,10 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     total_content ||= total.to_s
     quantity_content ||= quantity.to_s
     price_content ||= price.to_s
-    content ||= [ description, total_content, "#{quantity_content}#{unit}", price_content ].join("\n")
+    content ||= [ description, total_content, "#{quantity_prefix}#{quantity_content}#{unit}", price_content ].join("\n")
     total_offset = offset + provider_length(description, string_index_type) + 1
-    quantity_offset = total_offset + provider_length(total_content, string_index_type) + 1
+    quantity_offset = total_offset + provider_length(total_content, string_index_type) + 1 +
+      provider_length(quantity_prefix, string_index_type)
     unit_offset = quantity_offset + provider_length(quantity_content, string_index_type)
     price_offset = unit_offset + provider_length(unit, string_index_type) + 1
 
@@ -281,6 +283,162 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
             source: { line_total_amount: '120' }
           ) ]
         )
+      end
+    end
+
+    context 'when QuantityUnit is absent but the same item has exact quantity-line evidence' do
+      it 'preserves each supported count unit without inventing a QuantityUnit field path' do
+        {
+          '個' => 'each',
+          '点' => 'item',
+          '本' => 'piece',
+          '袋' => 'bag',
+          '枚' => 'sheet',
+          '台' => 'unit',
+          '箱' => 'box',
+          'セット' => 'set'
+        }.each do |token, unit_code|
+          item = exact_item(unit: token, quantity_prefix: '数量 ')
+          unit_span = item.fetch('valueObject').delete('QuantityUnit').fetch('spans').sole
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          aggregate_failures token do
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(result.sole.dig(:options, 0, :source, :quantity_unit_code)).to eq(unit_code)
+            expect(result.sole.dig(:options, 0, :evidence, :quantity_unit)).to eq(
+              source_field_path: 'documents[0].fields.Items[0]',
+              provider_span_start: unit_span.fetch('offset'),
+              provider_span_end: unit_span.fetch('offset') + unit_span.fetch('length')
+            )
+          end
+        end
+      end
+
+      it 'uses the explicit quantity label as each evidence when no unit is printed' do
+        item = exact_item(quantity: 3, total: 300, unit: '', quantity_prefix: ' 数量： ')
+        item.fetch('valueObject').delete('QuantityUnit')
+        quantity_start = item.dig('valueObject', 'Quantity', 'spans', 0, 'offset')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        aggregate_failures do
+          expect(result.sole.dig(:options, 0, :source)).to eq(
+            price_amount: '100',
+            quantity: '3',
+            quantity_unit_code: 'each'
+          )
+          expect(result.sole.dig(:options, 0, :evidence, :quantity_unit)).to eq(
+            source_field_path: 'documents[0].fields.Items[0]',
+            provider_span_start: quantity_start - 4,
+            provider_span_end: quantity_start - 2
+          )
+        end
+      end
+
+      it 'preserves a complete count source without a printed item total' do
+        item = exact_item(unit: '枚', quantity_prefix: '数量 ')
+        item.fetch('valueObject').delete('QuantityUnit')
+        item.fetch('valueObject').delete('TotalPrice')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq([ 'count_unit_price' ])
+      end
+
+      it 'does not replace an existing malformed or unknown QuantityUnit field' do
+        [ {}, { 'valueString' => '杯' }, { 'content' => '枚' } ].each do |field|
+          item = exact_item(unit: '枚', quantity_prefix: '数量 ')
+          item.fetch('valueObject')['QuantityUnit'] = field
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'rejects bare numbers, measurement units, unknown units, and fractional quantities' do
+        [
+          { unit: '' },
+          { unit: 'g', quantity_prefix: '数量 ' },
+          { unit: '杯', quantity_prefix: '数量 ' },
+          { unit: '個', quantity: 1.5, quantity_prefix: '数量 ' }
+        ].each do |attributes|
+          item = exact_item(**attributes)
+          item.fetch('valueObject').delete('QuantityUnit')
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'requires one quantity line whose numeric span exactly matches the Quantity field' do
+        duplicate = exact_item(unit: '枚', quantity_prefix: '数量 ')
+        append_item_content!(duplicate, '数量 2枚')
+        mismatched = exact_item(unit: '枚', quantity_prefix: '数量 ')
+        mismatched.dig('valueObject', 'Quantity', 'spans').sole['offset'] += 1
+        missing = exact_item(unit: '枚', quantity_prefix: '数量 ')
+        missing.fetch('valueObject').delete('Quantity')
+
+        [ duplicate, mismatched, missing ].each do |item|
+          item.fetch('valueObject').delete('QuantityUnit')
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'maps fallback spans through both supported indexes without normalizing their positions' do
+        %w[utf16CodeUnit textElements].each do |index_type|
+          item = exact_item(
+            description: "Cafe\u0301😀",
+            quantity_content: '２',
+            unit: '枚',
+            quantity_prefix: ' 数量： ',
+            string_index_type: index_type
+          )
+          unit_span = item.fetch('valueObject').delete('QuantityUnit').fetch('spans').sole
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], string_index_type: index_type),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.sole.dig(:options, 0, :evidence, :quantity_unit)).to include(
+            provider_span_start: unit_span.fetch('offset'),
+            provider_span_end: unit_span.fetch('offset') + unit_span.fetch('length')
+          )
+        end
+      end
+
+      it 'uses the injected quantity-line pattern instead of hardcoded labels' do
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_item_calculation_count_quantity_line_pattern)
+          .and_return(/\A(?<label>COUNT) (?<quantity>\d+)(?<unit>\p{L}+)?\z/)
+
+        results = [ 'COUNT ', '数量 ' ].map do |prefix|
+          item = exact_item(unit: '', quantity_prefix: prefix)
+          item.fetch('valueObject').delete('QuantityUnit')
+          described_class.call(analyze_result: analyze_result_for([ item ]), profile:)
+        end
+
+        expect(results.map { |result| modes(result.sole) }).to eq([
+          %w[count_unit_price explicit_line_total],
+          [ 'explicit_line_total' ]
+        ])
       end
     end
 

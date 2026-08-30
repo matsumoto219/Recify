@@ -483,6 +483,45 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
   end
 
   describe '.build_all' do
+    it 'round-trips exact count-unit evidence owned by the same Item parent' do
+      result = parsed_ocr_result
+      candidates = result.dig(:candidates, :item_calculation_mode_candidates)
+      candidates.each do |candidate|
+        candidate.dig(:options, 0, :evidence, :quantity_unit)[:source_field_path] = candidate.fetch(:source_field_path)
+      end
+      snapshot = snapshot_without_proposals(result)
+
+      proposals = described_class.build_all(candidates: candidates, ocr_snapshot: snapshot)
+
+      aggregate_failures do
+        expect(proposals&.size).to eq(4)
+        expect(described_class.from_snapshot(
+          JSON.parse(JSON.generate(proposals)),
+          ocr_snapshot: snapshot
+        )).to eq(proposals)
+      end
+    end
+
+    it 'rejects foreign, arbitrary, overlapping, and out-of-parent count-unit evidence' do
+      result = parsed_ocr_result
+      snapshot = snapshot_without_proposals(result)
+      candidate = result.dig(:candidates, :item_calculation_mode_candidates, 0)
+      invalid_evidence = [
+        { source_field_path: 'documents[0].fields.Items[1]' },
+        { source_field_path: 'documents[0].fields.Items[0].Description' },
+        { source_field_path: 'pages[0].lines[0]' },
+        { source_field_path: candidate[:source_field_path], provider_span_start: candidate[:provider_span_start] - 1 },
+        candidate.dig(:options, 0, :evidence, :quantity).merge(source_field_path: candidate[:source_field_path])
+      ]
+
+      invalid_evidence.each do |mutation|
+        candidates = result.dig(:candidates, :item_calculation_mode_candidates).deep_dup
+        candidates.first.dig(:options, 0, :evidence, :quantity_unit).merge!(mutation)
+
+        expect(described_class.build_all(candidates: candidates, ocr_snapshot: snapshot)).to be_nil
+      end
+    end
+
     it 'builds bounded exact proposals without raw item text' do
       result = parsed_ocr_result
       snapshot = snapshot_without_proposals(result)

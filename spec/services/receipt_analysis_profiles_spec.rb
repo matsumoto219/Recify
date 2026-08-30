@@ -412,6 +412,19 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
+    it 'owns explicit count quantity line vocabulary' do
+      pattern = profile.ocr_item_calculation_count_quantity_line_pattern
+
+      aggregate_failures do
+        expect('数量 3枚'.match(pattern).named_captures).to eq('label' => '数量', 'quantity' => '3', 'unit' => '枚')
+        expect('数量 3'.match(pattern).named_captures).to eq('label' => '数量', 'quantity' => '3', 'unit' => nil)
+        expect('２セット'.match(pattern).named_captures).to eq('label' => nil, 'quantity' => '２', 'unit' => 'セット')
+        expect('数量 約3枚').not_to match(pattern)
+        expect('数量 2〜3枚').not_to match(pattern)
+        expect('数量 3枚入り').to match(pattern)
+      end
+    end
+
     it 'owns item calculation package-quantity vocabulary' do
       aggregate_failures do
         expect('検証商品 10個入').to match(profile.ocr_item_calculation_package_quantity_pattern)

@@ -293,11 +293,15 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       parent_span: parent_span,
       field_path: item_field_path(item_index, "Quantity")
     )
-    quantity_unit = quantity_unit_component(
-      value_object["QuantityUnit"],
-      parent_span: parent_span,
-      field_path: item_field_path(item_index, "QuantityUnit")
-    )
+    quantity_unit = if value_object.key?("QuantityUnit")
+      quantity_unit_component(
+        value_object["QuantityUnit"],
+        parent_span: parent_span,
+        field_path: item_field_path(item_index, "QuantityUnit")
+      )
+    else
+      quantity_line_unit_component(item, quantity, item_index, parent_span)
+    end
     return if [ price, quantity, quantity_unit ].any?(&:nil?)
     return unless nonoverlapping_evidence?(
       description.fetch(:evidence),
@@ -412,6 +416,52 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       unit_code: structured_resolution.code,
       evidence: component_evidence(field_path, span)
     }
+  end
+
+  def quantity_line_unit_component(item, quantity, item_index, parent_span)
+    return if quantity.nil?
+
+    lines = provider_content_lines(item["content"], parent_span, strip: false)
+    return if lines.nil? || lines.size > MAX_LINES
+
+    matches = lines.filter_map do |line|
+      match = profile.ocr_item_calculation_count_quantity_line_pattern.match(line.fetch(:content))
+      [ line.fetch(:provider_span), match ] if match && (match[:label] || match[:unit])
+    end
+    return unless matches.one?
+
+    line_span, match = matches.sole
+    quantity_span = quantity_line_capture_span(match, :quantity, line_span)
+    return unless quantity_span == evidence_range(quantity.fetch(:evidence))
+
+    unit = if match[:unit]
+      resolution = profile.resolve_quantity_unit(match[:unit])
+      return unless resolution.known? && ReceiptQuantityUnit.countable?(resolution.code)
+
+      resolution.code
+    else
+      ReceiptQuantityUnit.default_code
+    end
+    span = quantity_line_capture_span(match, match[:unit] ? :unit : :label, line_span)
+    return unless span_within?(span, parent_span)
+
+    {
+      unit_code: unit,
+      evidence: component_evidence(item_field_path(item_index), span)
+    }
+  end
+
+  def quantity_line_capture_span(match, name, line_span)
+    prefix = match.string[0...match.begin(name)]
+    span = mapper.span_for_bytes(
+      match.string,
+      byte_offset: prefix.bytesize,
+      byte_length: match[name].bytesize
+    )
+    return if span.nil?
+
+    start_value = line_span.begin + span.fetch(:offset)
+    (start_value...(start_value + span.fetch(:length)))
   end
 
   def exact_money_from_content(value, declared_symbol:, allow_unit_price_marker:)
@@ -619,7 +669,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       "documents[0].fields.Items[#{item_index}].#{field_name}"
   end
 
-  def provider_content_lines(value, parent_span)
+  def provider_content_lines(value, parent_span, strip: true)
     return unless parent_span
 
     parts = value.split(LINE_BREAK_CAPTURE_PATTERN, -1)
@@ -629,7 +679,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       line_span = provider_offset...(provider_offset + line_length)
       provider_offset = line_span.end
       provider_offset += mapper.length(separator) if separator
-      { content: line.strip, provider_span: line_span }
+      { content: strip ? line.strip : line, provider_span: line_span }
     end
     return unless provider_offset == parent_span.end
 

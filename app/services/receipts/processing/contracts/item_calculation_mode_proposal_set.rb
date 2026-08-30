@@ -900,9 +900,15 @@ module Receipts::Processing::Contracts
           "quantity" => "Quantity",
           "quantity_unit" => "QuantityUnit"
         }.all? do |evidence_key, field_name|
+          item_path = "documents[0].fields.Items[#{item_index}]"
+          expected_path = "#{item_path}.#{field_name}"
+          if evidence_key == "quantity_unit" &&
+              normalized_hash(evidence[evidence_key])["source_field_path"] == item_path
+            expected_path = item_path
+          end
           component_evidence_valid?(
             evidence[evidence_key],
-            expected_path: "documents[0].fields.Items[#{item_index}].#{field_name}",
+            expected_path: expected_path,
             parent_start: parent_start,
             parent_end: parent_end
           )

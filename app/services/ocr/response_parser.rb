@@ -2171,6 +2171,16 @@ class Ocr::ResponseParser
       identity = candidate[:item_identity]
       identities[item_index] = identity if item_index.is_a?(Integer) && identity.is_a?(String)
     end
+    count_units_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, units|
+      next unless candidate.is_a?(Hash) && candidate[:source_provider] == "azure_structured"
+
+      item_index = candidate[:item_index]
+      options = Array(candidate[:options]).select { |option| option[:pricing_source_kind] == "count_unit_price" }
+      next unless item_index.is_a?(Integer) && item_index.between?(0, items.size - 1) && options.one?
+
+      unit_code = options.sole.dig(:source, :quantity_unit_code)
+      units[item_index] = unit_code if ReceiptQuantityUnit.countable?(unit_code)
+    end
 
     items.filter_map.with_index do |item, index|
       next unless retained_item_index_lookup[index]
@@ -2206,6 +2216,8 @@ class Ocr::ResponseParser
           status: purchased_quantity[:unit_status].to_sym,
           raw: nil
         )
+      elsif value_object["QuantityUnit"].nil? && count_units_by_index[index]
+        ReceiptQuantityUnit::Resolution.new(code: count_units_by_index[index], status: :known, raw: nil)
       else
         profile.resolve_quantity_unit(value_object.dig("QuantityUnit", "valueString"))
       end
