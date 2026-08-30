@@ -171,6 +171,8 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     if count_option && explicit_option && option_evidence_overlaps?(count_option, explicit_option)
       count_option = nil
     end
+    conflicts = conflicts_for(item, item_index, count_option: count_option, description: description)
+    count_option = nil if conflicts.any?
     options = [ count_option, explicit_option ].compact
     return if options.empty? && !valid_reference_pricing_item_indexes.include?(item_index)
 
@@ -187,7 +189,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       provider_span_end: parent_span.end,
       destination_evidence: description.fetch(:evidence),
       printed_line_total: printed_line_total,
-      conflicts: conflicts_for(item, item_index),
+      conflicts: conflicts,
       options: options
     }
   end
@@ -280,8 +282,6 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   end
 
   def count_option(value_object, item, item_index, parent_span, description:)
-    return if unsafe_count_context?(item, item_index)
-
     price = money_component(
       value_object["Price"],
       parent_span: parent_span,
@@ -529,7 +529,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     value.to_s("F").sub(/\.0+\z/, "").sub(/(\.\d*?)0+\z/, '\\1')
   end
 
-  def conflicts_for(item, item_index)
+  def conflicts_for(item, item_index, count_option:, description:)
     content = safe_content(item["content"], maximum_bytes: MAX_ITEM_CONTENT_BYTES)
     return CONFLICTS if content.nil?
 
@@ -539,13 +539,45 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     conflicts << "discount" if discount_conflict?(item, item_index, content)
     package_conflict = content.match?(profile.ocr_item_calculation_package_quantity_pattern) ||
       content.match?(profile.ocr_item_calculation_package_capacity_pattern)
+    if package_conflict && count_option && conflicts.empty? && !reference_pricing_item_indexes.include?(item_index)
+      package_conflict = !package_evidence_within_description?(item, description, content)
+    end
     conflicts << "package" if package_conflict
     conflicts << "reference_expression" if reference_pricing_item_indexes.include?(item_index)
     conflicts & CONFLICTS
   end
 
-  def unsafe_count_context?(item, item_index)
-    conflicts_for(item, item_index).any?
+  def package_evidence_within_description?(item, description, normalized_content)
+    parent_span = single_span(item)
+    description_span = evidence_range(description.fetch(:evidence))
+    return false unless span_within?(description_span, parent_span)
+
+    raw_content = item.fetch("content")
+    byte_range = mapper.byte_range_for_span(
+      raw_content,
+      offset: description_span.begin - parent_span.begin,
+      length: description_span.size
+    )
+    return false if byte_range.nil?
+
+    segments = [
+      raw_content.byteslice(0...byte_range.begin),
+      raw_content.byteslice(byte_range),
+      raw_content.byteslice(byte_range.end..)
+    ].map { |segment| segment.unicode_normalize(:nfkc) }
+    return false unless segments.join == normalized_content
+
+    description_start = segments.first.length
+    description_end = description_start + segments.fetch(1).length
+    [
+      profile.ocr_item_calculation_package_quantity_pattern,
+      profile.ocr_item_calculation_package_capacity_pattern
+    ].all? do |pattern|
+      normalized_content.to_enum(:scan, pattern).all? do
+        match = Regexp.last_match
+        match.begin(0) >= description_start && match.end(0) <= description_end
+      end
+    end
   end
 
   def discount_conflict?(item, item_index, content)

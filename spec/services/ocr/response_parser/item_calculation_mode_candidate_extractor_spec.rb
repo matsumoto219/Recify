@@ -711,6 +711,107 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
         expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
       end
 
+      it 'keeps independently printed purchase sources when package notation belongs only to Description' do
+        [ '検証品500ml入り', '検証品10個入' ].each do |description|
+          item = exact_item(description: description, price: 223, quantity: 2, unit: '本', total: 446)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          aggregate_failures description do
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(result.sole[:conflicts]).to eq([])
+            expect(result.sole.dig(:options, 0, :source)).to eq(
+              price_amount: '223',
+              quantity: '2',
+              quantity_unit_code: 'piece'
+            )
+          end
+        end
+      end
+
+      it 'preserves package diagnostics when the separate count source is missing or invalid' do
+        missing_price = exact_item(description: '検証品500ml入り')
+        missing_price.fetch('valueObject').delete('Price')
+        invalid_price = exact_item(description: '検証品500ml入り')
+        invalid_price.dig('valueObject', 'Price', 'valueCurrency')['amount'] = 101
+        invalid_quantity = exact_item(description: '検証品500ml入り', quantity: 0)
+        unknown_unit = exact_item(description: '検証品500ml入り', unit: '杯')
+
+        [ missing_price, invalid_price, invalid_quantity, unknown_unit ].each do |item|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          aggregate_failures do
+            expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+            expect(result.sole[:conflicts]).to include('package')
+          end
+        end
+      end
+
+      it 'rejects package notation crossing the exact Description boundary' do
+        item = exact_item(description: '検証品500ml入り')
+        description = item.dig('valueObject', 'Description')
+        description.merge!('valueString' => '検証品500', 'content' => '検証品500')
+        description.fetch('spans').sole['length'] = '検証品500'.length
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        aggregate_failures do
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+          expect(result.sole[:conflicts]).to include('package')
+        end
+      end
+
+      it 'does not reuse package count spans from Description as purchase sources' do
+        item = exact_item(description: '検証品10個入')
+        description = item.dig('valueObject', 'Description')
+        quantity_start = description.dig('spans', 0, 'offset') + description.fetch('content').index('10')
+        item.dig('valueObject', 'Quantity').merge!(
+          'valueNumber' => 10,
+          'content' => '10',
+          'spans' => [ { 'offset' => quantity_start, 'length' => 2 } ]
+        )
+        item.dig('valueObject', 'QuantityUnit').merge!(
+          'valueString' => '個',
+          'content' => '個',
+          'spans' => [ { 'offset' => quantity_start + 2, 'length' => 1 } ]
+        )
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        aggregate_failures do
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+          expect(result.sole[:conflicts]).to include('package')
+        end
+      end
+
+      it 'keeps full-width package normalization separate from provider index boundaries' do
+        %w[utf16CodeUnit textElements].each do |index_type|
+          item = exact_item(description: "Cafe\u0301😀検証品５００ｍｌ入り", string_index_type: index_type)
+          quantity_span = item.dig('valueObject', 'Quantity', 'spans').sole
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], string_index_type: index_type),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          aggregate_failures index_type do
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(result.sole.dig(:options, 0, :evidence, :quantity)).to include(
+              provider_span_start: quantity_span.fetch('offset'),
+              provider_span_end: quantity_span.fetch('offset') + quantity_span.fetch('length')
+            )
+          end
+        end
+      end
+
       it 'rejects mass-capacity and nested package expressions' do
         %w[500ml入り].each do |suffix|
           packaged_item = exact_item
