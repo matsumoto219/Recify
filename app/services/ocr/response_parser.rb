@@ -1966,8 +1966,8 @@ class Ocr::ResponseParser
     return nil unless text.match?(profile.ocr_tax_target_marker_pattern)
     return nil if text.match?(profile.ocr_tax_amount_description_pattern)
 
-    match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
-    normalize_rate_value(match[1]) if match
+    match = text.unicode_normalize(:nfkc).match(/(\d+(?:\.\d+)?)\s*%/)
+    normalize_rate_value(match[1], percentage: true) if match
   end
 
   def included_tax_amount(gross_amount, rate)
@@ -2091,11 +2091,13 @@ class Ocr::ResponseParser
     amounts.select { |amount| amount.positive? && amount > 20 }.max
   end
 
-  def normalize_rate_value(value)
+  def normalize_rate_value(value, percentage: false)
     return if value.blank?
 
-    rate = BigDecimal(value.to_s)
-    rate > 1 ? rate / 100 : rate
+    text = value.to_s.unicode_normalize(:nfkc)
+    percentage ||= text.include?("%")
+    rate = BigDecimal(text.delete("%"))
+    percentage || rate > 1 ? rate / 100 : rate
   rescue ArgumentError
     nil
   end
@@ -2291,8 +2293,8 @@ class Ocr::ResponseParser
       value_object.dig("Rate", "valueNumber")
     return explicit_rate if explicit_rate.present?
 
-    item["content"].to_s.scan(/(\d+(?:\.\d+)?)\s*[%％]/).filter_map do |match|
-      normalize_rate_value(match.first)
+    item["content"].to_s.unicode_normalize(:nfkc).scan(/(\d+(?:\.\d+)?)\s*%/).filter_map do |match|
+      normalize_rate_value(match.first, percentage: true)
     end.first
   rescue NoMethodError, TypeError
     nil

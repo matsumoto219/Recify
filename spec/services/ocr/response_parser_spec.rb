@@ -1143,6 +1143,48 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '明示された百分率は1以下でもdecimal rateへ変換する' do
+      percentages = {
+        '0%' => '0',
+        '0.5%' => '0.005',
+        '1%' => '0.01',
+        '1.01%' => '0.0101',
+        '8%' => '0.08',
+        '10%' => '0.1',
+        '27%' => '0.27',
+        '96%' => '0.96',
+        '99%' => '0.99',
+        '100%' => '1',
+        '０．５％' => '0.005',
+        '１％' => '0.01'
+      }
+
+      percentages.each do |percentage, expected_rate|
+        response = raw_response.deep_dup
+        response['analyzeResult']['documents'].first['fields']['Items']['valueArray'].first['content'] = "商品A 税込#{percentage} 180円"
+
+        result = described_class.new(response: response, provider: :fixture).call
+
+        aggregate_failures(percentage) do
+          expect(result[:success]).to eq(true)
+          expect(result.dig(:candidates, :items).first[:tax_rate]).to eq(BigDecimal(expected_rate))
+        end
+      end
+    end
+
+    it '構造化fieldのdecimal rateを百分率として再変換しない' do
+      [ '0.01', '0.27', '1' ].each do |rate|
+        response = raw_response.deep_dup
+        item = response['analyzeResult']['documents'].first['fields']['Items']['valueArray'].first
+        item['valueObject']['TaxRate'] = { 'valueNumber' => BigDecimal(rate) }
+        item['content'] = '商品A 税込1% 180円'
+
+        result = described_class.new(response: response, provider: :fixture).call
+
+        expect(result.dig(:candidates, :items).first[:tax_rate]).to eq(BigDecimal(rate))
+      end
+    end
+
     it '税率別対象額と税合計だけがOCR行にある内税レシートからTaxDetailsを復元する' do
       response = raw_response.deep_dup
       response['analyzeResult']['content'] = <<~TEXT

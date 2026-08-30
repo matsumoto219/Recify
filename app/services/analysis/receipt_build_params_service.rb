@@ -1379,10 +1379,10 @@ module Analysis
       end
 
       def tax_rate_candidates_from_text_number(raw_rate)
-        candidates = [ normalize_rate(raw_rate) ].compact
+        candidates = [ normalize_rate(raw_rate, percentage: true) ].compact
         if raw_rate.to_s.include?(".")
           decimal_tail = raw_rate.to_s.split(".").last
-          candidates << normalize_rate(decimal_tail) if decimal_tail.match?(/\A(?:8|10)\z/)
+          candidates << normalize_rate(decimal_tail, percentage: true) if decimal_tail.match?(/\A(?:8|10)\z/)
         end
 
         candidates.select(&:positive?).uniq
@@ -1516,7 +1516,7 @@ module Analysis
         return nil if text.match?(profile.analysis_external_tax_description_pattern)
 
         match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
-        normalize_rate(match[1]) if match
+        normalize_rate(match[1], percentage: true) if match
       end
 
       def tax_summary_gross_amount(lines, index, rate, tax)
@@ -2694,11 +2694,13 @@ module Analysis
         ReceiptAmountService.parse_amount_or_nil(value)
       end
 
-      def normalize_rate(value)
+      def normalize_rate(value, percentage: false)
         return nil if value.blank?
 
-        rate = value.is_a?(Numeric) ? value.to_d : value.to_s.delete("%").to_d
-        rate > 1 ? rate / 100 : rate
+        text = value.to_s.unicode_normalize(:nfkc)
+        percentage ||= text.include?("%")
+        rate = value.is_a?(Numeric) ? value.to_d : text.delete("%").to_d
+        percentage || rate > 1 ? rate / 100 : rate
       rescue ArgumentError
         nil
       end

@@ -4102,6 +4102,82 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '明示百分率の文字列をreceiptとitemとtax detailで同じdecimal rateへ変換する' do
+        percentages = {
+          '0%' => '0',
+          '0.5%' => '0.005',
+          '1%' => '0.01',
+          '1.01%' => '0.0101',
+          '27%' => '0.27',
+          '96%' => '0.96',
+          '99%' => '0.99',
+          '100%' => '1',
+          '０．５％' => '0.005',
+          '１％' => '0.01'
+        }
+
+        percentages.each do |percentage, expected_rate|
+          input = ocr_result.deep_dup
+          input[:candidates][:tax_rate] = percentage
+          input[:candidates][:items].first[:tax_rate] = percentage
+          input[:candidates][:tax_details].first[:rate] = percentage
+
+          params = described_class.call(ocr_result: input, ai_result: nil)
+
+          aggregate_failures(percentage) do
+            expect(params[:receipt_attributes][:tax_rate]).to eq(BigDecimal(expected_rate))
+            expect(params[:receipt_items_attributes].first[:tax_rate]).to eq(BigDecimal(expected_rate))
+            expect(params[:receipt_tax_details_attributes].first[:rate]).to eq(BigDecimal(expected_rate))
+          end
+        end
+      end
+
+      it 'percent記号のないdecimal rateの互換入力を維持する' do
+        [ BigDecimal('0.01'), BigDecimal('0.27'), BigDecimal('1'), '0.01', '0.27', '1' ].each do |rate|
+          input = ocr_result.deep_dup
+          input[:candidates][:tax_rate] = rate
+          input[:candidates][:items].first[:tax_rate] = rate
+          input[:candidates][:tax_details].first[:rate] = rate
+
+          params = described_class.call(ocr_result: input, ai_result: nil)
+
+          aggregate_failures(rate) do
+            expect(params[:receipt_attributes][:tax_rate]).to eq(BigDecimal(rate.to_s))
+            expect(params[:receipt_items_attributes].first[:tax_rate]).to eq(BigDecimal(rate.to_s))
+            expect(params[:receipt_tax_details_attributes].first[:rate]).to eq(BigDecimal(rate.to_s))
+          end
+        end
+      end
+
+      it '1%の対象行を同じdecimal rateの構造化税詳細へ対応させる' do
+        input = ocr_result.deep_dup
+        input[:candidates][:tax_details] = [ { description: 'Tax', rate: BigDecimal('0.01'), net_amount: 10_000, amount: 100 } ]
+        input[:lines] = [ '1%対象 10,100円', '内消費税 100円' ]
+
+        params = described_class.call(ocr_result: input, ai_result: nil)
+
+        expect(params[:receipt_tax_details_attributes]).to include(
+          include(description: '1%対象', rate: BigDecimal('0.01'), net_amount: 10_000, amount: 100)
+        )
+      end
+
+      it '小数百分率のsummary行と構造化decimal rateを照合する' do
+        { '1%' => [ '0.01', 10_100, 10_000 ], '0.5%' => [ '0.005', 20_100, 20_000 ] }.each do |percentage, values|
+          rate, gross, net = values
+          input = ocr_result.deep_dup
+          input[:candidates][:total_amount] = gross
+          input[:candidates][:tax_amount] = 100
+          input[:candidates][:tax_details] = [ { description: '内消費税', rate: BigDecimal(rate), amount: 100 } ]
+          input[:lines] = [ "税率#{percentage}", "税込額 #{gross}円" ]
+
+          params = described_class.call(ocr_result: input, ai_result: nil)
+
+          expect(params[:receipt_tax_details_attributes]).to include(
+            include(rate: BigDecimal(rate), net_amount: net, amount: 100)
+          )
+        end
+      end
+
       it 'quantityだけはdecimal commaを小数として正規化しmeasurement totalは推測しない' do
         ocr_result[:candidates][:items].first[:price] = '14,400円'
         ocr_result[:candidates][:items].first[:quantity] = '0,300'

@@ -80,7 +80,7 @@ module Analysis
 
     def rate_from_line(line)
       match = normalize_text(line).match(/(\d+(?:\.\d+)?)\s*[%％]/)
-      normalize_rate(match[1]) if match
+      normalize_rate(match[1], percentage: true) if match
     end
 
     def amount_near_line(index)
@@ -155,11 +155,13 @@ module Analysis
       ReceiptAmountService.parse_amount_or_nil(value)
     end
 
-    def normalize_rate(value)
+    def normalize_rate(value, percentage: false)
       return if value.blank?
 
-      rate = BigDecimal(value.to_s.delete("%"))
-      rate > 1 ? rate / 100 : rate
+      text = normalize_text(value)
+      percentage ||= text.include?("%")
+      rate = BigDecimal(text.delete("%"))
+      percentage || rate > 1 ? rate / 100 : rate
     rescue ArgumentError
       nil
     end
