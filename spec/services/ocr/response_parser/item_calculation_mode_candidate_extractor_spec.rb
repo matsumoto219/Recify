@@ -77,6 +77,48 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: index_type).length(value)
   end
 
+  def count_expression_item(
+    expression,
+    price_content:,
+    quantity_content: nil,
+    unit: nil,
+    price: 123,
+    quantity: 2,
+    total: 246,
+    total_content: nil,
+    string_index_type: 'utf16CodeUnit'
+  )
+    item = exact_item(price:, quantity:, total:, total_content:, string_index_type:)
+    item['content'] = [ '検証商品', total_content || total.to_s, expression ].join("\n")
+    item['spans'].sole['length'] = provider_length(item['content'], string_index_type)
+    fields = item.fetch('valueObject')
+    fields['Price']['content'] = price_content
+    { 'Quantity' => quantity_content, 'QuantityUnit' => unit }.each do |key, value|
+      if value
+        fields[key]['content'] = value
+        fields[key]['valueString'] = value if key == 'QuantityUnit'
+      else
+        fields.delete(key)
+      end
+    end
+    fields.each do |key, field|
+      relative_offset = if %w[Quantity QuantityUnit].include?(key)
+        field_offset = if key == 'Quantity' && expression.lstrip.start_with?('@', '＠')
+          expression.rindex(field['content'])
+        else
+          expression.index(field['content'])
+        end
+        item['content'].length - expression.length + field_offset
+      else
+        item['content'].rindex(field['content'])
+      end
+      prefix = item['content'][0...relative_offset]
+      field['spans'] = [ { 'offset' => 100 + provider_length(prefix, string_index_type), 'length' => provider_length(field['content'], string_index_type) } ]
+    end
+
+    item
+  end
+
   def analyze_result_for(
     items,
     model_id: described_class::SUPPORTED_MODEL_ID,
@@ -253,6 +295,322 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
   end
 
   describe '.call' do
+    context 'with provider-split count expressions' do
+      it 'uses exact numeric subspans when Price includes the multiplication separator' do
+        item = count_expression_item('@123× 2', price_content: '@123×', quantity_content: '2')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+        option = result.sole.fetch(:options).first
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(option[:source]).to eq(price_amount: '123', quantity: '2', quantity_unit_code: 'each')
+        expect(option.dig(:evidence, :price)).to eq(
+          source_field_path: 'documents[0].fields.Items[0].Price',
+          provider_span_start: item.dig('valueObject', 'Price', 'spans', 0, 'offset') + 1,
+          provider_span_end: item.dig('valueObject', 'Price', 'spans', 0, 'offset') + 4
+        )
+        expect(option.dig(:evidence, :quantity_unit, :source_field_path)).to eq('documents[0].fields.Items[0]')
+      end
+
+      it 'requires the complete parenthesized expression when individual fields include parentheses' do
+        item = count_expression_item('(2個 × 単123)', price_content: '123)', quantity_content: '(2', unit: '個')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole.dig(:options, 0, :source)).to eq(price_amount: '123', quantity: '2', quantity_unit_code: 'each')
+      end
+
+      it 'uses the real Price field path when its expression contains the omitted Quantity' do
+        item = count_expression_item('@123×2個', price_content: '@123×2', unit: '個')
+        original = item.deep_dup
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole.dig(:options, 0, :source, :quantity)).to eq('2')
+        expect(result.sole.dig(:options, 0, :evidence, :quantity, :source_field_path)).to eq('documents[0].fields.Items[0].Price')
+        expect(item).to eq(original)
+      end
+
+      it 'recognizes an explicit unitless quantity only with a same-item unit-price marker' do
+        [ 1, 2 ].each do |quantity|
+          item = count_expression_item("@123\n #{quantity} ", price_content: '@123', quantity_content: quantity.to_s, quantity:)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+          expect(result.sole.dig(:options, 0, :source)).to eq(price_amount: '123', quantity: quantity.to_s, quantity_unit_code: 'each')
+        end
+      end
+
+      it 'links an explicit quantity multiplier to the immediately following whole Price field' do
+        %w[utf16CodeUnit textElements].each do |string_index_type|
+          [ [ '2 x', '2', '360 ¥' ], [ '２ ×', '２', '３６０ ￥' ] ].each do |quantity_line, quantity_content, price_content|
+            item = count_expression_item(
+              "#{quantity_line}\n#{price_content}",
+              price_content:,
+              quantity_content:,
+              price: 360,
+              total: 720,
+              string_index_type:
+            )
+            item['valueObject']['Price']['valueCurrency']['currencySymbol'] = '¥'
+            original = item.deep_dup
+            result = described_class.call(
+              analyze_result: analyze_result_for([ item ], string_index_type:),
+              profile: ReceiptAnalysisProfiles.fetch('JPN')
+            )
+            option = result.sole.fetch(:options).first
+
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(option[:source]).to eq(price_amount: '360', quantity: '2', quantity_unit_code: 'each')
+            expect(option.dig(:evidence, :quantity, :source_field_path)).to eq('documents[0].fields.Items[0].Quantity')
+            expect(option.dig(:evidence, :quantity_unit, :source_field_path)).to eq('documents[0].fields.Items[0]')
+            unit_span = option.fetch(:evidence).fetch(:quantity_unit)
+            mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: string_index_type)
+            expect(mapper.slice(
+              analyze_result_for([ item ], string_index_type:).fetch('content'),
+              offset: unit_span.fetch(:provider_span_start),
+              length: unit_span.fetch(:provider_span_end) - unit_span.fetch(:provider_span_start)
+            )).to eq(quantity_line.last)
+            expect(item).to eq(original)
+          end
+        end
+      end
+
+      it 'does not require a printed total to recognize the complete split count expression' do
+        item = count_expression_item("2 x\n360 ¥", price_content: '360 ¥', quantity_content: '2', price: 360, total: 720)
+        item['valueObject'].delete('TotalPrice')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq([ 'count_unit_price' ])
+        expect(result.sole.dig(:options, 0, :source)).to eq(price_amount: '360', quantity: '2', quantity_unit_code: 'each')
+      end
+
+      it 'rejects non-count, incomplete, competing and separated quantity multiplier lines' do
+        [
+          [ "2g x\n360 ¥", '2', 2 ],
+          [ "2杯 x\n360 ¥", '2', 2 ],
+          [ "2個入り x\n360 ¥", '2', 2 ],
+          [ "約2 x\n360 ¥", '2', 2 ],
+          [ "2〜3 x\n360 ¥", '2', 2 ],
+          [ "2.5 x\n360 ¥", '2.5', 2.5 ],
+          [ "2 x\n3 x\n360 ¥", '2', 2 ],
+          [ "2 x\n別明細\n360 ¥", '2', 2 ],
+          [ "2 x\n\n360 ¥", '2', 2 ]
+        ].each do |expression, quantity_content, quantity|
+          item = count_expression_item(expression, price_content: '360 ¥', quantity_content:, price: 360, quantity:, total: 720)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'requires exact Price and Quantity fields and rejects conflicting declared units or currencies' do
+        [
+          ->(item) { item['valueObject']['Price']['valueCurrency']['amount'] = 361 },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencyCode'] = 'USD' },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencySymbol'] = '$' },
+          ->(item) { item['valueObject']['Price']['spans'].sole['offset'] += 1 },
+          ->(item) { item['valueObject']['Quantity']['valueNumber'] = 3 },
+          ->(item) { item['valueObject']['Quantity']['spans'].sole['offset'] += 1 },
+          ->(item) { item['valueObject'].delete('Quantity') },
+          ->(item) { item['valueObject']['QuantityUnit'] = {} }
+        ].each do |mutate|
+          item = count_expression_item("2 x\n360 ¥", price_content: '360 ¥', quantity_content: '2', price: 360, total: 720)
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not turn a split reference or discount conflict into a count formula' do
+        item = count_expression_item("2 x\n360 ¥", price_content: '360 ¥', quantity_content: '2', price: 360, total: 720)
+        [
+          { reference_pricing_candidates: [ { item_index: 0 } ] },
+          { discount_item_indexes: [ 0 ] }
+        ].each do |conflicts|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            **conflicts
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not join separated parent fragments across an unowned intervening line' do
+        item = count_expression_item("2 x\n別明細\n360 ¥", price_content: '360 ¥', quantity_content: '2', price: 360, total: 720)
+        content = analyze_result_for([ item ]).fetch('content')
+        gap = "\n別明細\n"
+        exclude_parent_span!(item, { 'offset' => content.index(gap), 'length' => gap.length }, content)
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'rejects partial, signed and conflicting currency content instead of finding a numeric substring' do
+        [ '360 ¥ extra', '-360 ¥', '¥360 $', '360 ¥/100g', '360 ¥ 10%', '360 ¥ 360 ¥' ].each do |price_content|
+          item = count_expression_item("2 x\n#{price_content}", price_content:, quantity_content: '2', price: 360, total: 720)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'preserves both supported indexes for fullwidth numeric subspans' do
+        %w[utf16CodeUnit textElements].each do |string_index_type|
+          item = count_expression_item('＠１２３×２個', price_content: '＠１２３×２', unit: '個', string_index_type:)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], string_index_type:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.sole.dig(:options, 0, :source)).to eq(price_amount: '123', quantity: '2', quantity_unit_code: 'each')
+        end
+      end
+
+      it 'rejects incomplete, multiple, package, fractional and unsupported-unit expressions' do
+        [
+          [ '(2個 × 単123', '123', '(2', '個' ],
+          [ "@123×2個\n@123×2個", '@123×2', '2', '個' ],
+          [ '@123×2個入り', '@123×2', '2', '個' ],
+          [ '@123×2g', '@123×2', '2', 'g' ],
+          [ '@123×2杯', '@123×2', '2', '杯' ],
+          [ '@123×2.5個', '@123×2.5', '2.5', '個' ]
+        ].each do |expression, price_content, quantity_content, unit|
+          item = count_expression_item(expression, price_content:, quantity_content:, unit:)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not replace conflicting structured fields or borrow a component outside its provider field' do
+        [
+          ->(item) { item['valueObject']['Price']['valueCurrency']['amount'] = 124 },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencyCode'] = 'USD' },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencySymbol'] = '$' },
+          ->(item) { item['valueObject']['Quantity']['valueNumber'] = 3 },
+          ->(item) { item['valueObject']['Quantity']['spans'].sole['offset'] -= 1 },
+          ->(item) { item['valueObject']['QuantityUnit'] = {} },
+          lambda do |item|
+            item['valueObject']['Price']['content'] = '@123'
+            item['valueObject']['Price']['spans'].sole['length'] = 4
+            item['valueObject'].delete('Quantity')
+          end
+        ].each do |mutate|
+          item = count_expression_item('@123×2', price_content: '@123×', quantity_content: '2')
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'keeps zero price and exact bounds separate from missing or out-of-bound count sources' do
+        [
+          [ 0, 2, true ],
+          [ 123, 1, true ],
+          [ 123, 9_999, true ],
+          [ 999_999_999_999, 1, true ],
+          [ 123, 0, false ],
+          [ 123, 10_000, false ],
+          [ 1_000_000_000_000, 1, false ]
+        ].each do |price, quantity, expected|
+          item = count_expression_item("@#{price}×#{quantity}", price_content: "@#{price}×#{quantity}", price:, quantity:)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.any? { |candidate| modes(candidate).include?('count_unit_price') }).to eq(expected)
+        end
+      end
+
+      it 'rejects oversized and control-bearing expressions without accepting a partial token' do
+        [ "@#{'1' * 513}×2", "@123×2\u0000" ].each do |expression|
+          item = count_expression_item(expression, price_content: expression)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.flat_map { |candidate| modes(candidate) }).not_to include('count_unit_price')
+        end
+      end
+
+      it 'does not infer one or count semantics from bare columns without the unit-price marker' do
+        [
+          count_expression_item("123\n2", price_content: '123', quantity_content: '2'),
+          count_expression_item('@123', price_content: '@123')
+        ].each do |item|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'retains explicit zero and positive totals with a profile-owned trailing tax marker' do
+        [ 0, 246 ].each do |total|
+          item = exact_item(total:, total_content: "#{total}※")
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.sole.dig(:printed_line_total, :amount)).to eq(total.to_s)
+          expect(modes(result.sole)).to include('explicit_line_total')
+        end
+      end
+
+      it 'uses injected expression and trailing-marker vocabulary without a Japanese fallback' do
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_item_calculation_count_expression_pattern).and_return(/\A\((?<quantity>\d+)(?<unit>個) (?<separator>×) RATE(?<price>\d+)\)\z/)
+        allow(profile).to receive(:ocr_item_calculation_tax_marker_suffix_pattern).and_return(/!\z/)
+        item = count_expression_item('(2個 × RATE123)', price_content: '123)', quantity_content: '(2', unit: '個', total_content: '246!')
+        result = described_class.call(analyze_result: analyze_result_for([ item ]), profile:)
+        japanese = count_expression_item('(2個 × 単123)', price_content: '123)', quantity_content: '(2', unit: '個', total_content: '246※')
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(described_class.call(analyze_result: analyze_result_for([ japanese ]), profile:)).to eq([])
+      end
+    end
+
     context 'with discontiguous same-item evidence' do
       it 'uses actual owned segments for discount proof and keeps only the envelope as item identity' do
         item, discount, content = discontiguous_item_evidence
@@ -1234,6 +1592,7 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
           define_method(:ocr_item_calculation_package_capacity_pattern) { /NEVER_CAPACITY/ }
           define_method(:ocr_item_calculation_count_uncertain_pattern) { /NEVER_COUNT_UNCERTAIN/ }
           define_method(:ocr_item_calculation_tax_marker_prefix_pattern) { /\A(?!)/ }
+          define_method(:ocr_item_calculation_tax_marker_suffix_pattern) { /(?!)/ }
         end.new
         append_item_content!(items.first, 'BUNDLE_MARKER')
 

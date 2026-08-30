@@ -16,6 +16,44 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
+  def parsed_count_expression_result
+    content = "検証商品\n@123×2個\n246"
+    fields = {
+      'Description' => {
+        'valueString' => '検証商品',
+        'content' => '検証商品',
+        'spans' => [ { 'offset' => 0, 'length' => 4 } ]
+      },
+      'Price' => {
+        'valueCurrency' => { 'amount' => 123, 'currencyCode' => 'JPY' },
+        'content' => '@123×2',
+        'spans' => [ { 'offset' => 5, 'length' => 6 } ]
+      },
+      'QuantityUnit' => {
+        'valueString' => '個',
+        'content' => '個',
+        'spans' => [ { 'offset' => 11, 'length' => 1 } ]
+      },
+      'TotalPrice' => {
+        'valueCurrency' => { 'amount' => 246, 'currencyCode' => 'JPY' },
+        'content' => '246',
+        'spans' => [ { 'offset' => 13, 'length' => 3 } ]
+      }
+    }
+    item = { 'content' => content, 'spans' => [ { 'offset' => 0, 'length' => content.length } ], 'valueObject' => fields }
+    raw = {
+      'analyzeResult' => {
+        'modelId' => 'prebuilt-receipt',
+        'apiVersion' => '2024-11-30',
+        'stringIndexType' => 'textElements',
+        'content' => content,
+        'documents' => [ { 'fields' => { 'Items' => { 'valueArray' => [ item ] } } } ]
+      }
+    }
+
+    Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+  end
+
   def parsed_structured_reference_result(
     with_total: true,
     string_index_type: 'utf16CodeUnit',
@@ -488,6 +526,47 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
   end
 
   describe '.build_all' do
+    it 'round-trips quantity subspans from the actual same-item Price expression' do
+      result = parsed_count_expression_result
+      expect(result.dig(:candidates, :items).sole).to include(
+        price: 123,
+        quantity: 2,
+        quantity_unit_code: 'each',
+        quantity_unit_status: 'known',
+        original_line_total: 246,
+        line_total: 246
+      )
+      snapshot = snapshot_without_proposals(result)
+      candidates = result.dig(:candidates, :item_calculation_mode_candidates)
+      proposals = described_class.build_all(candidates:, ocr_snapshot: snapshot)
+
+      expect(proposals).not_to be_nil
+      expect(proposals.sole.dig('options', 0, 'evidence', 'quantity', 'source_field_path')).to eq('documents[0].fields.Items[0].Price')
+      expect(described_class.from_snapshot(
+        JSON.parse(JSON.generate(proposals)),
+        ocr_snapshot: snapshot
+      )).to eq(proposals)
+    end
+
+    it 'rejects foreign, overlapping, preceding and out-of-parent Price-expression quantity evidence' do
+      result = parsed_count_expression_result
+      snapshot = snapshot_without_proposals(result)
+      candidate = result.dig(:candidates, :item_calculation_mode_candidates).sole
+      [
+        { source_field_path: 'documents[0].fields.Items[1].Price' },
+        { source_field_path: 'documents[0].fields.Items[0]' },
+        { source_field_path: 'documents[0].fields.Items[0].Description' },
+        { provider_span_start: 4, provider_span_end: 5 },
+        { provider_span_start: 6, provider_span_end: 7 },
+        { provider_span_start: 100, provider_span_end: 101 }
+      ].each do |mutation|
+        modified = candidate.deep_dup
+        modified.dig(:options, 0, :evidence, :quantity).merge!(mutation)
+
+        expect(described_class.build_all(candidates: [ modified ], ocr_snapshot: snapshot)).to be_nil
+      end
+    end
+
     it 'round-trips exact count-unit evidence owned by the same Item parent' do
       result = parsed_ocr_result
       candidates = result.dig(:candidates, :item_calculation_mode_candidates)

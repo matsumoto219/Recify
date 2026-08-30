@@ -1128,6 +1128,15 @@ module Receipts::Processing::Contracts
           if evidence_key == "quantity_unit" &&
               normalized_hash(evidence[evidence_key])["source_field_path"] == item_path
             expected_path = item_path
+          elsif evidence_key == "quantity" &&
+              normalized_hash(evidence[evidence_key])["source_field_path"] == "#{item_path}.Price"
+            price_evidence = normalized_hash(evidence["price"])
+            quantity_evidence = normalized_hash(evidence["quantity"])
+            price_end = price_evidence["provider_span_end"]
+            quantity_start = quantity_evidence["provider_span_start"]
+            return false unless price_end.is_a?(Integer) && quantity_start.is_a?(Integer) && quantity_start > price_end
+
+            expected_path = "#{item_path}.Price"
           end
           component_evidence_valid?(
             evidence[evidence_key],

@@ -307,8 +307,10 @@ module ReceiptAnalysisProfiles
     OCR_ITEM_CALCULATION_PACKAGE_CAPACITY_PATTERN = /(?:[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)\s*(?:セット|[x×]\s*[0-9０-９]+(?:[.．][0-9０-９]+)?\s*\p{L}+)|[0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:mg|g|kg|ml|l|cc)\s*(?:入(?:り)?|詰|パック|セット))/iu.freeze
     OCR_ITEM_CALCULATION_COUNT_UNCERTAIN_PATTERN = /(?:(?:約|およそ|概算|目安|approx(?:imately)?|about)\s*[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)|[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)?\s*[〜～~\-–—]\s*[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)|[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)\s*(?:前後|程度|目安|以上|以下|未満|超(?:過)?|で|なら)\s*(?:[¥￥]\s*)?[0-9０-９]*(?:\s*円)?|まとめ買い|よりどり|mix\s*&?\s*match)/i.freeze
     OCR_ITEM_CALCULATION_COUNT_QUANTITY_LINE_PATTERN = /\A[ \t]*(?:(?<label>数量)[ \t:：]*)?(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})?[ \t]*\z/u.freeze
+    OCR_ITEM_CALCULATION_COUNT_EXPRESSION_PATTERN = /\A[ \t]*(?:[@＠][ \t]*[¥￥]?[ \t]*(?<price>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)(?:[ \t]*円)?[ \t]*(?<separator>[x×])[ \t]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})?|[(（][ \t]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})[ \t]*(?<separator>[x×])[ \t]*(?:単|[@＠])[ \t]*[¥￥]?[ \t]*(?<price>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)(?:[ \t]*円)?[ \t]*[)）])[ \t]*\z/u.freeze
     OCR_ITEM_CALCULATION_DISCOUNT_LINE_PATTERN = /\A[ \t]*(?:(?:商品|明細)?(?:値引(?:き)?|割引)|discount|off)[ \t:：]*(?<rate>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*[%％][ \t]*[-−▲－][ \t]*[¥￥]?[ \t]*(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+))(?:[ \t]*円)?[ \t]*\z/iu.freeze
     OCR_ITEM_CALCULATION_TAX_MARKER_PREFIX_PATTERN = /\A[*＊]\s*/.freeze
+    OCR_ITEM_CALCULATION_TAX_MARKER_SUFFIX_PATTERN = /\s*※\z/.freeze
     OCR_ITEM_CALCULATION_LAYOUT_PRICE_LINE_PATTERN = /\A[ \t]*単価[ \t:：]*[@＠]?[ \t]*[¥￥]?[ \t]*(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*円[ \t]*\z/.freeze
     OCR_ITEM_CALCULATION_LAYOUT_REFERENCE_LINE_PATTERN = /\A[ \t]*(?<tax>税込|内税|税抜|外税)[ \t]*[¥￥]?[ \t]*(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*円[ \t]*[\/／][ \t]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})[ \t]*\z/u.freeze
     OCR_ITEM_CALCULATION_LAYOUT_NAME_TAX_PATTERN = /\A(?<name>[^()（）]+)[(（](?<tax>税込|内税|税抜|外税)[ \t]*(?<rate>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*[%％][)）]\z/.freeze
@@ -862,12 +864,20 @@ module ReceiptAnalysisProfiles
         OCR_ITEM_CALCULATION_COUNT_QUANTITY_LINE_PATTERN
       end
 
+      def ocr_item_calculation_count_expression_pattern
+        OCR_ITEM_CALCULATION_COUNT_EXPRESSION_PATTERN
+      end
+
       def ocr_item_calculation_discount_line_pattern
         OCR_ITEM_CALCULATION_DISCOUNT_LINE_PATTERN
       end
 
       def ocr_item_calculation_tax_marker_prefix_pattern
         OCR_ITEM_CALCULATION_TAX_MARKER_PREFIX_PATTERN
+      end
+
+      def ocr_item_calculation_tax_marker_suffix_pattern
+        OCR_ITEM_CALCULATION_TAX_MARKER_SUFFIX_PATTERN
       end
 
       def ocr_item_calculation_layout_price_line_pattern

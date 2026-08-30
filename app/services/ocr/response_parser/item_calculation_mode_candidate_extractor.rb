@@ -26,9 +26,11 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   LINE_BREAK_PATTERN = /\r\n|[\n\r\u0085\u2028\u2029]/.freeze
   LINE_BREAK_CAPTURE_PATTERN = /(\r\n|[\n\r\u0085\u2028\u2029])/.freeze
   PROMOTIONAL_DISCOUNT_LABEL_VALUE_PATTERN = /[0-9¥￥円%％@＠\/／+\-−▲△]/.freeze
-  MONEY_CONTENT_PATTERN = /\A\s*(?:(?<prefix>¥|JPY)\s*)?(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)(?:\s*(?<suffix>円))?\s*\z/i.freeze
-  UNIT_PRICE_CONTENT_PATTERN = /\A\s*(?:[x×]\s*)?@\s*(?:(?<prefix>¥|JPY)\s*)?(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)(?:\s*(?<suffix>円))?\)?\s*\z/i.freeze
+  MONEY_CONTENT_PATTERN = /\A\s*(?:(?<prefix>¥|JPY)\s*)?(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)(?:\s*(?<suffix>¥|円))?\s*\z/i.freeze
+  UNIT_PRICE_CONTENT_PATTERN = /\A\s*(?:[x×]\s*)?@\s*(?:(?<prefix>¥|JPY)\s*)?(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)(?:\s*(?<suffix>¥|円))?\)?\s*\z/i.freeze
   QUANTITY_CONTENT_PATTERN = /\A\s*(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)\s*\z/.freeze
+  MARKED_COUNT_PRICE_LINE_PATTERN = /\A[ \t]*(?<marker>[@＠])[ \t]*[¥￥]?[ \t]*(?<price>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*\z/.freeze
+  COUNT_QUANTITY_MULTIPLIER_LINE_PATTERN = /\A[ \t]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<separator>[x×])[ \t]*\z/.freeze
   UNIT_TOKEN_PATTERN = /\p{L}+/u.freeze
 
   def self.call(
@@ -326,7 +328,14 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     else
       quantity_line_unit_component(item, quantity, item_index, parent_span)
     end
-    return if [ price, quantity, quantity_unit ].any?(&:nil?)
+    if [ price, quantity, quantity_unit ].any?(&:nil?)
+      components = count_expression_components(value_object, item, item_index, parent_span) ||
+        marked_count_price_components(value_object, item, item_index, parent_span, quantity: quantity) ||
+        quantity_multiplier_components(value_object, item, item_index, price: price, quantity: quantity)
+      return if components.nil?
+
+      price, quantity, quantity_unit = components
+    end
     return unless nonoverlapping_evidence?(
       description.fetch(:evidence),
       price.fetch(:evidence),
@@ -348,6 +357,164 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
         quantity_unit: quantity_unit.fetch(:evidence)
       }
     }
+  end
+
+  def count_expression_components(value_object, item, item_index, parent_span)
+    lines = provider_segment_lines(provider_spans(item), strip: false)
+    return if lines.nil?
+
+    matches = lines.filter_map do |line|
+      next if line.fetch(:content).bytesize > MAX_FIELD_CONTENT_BYTES
+
+      match = profile.ocr_item_calculation_count_expression_pattern.match(line.fetch(:content))
+      [ line.fetch(:provider_span), match ] if match
+    end
+    return unless matches.one?
+
+    line_span, match = matches.sole
+    price_span = line_capture_span(match, :price, line_span)
+    quantity_span = line_capture_span(match, :quantity, line_span)
+    price = count_expression_price_component(value_object["Price"], match[:price], price_span, item_index, parent_span)
+    return if price.nil?
+
+    quantity = exact_quantity_from_content(match[:quantity])
+    return unless quantity && quantity.frac.zero? && quantity.between?(1, MAX_QUANTITY)
+
+    quantity_field_name = value_object.key?("Quantity") ? "Quantity" : "Price"
+    quantity_field = value_object[quantity_field_name]
+    return unless exact_component_field?(quantity_field, quantity_span, parent_span)
+    return if quantity_field_name == "Quantity" && provider_decimal(quantity_field["valueNumber"]) != quantity
+
+    quantity = {
+      amount: canonical_decimal_string(quantity),
+      evidence: component_evidence(item_field_path(item_index, quantity_field_name), quantity_span)
+    }
+    unit = count_expression_unit_component(value_object, match, line_span, item_index, parent_span)
+    [ price, quantity, unit ] if unit
+  end
+
+  def count_expression_price_component(field, printed, span, item_index, parent_span)
+    return unless exact_component_field?(field, span, parent_span)
+
+    currency = field["valueCurrency"]
+    return unless currency.is_a?(Hash) && currency["currencyCode"] == "JPY"
+
+    amount = exact_quantity_from_content(printed)
+    return unless amount && amount.frac.zero? && amount.between?(0, MAX_AMOUNT)
+    return unless provider_decimal(currency["amount"]) == amount
+    if currency["currencySymbol"]
+      symbol = safe_content(currency["currencySymbol"], maximum_bytes: MAX_CURRENCY_CODE_BYTES)
+      return if symbol.nil?
+
+      symbol = symbol.unicode_normalize(:nfkc)
+      return unless JPY_CURRENCY_SYMBOLS.include?(symbol) && field["content"].unicode_normalize(:nfkc).include?(symbol)
+    end
+
+    {
+      amount: canonical_decimal_string(amount),
+      evidence: component_evidence(item_field_path(item_index, "Price"), span)
+    }
+  end
+
+  def count_expression_unit_component(value_object, match, line_span, item_index, parent_span)
+    if value_object.key?("QuantityUnit")
+      unit = quantity_unit_component(
+        value_object["QuantityUnit"],
+        parent_span: parent_span,
+        field_path: item_field_path(item_index, "QuantityUnit")
+      )
+      return if unit.nil? || match[:unit].nil?
+      return unless evidence_range(unit[:evidence]) == line_capture_span(match, :unit, line_span)
+
+      return unit
+    end
+
+    unit_code = ReceiptQuantityUnit.default_code
+    if match[:unit]
+      resolution = profile.resolve_quantity_unit(match[:unit])
+      return unless resolution.known? && ReceiptQuantityUnit.countable?(resolution.code)
+
+      unit_code = resolution.code
+    end
+    span = line_capture_span(match, match[:unit] ? :unit : :separator, line_span)
+    {
+      unit_code: unit_code,
+      evidence: component_evidence(item_field_path(item_index), span)
+    }
+  end
+
+  def marked_count_price_components(value_object, item, item_index, parent_span, quantity:)
+    return if quantity.nil? || value_object.key?("QuantityUnit")
+
+    lines = provider_segment_lines(provider_spans(item), strip: false)
+    return if lines.nil?
+
+    price_lines = lines.filter_map do |line|
+      next if line.fetch(:content).bytesize > MAX_FIELD_CONTENT_BYTES
+
+      match = MARKED_COUNT_PRICE_LINE_PATTERN.match(line.fetch(:content))
+      [ line.fetch(:provider_span), match ] if match
+    end
+    return unless price_lines.one?
+
+    quantity_span = evidence_range(quantity[:evidence])
+    return unless lines.one? do |line|
+      match = profile.ocr_item_calculation_count_quantity_line_pattern.match(line.fetch(:content))
+      match && match[:label].nil? && match[:unit].nil? &&
+        line_capture_span(match, :quantity, line.fetch(:provider_span)) == quantity_span
+    end
+
+    line_span, match = price_lines.sole
+    price_span = line_capture_span(match, :price, line_span)
+    price = count_expression_price_component(value_object["Price"], match[:price], price_span, item_index, parent_span)
+    return if price.nil?
+
+    unit = {
+      unit_code: ReceiptQuantityUnit.default_code,
+      evidence: component_evidence(item_field_path(item_index), line_capture_span(match, :marker, line_span))
+    }
+    [ price, quantity, unit ]
+  end
+
+  def quantity_multiplier_components(value_object, item, item_index, price:, quantity:)
+    return if price.nil? || quantity.nil? || value_object.key?("QuantityUnit")
+
+    lines = provider_segment_lines(provider_spans(item), strip: false)
+    return if lines.nil?
+
+    matches = lines.each_with_index.filter_map do |line, index|
+      next if line.fetch(:content).bytesize > MAX_FIELD_CONTENT_BYTES
+
+      match = COUNT_QUANTITY_MULTIPLIER_LINE_PATTERN.match(line.fetch(:content))
+      [ index, match ] if match
+    end
+    return unless matches.one?
+
+    index, match = matches.sole
+    line_span = lines.fetch(index).fetch(:provider_span)
+    return unless line_capture_span(match, :quantity, line_span) == evidence_range(quantity.fetch(:evidence))
+
+    price_line = lines[index + 1]
+    return if price_line.nil? || price_line.fetch(:content).bytesize > MAX_FIELD_CONTENT_BYTES
+    return unless price_line.fetch(:content).strip == value_object.fetch("Price").fetch("content").strip
+    return unless span_within?(evidence_range(price.fetch(:evidence)), price_line.fetch(:provider_span))
+
+    line_separator = mapper.slice(content, offset: line_span.end, length: price_line.fetch(:provider_span).begin - line_span.end)
+    return unless line_separator && line_separator.match(LINE_BREAK_PATTERN)&.to_s == line_separator
+
+    unit = {
+      unit_code: ReceiptQuantityUnit.default_code,
+      evidence: component_evidence(item_field_path(item_index), line_capture_span(match, :separator, line_span))
+    }
+    [ price, quantity, unit ]
+  end
+
+  def exact_component_field?(field, span, parent_span)
+    return false unless field.is_a?(Hash)
+
+    field_span = single_span(field)
+    span_within?(span, field_span) && span_within?(field_span, parent_span) &&
+      exact_provider_content?(field["content"], field_span, maximum_bytes: MAX_FIELD_CONTENT_BYTES)
   end
 
   def explicit_option(printed_line_total, item_index, description:)
@@ -562,6 +729,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
 
     normalized = value.unicode_normalize(:nfkc)
     normalized = normalized.sub(profile.ocr_item_calculation_tax_marker_prefix_pattern, "")
+    normalized = normalized.sub(profile.ocr_item_calculation_tax_marker_suffix_pattern, "")
     match = MONEY_CONTENT_PATTERN.match(normalized)
     match ||= UNIT_PRICE_CONTENT_PATTERN.match(normalized) if allow_unit_price_marker
     return if match.nil?
@@ -572,7 +740,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
 
       declared_symbol = declared_symbol.unicode_normalize(:nfkc)
       return unless JPY_CURRENCY_SYMBOLS.include?(declared_symbol)
-      return if declared_symbol == "¥" && match[:prefix] != "¥"
+      return if declared_symbol == "¥" && match[:prefix] != "¥" && match[:suffix] != "¥"
       return if declared_symbol == "円" && match[:suffix] != "円"
     end
 

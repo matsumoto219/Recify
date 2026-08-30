@@ -457,6 +457,22 @@ RSpec.describe ReceiptAnalysisProfiles do
         expect('*120').to match(profile.ocr_item_calculation_tax_marker_prefix_pattern)
         expect('＊120').to match(profile.ocr_item_calculation_tax_marker_prefix_pattern)
         expect('120').not_to match(profile.ocr_item_calculation_tax_marker_prefix_pattern)
+        expect('120※').to match(profile.ocr_item_calculation_tax_marker_suffix_pattern)
+        expect('120').not_to match(profile.ocr_item_calculation_tax_marker_suffix_pattern)
+        expect('120※備考').not_to match(profile.ocr_item_calculation_tax_marker_suffix_pattern)
+      end
+    end
+
+    it 'owns complete count expressions without treating package or reference units as count semantics' do
+      pattern = profile.ocr_item_calculation_count_expression_pattern
+
+      aggregate_failures do
+        expect('@123×2個'.match(pattern).named_captures).to eq('price' => '123', 'quantity' => '2', 'unit' => '個', 'separator' => '×')
+        expect('(2個 × 単123)'.match(pattern).named_captures).to eq('price' => '123', 'quantity' => '2', 'unit' => '個', 'separator' => '×')
+        expect('＠１２３×２').to match(pattern)
+        expect('(2個 × 単123').not_to match(pattern)
+        expect('2袋 × 100g').not_to match(pattern)
+        expect('123円/100g').not_to match(pattern)
       end
     end
 

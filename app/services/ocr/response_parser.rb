@@ -2362,15 +2362,15 @@ class Ocr::ResponseParser
       identity = candidate[:item_identity]
       identities[item_index] = identity if item_index.is_a?(Integer) && identity.is_a?(String)
     end
-    count_units_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, units|
+    count_sources_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, sources|
       next unless candidate.is_a?(Hash) && candidate[:source_provider] == "azure_structured"
 
       item_index = candidate[:item_index]
       options = Array(candidate[:options]).select { |option| option[:pricing_source_kind] == "count_unit_price" }
       next unless item_index.is_a?(Integer) && item_index.between?(0, items.size - 1) && options.one?
 
-      unit_code = options.sole.dig(:source, :quantity_unit_code)
-      units[item_index] = unit_code if ReceiptQuantityUnit.countable?(unit_code)
+      source = options.sole[:source]
+      sources[item_index] = source if ReceiptQuantityUnit.countable?(source[:quantity_unit_code])
     end
 
     items.filter_map.with_index do |item, index|
@@ -2380,6 +2380,7 @@ class Ocr::ResponseParser
       next layout_replacement.deep_dup if layout_replacement
 
       value_object = item["valueObject"] || {}
+      count_source = count_sources_by_index[index]
       layout_overlay = layout_overlays_by_index[index]
       amount_field_name = value_object["TotalPrice"].present? ? "TotalPrice" : "Price"
       amount_field = value_object[amount_field_name]
@@ -2407,8 +2408,8 @@ class Ocr::ResponseParser
           status: purchased_quantity[:unit_status].to_sym,
           raw: nil
         )
-      elsif value_object["QuantityUnit"].nil? && count_units_by_index[index]
-        ReceiptQuantityUnit::Resolution.new(code: count_units_by_index[index], status: :known, raw: nil)
+      elsif value_object["QuantityUnit"].nil? && count_source
+        ReceiptQuantityUnit::Resolution.new(code: count_source[:quantity_unit_code], status: :known, raw: nil)
       else
         profile.resolve_quantity_unit(value_object.dig("QuantityUnit", "valueString"))
       end
@@ -2425,8 +2426,8 @@ class Ocr::ResponseParser
 
       {
         raw_text: raw_text,
-        price: value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
-        quantity: purchased_quantity&.dig(:amount) || value_object.dig("Quantity", "valueNumber"),
+        price: count_source ? count_source[:price_amount].to_i : value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
+        quantity: purchased_quantity&.dig(:amount) || count_source&.dig(:quantity)&.to_i || value_object.dig("Quantity", "valueNumber"),
         quantity_unit_code: quantity_unit_code,
         quantity_unit_status: quantity_unit_resolution.status.to_s,
         **unknown_quantity_unit_diagnostic(quantity_unit_resolution),
