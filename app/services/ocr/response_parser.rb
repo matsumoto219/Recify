@@ -145,6 +145,9 @@ class Ocr::ResponseParser
       profile: profile,
       reference_pricing_candidates: reference_pricing_candidates,
       discount_item_indexes: discount_details_by_item_index.keys,
+      discount_evidence_by_item_index: discount_details_by_item_index.filter_map do |index, detail|
+        [ index, detail[:calculation_mode_discount] ] if detail[:calculation_mode_discount]
+      end.to_h,
       destination_item_indexes: retained_item_indexes,
       item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
       reference_conflict_item_indexes: item_layout_resolution.fetch(:conflict_item_indexes)
@@ -2246,7 +2249,7 @@ class Ocr::ResponseParser
         product_code: value_object.dig("ProductCode", "valueString"),
         line_total: line_total,
         original_line_total: original_line_total,
-        discount_amount: discount_amount.positive? ? discount_amount : nil,
+        discount_amount: discount_amount.positive? || discount_details_by_index.dig(index, :calculation_mode_discount) ? discount_amount : nil,
         discount_rate: discount_details_by_index.dig(index, :rate),
         tax_rate: extract_item_tax_rate(item, value_object),
         confidence: item["confidence"],
@@ -2438,18 +2441,18 @@ class Ocr::ResponseParser
       extracted_rate = extract_discount_rate_from_line(line)
       current_discount_rate = extracted_rate if extracted_rate
       discount_amount = extract_discount_amount_from_line(line)
-      unless discount_amount.positive?
+      if discount_amount.nil?
         matched_discount_target_index = match_discount_target_item_index_from_line(line, item_labels, current_item_index)
         discount_target_item_index = matched_discount_target_index if matched_discount_target_index
         next
       end
 
       target_item_index = discount_target_item_index || current_item_index
-      original_line_total = normalize_amount_for_discount(item_original_totals[target_item_index])
+      original_line_total = ReceiptAmountService.parse_amount_or_nil(item_original_totals[target_item_index])
       detail = discount_details_by_index[target_item_index]
       detail[:amount] += discount_amount
       detail[:rate] ||= current_discount_rate
-      detail[:original_line_total] ||= original_line_total if original_line_total.positive?
+      detail[:original_line_total] ||= original_line_total unless original_line_total.nil?
       detail[:amount_lines] << line
 
       waiting_discount = false
@@ -2496,6 +2499,9 @@ class Ocr::ResponseParser
     end
     if exact_lines.one? && total_amount + detail[:amount] <= MAX_REFERENCE_PRICING_TOTAL_AMOUNT
       detail[:original_line_total] = total_amount + detail[:amount]
+      detail[:calculation_mode_discount] = calculation_mode_discount_evidence(
+        analyze_result, exact_lines.sole.first, index, detail
+      )
     else
       detail[:amount] = 0
       detail[:rate] = nil
@@ -2523,7 +2529,9 @@ class Ocr::ResponseParser
     mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
     content = analyze_result["content"]
     return false unless mapper && content.is_a?(String) && mapper.length(content)
-    return false unless total["content"].to_s.match?(ADJUSTMENT_AMOUNT_ONLY_PATTERN)
+    total_content = total["content"]
+    return false unless total_content.is_a?(String) && total_content.valid_encoding?
+    return false unless total_content.unicode_normalize(:nfkc).match?(ADJUSTMENT_AMOUNT_ONLY_PATTERN)
     return false unless normalize_amount_for_discount(total["content"]) == detail[:original_line_total]
 
     total_span = exact_structured_authority_span(total, content:, mapper:)
@@ -2565,6 +2573,53 @@ class Ocr::ResponseParser
     return if ranges.each_cons(2).any? { |left, right| left[1] > right[0] }
 
     ranges
+  end
+
+  def calculation_mode_discount_evidence(analyze_result, line, item_index, detail)
+    raw_content = line["content"]
+    return unless raw_content.is_a?(String) && raw_content.valid_encoding?
+    return if raw_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+
+    match = profile.ocr_item_calculation_discount_line_pattern.match(raw_content)
+    return unless match && %i[rate amount].all? { |key| match[key].bytesize <= 64 }
+
+    rate = BigDecimal(match[:rate].unicode_normalize(:nfkc)) / 100
+    amount = BigDecimal(match[:amount].unicode_normalize(:nfkc).delete(","))
+    rate_text = rate.to_s("F").sub(/0+\z/, "").sub(/\.\z/, "")
+    return unless rate.positive? && rate < 1 && rate_text.split(".").last.length <= 3
+    return unless amount.between?(0, MAX_REFERENCE_PRICING_TOTAL_AMOUNT)
+    return unless rate == detail[:rate] && amount == detail[:amount]
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    line_span = exact_structured_authority_span(line, content: analyze_result["content"], mapper:)
+    return unless line_span
+
+    evidence = %i[rate amount].to_h do |key|
+      span = mapper.span_for_bytes(
+        raw_content,
+        byte_offset: raw_content[0...match.begin(key)].bytesize,
+        byte_length: match[key].bytesize
+      )
+      return if span.nil?
+
+      [
+        key,
+        {
+          source_field_path: "documents[0].fields.Items[#{item_index}]",
+          provider_span_start: line_span[0] + span[:offset],
+          provider_span_end: line_span[0] + span[:offset] + span[:length]
+        }
+      ]
+    end
+
+    {
+      amount: amount.to_i.to_s,
+      rate: rate_text,
+      printed_total_stage: "after_item_discount",
+      evidence: evidence
+    }
+  rescue ArgumentError, EncodingError, TypeError
+    nil
   end
 
   def match_discount_target_item_index_from_line(line, item_labels, current_item_index)
@@ -2614,10 +2669,10 @@ class Ocr::ResponseParser
 
   def extract_discount_amount_from_line(line)
     text = line.to_s.unicode_normalize(:nfkc).gsub(/\d+(?:\.\d+)?\s*%/, " ")
-    return 0 if text.include?("/")
+    return if text.include?("/")
 
     amounts = text.scan(/[-−▲]\s*[¥￥]?\s*(\d[\d,]*)(?![\d,.])/).flatten
-    return 0 unless amounts.one?
+    return unless amounts.one?
 
     ReceiptAmountService.parse_amount(amounts.sole)
   end

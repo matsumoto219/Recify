@@ -134,6 +134,25 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     candidate.fetch(:options).map { |option| option.fetch(:pricing_source_kind) }
   end
 
+  def discounted_item_evidence
+    item = exact_item(price: 50, quantity: 1, total: 36)
+    lines = [ '検証商品', '50', '1個', '明細値引 27% -14円', '36' ]
+    item['content'] = lines.join("\n")
+    item['spans'].sole['length'] = item['content'].length
+    line_offsets = lines.each_with_object([ 100 ]) { |line, offsets| offsets << offsets.last + line.length + 1 }
+    item['valueObject']['Price']['spans'].sole['offset'] = line_offsets[1]
+    item['valueObject']['Quantity']['spans'].sole['offset'] = line_offsets[2]
+    item['valueObject']['QuantityUnit']['spans'].sole['offset'] = line_offsets[2] + 1
+    item['valueObject']['TotalPrice']['spans'].sole['offset'] = line_offsets[4]
+    path = 'documents[0].fields.Items[0]'
+    evidence = { rate: '27', amount: '14' }.to_h do |key, token|
+      start_value = line_offsets[3] + lines[3].index(token)
+      [ key, { source_field_path: path, provider_span_start: start_value, provider_span_end: start_value + token.length } ]
+    end
+
+    [ item, { amount: '14', rate: '0.27', printed_total_stage: 'after_item_discount', evidence: evidence } ]
+  end
+
   def valid_native_reference_candidate(
     item_index: 0,
     reference_quantity: '1',
@@ -186,6 +205,85 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
   end
 
   describe '.call' do
+    context 'with validated same-item discount evidence' do
+      it 'retains the discount conflict and carries complete proof only on the count option' do
+        item, discount = discounted_item_evidence
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole[:conflicts]).to eq([ 'discount' ])
+        expect(result.sole[:options].first[:discount]).to eq(discount)
+        expect(result.sole[:options].last).not_to have_key(:discount)
+      end
+
+      it 'rejects missing, unknown, foreign, overlapping and inconsistent discount proof' do
+        mutations = [
+          ->(discount) { discount.delete(:amount) },
+          ->(discount) { discount[:unexpected] = true },
+          ->(discount) { discount[:rate] = '0' },
+          ->(discount) { discount[:rate] = '1' },
+          ->(discount) { discount[:rate] = '0.2701' },
+          ->(discount) { discount[:rate] = '0.28' },
+          ->(discount) { discount[:amount] = '13' },
+          ->(discount) { discount[:amount] = '1000000000000' },
+          ->(discount) { discount[:printed_total_stage] = 'before_item_discount' },
+          ->(discount) { discount[:evidence][:amount][:source_field_path] = 'documents[0].fields.Items[1]' },
+          ->(discount) { discount[:evidence][:amount][:provider_span_start] = 0 },
+          ->(discount) { discount[:evidence][:amount] = discount[:evidence][:rate] },
+          ->(discount) { discount[:evidence][:amount][:unexpected] = true }
+        ]
+
+        mutations.each do |mutate|
+          item, discount = discounted_item_evidence
+          mutate.call(discount)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not let discount proof bypass package, reference or incomplete count evidence' do
+        mutations = [
+          ->(item) { append_item_content!(item, '500ml入り') },
+          ->(item) { item['valueObject'].delete('Quantity') },
+          ->(item) { item['valueObject'].delete('TotalPrice') }
+        ]
+
+        mutations.each do |mutate|
+          item, discount = discounted_item_evidence
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(result.flat_map { |candidate| modes(candidate) }).not_to include('count_unit_price')
+        end
+
+        item, discount = discounted_item_evidence
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: [ { item_index: 0 } ],
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+    end
+
     context 'with exact Azure structured item evidence' do
       let(:items) { fixture_items('single_tax_receipt') }
 

@@ -17,6 +17,9 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   SOURCE_PROVIDER = "azure_structured"
   PRICING_SOURCE_KINDS = %w[count_unit_price explicit_line_total].freeze
   CONFLICTS = %w[count_semantics discount package reference_expression].freeze
+  DISCOUNT_KEYS = %w[amount rate printed_total_stage evidence].freeze
+  DISCOUNT_EVIDENCE_KEYS = %w[amount rate].freeze
+  COMPONENT_EVIDENCE_KEYS = %w[source_field_path provider_span_start provider_span_end].freeze
   JPY_CURRENCY_SYMBOLS = %w[¥ 円].freeze
   CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
   LINE_BREAK_PATTERN = /\r\n|[\n\r\u0085\u2028\u2029]/.freeze
@@ -32,6 +35,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     profile:,
     reference_pricing_candidates: [],
     discount_item_indexes: [],
+    discount_evidence_by_item_index: {},
     destination_item_indexes: nil,
     item_layout_descriptors: [],
     reference_conflict_item_indexes: []
@@ -41,6 +45,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       profile: profile,
       reference_pricing_candidates: reference_pricing_candidates,
       discount_item_indexes: discount_item_indexes,
+      discount_evidence_by_item_index: discount_evidence_by_item_index,
       destination_item_indexes: destination_item_indexes,
       item_layout_descriptors: item_layout_descriptors,
       reference_conflict_item_indexes: reference_conflict_item_indexes
@@ -52,6 +57,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     profile:,
     reference_pricing_candidates:,
     discount_item_indexes:,
+    discount_evidence_by_item_index: {},
     destination_item_indexes: nil,
     item_layout_descriptors: [],
     reference_conflict_item_indexes: []
@@ -79,6 +85,11 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     @discount_item_indexes = Array(discount_item_indexes).select do |item_index|
       item_index.is_a?(Integer) && item_index.between?(0, MAX_ITEMS - 1)
     end.to_set
+    @discount_evidence_by_item_index = if discount_evidence_by_item_index.is_a?(Hash) && discount_evidence_by_item_index.size <= MAX_ITEMS
+      discount_evidence_by_item_index
+    else
+      {}
+    end
     @destination_item_indexes = if destination_item_indexes.nil?
       nil
     else
@@ -118,7 +129,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   private
 
   attr_reader :analyze_result, :content, :destination_item_indexes, :discount_item_indexes,
-    :item_layout_descriptors, :items, :mapper, :profile, :reference_pricing_item_indexes,
+    :discount_evidence_by_item_index, :item_layout_descriptors, :items, :mapper, :profile, :reference_pricing_item_indexes,
     :reference_pricing_candidates, :valid_reference_pricing_item_indexes
 
   def provider_context_valid?
@@ -172,7 +183,11 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       count_option = nil
     end
     conflicts = conflicts_for(item, item_index, count_option: count_option, description: description)
-    count_option = nil if conflicts.any?
+    if conflicts == [ "discount" ]
+      count_option = discounted_count_option(count_option, printed_line_total, item_index, parent_span, description: description)
+    elsif conflicts.any?
+      count_option = nil
+    end
     options = [ count_option, explicit_option ].compact
     return if options.empty? && !valid_reference_pricing_item_indexes.include?(item_index)
 
@@ -345,6 +360,72 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     }
   end
 
+  def discounted_count_option(option, printed_line_total, item_index, parent_span, description:)
+    return if option.nil? || printed_line_total.nil?
+
+    discount = normalized_hash(discount_evidence_by_item_index[item_index])
+    return unless discount.keys.sort == DISCOUNT_KEYS.sort
+    return unless discount[:printed_total_stage] == "after_item_discount"
+
+    evidence = normalized_hash(discount[:evidence])
+    return unless evidence.keys.sort == DISCOUNT_EVIDENCE_KEYS.sort
+
+    amount = lexeme_decimal(discount[:amount])
+    rate = lexeme_decimal(discount[:rate])
+    return unless amount && amount.frac.zero? && amount.between?(0, MAX_AMOUNT)
+    return unless rate && rate.positive? && rate < 1 && canonical_decimal_string(rate).split(".").last.length <= 3
+    return unless canonical_decimal_string(amount) == discount[:amount] && canonical_decimal_string(rate) == discount[:rate]
+
+    components = { amount: amount, rate: rate * 100 }.to_h do |key, value|
+      component = normalized_hash(evidence[key])
+      return unless component.keys.sort == COMPONENT_EVIDENCE_KEYS.sort
+      return unless component[:source_field_path] == item_field_path(item_index)
+
+      span = evidence_range(component)
+      return unless span_within?(span, parent_span) && span.end <= printed_line_total.dig(:evidence, :provider_span_start)
+
+      raw_value = mapper.slice(content, offset: span.begin, length: span.size)
+      raw_value = safe_content(raw_value, maximum_bytes: MAX_EXACT_NUMBER_BYTES)
+      return unless raw_value && exact_quantity_from_content(raw_value) == value
+
+      [ key, component_evidence(item_field_path(item_index), span) ]
+    end
+    return unless discount_components_match_line?(components, item_index, parent_span)
+    return unless nonoverlapping_evidence?(
+      description.fetch(:evidence),
+      *option.fetch(:evidence).values,
+      printed_line_total.fetch(:evidence),
+      *components.values
+    )
+
+    option.merge(
+      discount: {
+        amount: discount[:amount],
+        rate: discount[:rate],
+        printed_total_stage: discount[:printed_total_stage],
+        evidence: components
+      }
+    )
+  end
+
+  def discount_components_match_line?(components, item_index, parent_span)
+    lines = provider_content_lines(items.fetch(item_index)["content"], parent_span, strip: false)
+    return false unless lines && lines.size <= MAX_LINES
+
+    matches = lines.filter_map do |line|
+      next if line[:content].bytesize > MAX_FIELD_CONTENT_BYTES
+
+      match = profile.ocr_item_calculation_discount_line_pattern.match(line[:content])
+      [ match, line[:provider_span] ] if match
+    end
+    return false unless matches.one?
+
+    match, line_span = matches.sole
+    components.all? do |key, component|
+      line_capture_span(match, key, line_span) == evidence_range(component)
+    end
+  end
+
   def money_component(field, parent_span:, field_path:, allow_unit_price_marker: false)
     return unless field.is_a?(Hash)
 
@@ -431,7 +512,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     return unless matches.one?
 
     line_span, match = matches.sole
-    quantity_span = quantity_line_capture_span(match, :quantity, line_span)
+    quantity_span = line_capture_span(match, :quantity, line_span)
     return unless quantity_span == evidence_range(quantity.fetch(:evidence))
 
     unit = if match[:unit]
@@ -442,7 +523,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     else
       ReceiptQuantityUnit.default_code
     end
-    span = quantity_line_capture_span(match, match[:unit] ? :unit : :label, line_span)
+    span = line_capture_span(match, match[:unit] ? :unit : :label, line_span)
     return unless span_within?(span, parent_span)
 
     {
@@ -451,7 +532,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     }
   end
 
-  def quantity_line_capture_span(match, name, line_span)
+  def line_capture_span(match, name, line_span)
     prefix = match.string[0...match.begin(name)]
     span = mapper.span_for_bytes(
       match.string,

@@ -443,6 +443,21 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
+    it 'owns complete same-line item discount vocabulary and numeric captures' do
+      pattern = profile.ocr_item_calculation_discount_line_pattern
+
+      aggregate_failures do
+        expect('明細値引 27% -14円'.match(pattern).named_captures).to eq('rate' => '27', 'amount' => '14')
+        expect('値引 １％ －０円'.match(pattern).named_captures).to eq('rate' => '１', 'amount' => '０')
+        expect('discount 27% -¥14').to match(pattern)
+        expect('クーポン値引 27% -14円').not_to match(pattern)
+        expect('明細値引 27% -14円/L').not_to match(pattern)
+        expect('明細値引 27% -14USD').not_to match(pattern)
+        expect('明細値引 27% -14.5円').not_to match(pattern)
+        expect('明細値引 27% 27% -14円').not_to match(pattern)
+      end
+    end
+
     it 'owns the strong item-total label without treating receipt summaries as item totals' do
       pattern = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern
 

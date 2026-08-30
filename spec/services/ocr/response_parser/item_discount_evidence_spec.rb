@@ -1,20 +1,34 @@
 require 'rails_helper'
 
 RSpec.describe Ocr::ResponseParser do
-  def discount_response(discontiguous: false, split: false, item_count: 1)
+  def discount_response(
+    discontiguous: false,
+    split: false,
+    item_count: 1,
+    price: 50,
+    rate: 27,
+    amount: 14,
+    discount_line: nil,
+    name_prefix: '検証品',
+    string_index_type: 'textElements',
+    fullwidth: false
+  )
     content = +''
     lines = []
+    printed = ->(value) { fullwidth ? value.tr('0-9.@%-', '０-９．＠％－') : value }
     items = Array.new(item_count) do |index|
-      name = "検証品#{index + 1}(税込#{index + 1}%)"
-      discount_amount = 14 - index
-      discount_rate = 27 - index
-      total = 50 - discount_amount
-      item_lines = [ name, '単価 @50円', '数量 1個' ]
-      item_lines.concat(split ? [ '明細値引', "#{discount_rate}%", "-#{discount_amount}円" ] : [ "明細値引 #{discount_rate}% -#{discount_amount}円" ])
+      name = "#{name_prefix}#{index + 1}(税込#{index + 1}%)"
+      discount_amount = amount - index
+      discount_rate = rate - index
+      total = price - discount_amount
+      item_lines = [ name, "単価 @#{price}円", '数量 1個' ]
+      item_lines.concat(split ? [ '明細値引', "#{discount_rate}%", "-#{discount_amount}円" ] : [ discount_line || "明細値引 #{discount_rate}% -#{discount_amount}円" ])
       item_lines << "明細計 #{total}円"
-      item_start = content.length
+      item_lines.map!(&printed)
+      name = item_lines.first
+      item_start = discount_length(content, string_index_type)
       source_lines = item_lines.map do |line|
-        value = { 'content' => line, 'spans' => [ { 'offset' => content.length, 'length' => line.length } ] }
+        value = { 'content' => line, 'spans' => [ { 'offset' => discount_length(content, string_index_type), 'length' => discount_length(line, string_index_type) } ] }
         content << "#{line}\n"
         lines << value
         value
@@ -26,7 +40,7 @@ RSpec.describe Ocr::ResponseParser do
           { 'offset' => total_offset, 'length' => "#{total}円".length }
         ]
       else
-        [ { 'offset' => item_start, 'length' => content.length - item_start - 1 } ]
+        [ { 'offset' => item_start, 'length' => discount_length(content, string_index_type) - item_start - 1 } ]
       end
 
       {
@@ -34,10 +48,10 @@ RSpec.describe Ocr::ResponseParser do
         'spans' => parent_spans,
         'valueObject' => {
           'Description' => { 'valueString' => name, **source_lines.first },
-          'Price' => discount_currency_field('@50円', 50, source_lines[1].dig('spans', 0, 'offset') + '単価 '.length),
+          'Price' => discount_currency_field(printed.call("@#{price}円"), price, source_lines[1].dig('spans', 0, 'offset') + '単価 '.length),
           'Quantity' => {
             'valueNumber' => 1,
-            'content' => '1',
+            'content' => printed.call('1'),
             'spans' => [ { 'offset' => source_lines[2].dig('spans', 0, 'offset') + '数量 '.length, 'length' => 1 } ]
           },
           'QuantityUnit' => {
@@ -45,13 +59,13 @@ RSpec.describe Ocr::ResponseParser do
             'content' => '個',
             'spans' => [ { 'offset' => source_lines[2].dig('spans', 0, 'offset') + '数量 1'.length, 'length' => 1 } ]
           },
-          'TotalPrice' => discount_currency_field("#{total}円", total, total_offset)
+          'TotalPrice' => discount_currency_field(printed.call("#{total}円"), total, total_offset)
         }
       }
     end
-    receipt_total = item_count.times.sum { |index| 36 + index }
+    receipt_total = item_count.times.sum { |index| price - amount + index }
     summary = "合計 #{receipt_total}円"
-    lines << { 'content' => summary, 'spans' => [ { 'offset' => content.length, 'length' => summary.length } ] }
+    lines << { 'content' => summary, 'spans' => [ { 'offset' => discount_length(content, string_index_type), 'length' => summary.length } ] }
     content << summary
 
     {
@@ -59,7 +73,7 @@ RSpec.describe Ocr::ResponseParser do
       'analyzeResult' => {
         'modelId' => 'prebuilt-receipt',
         'apiVersion' => '2024-11-30',
-        'stringIndexType' => 'textElements',
+        'stringIndexType' => string_index_type,
         'content' => content,
         'pages' => [ { 'pageNumber' => 1, 'lines' => lines } ],
         'documents' => [
@@ -73,6 +87,10 @@ RSpec.describe Ocr::ResponseParser do
         ]
       }
     }
+  end
+
+  def discount_length(value, index_type)
+    Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: index_type).length(value)
   end
 
   def discount_currency_field(content, amount, offset)
@@ -89,6 +107,79 @@ RSpec.describe Ocr::ResponseParser do
     expect(result.dig(:candidates, :items).sole).to include(
       original_line_total: 50, discount_rate: BigDecimal('0.27'), discount_amount: 14, line_total: 36, tax_rate: BigDecimal('0.01')
     )
+  end
+
+  it '同一明細の割引率と金額のexact spanをcount optionへ渡す' do
+    [ [ 1, 1 ], [ 27, 14 ], [ 59, 30 ], [ 99, 50 ] ].each do |rate, amount|
+      response = discount_response(rate:, amount:)
+      result = described_class.new(response: response).call
+      candidate = result.dig(:candidates, :item_calculation_mode_candidates).sole
+      option = candidate[:options].find { |entry| entry[:pricing_source_kind] == 'count_unit_price' }
+
+      expect(option).not_to be_nil
+      expect(candidate[:conflicts]).to eq([ 'discount' ])
+      expect(option[:discount]).to include(amount: amount.to_s, rate: (BigDecimal(rate) / 100).to_s('F'), printed_total_stage: 'after_item_discount')
+      option[:discount][:evidence].each do |key, evidence|
+        expect(evidence[:source_field_path]).to eq('documents[0].fields.Items[0]')
+        span = evidence[:provider_span_start]...evidence[:provider_span_end]
+        expect(response.dig('analyzeResult', 'content')[span]).to eq((key == :rate ? rate : amount).to_s)
+      end
+    end
+  end
+
+  it '正の率から丸めた印字0円割引をmissingへ変換しない' do
+    result = described_class.new(response: discount_response(price: 1, rate: 1, amount: 0)).call
+
+    expect(result.dig(:candidates, :items).sole).to include(
+      original_line_total: 1, line_total: 1, discount_amount: 0, discount_rate: BigDecimal('0.01')
+    )
+    option = result.dig(:candidates, :item_calculation_mode_candidates).sole[:options].find { |entry| entry[:pricing_source_kind] == 'count_unit_price' }
+    expect(option).to include(discount: include(amount: '0', rate: '0.01'))
+  end
+
+  it '割引率または割引額の欠損と対象外の率ではcount割引proofを作らない' do
+    [
+      '明細値引 27%',
+      '明細値引 -14円',
+      '明細値引 0% -0円',
+      '明細値引 100% -50円',
+      '明細値引 27% 27% -14円',
+      '明細値引 27.01% -14円',
+      '明細値引 27% -14USD',
+      '明細値引 27% -14円/L',
+      '明細値引 27% -14.5円'
+    ].each do |discount_line|
+      result = described_class.new(response: discount_response(discount_line:)).call
+
+      expect(result.dig(:candidates, :item_calculation_mode_candidates).sole[:options].map { |option| option[:pricing_source_kind] }).to eq([ 'explicit_line_total' ])
+    end
+  end
+
+  it '同一行割引の検証に注入profileを使用し以前の固定語彙へ戻らない' do
+    profile = ReceiptAnalysisProfiles.fetch('JPN')
+    allow(profile).to receive(:ocr_item_calculation_discount_line_pattern)
+      .and_return(/\A明細値引 (?<rate>\d+)% -(?<amount>\d+)円 ONLY\z/)
+
+    modes = [ '明細値引 27% -14円 ONLY', '明細値引 27% -14円' ].map do |discount_line|
+      result = described_class.new(response: discount_response(discount_line:), profile:).call
+      result.dig(:candidates, :item_calculation_mode_candidates).sole[:options].map { |option| option[:pricing_source_kind] }
+    end
+
+    expect(modes).to eq([ %w[count_unit_price explicit_line_total], [ 'explicit_line_total' ] ])
+  end
+
+  it 'Unicodeを含む明細でも両index typeで割引captureのraw位置を保持する' do
+    %w[utf16CodeUnit textElements].each do |string_index_type|
+      response = discount_response(name_prefix: "Cafe\u0301😀", string_index_type:, fullwidth: true)
+      result = described_class.new(response: response).call
+      option = result.dig(:candidates, :item_calculation_mode_candidates).sole[:options].find { |entry| entry[:pricing_source_kind] == 'count_unit_price' }
+
+      expect(option).not_to be_nil
+      mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: string_index_type)
+      option[:discount][:evidence].each do |key, evidence|
+        expect(mapper.slice(response.dig('analyzeResult', 'content'), offset: evidence[:provider_span_start], length: evidence[:provider_span_end] - evidence[:provider_span_start])).to eq(key == :rate ? '２７' : '１４')
+      end
+    end
   end
 
   it '非連続parent spanでも明細合計componentの完全包含で割引後を確認する' do
