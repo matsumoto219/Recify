@@ -107,7 +107,7 @@ module Analysis
     end
 
     def build_fact(owner:, fact_type:, effect_scope:, amount:, attributes:, origin:, kind: nil, sign: nil, tax_rate: nil, action: :persist)
-      source_refs = source_refs_for(attributes, amount)
+      source_refs = source_refs_for(attributes, amount, origin: origin)
       source_refs += discount_source_refs_for(attributes) if origin == :item
 
       OwnershipFact.new(
@@ -128,7 +128,7 @@ module Analysis
       )
     end
 
-    def source_refs_for(attributes, amount)
+    def source_refs_for(attributes, amount, origin:)
       amount_value = amount.to_i.abs
       return [] unless amount_value.positive?
 
@@ -139,6 +139,7 @@ module Analysis
       token_entry = if attributes[:source_span_start].present? || attributes[:source_span_end].present?
         explicit_span_token_entry(attributes, token_entries)
       else
+        token_entries = adjustment_block_token_entries(attributes, source_indexes, token_entries) if origin == :adjustment
         indexed_entries = token_entries.select { |entry| source_indexes.include?(entry[:line][:line_index]) }
         unique_token_entry(preferred_signed_token_entries(attributes, indexed_entries.presence || token_entries))
       end
@@ -147,6 +148,39 @@ module Analysis
       line = token_entry[:line]
       token = token_entry[:token]
       [ build_source_ref(attributes, line, token) ]
+    end
+
+    def adjustment_block_token_entries(attributes, source_indexes, token_entries)
+      return token_entries unless source_indexes.one?
+
+      index = source_indexes.first
+      return token_entries unless index >= 2 && adjustment_label_line?(evidence_by_line_index[index])
+      return token_entries unless adjustment_label_line?(evidence_by_line_index[index - 2])
+      return token_entries unless amount_only_line?(evidence_by_line_index[index - 1])
+      return [] unless amount_only_line?(evidence_by_line_index[index + 1])
+      return [] unless %w[discount surcharge].include?(attributes[:sign].to_s)
+
+      token_entries.select do |entry|
+        entry[:line][:line_index] == index + 1 &&
+          (attributes[:sign].to_s == "discount" || !signed_discount_token?(entry[:token]))
+      end
+    end
+
+    def adjustment_label_line?(line)
+      return false unless line
+      return false unless Array(line[:tokens]).all? { |token| token[:kind] == :percent }
+
+      source = line[:source_text].to_s
+      source.match?(profile.ocr_adjustment_discount_label_pattern) || source.match?(profile.ocr_adjustment_surcharge_label_pattern)
+    end
+
+    def amount_only_line?(line)
+      return false unless line
+
+      tokens = Array(line[:tokens])
+      return false unless tokens.one? && %i[money bare_number].include?(tokens.first[:kind])
+
+      line[:source_text].to_s.strip == tokens.first[:raw_text].to_s.strip
     end
 
     def discount_source_refs_for(attributes)
