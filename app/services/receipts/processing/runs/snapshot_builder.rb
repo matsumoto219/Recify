@@ -654,7 +654,7 @@ module Receipts::Processing::Runs
           candidates[:items],
           lines: lines,
           source_lines: source_lines,
-          profile: ReceiptAnalysisProfiles.for_country(candidates[:country_region])
+          profile: ReceiptAnalysisProfiles.fetch(candidates[:country_region])
         ),
         review_reasons: limited_strings(candidates[:review_reasons], snapshot_review_reasons_limit),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
