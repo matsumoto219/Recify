@@ -277,13 +277,21 @@ RSpec.describe "Receipt form Stimulus controller" do
     item_line_total_max: 999_999_999,
     receipt_total_max: 999_999_999,
     receipt_tax_max: 999_999_999,
-    capture_preview_unavailable: false
+    capture_preview_unavailable: false,
+    capture_line_displays: false,
+    sync_initial_pricing_previews: false
   )
     run_controller_script(<<~JAVASCRIPT)
       const itemDefinitions = #{items.to_json}
       const adjustmentDefinitions = #{adjustments.to_json}
       const amountTarget = () => ({ value: null, textContent: '', title: '', dataset: {} })
       const rows = itemDefinitions.map((definition) => {
+        const lineTotalDisplays = #{capture_line_displays.to_json}
+          ? [false, true].map((withLabel) => ({
+            ...amountTarget(),
+            closest: () => withLabel ? {} : null
+          }))
+          : []
         const inputs = {
           quantityInput: { value: String(definition.quantity ?? 1) },
           quantityUnitInput: { value: String(definition.quantityUnit ?? 'each') },
@@ -326,11 +334,14 @@ RSpec.describe "Receipt form Stimulus controller" do
             receiptFormHasPersistedAbsoluteDiscountSource: String(definition.hasAbsoluteDiscountSource ?? false)
           },
           inputs,
+          lineTotalDisplays,
           querySelector (selector) {
             const match = selector.match(/receipt-form-target="([^"]+)"/)
             return match ? inputs[match[1]] : null
           },
-          querySelectorAll () { return [] }
+          querySelectorAll (selector) {
+            return selector.includes('lineTotalDisplay') ? lineTotalDisplays : []
+          }
         }
       })
       const controller = Object.create(ReceiptFormController.prototype)
@@ -364,6 +375,7 @@ RSpec.describe "Receipt form Stimulus controller" do
         purchaseInputsChangedValue: { value: #{purchase_inputs_changed.to_json} },
         receiptTaxBasisValue: { value: #{basis.to_json} },
         unsetLabelValue: { value: 'Unset' },
+        subtotalLabelValue: { value: 'Subtotal' },
         multipleTaxRatesLabelValue: { value: 'Multiple tax rates' },
         roundingModeValue: { value: 'floor' },
         discountRoundingModeValue: { value: 'round' },
@@ -388,7 +400,7 @@ RSpec.describe "Receipt form Stimulus controller" do
       controller.previewNumericInputsValid = () => true
       controller.previewRowExcluded = () => false
       controller.animateAmount = (target, value) => { target.value = value }
-      controller.animateLineTotal = () => {}
+      controller.shouldRenderAmountImmediately = () => true
       let previewUnavailable = false
       if (#{capture_preview_unavailable.to_json}) {
         controller.renderUnavailablePreview = () => { previewUnavailable = true }
@@ -414,9 +426,16 @@ RSpec.describe "Receipt form Stimulus controller" do
           subtotal: subtotal.value,
           tax: tax.value,
           total: total.value,
-          firstLineTotal: Number(rows[0].inputs.lineTotalInput.value)
+          firstLineTotal: rows[0].inputs.lineTotalInput.value === '' ? null : Number(rows[0].inputs.lineTotalInput.value)
         }
 
+        if (#{capture_line_displays.to_json}) {
+          amounts.lineDisplays = rows.map((row) => row.lineTotalDisplays.map((target) => ({
+            text: target.textContent,
+            title: target.title,
+            amount: target.dataset.amountValue ?? null
+          })))
+        }
         if (adjustmentDefinitions.length > 0) {
           amounts.paymentAdjustmentTotal = paymentAdjustmentSnapshot.adjustmentTotal
           amounts.finalPaymentTotal = paymentAdjustmentSnapshot.finalPaymentTotal
@@ -436,7 +455,11 @@ RSpec.describe "Receipt form Stimulus controller" do
         return amounts
       }
 
-      controller.recalculate()
+      if (#{sync_initial_pricing_previews.to_json}) {
+        controller.syncInitialPricingPreviews()
+      } else {
+        controller.recalculate()
+      }
       const initial = snapshot()
       const changedDiscountRate = #{changed_discount_rate.to_json}
       const changedPrice = #{changed_price.to_json}
@@ -2297,7 +2320,7 @@ RSpec.describe "Receipt form Stimulus controller" do
       "subtotal" => 91,
       "tax" => 9,
       "total" => 100,
-      "firstLineTotal" => 0,
+      "firstLineTotal" => nil,
       "sourceLineTotal" => "",
       "sourceOriginalLineTotal" => ""
     }
@@ -2360,6 +2383,125 @@ RSpec.describe "Receipt form Stimulus controller" do
     end
   end
 
+  it "keeps missing line displays unset through quantity changes and clearing an entered zero" do
+    missing_item = { price: nil, lineTotal: nil, originalLineTotal: nil, taxRate: 0, captureBlankSources: true }
+    quantity_result = run_amount_round_trip(
+      basis: "internal",
+      items: [ missing_item ],
+      initial_receipt_amounts: { subtotal: 100, tax: 0, total: 100 },
+      capture_line_displays: true
+    )
+    price_result = run_amount_round_trip(
+      basis: "internal",
+      items: [ missing_item ],
+      initial_receipt_amounts: { subtotal: 100, tax: 0, total: 100 },
+      changed_price: 0,
+      capture_line_displays: true
+    )
+    missing_display = { "text" => "Unset", "title" => "Unset", "amount" => nil }
+    missing_state = {
+      "firstLineTotal" => nil,
+      "sourceLineTotal" => "",
+      "sourceOriginalLineTotal" => "",
+      "lineDisplays" => [ [ missing_display, missing_display ] ]
+    }
+
+    aggregate_failures do
+      expect(quantity_result.values).to all(include(missing_state))
+      expect(price_result["initial"]).to include(missing_state)
+      expect(price_result["restored"]).to include(missing_state)
+      expect(price_result["doubled"]).to include(
+        "firstLineTotal" => 0,
+        "sourceLineTotal" => "0",
+        "sourceOriginalLineTotal" => "0",
+        "lineDisplays" => [
+          [
+            { "text" => "¥0", "title" => "¥0", "amount" => "0" },
+            { "text" => "Subtotal ¥0", "title" => "Subtotal ¥0", "amount" => "0" }
+          ]
+        ]
+      )
+    end
+  end
+
+  it "keeps missing line displays unset when reference items trigger initial mixed-mode previews" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [
+        { price: nil, lineTotal: nil, originalLineTotal: nil, taxRate: 0, captureBlankSources: true },
+        { pricingSourceKind: "count_unit_price", price: 200, quantity: 1, lineTotal: 200, taxRate: 0 },
+        {
+          pricingSourceKind: "reference_quantity_price",
+          price: nil,
+          referencePriceAmount: 150,
+          referenceQuantity: 100,
+          referenceQuantityUnit: "gram",
+          referencePriceTaxInclusion: "gross",
+          quantity: 200,
+          quantityUnit: "gram",
+          lineTotal: 300,
+          taxRate: 0
+        },
+        { pricingSourceKind: "explicit_line_total", price: nil, explicitLineTotal: 0, lineTotal: 0, taxRate: 0 }
+      ],
+      capture_line_displays: true,
+      sync_initial_pricing_previews: true
+    )
+    missing_display = { "text" => "Unset", "title" => "Unset", "amount" => nil }
+    expected_displays = [ [ missing_display, missing_display ] ] + [ 200, 300, 0 ].map do |amount|
+      [
+        { "text" => "¥#{amount}", "title" => "¥#{amount}", "amount" => amount.to_s },
+        { "text" => "Subtotal ¥#{amount}", "title" => "Subtotal ¥#{amount}", "amount" => amount.to_s }
+      ]
+    end
+
+    expect(result.values).to all(include(
+      "total" => 500,
+      "firstLineTotal" => nil,
+      "sourceLineTotal" => "",
+      "sourceOriginalLineTotal" => "",
+      "lineDisplays" => expected_displays
+    ))
+  end
+
+  it "keeps complete zero and fully discounted formula line displays numeric" do
+    count_item = { pricingSourceKind: "count_unit_price", price: 0, quantity: 1, taxRate: 0 }
+    reference_item = {
+      pricingSourceKind: "reference_quantity_price",
+      price: nil,
+      referencePriceAmount: 0,
+      referenceQuantity: 100,
+      referenceQuantityUnit: "gram",
+      referencePriceTaxInclusion: "gross",
+      quantity: 100,
+      quantityUnit: "gram",
+      taxRate: 0
+    }
+    explicit_item = { pricingSourceKind: "explicit_line_total", price: nil, explicitLineTotal: 0, taxRate: 0 }
+    definitions = [
+      count_item,
+      count_item.merge(price: 125, discountRate: 100),
+      reference_item,
+      reference_item.merge(referencePriceAmount: 125, discountRate: 100),
+      explicit_item
+    ]
+
+    aggregate_failures do
+      definitions.each do |item|
+        result = run_amount_round_trip(basis: "internal", items: [ item ], capture_line_displays: true)
+        expect(result.values).to all(include(
+          "firstLineTotal" => 0,
+          "lineDisplays" => [
+            [
+              { "text" => "¥0", "title" => "¥0", "amount" => "0" },
+              { "text" => "Subtotal ¥0", "title" => "Subtotal ¥0", "amount" => "0" }
+            ]
+          ]
+        ))
+      end
+    end
+  end
+
   it "uses the trusted pre-submit fingerprint after a 422 correction" do
     result = run_controller_script(<<~JAVASCRIPT)
       const baseline = JSON.stringify({ items: [], adjustments: [] })
@@ -2408,7 +2550,9 @@ RSpec.describe "Receipt form Stimulus controller" do
         hasTotalAmountTarget: { value: true },
         totalAmountTarget: { value: total },
         hasTaxRateSummaryTarget: { value: true },
-        taxRateSummaryTarget: { value: taxRateSummary }
+        taxRateSummaryTarget: { value: taxRateSummary },
+        receiptTotalAmountMaxValue: { value: 999999999 },
+        receiptTaxAmountMaxValue: { value: 999999999 }
       })
 
       controller.captureInitialReceiptAmounts()
@@ -2425,6 +2569,129 @@ RSpec.describe "Receipt form Stimulus controller" do
       "first" => { "subtotal" => 91, "tax" => 9, "total" => 100, "taxRateSummary" => "10%" },
       "reconnected" => { "subtotal" => 91, "tax" => 9, "total" => 100, "taxRateSummary" => "10%" }
     )
+  end
+
+  it "keeps nullable receipt amounts distinct from zero through capture and Turbo reconnect" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const capture = (values) => {
+        const controller = Object.create(ReceiptFormController.prototype)
+        const targets = values.map((value) => ({ textContent: value, dataset: {} }))
+        Object.defineProperties(controller, {
+          element: { value: { dataset: {} } },
+          hasSubtotalAmountTarget: { value: true },
+          subtotalAmountTarget: { value: targets[0] },
+          hasTaxAmountTarget: { value: true },
+          taxAmountTarget: { value: targets[1] },
+          hasTotalAmountTarget: { value: true },
+          totalAmountTarget: { value: targets[2] },
+          hasTaxRateSummaryTarget: { value: false },
+          receiptTotalAmountMaxValue: { value: 999999999 },
+          receiptTaxAmountMaxValue: { value: 999999999 }
+        })
+        controller.captureInitialReceiptAmounts()
+        const first = controller.initialReceiptAmounts
+        targets.forEach((target) => { target.textContent = '¥0' })
+        controller.captureInitialReceiptAmounts()
+        return { first, reconnected: controller.initialReceiptAmounts }
+      }
+
+      process.stdout.write(JSON.stringify({
+        missing: capture(['—', '', '—']),
+        partial: capture(['¥91', '—', '¥100']),
+        zero: capture(['¥0', '¥0', '¥0'])
+      }))
+    JAVASCRIPT
+
+    aggregate_failures do
+      expect(result["missing"].values).to all(eq("subtotal" => nil, "tax" => nil, "total" => nil, "taxRateSummary" => nil))
+      expect(result["partial"].values).to all(eq("subtotal" => 91, "tax" => nil, "total" => 100, "taxRateSummary" => nil))
+      expect(result["zero"].values).to all(eq("subtotal" => 0, "tax" => 0, "total" => 0, "taxRateSummary" => nil))
+    end
+  end
+
+  it "accepts bounded nullable receipt snapshots but rejects malformed and out-of-bound values" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        receiptTotalAmountMaxValue: { value: 100 },
+        receiptTaxAmountMaxValue: { value: 20 }
+      })
+      const baseline = { subtotal: 80, tax: 20, total: 100 }
+      process.stdout.write(JSON.stringify({
+        complete: controller.validReceiptAmounts(baseline),
+        nullable: controller.validReceiptAmounts({ subtotal: null, tax: null, total: null }),
+        zero: controller.validReceiptAmounts({ subtotal: 0, tax: 0, total: 0 }),
+        invalid: [
+          {}, [], null,
+          { ...baseline, subtotal: undefined },
+          { ...baseline, total: '100' },
+          { ...baseline, total: Number.NaN },
+          { ...baseline, total: Number.POSITIVE_INFINITY },
+          { ...baseline, total: -1 },
+          { ...baseline, total: 101 },
+          { ...baseline, subtotal: 101 },
+          { ...baseline, tax: 21 }
+        ].map((amounts) => Boolean(controller.validReceiptAmounts(amounts)))
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq("complete" => true, "nullable" => true, "zero" => true, "invalid" => Array.new(11, false))
+  end
+
+  it "keeps unknown receipt totals through quantity-only edits and restores them after clearing a zero source" do
+    missing_item = { price: nil, originalLineTotal: nil, lineTotal: nil, taxRate: 0 }
+    aggregate_failures do
+      [ { subtotal: nil, tax: nil, total: nil }, { subtotal: 91, tax: nil, total: 100 } ].each do |amounts|
+        quantity_result = run_amount_round_trip(basis: "internal", items: [ missing_item ], initial_receipt_amounts: amounts)
+        source_result = run_amount_round_trip(
+          basis: "internal",
+          items: [ missing_item ],
+          initial_receipt_amounts: amounts,
+          changed_price: 0
+        )
+        expected = amounts.stringify_keys.merge("firstLineTotal" => nil)
+
+        expect(quantity_result.values).to all(eq(expected))
+        expect(source_result["initial"]).to eq(expected)
+        expect(source_result["restored"]).to eq(expected)
+        expect(source_result["doubled"]).to eq("subtotal" => 0, "tax" => 0, "total" => 0, "firstLineTotal" => 0)
+      end
+    end
+  end
+
+  it "keeps final payment unknown when only a payment adjustment is known" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [ { price: nil, originalLineTotal: nil, lineTotal: nil, taxRate: 0 } ],
+      adjustments: [ { amount: 10, taxRate: nil, effect: "payment_adjustment", sign: "discount" } ],
+      initial_receipt_amounts: { subtotal: nil, tax: nil, total: nil }
+    )
+
+    expect(result.values).to all(include(
+      "subtotal" => nil, "tax" => nil, "total" => nil,
+      "paymentAdjustmentTotal" => -10, "finalPaymentTotal" => nil
+    ))
+  end
+
+  it "renders an unknown amount without converting it to an animated zero" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const target = { textContent: '¥0', title: '¥0', dataset: { amountValue: '0' }, amountDisplayValue: 0 }
+      Object.defineProperty(controller, 'unsetLabelValue', { value: 'Unset' })
+      controller.shouldRenderAmountImmediately = () => true
+      controller.syncPaymentSummaryLayout = () => {}
+      controller.animateAmount(target, null)
+
+      process.stdout.write(JSON.stringify({
+        text: target.textContent,
+        title: target.title,
+        amount: target.dataset.amountValue ?? null,
+        nullableValue: controller.currentAmountValue(target, null),
+        animationBaseline: controller.currentAmountValue(target)
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq("text" => "Unset", "title" => "Unset", "amount" => nil, "nullableValue" => nil, "animationBaseline" => 0)
   end
 
   it "drops a transient countable working source before switching to a measurement unit" do
@@ -2671,6 +2938,85 @@ RSpec.describe "Receipt form Stimulus controller" do
       )
       expect(result["restored"]).to eq(result["initial"])
     end
+  end
+
+  it "keeps known payment amounts but hides reconciliation and synchronization for an unknown total" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const amountTarget = () => ({ textContent: '¥0', title: '¥0', dataset: {} })
+      const adjustment = amountTarget()
+      const finalPayment = amountTarget()
+      const paymentSum = amountTarget()
+      const finalReconciliation = amountTarget()
+      const difference = amountTarget()
+      const visibilityTarget = () => {
+        const target = { hidden: false }
+        target.classList = { toggle: (_name, hidden) => { target.hidden = hidden } }
+        return target
+      }
+      const warning = visibilityTarget()
+      const syncButton = visibilityTarget()
+      const paymentInput = { value: '123' }
+      const paymentRow = { querySelector: () => paymentInput }
+      Object.defineProperties(controller, {
+        unsetLabelValue: { value: 'Unset' },
+        paymentAdjustmentRowTargets: { value: [] },
+        finalPaymentRowTargets: { value: [] },
+        hasPaymentAdjustmentAmountTarget: { value: true },
+        paymentAdjustmentAmountTarget: { value: adjustment },
+        hasFinalPaymentAmountTarget: { value: true },
+        finalPaymentAmountTarget: { value: finalPayment },
+        hasPaymentAmountSumTarget: { value: true },
+        paymentAmountSumTarget: { value: paymentSum },
+        hasPaymentReconciliationFinalAmountTarget: { value: true },
+        paymentReconciliationFinalAmountTarget: { value: finalReconciliation },
+        hasPaymentDifferenceAmountTarget: { value: true },
+        paymentDifferenceAmountTarget: { value: difference },
+        paymentMismatchWarningTargets: { value: [warning] },
+        syncPaymentAmountButtonTargets: { value: [syncButton] }
+      })
+      controller.shouldRenderAmountImmediately = () => true
+      controller.syncPaymentSummaryLayout = () => {}
+      controller.visiblePaymentRows = () => [paymentRow]
+      controller.paymentAmountSum = () => 123
+      let recalculations = 0
+      controller.recalculate = () => { recalculations += 1 }
+      controller.lastFinalPaymentTotal = null
+
+      controller.syncPaymentAdjustmentSummary(-10, null)
+      controller.syncPaymentReconciliationSummary(123, null)
+      const unknownFinal = controller.currentFinalPaymentTotal()
+      controller.syncPaymentAmountToFinal({ preventDefault () {} })
+      const unknown = {
+        adjustment: adjustment.textContent,
+        finalPayment: finalPayment.textContent,
+        paymentSum: paymentSum.textContent,
+        finalReconciliation: finalReconciliation.textContent,
+        difference: difference.textContent,
+        warningHidden: warning.hidden,
+        syncHidden: syncButton.hidden,
+        currentFinal: unknownFinal,
+        paymentInput: paymentInput.value,
+        recalculations
+      }
+      controller.lastFinalPaymentTotal = 0
+      controller.syncPaymentReconciliationSummary(123, 0)
+      controller.syncPaymentAmountToFinal({ preventDefault () {} })
+
+      process.stdout.write(JSON.stringify({
+        unknown,
+        zero: { warningHidden: warning.hidden, syncHidden: syncButton.hidden, paymentInput: paymentInput.value, recalculations }
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "unknown" => {
+        "adjustment" => "-¥10", "finalPayment" => "Unset", "paymentSum" => "¥123",
+        "finalReconciliation" => "Unset", "difference" => "Unset", "warningHidden" => true,
+        "syncHidden" => true, "currentFinal" => nil, "paymentInput" => "123", "recalculations" => 0
+      },
+      "zero" => { "warningHidden" => false, "syncHidden" => false, "paymentInput" => 0, "recalculations" => 1 }
+    )
   end
 
   it "does not write a negative amount through the payment synchronization action" do

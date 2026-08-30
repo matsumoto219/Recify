@@ -980,6 +980,142 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     expect_browser_console_clean
   end
 
+  it "金額欠損行はreference混在の再計算・通常保存・再表示でも明示0円と区別する" do
+    user = create_system_test_user
+    receipt = create_editable_receipt(user: user, store_name: "金額未設定確認店")
+    missing_item = receipt.receipt_items.create!(
+      confirmed_name: "金額未設定商品",
+      quantity: 2,
+      quantity_unit_code: "each",
+      tax_rate: 0,
+      needs_review: true,
+      review_reasons: [ "item_pricing_mode_uncertain" ]
+    )
+    zero_item = receipt.receipt_items.create!(
+      confirmed_name: "明示0円商品",
+      quantity: 1,
+      quantity_unit_code: "each",
+      tax_rate: 0,
+      pricing_source_kind: "explicit_line_total",
+      original_line_total: 0,
+      line_total: 0
+    )
+    reference_item = receipt.receipt_items.create!(
+      confirmed_name: "基準価格商品",
+      quantity: 250,
+      quantity_unit_code: "gram",
+      tax_rate: 0,
+      pricing_source_kind: "reference_quantity_price",
+      reference_price_amount: 120,
+      reference_quantity: 100,
+      reference_quantity_unit_code: "gram",
+      reference_price_tax_inclusion: "gross",
+      original_line_total: 300,
+      line_total: 300
+    )
+    receipt.update!(status: "review_needed", subtotal_amount: 400, total_amount: 400)
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    missing_row = expand_item_row(item_row_named("金額未設定商品"))
+    missing_row.find("[data-receipt-form-target='quantityInput']", visible: true).set("3")
+    missing_row.find("[data-receipt-form-target='quantityInput']", visible: true).set("2")
+
+    aggregate_failures do
+      expect(missing_row.find("[data-receipt-form-target='pricingSourceSummary']", visible: true)).to have_text("金額未設定")
+      expect(
+        missing_row.all("[data-receipt-form-target='lineTotalDisplay']", visible: :all).map { |display| display.text(:all) }
+      ).to all(eq(I18n.t("receipts.common.not_available")))
+      expect(missing_row.find("[data-receipt-form-target='lineTotalInput']", visible: :all).value).to eq("")
+      expect(item_row_named("明示0円商品")).to have_text("¥0")
+      expect(item_row_named("基準価格商品")).to have_text("¥300")
+    end
+
+    save_receipt
+    expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    aggregate_failures do
+      expect(item_row_named("金額未設定商品").find("[data-receipt-form-target='pricingSourceSummary']", visible: true)).to have_text("金額未設定")
+      expect(missing_item.reload).to have_attributes(
+        price: nil,
+        original_line_total: nil,
+        line_total: nil,
+        pricing_source_kind: nil,
+        needs_review: true
+      )
+      expect(missing_item.review_reasons).to include("item_pricing_mode_uncertain")
+      expect(zero_item.reload.line_total).to eq(0)
+      expect(reference_item.reload.line_total).to eq(300)
+      expect(receipt.reload.total_amount).to eq(400)
+    end
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
+  it "合計未設定では数量編集や再表示で0円を作らず支払額の同期を表示しない" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :review_needed,
+      :with_image,
+      user: user,
+      subtotal_amount: nil,
+      tax_amount: nil,
+      total_amount: nil,
+      review_reasons: [ "ocr_low_confidence" ]
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: "金額未設定商品",
+      quantity: 2,
+      quantity_unit_code: "each",
+      tax_rate: 0,
+      needs_review: true,
+      review_reasons: [ "item_pricing_mode_uncertain" ]
+    )
+    payment = receipt.receipt_payments.create!(method: "現金", amount: 123)
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    aggregate_failures do
+      expect(page).to have_css("[data-receipt-form-target='paymentAmountSum']", text: "¥123")
+      expect(page).to have_css("[data-receipt-form-target='paymentReconciliationFinalAmount']", text: I18n.t("receipts.common.not_available"))
+      expect(page).not_to have_css("[data-receipt-form-target='paymentMismatchWarning']", visible: true)
+    end
+
+    row = expand_item_row(item_row_named("金額未設定商品"))
+    row.find("[data-receipt-form-target='quantityInput']", visible: true).set("3")
+    row.find("[data-receipt-form-target='quantityInput']", visible: true).set("2")
+    row.find("[data-receipt-form-target='priceInput']", visible: true).set("0")
+    expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥0")
+    row.find("[data-receipt-form-target='priceInput']", visible: true).set("")
+
+    aggregate_failures do
+      expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: I18n.t("receipts.common.not_available"))
+      expect(page).to have_css("[data-receipt-form-target='paymentDifferenceAmount']", text: I18n.t("receipts.common.not_available"))
+      expect(page).not_to have_button(I18n.t("receipts.payment_fields.sync_to_final"), visible: true)
+      expect(row.find("[data-receipt-form-target='lineTotalInput']", visible: :all).value).to eq("")
+    end
+
+    save_receipt
+    expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    aggregate_failures do
+      expect(item.reload).to have_attributes(price: nil, original_line_total: nil, line_total: nil, pricing_source_kind: nil)
+      expect(receipt.reload.total_amount).to be_nil
+      expect(payment.reload.amount).to eq(123)
+      expect(page).not_to have_css("[data-receipt-form-target='paymentMismatchWarning']", visible: true)
+    end
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
   it "割引前source未記録の明示金額は推測せず、保存済みderived表示と明示0円を区別する" do
     user = create_system_test_user
     receipt = create_editable_receipt(user: user, store_name: "明示金額source確認店")
