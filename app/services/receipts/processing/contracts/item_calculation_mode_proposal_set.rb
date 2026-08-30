@@ -898,6 +898,9 @@ module Receipts::Processing::Contracts
         ].include?(modes)
         return false unless proposal["printed_line_total"].is_a?(Hash)
 
+        count_offsets = calculation_layout_count_offsets(proposal) if modes.include?("count_unit_price")
+        return false if modes.include?("count_unit_price") && count_offsets.nil?
+
         valid = options.all? do |option|
           return false unless exact_keys?(option, OPTION_KEYS)
           return false unless bounded_string?(option["proposal_id"], maximum: MAX_ID_BYTES)
@@ -913,7 +916,7 @@ module Receipts::Processing::Contracts
               exact_integer?(source["price_amount"], maximum: MAX_AMOUNT, allow_zero: true) &&
               exact_integer?(source["quantity"], maximum: MAX_QUANTITY, allow_zero: false) &&
               unit&.code == source["quantity_unit_code"] && unit.kind == :countable &&
-              calculation_layout_evidence_valid?(evidence, proposal: proposal, offsets: { "price" => 1, "quantity" => 2, "quantity_unit" => 2 })
+              calculation_layout_evidence_valid?(evidence, proposal: proposal, offsets: count_offsets.except("line_total"))
           when "reference_quantity_price"
             exact_keys?(source, REFERENCE_SOURCE_KEYS) &&
               exact_keys?(evidence, CALCULATION_LAYOUT_REFERENCE_EVIDENCE_KEYS) &&
@@ -933,7 +936,13 @@ module Receipts::Processing::Contracts
                 }
               )
           when "explicit_line_total"
-            total_offset = modes.one? ? nil : 3
+            total_offset = if count_offsets
+              count_offsets.fetch("line_total")
+            elsif modes.one?
+              nil
+            else
+              3
+            end
             exact_keys?(source, EXPLICIT_SOURCE_KEYS) &&
               exact_keys?(evidence, EXPLICIT_EVIDENCE_KEYS) &&
               exact_integer?(source["line_total_amount"], maximum: MAX_AMOUNT, allow_zero: true) &&
@@ -965,6 +974,20 @@ module Receipts::Processing::Contracts
           previous.map { |component| component["provider_span_end"] }.max <=
             following.map { |component| component["provider_span_start"] }.min
         end
+      end
+
+      def calculation_layout_count_offsets(proposal)
+        metadata = calculation_layout_identity_metadata(proposal["item_identity"])
+        count = normalized_hash(proposal["options"].find { |option| option["pricing_source_kind"] == "count_unit_price" })
+        explicit = normalized_hash(proposal["options"].find { |option| option["pricing_source_kind"] == "explicit_line_total" })
+        evidence = normalized_hash(count["evidence"]).merge(normalized_hash(explicit["evidence"]))
+        roles = %w[price quantity quantity_unit line_total]
+        paths = roles.map { |role| normalized_hash(evidence[role])["source_field_path"] }
+        offsets = [ [ 1, 2, 2, 3 ], [ 2, 4, 4, 5 ] ].find do |tuple|
+          paths == tuple.map { |offset| layout_line_path(metadata[:name_line_index] + offset) }
+        end
+
+        roles.zip(offsets).to_h if offsets
       end
 
       def calculation_layout_evidence_valid?(evidence, proposal:, offsets:)

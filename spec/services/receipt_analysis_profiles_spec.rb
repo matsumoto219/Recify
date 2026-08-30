@@ -478,6 +478,18 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
+    it 'owns complete split count labels and the exact yen value line' do
+      aggregate_failures do
+        expect('単価').to match(profile.ocr_item_calculation_layout_price_label_line_pattern)
+        expect('数量').to match(profile.ocr_item_calculation_layout_quantity_label_line_pattern)
+        expect('商品単価').not_to match(profile.ocr_item_calculation_layout_price_label_line_pattern)
+        expect('数量不明').not_to match(profile.ocr_item_calculation_layout_quantity_label_line_pattern)
+        expect('193円'.match(profile.ocr_item_calculation_layout_price_value_line_pattern).named_captures).to eq('amount' => '193', 'currency' => '円')
+        expect('明細計 193円').not_to match(profile.ocr_item_calculation_layout_price_value_line_pattern)
+        expect('193USD').not_to match(profile.ocr_item_calculation_layout_price_value_line_pattern)
+      end
+    end
+
     it 'owns the strong item-total label without treating receipt summaries as item totals' do
       pattern = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern
 

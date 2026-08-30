@@ -204,6 +204,7 @@ class Ocr::ResponseParser::ItemCalculationModeLayoutExtractor
   def components_at(index)
     next_line = lines[index + 1]
     return if next_line.nil?
+    return split_count_components(index) if next_line[:content].match?(profile.ocr_item_calculation_layout_price_label_line_pattern)
 
     price = captured_component(next_line, profile.ocr_item_calculation_layout_price_line_pattern, :amount)
     reference = reference_component(next_line)
@@ -223,6 +224,22 @@ class Ocr::ResponseParser::ItemCalculationModeLayoutExtractor
 
     total = total_component(lines[index + 2])
     { quantity:, total:, last_index: total ? index + 2 : index + 1 }
+  end
+
+  def split_count_components(index)
+    price_line = lines[index + 2]
+    quantity_label = lines[index + 3]
+    total_line = lines[index + 5]
+    return if price_line.nil? || quantity_label.nil? || total_line.nil?
+    return unless quantity_label[:content].match?(profile.ocr_item_calculation_layout_quantity_label_line_pattern)
+    return if total_line[:content].match?(profile.ocr_item_calculation_layout_price_value_line_pattern)
+
+    price = captured_component(price_line, profile.ocr_item_calculation_layout_price_value_line_pattern, :amount)
+    quantity = quantity_component(lines[index + 4], count: true, require_label: false)
+    total = total_component(total_line)
+    return if price.nil? || quantity.nil? || total.nil?
+
+    { price:, quantity:, total:, last_index: index + 5 }
   end
 
   def options_for(components)
@@ -287,12 +304,12 @@ class Ocr::ResponseParser::ItemCalculationModeLayoutExtractor
     { value:, evidence: evidence(line, match:, capture:) }
   end
 
-  def quantity_component(line, count:)
+  def quantity_component(line, count:, require_label: true)
     return if line.nil?
 
     pattern = count ? profile.ocr_item_calculation_count_quantity_line_pattern : profile.ocr_reference_pricing_item_layout_purchased_quantity_line_pattern
     match = pattern.match(line[:content])
-    return if match.nil? || (count && match[:label].nil?)
+    return if match.nil? || (count && require_label && match[:label].nil?)
 
     value = decimal(match[:quantity])
     unit = profile.resolve_quantity_unit(match[:unit])
@@ -447,6 +464,8 @@ class Ocr::ResponseParser::ItemCalculationModeLayoutExtractor
 
   def structured_fragment_matches?(children, descriptor)
     children.all? do |field_name, field|
+      next true if split_count_fragment_correction?(field_name, field, descriptor)
+
       component = @fragment_components.fetch(descriptor[:item_identity])[field_name]
       next false if component.nil?
       next description_fragment_matches?(field, component) if field_name == "Description"
@@ -494,6 +513,41 @@ class Ocr::ResponseParser::ItemCalculationModeLayoutExtractor
     span[:offset] >= line[:span_start] && span[:offset] + span[:length] <= line[:span_end] &&
       span[:offset] <= component[:provider_span_start] &&
       span[:offset] + span[:length] >= component[:provider_span_end]
+  end
+
+  def split_count_fragment_correction?(field_name, field, descriptor)
+    return false unless %w[Price TotalPrice].include?(field_name)
+    return false unless split_count_tuple?(descriptor)
+
+    components = @fragment_components.fetch(descriptor[:item_identity])
+    price_component = components.fetch("Price")
+    if field_name == "Price"
+      return false unless field["valueCurrency"].nil? && field["valueNumber"].nil?
+
+      line = lines[price_component[:line_index]]
+      match = profile.ocr_item_calculation_layout_price_value_line_pattern.match(line[:content])
+      currency = evidence(line, match:, capture: :currency)
+      span = field_spans(field, maximum: 1).sole
+      return span[:offset] == currency[:provider_span_start] &&
+        span[:offset] + span[:length] == currency[:provider_span_end]
+    end
+
+    return false unless field_owns_component?(field, price_component)
+
+    value = structured_numeric_value(field, field_name:)
+    return false unless value.is_a?(Numeric) && value.finite? && value.between?(0, 999_999_999_999)
+
+    BigDecimal(value.to_s) == BigDecimal(descriptor.dig(:layout_item, :price).to_s)
+  end
+
+  def split_count_tuple?(descriptor)
+    return false unless descriptor[:options].first&.fetch(:pricing_source_kind) == "count_unit_price"
+
+    name_index = descriptor[:owned_line_indexes].first
+    components = @fragment_components.fetch(descriptor[:item_identity])
+    actual = %w[Price Quantity QuantityUnit TotalPrice].map { |field| components.dig(field, :line_index) }
+    actual == [ name_index + 2, name_index + 4, name_index + 4, name_index + 5 ] &&
+      descriptor[:owned_line_indexes] == (name_index..name_index + 5).to_a
   end
 
   def structured_numeric_value(field, field_name:)

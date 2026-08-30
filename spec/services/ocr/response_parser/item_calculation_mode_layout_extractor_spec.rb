@@ -106,6 +106,55 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeLayoutExtractor do
     response
   end
 
+  def split_field_response(currency_only_price: false, total_at_price: false, printed_total: 579)
+    response = provider_layout([ '検証商品', '単価', '193円', '数量', '3個', "明細計 #{printed_total}円" ])
+    lines = response['pages'].sole['lines']
+    price_span = lines[2]['spans'].sole
+    price = {
+      'content' => currency_only_price ? '円' : lines[2]['content'],
+      'spans' => [
+        {
+          'offset' => price_span['offset'] + (currency_only_price ? 3 : 0),
+          'length' => currency_only_price ? 1 : price_span['length']
+        }
+      ],
+      'valueCurrency' => { 'amount' => 193, 'currencyCode' => 'JPY' }
+    }
+    price.delete('valueCurrency') if currency_only_price
+    total_line = lines[total_at_price ? 2 : 5]
+    response['documents'].sole['fields']['Items'] = {
+      'valueArray' => [
+        {
+          'spans' => [
+            {
+              'offset' => lines.first['spans'].sole['offset'],
+              'length' => lines[5]['spans'].sole['offset'] + lines[5]['spans'].sole['length']
+            }
+          ],
+          'valueObject' => {
+            'Description' => {
+              'content' => '検証商品',
+              'spans' => [ { 'offset' => 0, 'length' => 4 } ],
+              'valueString' => '検証商品'
+            },
+            'Price' => price,
+            'Quantity' => {
+              'content' => '3',
+              'spans' => [ { 'offset' => lines[4]['spans'].sole['offset'], 'length' => 1 } ],
+              'valueNumber' => 3
+            },
+            'TotalPrice' => {
+              'content' => total_line['content'],
+              'spans' => total_line['spans'],
+              'valueCurrency' => { 'amount' => total_at_price ? 193 : printed_total, 'currencyCode' => 'JPY' }
+            }
+          }
+        }
+      ]
+    }
+    response
+  end
+
   it 'Items欠損でも個数・固定額・明示0・金額欠損を独立blockとして保持する' do
     descriptors = extract([
       '検証商品甲(税込96%)', '単価 @257円', '数量 1個', '明細計 257円',
@@ -465,5 +514,135 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeLayoutExtractor do
     }
 
     expect(described_class.call(analyze_result: response, profile:)).to be_empty
+  end
+
+  describe '単価・数量labelが独立した明細block' do
+    it 'labelと値の連続したexact spanからcount sourceと最終明細合計を構成する' do
+      response = split_field_response
+
+      descriptor = described_class.call(analyze_result: response, profile:).sole
+      count = descriptor[:options].find { |option| option[:pricing_source_kind] == 'count_unit_price' }
+
+      expect(count[:source]).to eq(price_amount: '193', quantity: '3', quantity_unit_code: 'each')
+      expect(count.dig(:evidence, :price, :source_field_path)).to eq('pages[0].lines[2]')
+      expect(count.dig(:evidence, :quantity, :source_field_path)).to eq('pages[0].lines[4]')
+      expect(descriptor[:owned_line_indexes]).to eq([ 0, 1, 2, 3, 4, 5 ])
+      expect(descriptor[:structured_item_indexes]).to eq([ 0 ])
+      expect(descriptor.dig(:layout_item, :line_total)).to eq(579)
+    end
+
+    it '独立labelと値のgrammarも注入profileを使う' do
+      allow(profile).to receive(:ocr_item_calculation_layout_price_label_line_pattern).and_return(/\ACOST\z/)
+      allow(profile).to receive(:ocr_item_calculation_layout_price_value_line_pattern).and_return(/\AVALUE (?<amount>[0-9]+)(?<currency>JPY)\z/)
+      allow(profile).to receive(:ocr_item_calculation_layout_quantity_label_line_pattern).and_return(/\AUNITS\z/)
+
+      descriptor = extract([ '検証商品', 'COST', 'VALUE 100JPY', 'UNITS', '2個', '明細計 200円' ]).sole
+
+      expect(descriptor[:options].first[:source]).to eq(price_amount: '100', quantity: '2', quantity_unit_code: 'each')
+      expect(extract([ '検証商品', '単価', '100円', '数量', '2個', '明細計 200円' ])).to be_empty
+    end
+
+    it 'inline labelと別行labelを同じreceipt内で独立したidentityとして保持する' do
+      descriptors = extract([
+        '検証商品甲(税込27%)', '単価 @100円', '数量 2枚', '明細計 200円',
+        '検証商品乙(税込27%)', '単価', '193円', '数量', '3セット', '明細計 579円'
+      ])
+
+      expect(descriptors.size).to eq(2)
+      expect(descriptors.map { |descriptor| descriptor[:item_identity] }.uniq.size).to eq(2)
+      expect(descriptors.map { |descriptor| descriptor[:options].first[:source][:quantity_unit_code] }).to eq(%w[sheet set])
+      expect(descriptors.map { |descriptor| descriptor[:options].first[:pricing_source_kind] }).to eq([ 'count_unit_price' ] * 2)
+    end
+
+    it 'currencyだけのPriceは数値sourceにせず同一blockの完全な価格tokenを使用する' do
+      response = split_field_response(currency_only_price: true)
+
+      descriptor = described_class.call(analyze_result: response, profile:).sole
+
+      expect(descriptor[:options].first[:source]).to include(price_amount: '193', quantity: '3')
+      expect(descriptor[:structured_item_indexes]).to eq([ 0 ])
+    end
+
+    it 'TotalPriceがexact価格tokenに所属する場合だけ別の明細合計を使用する' do
+      response = split_field_response(currency_only_price: true, total_at_price: true)
+
+      descriptor = described_class.call(analyze_result: response, profile:).sole
+      explicit = descriptor[:options].find { |option| option[:pricing_source_kind] == 'explicit_line_total' }
+
+      expect(descriptor[:options].first[:source]).to include(price_amount: '193', quantity: '3')
+      expect(explicit[:source]).to eq(line_total_amount: '579')
+      expect(explicit.dig(:evidence, :line_total, :source_field_path)).to eq('pages[0].lines[5]')
+      expect(descriptor.dig(:layout_item, :line_total)).to eq(579)
+    end
+
+    it '誤TotalPriceのrole訂正とformula不一致を分離してstrong明細計を保持する' do
+      response = split_field_response(total_at_price: true, printed_total: 580)
+
+      descriptor = described_class.call(analyze_result: response, profile:).sole
+
+      expect(descriptor[:options].first[:source]).to include(price_amount: '193', quantity: '3')
+      expect(descriptor[:options].last[:source]).to eq(line_total_amount: '580')
+      expect(descriptor.dig(:layout_item, :line_total)).to eq(580)
+    end
+
+    it '正常TotalPriceのformula不一致は既存decisionへ渡せるproposalとして維持する' do
+      response = split_field_response(currency_only_price: true, printed_total: 580)
+
+      descriptor = described_class.call(analyze_result: response, profile:).sole
+
+      expect(descriptor[:options].first[:source]).to include(price_amount: '193', quantity: '3')
+      expect(descriptor[:options].last[:source]).to eq(line_total_amount: '580')
+    end
+
+    it '価格tokenに所属していてもprovider値がexact価格と異なる場合は拒否する' do
+      response = split_field_response(total_at_price: true)
+      response['documents'].sole['fields']['Items']['valueArray'].sole['valueObject']['TotalPrice']['valueCurrency']['amount'] = 194
+
+      expect(described_class.call(analyze_result: response, profile:)).to be_empty
+    end
+
+    it 'TotalPriceのspanが価格tokenの一部だけなら金額一致で所属を訂正しない' do
+      response = split_field_response(total_at_price: true)
+      total = response['documents'].sole['fields']['Items']['valueArray'].sole['valueObject']['TotalPrice']
+      total['content'] = '93円'
+      total['spans'].sole['offset'] += 1
+      total['spans'].sole['length'] -= 1
+
+      expect(described_class.call(analyze_result: response, profile:)).to be_empty
+    end
+
+    it 'quantity labelへ誤帰属したTotalPriceを金額一致だけで価格扱いしない' do
+      response = split_field_response(total_at_price: true)
+      total = response['documents'].sole['fields']['Items']['valueArray'].sole['valueObject']['TotalPrice']
+      label = response['pages'].sole['lines'][3]
+      total['content'] = label['content']
+      total['spans'] = label['spans']
+
+      expect(described_class.call(analyze_result: response, profile:)).to be_empty
+    end
+
+    it 'currency-only Priceのspanが別の行ならlayout価格で隠さない' do
+      response = split_field_response(currency_only_price: true)
+      price = response['documents'].sole['fields']['Items']['valueArray'].sole['valueObject']['Price']
+      price['spans'].sole['offset'] = response['pages'].sole['lines'].last['spans'].sole['offset']
+
+      expect(described_class.call(analyze_result: response, profile:)).to be_empty
+    end
+
+    [
+      [ '検証商品', '単価', '193円', '数量', '3個' ],
+      [ '検証商品', '単価', '193円', '数量', '3個', '合計 579円' ],
+      [ '検証商品', '単価', '193円', '数量', '検証別商品', '3個', '明細計 579円' ],
+      [ '検証商品', '数量', '3個', '単価', '193円', '明細計 579円' ],
+      [ '検証商品', '単価', '193円', '数量', '3個入', '明細計 579円' ]
+    ].each do |lines|
+      it "独立label blockの不完全・誤順序・package証拠をcountへ昇格しない: #{lines.inspect}" do
+        descriptors = extract(lines)
+
+        expect(descriptors.flat_map { |descriptor| descriptor[:options] }).not_to include(
+          include(pricing_source_kind: 'count_unit_price')
+        )
+      end
+    end
   end
 end

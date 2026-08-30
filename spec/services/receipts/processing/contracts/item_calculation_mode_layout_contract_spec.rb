@@ -149,6 +149,57 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     end
   end
 
+  it 'round-trips the complete separate-label count tuple without changing its exact sources' do
+    context = calculation_layout_context('count_unit_price')
+    candidate = context[:candidate]
+    count = candidate[:options].first
+    count[:evidence][:price][:source_field_path] = 'pages[0].lines[2]'
+    count[:evidence][:quantity][:source_field_path] = 'pages[0].lines[4]'
+    count[:evidence][:quantity_unit][:source_field_path] = 'pages[0].lines[4]'
+    candidate[:options].last[:evidence][:line_total][:source_field_path] = 'pages[0].lines[5]'
+    source = count[:source].deep_dup
+
+    proposals = described_class.build_all(candidates: [ candidate ], ocr_snapshot: context[:snapshot])
+
+    expect(proposals).not_to be_nil
+    expect(proposals.sole['options'].first['source']).to eq(source.stringify_keys)
+    expect(described_class.from_snapshot(JSON.parse(JSON.generate(proposals)), ocr_snapshot: context[:snapshot])).to eq(proposals)
+  end
+
+  [
+    [ 1, 4, 4, 5 ],
+    [ 2, 2, 2, 5 ],
+    [ 2, 4, 4, 3 ],
+    [ 2, 4, 2, 5 ],
+    [ 2, 2, 4, 5 ]
+  ].each do |tuple|
+    it "rejects mixed inline and separate-label evidence paths #{tuple.inspect}" do
+      context = calculation_layout_context('count_unit_price')
+      candidate = context[:candidate]
+      evidence = candidate[:options].first[:evidence]
+      evidence[:price][:source_field_path] = "pages[0].lines[#{tuple[0]}]"
+      evidence[:quantity][:source_field_path] = "pages[0].lines[#{tuple[1]}]"
+      evidence[:quantity_unit][:source_field_path] = "pages[0].lines[#{tuple[2]}]"
+      candidate[:options].last[:evidence][:line_total][:source_field_path] = "pages[0].lines[#{tuple[3]}]"
+
+      expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: context[:snapshot])).to be_nil
+    end
+  end
+
+  it 'does not expand reference evidence into the separate-label count grammar' do
+    context = calculation_layout_context('reference_quantity_price')
+    evidence = context[:candidate][:options].first[:evidence]
+    %i[reference_price reference_quantity reference_unit tax_inclusion].each do |role|
+      evidence[role][:source_field_path] = 'pages[0].lines[2]'
+    end
+    %i[purchased_quantity purchased_unit].each do |role|
+      evidence[role][:source_field_path] = 'pages[0].lines[4]'
+    end
+    context[:candidate][:options].last[:evidence][:line_total][:source_field_path] = 'pages[0].lines[5]'
+
+    expect(described_class.build_all(candidates: [ context[:candidate] ], ocr_snapshot: context[:snapshot])).to be_nil
+  end
+
   it 'rejects a price span after the quantity line despite an earlier price path' do
     context = calculation_layout_context('count_unit_price')
     context[:candidate][:options].first[:evidence][:price] = line_evidence(1, 60, 62)
