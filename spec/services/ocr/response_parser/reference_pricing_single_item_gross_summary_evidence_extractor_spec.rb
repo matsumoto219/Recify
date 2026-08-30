@@ -454,6 +454,7 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleItemGrossSummaryEviden
     profile = ReceiptAnalysisProfiles.default.dup
     allow(profile).to receive(:ocr_strict_receipt_summary_total_line_pattern).and_return(/\A精算額 \d+円\z/)
     allow(profile).to receive(:analysis_tax_target_marker_pattern).and_return(/課税総額/)
+    allow(profile).to receive(:analysis_tax_summary_line_pattern).and_return(/\A10%課税総額 ¥600\z/)
     allow(profile).to receive(:amount_tax_detail_gross_pattern).and_return(/課税総額/)
     result = analyze_result(line_contents: [
       '匿名商品',

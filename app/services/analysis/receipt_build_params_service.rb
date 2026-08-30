@@ -1370,6 +1370,7 @@ module Analysis
 
       def tax_target_rate_candidates_from_line(line)
         text = line.to_s.unicode_normalize(:nfkc)
+        return [] unless text.match?(profile.analysis_tax_summary_line_pattern)
         return [] unless text.match?(profile.analysis_tax_target_marker_pattern)
         return [] if text.match?(profile.analysis_tax_amount_description_pattern)
 
@@ -1390,7 +1391,8 @@ module Analysis
 
       def tax_section_amount_entries(lines, first_rate_index)
         section = Array(lines)[first_rate_index..].to_a.take_while do |line|
-          !line.to_s.match?(profile.analysis_tax_total_line_pattern)
+          line.to_s.unicode_normalize(:nfkc).match?(profile.analysis_tax_summary_continuation_line_pattern) &&
+            !line.to_s.match?(profile.analysis_tax_total_line_pattern)
         end
         section.each_with_index.flat_map do |line, offset|
           positive_amounts_from_text(line).select { |amount| amount > 20 }.map do |amount|
@@ -1513,6 +1515,7 @@ module Analysis
 
       def tax_summary_rate_from_line(line)
         text = line.to_s.unicode_normalize(:nfkc)
+        return nil unless text.match?(profile.analysis_tax_summary_continuation_line_pattern)
         return nil if text.match?(profile.analysis_external_tax_description_pattern)
 
         match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
@@ -1520,7 +1523,10 @@ module Analysis
       end
 
       def tax_summary_gross_amount(lines, index, rate, tax)
-        amounts = Array(lines)[index, 4].to_a.flat_map do |line|
+        summary_lines = Array(lines)[index, 4].to_a.take_while do |line|
+          line.to_s.unicode_normalize(:nfkc).match?(profile.analysis_tax_summary_continuation_line_pattern)
+        end
+        amounts = summary_lines.flat_map do |line|
           positive_amounts_from_text(line).select { |amount| amount > 20 }
         end
 
@@ -1539,7 +1545,10 @@ module Analysis
 
       def lines_window_until_next_tax_target(lines, index)
         Array(lines)[index, 4].to_a.take_while.with_index do |line, offset|
-          offset.zero? || tax_target_rate_from_line(line).blank?
+          offset.zero? || (
+            tax_target_rate_from_line(line).blank? &&
+              line.to_s.unicode_normalize(:nfkc).match?(profile.analysis_tax_summary_continuation_line_pattern)
+          )
         end
       end
 

@@ -1962,7 +1962,8 @@ class Ocr::ResponseParser
   end
 
   def tax_target_rate_from_line(line)
-    text = line.to_s
+    text = line.to_s.unicode_normalize(:nfkc)
+    return nil unless text.match?(profile.analysis_tax_summary_line_pattern)
     return nil unless text.match?(profile.ocr_tax_target_marker_pattern)
     return nil if text.match?(profile.ocr_tax_amount_description_pattern)
 
@@ -2077,13 +2078,18 @@ class Ocr::ResponseParser
   end
 
   def tax_target_line?(line, rate_label)
-    text = line.to_s
-    text.match?(profile.ocr_tax_rate_target_line_pattern(rate_label)) &&
+    text = line.to_s.unicode_normalize(:nfkc)
+    text.match?(profile.analysis_tax_summary_line_pattern) &&
+      text.match?(profile.ocr_tax_rate_target_line_pattern(rate_label)) &&
       !text.match?(profile.ocr_tax_amount_description_pattern)
   end
 
   def tax_target_amount_from_line(line)
-    amounts = line.to_s.to_enum(:scan, /[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?/).filter_map do |match|
+    text = line.to_s.unicode_normalize(:nfkc)
+    return nil unless text.match?(profile.analysis_tax_summary_continuation_line_pattern)
+
+    text = text.gsub(/\d+(?:\.\d+)?\s*%/, " ")
+    amounts = text.to_enum(:scan, /[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?/).filter_map do |match|
       amount = ReceiptAmountService.parse_amount_or_nil(match)
       amount&.to_i
     end
@@ -2293,9 +2299,12 @@ class Ocr::ResponseParser
       value_object.dig("Rate", "valueNumber")
     return explicit_rate if explicit_rate.present?
 
-    item["content"].to_s.unicode_normalize(:nfkc).scan(/(\d+(?:\.\d+)?)\s*%/).filter_map do |match|
-      normalize_rate_value(match.first, percentage: true)
-    end.first
+    rates = item["content"].to_s.unicode_normalize(:nfkc).lines.flat_map do |line|
+      line.chomp.to_enum(:scan, profile.ocr_item_tax_rate_pattern).filter_map do
+        normalize_rate_value(Regexp.last_match[:rate], percentage: true)
+      end
+    end.uniq
+    rates.sole if rates.one?
   rescue NoMethodError, TypeError
     nil
   end

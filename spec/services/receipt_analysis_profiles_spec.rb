@@ -303,6 +303,60 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile item tax-rate evidence' do
+    it '税ラベルに結合した率と独立した税率行を商品割合や割引率と区別する' do
+      pattern = described_class.fetch('JPN').ocr_item_tax_rate_pattern
+
+      aggregate_failures do
+        expect('例示商品 (税込27%)').to match(pattern)
+        expect('税率: 1%').to match(pattern)
+        expect('税抜 0.5%').to match(pattern)
+        expect('8%').to match(pattern)
+        expect('果汁27%飲料').not_to match(pattern)
+        expect('明細値引27% -14円').not_to match(pattern)
+        expect('27%増量').not_to match(pattern)
+        expect('単価 127円').not_to match(pattern)
+      end
+    end
+  end
+
+  describe 'JPN profile analysis tax-summary ownership' do
+    it '商品行の税込表記や基準価格を税率別集計行へ昇格しない' do
+      pattern = described_class.fetch('JPN').analysis_tax_summary_line_pattern
+
+      aggregate_failures do
+        expect('(10%対象').to match(pattern)
+        expect('1%対象計 101円').to match(pattern)
+        expect('小 計 (税抜8%)').to match(pattern)
+        expect('(10%税込対象額').to match(pattern)
+        expect('外税 8%対象額').to match(pattern)
+        expect('例示商品(税込27%)').not_to match(pattern)
+        expect('税込27% 100円/100g').not_to match(pattern)
+        expect('税込27%').not_to match(pattern)
+        expect('商品27%対象').not_to match(pattern)
+        expect('値引27% -14円').not_to match(pattern)
+      end
+    end
+
+    it '税集計の継続行に商品・数量・支払の文字列を許容しない' do
+      pattern = described_class.fetch('JPN').analysis_tax_summary_continuation_line_pattern
+
+      aggregate_failures do
+        expect('').to match(pattern)
+        expect('¥1270)').to match(pattern)
+        expect('(内消費税等').to match(pattern)
+        expect('¥1,391内消費税').to match(pattern)
+        expect('軽 8%').to match(pattern)
+        expect('税込額 1270円').to match(pattern)
+        expect('例示商品1270円').not_to match(pattern)
+        expect('単価1270円').not_to match(pattern)
+        expect('数量1270個').not_to match(pattern)
+        expect('現金1270円').not_to match(pattern)
+        expect('税込27% 1270円/100g').not_to match(pattern)
+      end
+    end
+  end
+
   describe 'JPN profile post-discount reference pricing labels' do
     it '値引額と値引適用後の明示basisを区別する' do
       pattern = described_class.fetch('JPN').ocr_post_discount_price_basis_pattern

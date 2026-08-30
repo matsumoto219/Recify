@@ -295,6 +295,7 @@ module ReceiptAnalysisProfiles
     OCR_SUBTOTAL_ANCHOR_PATTERN = /小\s*計|subtotal/i.freeze
     OCR_TOTAL_ANCHOR_PATTERN = /合\s*計|総合計|total/i.freeze
     OCR_TAX_ANCHOR_PATTERN = /消費税|税額|税率|税込|税抜|外税|内税|tax/i.freeze
+    OCR_ITEM_TAX_RATE_PATTERN = /(?:税込み?|税抜き?|税率|内税|外税|消費税|tax(?:[ \t]+rate)?)[ \t:()]*(?<rate>[0-9]+(?:\.[0-9]+)?)[ \t]*%|\A[ \t]*(?<rate>[0-9]+(?:\.[0-9]+)?)[ \t]*%[ \t]*\z/i.freeze
     OCR_PAYMENT_ANCHOR_PATTERN = /支払|お支払|決済|現金|クレジット|visa|master|jcb|預り|お預り|釣|お釣り|釣銭|pay/i.freeze
     OCR_GENERIC_TAX_DETAIL_DESCRIPTION_PATTERN = /\A(?:内)?消費税等?\z|\A税額\z|\Atax\z/i.freeze
     OCR_TAX_TARGET_MARKER_PATTERN = /対象/.freeze
@@ -546,6 +547,8 @@ module ReceiptAnalysisProfiles
     ANALYSIS_TAX_TOTAL_LINE_PATTERN = /消費税.*合計|税額.*合計|tax\s*total/i.freeze
     ANALYSIS_TAX_TARGET_MARKER_PATTERN = /対象/.freeze
     ANALYSIS_TAX_AMOUNT_DESCRIPTION_PATTERN = /消費税|税額|tax/i.freeze
+    ANALYSIS_TAX_SUMMARY_LINE_PATTERN = /\A(?=[^\r\n]*(?:対象|小[ \t]*計|合[ \t]*計))(?:(?:税率|税込み?|税抜き?|税別|外税|内税|軽|対象(?:額|計|小計|商品)?|課税|小[ \t]*計|合[ \t]*計|円)|[0-9%.,，¥￥() \t:：])+\z/.freeze
+    ANALYSIS_TAX_SUMMARY_CONTINUATION_LINE_PATTERN = /\A(?:(?:税率|税込み?(?:額|金額)?|税抜き?(?:額|金額)?|税別|外税|内税(?:額)?|(?:内)?消費税(?:等)?|税額|税|軽|対象(?:額|計|小計|商品)?|課税|小[ \t]*計|合[ \t]*計|円)|[0-9%.,，¥￥() \t:：])*\z/.freeze
     ANALYSIS_NEGATIVE_ADJUSTMENT_CONTEXT_PATTERN = /値引|割引|ディスカウント|discount|off|クーポン|coupon|ポイント|point|返品|返金|refund|return/i.freeze
     ANALYSIS_PER_UNIT_DISCOUNT_NOTE_PATTERN = /\A[ \t]*(?=(?:(?:会員|特典|アプリ)?値引(?:き)?|.*[\/／].*引(?:き)?[ \t]*\z))(?:(?:会員|特典|アプリ)?値引(?:き)?[ \t:：]*)?(?:[¥￥][ \t]*)?[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*円[ \t]*[\/／][ \t]*(?:[0-9０-９]+(?:[.．][0-9０-９]+)?[ \t]*)?[\p{L}]+?[ \t]*(?:引(?:き)?)?[ \t]*\z/iu.freeze
     ANALYSIS_ITEM_DISCOUNT_LABEL_PATTERN = /割引|discount|off/i.freeze
@@ -796,6 +799,10 @@ module ReceiptAnalysisProfiles
 
       def ocr_tax_anchor_pattern
         OCR_TAX_ANCHOR_PATTERN
+      end
+
+      def ocr_item_tax_rate_pattern
+        OCR_ITEM_TAX_RATE_PATTERN
       end
 
       def ocr_payment_anchor_pattern
@@ -1325,6 +1332,14 @@ module ReceiptAnalysisProfiles
 
       def analysis_tax_amount_description_pattern
         ANALYSIS_TAX_AMOUNT_DESCRIPTION_PATTERN
+      end
+
+      def analysis_tax_summary_line_pattern
+        ANALYSIS_TAX_SUMMARY_LINE_PATTERN
+      end
+
+      def analysis_tax_summary_continuation_line_pattern
+        ANALYSIS_TAX_SUMMARY_CONTINUATION_LINE_PATTERN
       end
 
       def analysis_negative_adjustment_context_pattern

@@ -1185,6 +1185,69 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it '商品割合や値引率ではなく明細の税率表記だけを使う' do
+      contents = {
+        "果汁27%飲料\n税込1% 180円" => '0.01',
+        "明細値引27% -14円\n税込8%" => '0.08',
+        "税込8%\n明細値引27% -14円" => '0.08',
+        "商品A\n180円\n8%" => '0.08',
+        '果汁27%飲料' => nil,
+        '明細値引27% -14円' => nil,
+        "税込8%\n税込10%" => nil
+      }
+
+      contents.each do |content, rate|
+        response = raw_response.deep_dup
+        response['analyzeResult']['documents'].first['fields']['Items']['valueArray'].first['content'] = content
+
+        result = described_class.new(response: response, provider: :fixture).call
+
+        expect(result.dig(:candidates, :items).first[:tax_rate]).to eq(rate && BigDecimal(rate))
+      end
+    end
+
+    it '明細税率の語彙を注入profileから取得し旧語彙へfallbackしない' do
+      profile = ReceiptAnalysisProfiles.default.dup
+      allow(profile).to receive(:ocr_item_tax_rate_pattern).and_return(/課税記号:(?<rate>\d+)%/)
+
+      { '課税記号:27%' => '0.27', '税込27%' => nil }.each do |content, rate|
+        response = raw_response.deep_dup
+        response['analyzeResult']['documents'].first['fields']['Items']['valueArray'].first['content'] = content
+
+        result = described_class.new(response: response, provider: :fixture, profile: profile).call
+
+        expect(result.dig(:candidates, :items).first[:tax_rate]).to eq(rate && BigDecimal(rate))
+      end
+    end
+
+    it '構造化税詳細の欠損対象額を後続商品から補わない' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = "27%対象計\n例示商品 単価1270円"
+      fields = response['analyzeResult']['documents'].first['fields']
+      fields['Total'] = { 'valueNumber' => 1270 }
+      fields['TotalTax'] = { 'valueNumber' => 270 }
+      fields['TaxDetails'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Rate' => { 'valueNumber' => 0.27 },
+              'Amount' => { 'valueNumber' => 270 }
+            }
+          },
+          {
+            'valueObject' => {
+              'Rate' => { 'valueNumber' => 0.1 },
+              'Amount' => { 'valueNumber' => 10 }
+            }
+          }
+        ]
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :tax_details).map { |detail| detail[:net_amount] }).to eq([ nil, nil ])
+    end
+
     it '税率別対象額と税合計だけがOCR行にある内税レシートからTaxDetailsを復元する' do
       response = raw_response.deep_dup
       response['analyzeResult']['content'] = <<~TEXT

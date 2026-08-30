@@ -4178,6 +4178,20 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '税対象額の欠損を後続商品の金額から復元しない' do
+        [ '27%対象計', '税率27%' ].each do |label|
+          input = ocr_result.deep_dup
+          input[:candidates][:total_amount] = 1270
+          input[:candidates][:tax_amount] = 270
+          input[:candidates][:tax_details] = [ { rate: BigDecimal('0.27'), amount: 270 } ]
+          input[:lines] = [ label, '例示商品 単価1270円', '1270円' ]
+
+          params = described_class.call(ocr_result: input, ai_result: nil)
+
+          expect(params[:receipt_tax_details_attributes].first[:net_amount]).to be_nil
+        end
+      end
+
       it 'quantityだけはdecimal commaを小数として正規化しmeasurement totalは推測しない' do
         ocr_result[:candidates][:items].first[:price] = '14,400円'
         ocr_result[:candidates][:items].first[:quantity] = '0,300'
