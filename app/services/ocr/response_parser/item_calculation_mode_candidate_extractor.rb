@@ -3,6 +3,7 @@ require "set"
 class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   MAX_ITEMS = 100
   MAX_LINES = 150
+  MAX_ITEM_SPANS = 16
   MAX_CONTENT_BYTES = Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
   MAX_ITEM_CONTENT_BYTES = 4_096
   MAX_FIELD_CONTENT_BYTES = 512
@@ -109,8 +110,8 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     return [] unless provider_context_valid?
     return [] unless items.is_a?(Array) && items.size <= MAX_ITEMS
 
-    parent_spans = items.map { |item| item.is_a?(Hash) ? single_span(item) : nil }
-    overlapping_indexes = overlapping_parent_indexes(parent_spans)
+    parent_spans = items.map { |item| provider_spans(item) }
+    overlapping_indexes = overlapping_item_indexes(parent_spans)
     layout_candidates = item_layout_descriptors.filter_map { |descriptor| extract_layout_candidate(descriptor) }
     layout_replacement_indexes = layout_candidates.filter_map { |candidate| candidate[:item_index] }.to_set
     structured_candidates = items.filter_map.with_index do |item, item_index|
@@ -158,16 +159,18 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     items.is_a?(Array)
   end
 
-  def extract_candidate(item, item_index, parent_span)
-    return unless item.is_a?(Hash) && parent_span
-    return unless exact_provider_content?(item["content"], parent_span, maximum_bytes: MAX_ITEM_CONTENT_BYTES)
+  def extract_candidate(item, item_index, parent_spans)
+    return unless item.is_a?(Hash) && parent_spans
+    return unless exact_provider_segments?(item["content"], parent_spans, maximum_bytes: MAX_ITEM_CONTENT_BYTES)
+
+    parent_span = parent_spans.first.begin...parent_spans.last.end
 
     value_object = item["valueObject"]
     return unless value_object.is_a?(Hash)
 
     description = description_component(
       value_object["Description"],
-      parent_span: parent_span,
+      parent_spans: parent_spans,
       field_path: item_field_path(item_index, "Description")
     )
     return if description.nil?
@@ -177,7 +180,13 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       parent_span: parent_span,
       field_path: item_field_path(item_index, "TotalPrice")
     )
+    if printed_line_total && !evidence_within_parent?([ printed_line_total.fetch(:evidence) ], parent_spans, description: description)
+      printed_line_total = nil
+    end
     count_option = count_option(value_object, item, item_index, parent_span, description: description)
+    if count_option && !evidence_within_parent?(count_option.fetch(:evidence).values, parent_spans, description: description)
+      count_option = nil
+    end
     explicit_option = explicit_option(printed_line_total, item_index, description: description)
     if count_option && explicit_option && option_evidence_overlaps?(count_option, explicit_option)
       count_option = nil
@@ -390,7 +399,9 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
 
       [ key, component_evidence(item_field_path(item_index), span) ]
     end
-    return unless discount_components_match_line?(components, item_index, parent_span)
+    parent_spans = provider_spans(items.fetch(item_index))
+    return unless evidence_within_parent?(components.values, parent_spans, description: description)
+    return unless discount_components_match_line?(components, parent_spans)
     return unless nonoverlapping_evidence?(
       description.fetch(:evidence),
       *option.fetch(:evidence).values,
@@ -408,8 +419,8 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     )
   end
 
-  def discount_components_match_line?(components, item_index, parent_span)
-    lines = provider_content_lines(items.fetch(item_index)["content"], parent_span, strip: false)
+  def discount_components_match_line?(components, parent_spans)
+    lines = provider_segment_lines(parent_spans, strip: false)
     return false unless lines && lines.size <= MAX_LINES
 
     matches = lines.filter_map do |line|
@@ -502,7 +513,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   def quantity_line_unit_component(item, quantity, item_index, parent_span)
     return if quantity.nil?
 
-    lines = provider_content_lines(item["content"], parent_span, strip: false)
+    lines = provider_segment_lines(provider_spans(item), strip: false)
     return if lines.nil? || lines.size > MAX_LINES
 
     matches = lines.filter_map do |line|
@@ -801,6 +812,21 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     nil
   end
 
+  def provider_segment_lines(spans, strip: true)
+    return if spans.nil?
+
+    lines = spans.flat_map do |span|
+      segment = mapper.slice(content, offset: span.begin, length: span.size)
+      return if segment.nil?
+
+      segment_lines = provider_content_lines(segment, span, strip: strip)
+      return if segment_lines.nil?
+
+      segment_lines
+    end
+    lines if lines.size <= MAX_LINES
+  end
+
   def component_evidence(field_path, span)
     {
       source_field_path: field_path,
@@ -809,17 +835,58 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     }
   end
 
-  def description_component(field, parent_span:, field_path:)
+  def description_component(field, parent_spans:, field_path:)
     return unless field.is_a?(Hash)
 
     value_string = safe_content(field["valueString"], maximum_bytes: MAX_FIELD_CONTENT_BYTES)
     field_content = safe_content(field["content"], maximum_bytes: MAX_FIELD_CONTENT_BYTES)
-    span = single_span(field)
+    spans = provider_spans(field)
     return if value_string.blank? || field_content.blank? || value_string != field_content
-    return unless span_within?(span, parent_span)
-    return unless exact_provider_content?(field_content, span, maximum_bytes: MAX_FIELD_CONTENT_BYTES)
+    return if spans.nil? || spans.any? { |span| !span_within_any?(span, parent_spans) }
+    return unless exact_provider_segments?(field_content, spans, maximum_bytes: MAX_FIELD_CONTENT_BYTES)
 
-    { evidence: component_evidence(field_path, span) }
+    evidence = component_evidence(field_path, spans.first)
+    return { evidence: evidence } if spans.one?
+
+    lines = provider_segment_lines(parent_spans, strip: false)
+    return if lines.nil?
+
+    matching_lines = lines.select do |line|
+      spans.all? { |span| span_within?(span, line.fetch(:provider_span)) }
+    end
+    return unless matching_lines.one?
+
+    line_span = matching_lines.sole.fetch(:provider_span)
+    prefix = mapper.slice(content, offset: line_span.begin, length: spans.first.begin - line_span.begin)
+    suffix = mapper.slice(content, offset: spans.first.end, length: line_span.end - spans.first.end)
+    first_fragment = mapper.slice(content, offset: spans.first.begin, length: spans.first.size)
+    return unless prefix&.blank? && first_fragment&.present? && description_tax_suffix?(suffix)
+
+    { evidence: evidence, exclusion_span: line_span }
+  end
+
+  def description_tax_suffix?(value)
+    value = safe_content(value, maximum_bytes: MAX_FIELD_CONTENT_BYTES)
+    return false if value.nil?
+
+    normalized = value.unicode_normalize(:nfkc)
+    return true if normalized.blank?
+    return false unless normalized.match?(/\A(?:[ \t]+|\()/)
+
+    normalized = normalized.strip
+    if normalized.start_with?("(") && normalized.end_with?(")")
+      normalized = normalized[1...-1].strip
+    end
+    match = profile.ocr_item_tax_rate_pattern.match(normalized)
+    match && match.begin(0).zero? && match.end(0) == normalized.length && match.begin(:rate).positive?
+  end
+
+  def evidence_within_parent?(components, parent_spans, description:)
+    exclusion_span = description[:exclusion_span]
+    components.all? do |component|
+      span = evidence_range(component)
+      span_within_any?(span, parent_spans) && (!exclusion_span || !ranges_overlap?(span, exclusion_span))
+    end
   end
 
   def option_evidence_overlaps?(left, right)
@@ -857,6 +924,15 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     "azure_structured_item_i#{item_index}_s#{parent_span.begin}_e#{parent_span.end}"
   end
 
+  def overlapping_item_indexes(parent_spans)
+    indexed_spans = parent_spans.each_with_index.flat_map do |spans, item_index|
+      (spans || []).map { |span| [ span, item_index ] }
+    end
+    overlapping_parent_indexes(indexed_spans.map(&:first)).map do |index|
+      indexed_spans.fetch(index).last
+    end.to_set
+  end
+
   def overlapping_parent_indexes(parent_spans)
     sorted = parent_spans.each_with_index.filter_map do |span, index|
       [ span, index ] if span
@@ -883,7 +959,21 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     spans = value.is_a?(Hash) ? value["spans"] : nil
     return unless spans.is_a?(Array) && spans.one?
 
-    span = spans.sole
+    provider_span(spans.sole)
+  end
+
+  def provider_spans(value)
+    spans = value.is_a?(Hash) ? value["spans"] : nil
+    return unless spans.is_a?(Array) && spans.size.between?(1, MAX_ITEM_SPANS)
+
+    ranges = spans.map { |span| provider_span(span) }
+    return if ranges.any?(&:nil?)
+    return unless ranges.each_cons(2).all? { |left, right| left.end <= right.begin }
+
+    ranges
+  end
+
+  def provider_span(span)
     return unless span.is_a?(Hash)
 
     offset = span["offset"]
@@ -897,6 +987,10 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
 
   def span_within?(child, parent)
     child && parent && child.begin >= parent.begin && child.end <= parent.end
+  end
+
+  def span_within_any?(child, parents)
+    parents && parents.any? { |parent| span_within?(child, parent) }
   end
 
   def safe_content(value, maximum_bytes:)
@@ -915,6 +1009,22 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     return false unless mapper.length(value) == span.size
 
     mapper.slice(content, offset: span.begin, length: span.size) == value
+  rescue ArgumentError, EncodingError, TypeError
+    false
+  end
+
+  def exact_provider_segments?(value, spans, maximum_bytes:)
+    value = safe_content(value, maximum_bytes: maximum_bytes)
+    return false if value.nil? || spans.nil?
+    return false unless spans.sum(&:size) + spans.size - 1 == mapper.length(value)
+
+    segments = spans.map do |span|
+      segment = mapper.slice(content, offset: span.begin, length: span.size)
+      return false if segment.nil?
+
+      segment
+    end
+    segments.join("\n") == value
   rescue ArgumentError, EncodingError, TypeError
     false
   end

@@ -134,12 +134,12 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     candidate.fetch(:options).map { |option| option.fetch(:pricing_source_kind) }
   end
 
-  def discounted_item_evidence
-    item = exact_item(price: 50, quantity: 1, total: 36)
-    lines = [ '検証商品', '50', '1個', '明細値引 27% -14円', '36' ]
+  def discounted_item_evidence(description: '検証商品', string_index_type: 'utf16CodeUnit')
+    item = exact_item(price: 50, quantity: 1, total: 36, description:, string_index_type:)
+    lines = [ description, '50', '1個', '明細値引 27% -14円', '36' ]
     item['content'] = lines.join("\n")
-    item['spans'].sole['length'] = item['content'].length
-    line_offsets = lines.each_with_object([ 100 ]) { |line, offsets| offsets << offsets.last + line.length + 1 }
+    item['spans'].sole['length'] = provider_length(item['content'], string_index_type)
+    line_offsets = lines.each_with_object([ 100 ]) { |line, offsets| offsets << offsets.last + provider_length(line, string_index_type) + 1 }
     item['valueObject']['Price']['spans'].sole['offset'] = line_offsets[1]
     item['valueObject']['Quantity']['spans'].sole['offset'] = line_offsets[2]
     item['valueObject']['QuantityUnit']['spans'].sole['offset'] = line_offsets[2] + 1
@@ -151,6 +151,54 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     end
 
     [ item, { amount: '14', rate: '0.27', printed_total_stage: 'after_item_discount', evidence: evidence } ]
+  end
+
+  def discontiguous_item_evidence(description: '検証商品(税込1%)', split_description: false, string_index_type: 'utf16CodeUnit')
+    item, discount = discounted_item_evidence(description:, string_index_type:)
+    source_lines = item.fetch('content').lines(chomp: true)
+    prefix = source_lines.first(4).join("\n")
+    raw_content = "#{prefix}\n明細計 #{source_lines.last}"
+    total = item.dig('valueObject', 'TotalPrice')
+    total['spans'].sole['offset'] += '明細計 '.length
+    item['spans'] = [
+      { 'offset' => 100, 'length' => provider_length(prefix, string_index_type) },
+      total.fetch('spans').sole.deep_dup
+    ]
+    if split_description
+      name = description.split('(').first
+      suffix_offset = name.length + 2
+      suffix = description[suffix_offset..]
+      field_content = "#{name}\n#{suffix}"
+      item['valueObject']['Description'] = {
+        'valueString' => field_content,
+        'content' => field_content,
+        'spans' => [
+          { 'offset' => 100, 'length' => provider_length(name, string_index_type) },
+          { 'offset' => 100 + provider_length(description[0...suffix_offset], string_index_type), 'length' => provider_length(suffix, string_index_type) }
+        ]
+      }
+    end
+
+    [ item, discount, "#{' ' * 100}#{raw_content}" ]
+  end
+
+  def exclude_parent_span!(item, excluded_span, content, string_index_type: 'utf16CodeUnit')
+    start_value = excluded_span.fetch('offset')
+    end_value = start_value + excluded_span.fetch('length')
+    item['spans'] = item.fetch('spans').flat_map do |span|
+      span_start = span.fetch('offset')
+      span_end = span_start + span.fetch('length')
+      next [ span ] unless span_start <= start_value && end_value <= span_end
+
+      [
+        { 'offset' => span_start, 'length' => start_value - span_start },
+        { 'offset' => end_value, 'length' => span_end - end_value }
+      ].reject { |component| component.fetch('length').zero? }
+    end
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: string_index_type)
+    item['content'] = item.fetch('spans').map do |span|
+      mapper.slice(content, offset: span.fetch('offset'), length: span.fetch('length'))
+    end.join("\n")
   end
 
   def valid_native_reference_candidate(
@@ -205,6 +253,201 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
   end
 
   describe '.call' do
+    context 'with discontiguous same-item evidence' do
+      it 'uses actual owned segments for discount proof and keeps only the envelope as item identity' do
+        item, discount, content = discontiguous_item_evidence
+        original = item.deep_dup
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole[:options].first[:discount]).to eq(discount)
+        expect(result.sole[:provider_span_start]).to eq(100)
+        expect(result.sole[:provider_span_end]).to eq(content.length)
+        expect(item).to eq(original)
+      end
+
+      it 'keeps an exact quantity-line unit when the provider omits QuantityUnit' do
+        item, discount, content = discontiguous_item_evidence
+        item['valueObject'].delete('QuantityUnit')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole[:options].first.dig(:source, :quantity_unit_code)).to eq('each')
+        expect(result.sole[:options].first.dig(:evidence, :quantity_unit, :source_field_path)).to eq('documents[0].fields.Items[0]')
+      end
+
+      it 'accepts only a same-line product fragment followed by a known tax suffix' do
+        %w[utf16CodeUnit textElements].each do |string_index_type|
+          item, discount, content = discontiguous_item_evidence(
+            description: "Cafe\u0301😀(税込１%)",
+            split_description: true,
+            string_index_type:
+          )
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:, string_index_type:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+          expect(result.sole[:destination_evidence]).to eq(
+            source_field_path: 'documents[0].fields.Items[0].Description',
+            provider_span_start: 100,
+            provider_span_end: 100 + provider_length("Cafe\u0301😀", string_index_type)
+          )
+          expect(result.sole).not_to have_key(:exclusion_span)
+        end
+      end
+
+      it 'accepts a split tax suffix inside a continuous parent without changing the destination text' do
+        item, discount, content = discontiguous_item_evidence(split_description: true)
+        item['content'] = content[100..]
+        item['spans'] = [ { 'offset' => 100, 'length' => item.fetch('content').length } ]
+        original_description = item.dig('valueObject', 'Description').deep_dup
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(item.dig('valueObject', 'Description')).to eq(original_description)
+      end
+
+      it 'uses the injected profile for the independent tax suffix instead of fixed tax vocabulary' do
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_item_tax_rate_pattern).and_return(/levy(?<rate>\d+)%/)
+        results = [ '検証商品(levy1%)', '検証商品(税込1%)' ].map do |description|
+          item, discount, content = discontiguous_item_evidence(description:, split_description: true)
+          described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile:,
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+        end
+
+        expect(modes(results.first.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(results.last).to eq([])
+      end
+
+      it 'rejects wrapped names, unknown suffixes and mismatched Description content' do
+        [
+          ->(item) { item['valueObject']['Description']['valueString'] = '別商品' },
+          lambda do |item|
+            field = item['valueObject']['Description']
+            field['spans'][1] = item.dig('valueObject', 'Price', 'spans').sole.deep_dup
+            field['content'] = "検証商品\n50"
+            field['valueString'] = field['content']
+          end
+        ].each do |mutate|
+          item, discount, content = discontiguous_item_evidence(split_description: true)
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+          expect(result).to eq([])
+        end
+
+        item, discount, content = discontiguous_item_evidence(description: '検証商品(別商品)', split_description: true)
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+        expect(result).to eq([])
+      end
+
+      it 'does not borrow Price, Quantity, QuantityUnit or discount digits from a parent gap' do
+        %w[Price Quantity QuantityUnit discount].each do |field_name|
+          item, discount, content = discontiguous_item_evidence
+          excluded_span = if field_name == 'discount'
+            evidence = discount.fetch(:evidence).fetch(:amount)
+            { 'offset' => evidence.fetch(:provider_span_start), 'length' => evidence.fetch(:provider_span_end) - evidence.fetch(:provider_span_start) }
+          else
+            item.dig('valueObject', field_name, 'spans').sole
+          end
+          exclude_parent_span!(item, excluded_span, content)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not invent an explicit or discounted count source when TotalPrice is unowned' do
+        item, discount, content = discontiguous_item_evidence
+        exclude_parent_span!(item, item.dig('valueObject', 'TotalPrice', 'spans').sole, content)
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(result).to eq([])
+      end
+
+      it 'does not reuse tax-suffix digits excluded from the destination anchor as a money source' do
+        %w[Price TotalPrice].each do |field_name|
+          item, discount, content = discontiguous_item_evidence(split_description: true)
+          item['valueObject'][field_name] = currency_field(1, '1', content.index('1%'))
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expected = field_name == 'Price' ? [ 'explicit_line_total' ] : []
+          expect(result.flat_map { |candidate| modes(candidate) }).to eq(expected)
+        end
+      end
+
+      it 'rejects unordered, duplicate, overflowing, oversized or text-inexact parent spans' do
+        mutations = [
+          ->(item) { item['spans'].reverse! },
+          ->(item) { item['spans'] << item['spans'].last.deep_dup },
+          ->(item) { item['spans'][0]['length'] = described_class::MAX_PROVIDER_SPAN_VALUE },
+          ->(item) { item['spans'] = Array.new(17) { |index| { 'offset' => 100 + index * 2, 'length' => 1 } } },
+          ->(item) { item['content'] = item['content'].sub('50', '51') }
+        ]
+
+        mutations.each do |mutate|
+          item, discount, content = discontiguous_item_evidence
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(result).to eq([])
+        end
+      end
+    end
+
     context 'with validated same-item discount evidence' do
       it 'retains the discount conflict and carries complete proof only on the count option' do
         item, discount = discounted_item_evidence

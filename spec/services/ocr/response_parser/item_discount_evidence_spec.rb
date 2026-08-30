@@ -3,6 +3,7 @@ require 'rails_helper'
 RSpec.describe Ocr::ResponseParser do
   def discount_response(
     discontiguous: false,
+    split_description: false,
     split: false,
     item_count: 1,
     price: 50,
@@ -42,12 +43,32 @@ RSpec.describe Ocr::ResponseParser do
       else
         [ { 'offset' => item_start, 'length' => discount_length(content, string_index_type) - item_start - 1 } ]
       end
+      description = { 'valueString' => name, **source_lines.first }
+      if split_description
+        product_name = name.split('(').first
+        suffix_offset = product_name.length + 2
+        suffix = name[suffix_offset..]
+        field_content = "#{product_name}\n#{suffix}"
+        description = {
+          'valueString' => field_content,
+          'content' => field_content,
+          'spans' => [
+            { 'offset' => item_start, 'length' => discount_length(product_name, string_index_type) },
+            { 'offset' => item_start + discount_length(name[0...suffix_offset], string_index_type), 'length' => discount_length(suffix, string_index_type) }
+          ]
+        }
+      end
+      parent_content = if discontiguous
+        (item_lines[0...-1] + [ printed.call("#{total}円") ]).join("\n")
+      else
+        item_lines.join("\n")
+      end
 
       {
-        'content' => item_lines.join("\n"),
+        'content' => parent_content,
         'spans' => parent_spans,
         'valueObject' => {
-          'Description' => { 'valueString' => name, **source_lines.first },
+          'Description' => description,
           'Price' => discount_currency_field(printed.call("@#{price}円"), price, source_lines[1].dig('spans', 0, 'offset') + '単価 '.length),
           'Quantity' => {
             'valueNumber' => 1,
@@ -188,6 +209,23 @@ RSpec.describe Ocr::ResponseParser do
     expect(result.dig(:candidates, :items).sole).to include(
       original_line_total: 50, discount_rate: BigDecimal('0.27'), discount_amount: 14, line_total: 36
     )
+    candidate = result.dig(:candidates, :item_calculation_mode_candidates).sole
+    expect(candidate[:options].map { |option| option[:pricing_source_kind] }).to eq(%w[count_unit_price explicit_line_total])
+    expect(candidate[:options].first).to include(discount: include(amount: '14', rate: '0.27'))
+  end
+
+  it '分割Descriptionの税注記を商品名へ再構築せず既存の同一明細identityと割引sourceを保持する' do
+    %w[utf16CodeUnit textElements].each do |string_index_type|
+      response = discount_response(discontiguous: true, split_description: true, name_prefix: "Cafe\u0301😀", string_index_type:, fullwidth: true)
+      result = described_class.new(response: response).call
+      item = result.dig(:candidates, :items).sole
+      candidate = result.dig(:candidates, :item_calculation_mode_candidates).sole
+
+      expect(item).to include(raw_text: "Cafe\u0301😀１", original_line_total: 50, line_total: 36, discount_amount: 14, discount_rate: BigDecimal('0.27'))
+      expect(item[:ocr_item_identity]).to eq(candidate[:item_identity])
+      expect(candidate[:options].map { |option| option[:pricing_source_kind] }).to eq(%w[count_unit_price explicit_line_total])
+      expect(candidate[:options].first).to include(discount: include(amount: '14', rate: '0.27'))
+    end
   end
 
   it '割引ラベル・率・金額の分離行を同一明細へ対応させる' do
