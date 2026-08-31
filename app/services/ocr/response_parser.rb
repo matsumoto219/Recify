@@ -2987,11 +2987,11 @@ class Ocr::ResponseParser
 
         { line: line, span: span, index: line_index }
       end
-      entries unless entries.empty?
+      [ page, entries ] unless entries.empty?
     end
     return unless page_lines.one?
 
-    entries = page_lines.sole
+    page, entries = page_lines.sole
     return unless entries.each_cons(2).all? { |left, right| left[:span][1] <= right[:span][0] }
 
     block = Ocr::ResponseParser::ItemCalculationDiscountBlock.call(lines: entries.map { |entry| entry[:line]["content"] }, profile:)
@@ -2999,7 +2999,7 @@ class Ocr::ResponseParser
 
     block_entries = entries[block[:block_start_line_index]..block[:block_end_line_index]]
     return unless block_entries.first[:span][0] >= total_span[1]
-    return unless block_entries.each_cons(2).all? { |left, right| right[:index] == left[:index] + 1 }
+    return unless discount_block_contiguous?(block_entries, page:, item:, parents:, content:, mapper:)
 
     evidence = block[:evidence].to_h do |key, component|
       entry = entries[component[:line_index]]
@@ -3030,6 +3030,100 @@ class Ocr::ResponseParser
     }
   rescue ArgumentError, EncodingError, TypeError
     nil
+  end
+
+  def discount_block_contiguous?(entries, page:, item:, parents:, content:, mapper:)
+    gaps = entries.each_cons(2).reject { |left, right| right[:index] == left[:index] + 1 }
+    return true if gaps.empty?
+
+    regions = item["boundingRegions"]
+    return false unless regions.is_a?(Array) && regions.one? && regions.sole.is_a?(Hash)
+    return false unless page["pageNumber"].is_a?(Integer) && page["pageNumber"].positive? && regions.sole["pageNumber"] == page["pageNumber"]
+
+    parent_bounds = discount_polygon_bounds(regions.sole["polygon"], page:)
+    return false unless parent_bounds
+
+    words = page["words"]
+    return false unless words.is_a?(Array) && words.size.between?(1, Ocr::ResponseParser::ItemCalculationModeLayoutExtractor::MAX_WORDS)
+
+    word_entries = words.map do |word|
+      return false unless word.is_a?(Hash)
+      return false unless word["content"].is_a?(String) && word["content"].bytesize <= Ocr::ResponseParser::ItemCalculationModeLayoutExtractor::MAX_WORD_CONTENT_BYTES
+
+      span = exact_structured_authority_span({ "content" => word["content"], "spans" => [ word["span"] ] }, content:, mapper:)
+      return false unless span
+
+      { span:, polygon: word["polygon"] }
+    end
+    return false unless word_entries.each_cons(2).all? { |left, right| left[:span][1] <= right[:span][0] }
+
+    gaps.all? do |left, right|
+      previous_end = left[:span][1]
+      page["lines"][(left[:index] + 1)...right[:index]].all? do |line|
+        next false unless line.is_a?(Hash)
+
+        span = exact_structured_authority_span(line, content:, mapper:)
+        next false unless span && span[0] >= previous_end && span[1] <= right[:span][0]
+        next false if parents.any? { |parent| spans_overlap?(*span, *parent) }
+
+        previous_end = span[1]
+        discount_gap_line_outside_parent?(line, span:, word_entries:, parent_bounds:, page:, content:, mapper:)
+      end
+    end
+  end
+
+  def discount_gap_line_outside_parent?(line, span:, word_entries:, parent_bounds:, page:, content:, mapper:)
+    bounds = discount_polygon_bounds(line["polygon"], page:)
+    return false unless bounds
+
+    side = if bounds[:right] < parent_bounds[:left]
+      :left
+    elsif bounds[:left] > parent_bounds[:right]
+      :right
+    end
+    return false unless side
+
+    index = word_entries.bsearch_index { |word| word[:span][1] > span[0] }
+    return false unless index
+
+    cursor = span[0]
+    count = 0
+    while index < word_entries.size && word_entries[index][:span][0] < span[1]
+      word = word_entries[index]
+      return false unless word[:span][0] >= cursor && word[:span][1] <= span[1]
+      return false unless mapper.slice(content, offset: cursor, length: word[:span][0] - cursor)&.match?(/\A[ \t]*\z/)
+
+      word_bounds = discount_polygon_bounds(word[:polygon], page:)
+      return false unless word_bounds
+      return false unless side == :left ? word_bounds[:right] < parent_bounds[:left] : word_bounds[:left] > parent_bounds[:right]
+
+      cursor = word[:span][1]
+      count += 1
+      index += 1
+    end
+    count.positive? && mapper.slice(content, offset: cursor, length: span[1] - cursor)&.match?(/\A[ \t]*\z/)
+  end
+
+  def discount_polygon_bounds(polygon, page:)
+    dimensions = [ page["width"], page["height"] ]
+    maximum = Ocr::ResponseParser::ItemCalculationModeLayoutExtractor::MAX_PAGE_DIMENSION
+    return unless dimensions.all? { |value| value.is_a?(Numeric) && value.finite? && value.positive? && value <= maximum }
+    return unless polygon.is_a?(Array) && polygon.size == 8
+    return unless polygon.all? { |value| value.is_a?(Numeric) && value.finite? }
+    return unless polygon.each_slice(2).all? { |x, y| x.between?(0, dimensions[0]) && y.between?(0, dimensions[1]) }
+
+    points = polygon.each_slice(2).map { |pair| pair.map { |value| Rational(value.to_s) } }
+    crosses = 4.times.map do |index|
+      first = points[index]
+      second = points[(index + 1) % 4]
+      third = points[(index + 2) % 4]
+      (second[0] - first[0]) * (third[1] - second[1]) -
+        (second[1] - first[1]) * (third[0] - second[0])
+    end
+    return unless crosses.all?(&:positive?) || crosses.all?(&:negative?)
+
+    left, right = points.map(&:first).minmax
+    { left:, right: }
   end
 
   def match_discount_target_item_index_from_line(line, item_labels, current_item_index)

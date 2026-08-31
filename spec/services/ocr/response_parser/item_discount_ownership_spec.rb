@@ -54,6 +54,44 @@ RSpec.describe Ocr::ResponseParser do
     details.values.filter_map { |detail| detail[:calculation_mode_discount] }
   end
 
+  def separated_discount_response(side: :left, gap_text: '7')
+    texts = [ '検証品', '¥500', '操作割引07', '30%', gap_text, '(単品 -75)', '-150' ]
+    content = +''
+    words = []
+    lines = texts.map.with_index do |text, index|
+      left = index == 4 ? (side == :left ? 20 : 700) : 250
+      top = 20 + index * 30
+      polygon = [ left, top, left + 100, top, left + 100, top + 20, left, top + 20 ]
+      span = { 'offset' => content.length, 'length' => text.length }
+      words << { 'content' => text, 'span' => span.dup, 'polygon' => polygon.dup }
+      content << "#{text}\n"
+      { 'content' => text, 'spans' => [ span ], 'polygon' => polygon }
+    end
+    first_span = lines[3]['spans'].sole
+    first_end = first_span['offset'] + first_span['length']
+    last_start = lines[5]['spans'].sole['offset']
+    item = {
+      'content' => texts.values_at(0, 1, 2, 3, 5, 6).join("\n"),
+      'spans' => [ { 'offset' => 0, 'length' => first_end }, { 'offset' => last_start, 'length' => content.length - last_start - 1 } ],
+      'boundingRegions' => [ { 'pageNumber' => 1, 'polygon' => [ 200, 10, 600, 10, 600, 240, 200, 240 ] } ],
+      'valueObject' => {
+        'Description' => { 'valueString' => texts.first, **lines.first },
+        'TotalPrice' => { 'valueCurrency' => { 'amount' => 500 }, **lines[1] }
+      }
+    }
+    {
+      'status' => 'succeeded',
+      'analyzeResult' => {
+        'modelId' => 'prebuilt-receipt',
+        'apiVersion' => '2024-11-30',
+        'stringIndexType' => 'textElements',
+        'content' => content,
+        'pages' => [ { 'pageNumber' => 1, 'width' => 1000, 'height' => 1000, 'unit' => 'pixel', 'lines' => lines, 'words' => words } ],
+        'documents' => [ { 'fields' => { 'Items' => { 'valueArray' => [ item ] } } } ]
+      }
+    }
+  end
+
   it '商品名の一部と同じheaderを割引対象にせずprovider parent内の各割引を保持する' do
     [ [], [ 'K2' ], [ 'K2', '30%' ] ].each do |header|
       result = described_class.new(response: item_discount_response(header:)).call
@@ -104,6 +142,44 @@ RSpec.describe Ocr::ResponseParser do
     lines.insert(5, lines.first.deep_dup)
 
     expect(calculation_discounts(response).size).to eq(2)
+  end
+
+  [ :left, :right ].each do |side|
+    it "親fragment外の#{side}領域にある行だけが挟まる場合は割引proofを保持する" do
+      response = separated_discount_response(side:)
+
+      expect(calculation_discounts(response)).to contain_exactly(include(printed_total_stage: 'before_item_discount', amount: '150', rate: '0.3'))
+    end
+  end
+
+  it '外部領域の行を数字や店舗語彙で判別しない' do
+    expect(calculation_discounts(separated_discount_response(gap_text: '外部注記'))).not_to be_empty
+  end
+
+  {
+    missing_polygon: ->(page) { page['lines'][4].delete('polygon') },
+    touching_parent: ->(page) { page['lines'][4]['polygon'] = [ 100, 140, 200, 140, 200, 160, 100, 160 ] },
+    overlapping_parent: ->(page) { page['lines'][4]['polygon'] = [ 100, 140, 201, 140, 201, 160, 100, 160 ] },
+    word_inside_parent: ->(page) { page['words'][4]['polygon'] = [ 250, 140, 350, 140, 350, 160, 250, 160 ] },
+    word_touching_parent: ->(page) { page['words'][4]['polygon'] = [ 100, 140, 200, 140, 200, 160, 100, 160 ] },
+    word_other_side: ->(page) { page['words'][4]['polygon'] = [ 700, 140, 800, 140, 800, 160, 700, 160 ] },
+    word_missing: ->(page) { page['words'].delete_at(4) },
+    word_polygon_missing: ->(page) { page['words'][4].delete('polygon') },
+    word_duplicate: ->(page) { page['words'].insert(4, page['words'][4].deep_dup) },
+    word_span_changed: ->(page) { page['words'][4]['span']['offset'] += 1 },
+    line_span_changed: ->(page) { page['lines'][4]['spans'].sole['offset'] += 1 },
+    nonconvex_polygon: ->(page) { page['lines'][4]['polygon'] = [ 20, 140, 120, 160, 120, 140, 20, 160 ] },
+    nonfinite_polygon: ->(page) { page['lines'][4]['polygon'][0] = Float::INFINITY },
+    different_page: ->(page) { page['pageNumber'] = 2 },
+    oversized_dimension: ->(page) { page['width'] = 10_001 },
+    oversized_words: ->(page) { page['words'] = [ page['words'].first ] * 4_801 }
+  }.each do |name, mutation|
+    it "非連続割引blockの#{name}はproofへ昇格しない" do
+      response = separated_discount_response
+      mutation.call(response.dig('analyzeResult', 'pages', 0))
+
+      expect(calculation_discounts(response)).to be_empty
+    end
   end
 
   it 'TotalPriceのcomponent span破損とparent overlapからproofを作らない' do
