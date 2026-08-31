@@ -128,6 +128,30 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     end
   end
 
+  it 'round-trips disjoint name and explicit total evidence on the same provider line' do
+    context = calculation_layout_context('explicit_line_total')
+    candidate = context[:candidate]
+    candidate[:options].sole[:evidence][:line_total][:source_field_path] = 'pages[0].lines[0]'
+    candidate[:printed_line_total][:evidence][:source_field_path] = 'pages[0].lines[0]'
+
+    proposals = described_class.build_all(candidates: [ candidate ], ocr_snapshot: context[:snapshot])
+
+    expect(proposals).not_to be_nil
+    expect(described_class.from_snapshot(proposals, ocr_snapshot: context[:snapshot])).to eq(proposals)
+  end
+
+  it 'rejects same-line totals that overlap the destination or precede its end' do
+    [ [ 0, 2 ], [ 2, 4 ] ].each do |span_start, span_end|
+      context = calculation_layout_context('explicit_line_total')
+      candidate = context[:candidate]
+      evidence = line_evidence(0, span_start, span_end)
+      candidate[:options].sole[:evidence][:line_total] = evidence
+      candidate[:printed_line_total][:evidence] = evidence
+
+      expect(described_class.build_all(candidates: [ candidate ], ocr_snapshot: context[:snapshot])).to be_nil
+    end
+  end
+
   it 'rejects foreign paths, role changes, overlaps, unsupported sources and mismatched structural identities' do
     mutations = [
       ->(candidate) { candidate[:source_provider] = 'unknown_layout' },

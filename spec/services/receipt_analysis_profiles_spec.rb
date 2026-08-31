@@ -463,6 +463,26 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
+    it 'owns bounded fragment name prefixes without inferring tax authority' do
+      pattern = profile.ocr_item_calculation_fragment_name_prefix_pattern
+
+      aggregate_failures do
+        expect('外0 ').to match(pattern)
+        expect('外1 ').to match(pattern)
+        expect('外8 ').to match(pattern)
+        expect('外27 ').to match(pattern)
+        expect('外99 ').to match(pattern)
+        expect('外８ ').to match(pattern)
+        expect('外100 ').not_to match(pattern)
+        expect('外8').not_to match(pattern)
+        expect('外8 追加 ').not_to match(pattern)
+        expect('外8 外8 ').not_to match(pattern)
+        expect("外8\n").not_to match(pattern)
+        expect('検証商品 ').not_to match(pattern)
+        expect('合計 ').not_to match(pattern)
+      end
+    end
+
     it 'owns complete count expressions without treating package or reference units as count semantics' do
       pattern = profile.ocr_item_calculation_count_expression_pattern
 

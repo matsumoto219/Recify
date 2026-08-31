@@ -158,6 +158,19 @@ class Ocr::ResponseParser
       candidates: item_calculation_mode_candidates,
       reference_candidates: reference_pricing_candidates
     )
+    calculation_fragments = if calculation_layout
+      []
+    else
+      calculation_layout_fragments(
+        analyze_result:,
+        parsed_response:,
+        candidates: item_calculation_mode_candidates,
+        reference_candidates: reference_pricing_candidates,
+        item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+        discount_item_indexes: discount_details_by_item_index.keys,
+        retained_item_indexes:
+      )
+    end
     if calculation_layout
       item_calculation_mode_candidates = calculation_layout.fetch(:candidates)
       reference_pricing_candidates = []
@@ -169,6 +182,9 @@ class Ocr::ResponseParser
       tax_details = tax_detail_result[:tax_details]
       tax_amount = extract_tax_amount(authority_response, authority_lines, tax_details:)
       adjustment_candidates = extract_adjustment_candidates(authority_response, authority_lines)
+    elsif calculation_fragments.any?
+      item_calculation_mode_candidates += calculation_fragments.map { |entry| entry.fetch(:candidate) }
+      item_calculation_mode_candidates.sort_by! { |candidate| candidate.fetch(:item_index) }
     end
     authority_raw_text = authority_lines.reject(&:blank?).join("\n")
 
@@ -216,7 +232,8 @@ class Ocr::ResponseParser
           authority_lines,
           item_calculation_mode_candidates: item_calculation_mode_candidates,
           retained_item_indexes: retained_item_indexes,
-          item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors)
+          item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+          item_calculation_mode_fragments: calculation_fragments
         ),
         review_reasons: extract_review_reasons(authority_response),
         confidence_summary: extract_confidence_summary(authority_response)
@@ -958,6 +975,50 @@ class Ocr::ResponseParser
     modes = existing.sole.fetch(:options).map { |option| option[:pricing_source_kind] }
     modes << "reference_quantity_price" if reference_item_indexes.include?(item_index)
     descriptor.fetch(:options).all? { |option| modes.include?(option[:pricing_source_kind]) }
+  end
+
+  def calculation_layout_fragments(
+    analyze_result:,
+    parsed_response:,
+    candidates:,
+    reference_candidates:,
+    item_layout_descriptors:,
+    discount_item_indexes:,
+    retained_item_indexes:
+  )
+    descriptors = Ocr::ResponseParser::ItemCalculationModeFragmentExtractor.call(analyze_result:, profile:)
+    return [] if descriptors.empty?
+
+    occupied_indexes = (candidates + reference_candidates).filter_map { |candidate| candidate[:item_index] }
+    occupied_indexes += item_layout_descriptors.filter_map { |descriptor| descriptor[:structured_item_index] }
+    occupied_indexes += discount_item_indexes
+    consumed_indexes = descriptors.flat_map { |descriptor| descriptor.fetch(:structured_item_indexes) }
+    return [] unless consumed_indexes.uniq == consumed_indexes
+    return [] unless (consumed_indexes - retained_item_indexes).empty? && (consumed_indexes & occupied_indexes).empty?
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    descriptors.map do |descriptor|
+      item_index = descriptor.fetch(:structured_item_index)
+      entry = calculation_layout_entry(descriptor, item_index:, analyze_result:, mapper:)
+      return [] if entry.nil? || entry[:candidate].nil?
+
+      items = analyze_result.dig("documents", 0, "fields", "Items", "valueArray")
+      name_item = items.fetch(item_index)
+      total_index = descriptor.fetch(:total_item_index)
+      total_field = items.fetch(total_index).dig("valueObject", "TotalPrice")
+      entry.fetch(:item).merge!(
+        tax_rate: extract_item_tax_rate(name_item, name_item.fetch("valueObject")),
+        confidence: name_item["confidence"],
+        **structured_source_metadata(
+          parsed_response,
+          total_field,
+          field_path: "documents[0].fields.Items[#{total_index}].TotalPrice"
+        )
+      )
+      entry.merge(structured_item_indexes: descriptor.fetch(:structured_item_indexes))
+    end
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    []
   end
 
   def calculation_layout_entry(descriptor, item_index:, analyze_result:, mapper:)
@@ -2310,7 +2371,8 @@ class Ocr::ResponseParser
     lines = [],
     item_calculation_mode_candidates: [],
     retained_item_indexes: nil,
-    item_layout_descriptors: []
+    item_layout_descriptors: [],
+    item_calculation_mode_fragments: []
   )
     fields = extract_fields(parsed_response)
     items = fields.dig("Items", "valueArray")
@@ -2325,6 +2387,10 @@ class Ocr::ResponseParser
     end
 
     discount_details_by_index = extract_discount_details_by_item_index(items, lines)
+    fragment_replacements = item_calculation_mode_fragments.to_h do |entry|
+      [ entry.fetch(:structured_item_indexes).min, entry.fetch(:item) ]
+    end
+    fragment_indexes = item_calculation_mode_fragments.flat_map { |entry| entry.fetch(:structured_item_indexes) }.to_set
     retained_item_indexes ||= retained_structured_item_indexes(items)
     retained_item_index_lookup = Array(retained_item_indexes).index_with(true)
     layout_replacements_by_index = layout_descriptors.each_with_object({}) do |descriptor, replacements|
@@ -2374,6 +2440,8 @@ class Ocr::ResponseParser
     end
 
     items.filter_map.with_index do |item, index|
+      next fragment_replacements[index].deep_dup if fragment_replacements.key?(index)
+      next if fragment_indexes.include?(index)
       next unless retained_item_index_lookup[index]
 
       layout_replacement = layout_replacements_by_index[index]

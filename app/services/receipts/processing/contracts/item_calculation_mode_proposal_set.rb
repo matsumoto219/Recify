@@ -1007,7 +1007,13 @@ module Receipts::Processing::Contracts
           next false if match.nil?
 
           index = Integer(match[1], 10)
-          valid_line = offset ? index == metadata[:name_line_index] + offset : index.between?(metadata[:name_line_index] + 1, metadata[:name_line_index] + 2)
+          valid_line = if offset
+            index == metadata[:name_line_index] + offset
+          else
+            index.between?(metadata[:name_line_index], metadata[:name_line_index] + 2) &&
+              component["provider_span_start"].is_a?(Integer) &&
+              component["provider_span_start"] >= metadata[:name_end]
+          end
           valid_line && index <= MAX_LAYOUT_LINE_INDEX &&
             component_evidence_valid?(
               component,
