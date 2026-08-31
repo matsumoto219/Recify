@@ -106,12 +106,12 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     context
   end
 
-  def decision_for(context, item_line_total_limit: 999_999)
+  def decision_for(context, item_line_total_limit: 999_999, count_tax_semantics: 'reproducible_as_recorded')
     Receipts::Processing::Contracts::ItemCalculationModeDecision.call(
       item_identity: context[:item][:ocr_item_identity],
       item_proposals: build_proposals(context),
       ocr_snapshot: context[:snapshot],
-      count_tax_semantics: 'reproducible_as_recorded',
+      count_tax_semantics: count_tax_semantics,
       item_price_limit: 999_999,
       item_line_total_limit: item_line_total_limit
     )
@@ -122,8 +122,8 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       receipt: params[:receipt_attributes],
       receipt_items: params[:receipt_items_attributes],
       receipt_tax_details: params[:receipt_tax_details_attributes],
-      receipt_adjustments: [],
-      receipt_payments: [],
+      receipt_adjustments: params[:receipt_adjustments_attributes],
+      receipt_payments: params[:receipt_payments_attributes],
       context: :analysis
     )
   end
@@ -158,6 +158,16 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     )
   end
 
+  def uniform_net_discount_context
+    context = before_discount_context(count: true)
+    context[:item][:tax_rate] = BigDecimal('0.1')
+    application = application_context(context)
+    application[:params][:receipt_attributes].merge!(subtotal_amount: 36, tax_amount: 3, total_amount: 39, tax_rate: BigDecimal('0.1'))
+    application[:params][:receipt_tax_details_attributes] = [ { description: '外税10%', net_amount: 36, amount: 3, rate: BigDecimal('0.1') } ]
+    application[:amount_result] = amount_for(application[:params])
+    application
+  end
+
   it 'round-trips a complete same-item discount without changing the existing count source tuple' do
     context = discount_context
     proposals = build_proposals(context)
@@ -188,6 +198,219 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       selected_pricing_source_kind: 'count_unit_price',
       projected_line_total: 36
     )
+  end
+
+  it 'confirms a complete discounted count source when uniform net semantics are reproducible' do
+    expect(decision_for(before_discount_context(count: true), count_tax_semantics: 'reproducible_uniform_net')).to have_attributes(
+      state: 'confirmed',
+      selected_pricing_source_kind: 'count_unit_price',
+      projected_line_total: 36
+    )
+  end
+
+  it 'preserves uniform net discount sources and receipt gross amounts with printed tax details' do
+    context = uniform_net_discount_context
+    expect(context.dig(:amount_result, :calculation_profile)).to include(
+      receipt_tax_basis: :tax_added_to_subtotal,
+      item_amount_basis: :line_total_as_net
+    )
+    result = apply(context)
+
+    expect(result).to be_applied
+    expect(result.decisions.sole).to be_confirmed
+    expect(result.params[:receipt_items_attributes].sole).to include(
+      pricing_source_kind: 'count_unit_price',
+      price: 50,
+      original_line_total: 50,
+      discount_amount: 14,
+      discount_rate: BigDecimal('0.27'),
+      line_total: 36
+    )
+    expect(result.amount_result[:resolved]).to eq(context[:amount_result][:resolved])
+    expect(result.amount_result[:resolved]).to include(subtotal: 36, tax: 3, total: 39)
+  end
+
+  it 'rejects changes to any uniform net computed source, discount or receipt amount' do
+    mutations = [
+      ->(result) { result[:computed][:items].sole[:price] += 1 },
+      ->(result) { result[:computed][:items].sole[:quantity] += 1 },
+      ->(result) { result[:computed][:items].sole[:original_line_total] -= 1 },
+      ->(result) { result[:computed][:items].sole[:line_total] += 1 },
+      ->(result) { result[:computed][:items].sole[:discount_amount] += 1 },
+      ->(result) { result[:computed][:items].sole[:discount_rate] = BigDecimal('0.28') },
+      ->(result) { result[:computed][:items].sole[:tax_rate] = BigDecimal('0.08') },
+      ->(result) { result[:resolved][:total] += 1 }
+    ]
+
+    mutations.each do |mutation|
+      context = uniform_net_discount_context
+      result = apply(context) do |params|
+        amount_for(params).deep_dup.tap { |amount| mutation.call(amount) }
+      end
+
+      expect(result).not_to be_applied
+    end
+  end
+
+  it 'does not confirm a uniform net discount with conflicting tax semantics' do
+    %i[receipt_tax_basis item_amount_basis tax_detail_amount_basis].each do |field|
+      context = uniform_net_discount_context
+      context[:amount_result][:computed][field] = :unknown
+
+      expect(apply(context).decisions.sole).to have_attributes(state: 'reviewable', reason: 'count_tax_semantics_unknown')
+    end
+  end
+
+  it 'keeps incomplete, mismatched and boundary discount sources ineligible for uniform net confirmation' do
+    mutations = [
+      ->(context) { context[:item][:discount_amount] = 13 },
+      ->(context) { context[:item][:discount_rate] = nil },
+      ->(context) { context[:candidate][:options].first[:discount][:rate] = '1' },
+      ->(context) { context[:candidate][:options].first[:discount][:rate] = '0' },
+      ->(context) { context[:candidate][:options].first[:discount][:amount] = '51' }
+    ]
+
+    mutations.each do |mutation|
+      context = before_discount_context(count: true)
+      mutation.call(context)
+      expect(decision_for(context, count_tax_semantics: 'reproducible_uniform_net')).not_to be_confirmed
+    end
+
+    expect(decision_for(before_discount_context(count: true), count_tax_semantics: 'reproducible_uniform_net', item_line_total_limit: 49)).not_to be_confirmed
+    expect(decision_for(discount_context(price: 1, rate: '0.01', amount: 0, total: 1), count_tax_semantics: 'reproducible_uniform_net')).to be_confirmed
+  end
+
+  it 'confirms exact uniform net discount sources at HALF_UP boundaries and percentage endpoints' do
+    [
+      { price: 49, rate: '0.27', amount: 13, total: 36 },
+      { price: 50, rate: '0.27', amount: 14, total: 36 },
+      { price: 51, rate: '0.27', amount: 14, total: 37 },
+      { price: 100, rate: '0.01', amount: 1, total: 99 },
+      { price: 100, rate: '0.99', amount: 99, total: 1 }
+    ].each do |values|
+      expect(decision_for(discount_context(**values), count_tax_semantics: 'reproducible_uniform_net')).to have_attributes(
+        state: 'confirmed',
+        projected_line_total: values[:total]
+      )
+    end
+  end
+
+  it 'keeps an unrelated item and receipt coupon unchanged without hiding uncertain tax semantics' do
+    context = uniform_net_discount_context
+    other_item = {
+      name: '別検証品',
+      quantity: 1,
+      quantity_unit_code: 'piece',
+      price: nil,
+      original_line_total: 100,
+      line_total: 100,
+      tax_rate: BigDecimal('0.1'),
+      position_index: 1
+    }
+    context[:params][:receipt_items_attributes] << other_item.deep_dup
+    context[:ocr_result][:candidates][:items] << other_item.deep_dup
+    context[:ocr_result][:candidate_counts][:items] = { actual_count: 2, snapshot_count: 2 }
+    context[:params][:receipt_adjustments_attributes] = [
+      { kind: 'coupon', label: 'クーポン', amount: 10, sign: -1, tax_rate: BigDecimal('0.1'), effect: 'purchase_adjustment' }
+    ]
+    context[:params][:receipt_attributes].merge!(subtotal_amount: 126, tax_amount: 12, total_amount: 138)
+    context[:params][:receipt_tax_details_attributes] = [ { description: '外税10%', net_amount: 126, amount: 12, rate: BigDecimal('0.1') } ]
+    context[:amount_result] = amount_for(context[:params])
+    result = apply(context)
+
+    expect(result).to be_applied
+    expect(result.decisions.sole).to have_attributes(state: 'reviewable', reason: 'count_tax_semantics_unknown')
+    expect(result.params[:receipt_items_attributes].last).to eq(other_item)
+    expect(result.params[:receipt_adjustments_attributes]).to eq(context[:params][:receipt_adjustments_attributes])
+    expect(result.amount_result[:resolved]).to eq(context[:amount_result][:resolved])
+    expect(result.amount_result[:resolved]).to include(subtotal: 126, tax: 12, total: 138)
+    expect(result.params[:receipt_items_attributes].first).to include(discount_amount: 14, line_total: 36)
+  end
+
+  it 'persists uniform net discount sources and preserves them through editing and retry' do
+    context = before_discount_context(count: true)
+    context[:item][:tax_rate] = BigDecimal('0.1')
+    ocr = {
+      success: true,
+      candidates: context[:snapshot][:candidates].merge(
+        country_region: 'JPN',
+        item_calculation_mode_candidates: [ context[:candidate] ],
+        subtotal_amount: 36,
+        tax_amount: 3,
+        total_amount: 39,
+        tax_rate: BigDecimal('0.1'),
+        tax_details: [ { description: '外税10%', net_amount: 36, amount: 3, rate: BigDecimal('0.1') } ],
+        payments: [],
+        adjustment_candidates: []
+      )
+    }
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = Receipts::Processing.start(receipt: receipt, source: 'upload').run
+    Receipts::Processing.record_ocr_snapshot(run, ocr)
+    Receipts::Processing.record_finalize_decision(
+      run,
+      Receipts::Processing::Contracts::FinalizeDecision.new(
+        finalize_strategy: 'ocr_only',
+        error_code: nil,
+        error_message: nil,
+        receipt_attributes: {},
+        ocr_result: nil,
+        ai_result: nil,
+        metadata: {}
+      )
+    )
+    expect(Receipts::Processing.run_finalize(run).next_step).to eq(:done)
+    item = receipt.reload.receipt_items.sole
+    expect(item).to have_attributes(
+      pricing_source_kind: 'count_unit_price',
+      price: 50,
+      quantity: BigDecimal('1'),
+      original_line_total: 50,
+      discount_amount: 14,
+      discount_rate: BigDecimal('0.27'),
+      line_total: 36
+    )
+    expect(item.review_reasons).not_to include('item_pricing_mode_uncertain')
+    expect(receipt).to have_attributes(subtotal_amount: 36, tax_amount: 3, total_amount: 39)
+
+    [ [ '1', 50, 14, 36, 39 ], [ '2', 100, 27, 73, 80 ] ].each do |quantity, original, discount, net, gross|
+      attributes = { 'receipt_items_attributes' => { '0' => { 'id' => item.id.to_s, 'quantity' => quantity } } }
+      input = Receipts::Editing.build_input(receipt: receipt, permitted: attributes)
+      change_set = Receipts::Editing.change_set(receipt: receipt, permitted: attributes)
+      receipt_amounts = receipt.attributes.symbolize_keys.merge(receipt.amount_source_semantics_for_edit)
+      receipt_amounts.merge!(subtotal_amount: nil, tax_amount: nil, total_amount: nil) if change_set.derived_purchase_inputs_changed?
+      amount = ReceiptAmountService.call(
+        receipt: receipt_amounts,
+        receipt_items: input.receipt_items,
+        receipt_tax_details: change_set.derived_purchase_inputs_changed? ? [] : receipt.receipt_tax_details,
+        receipt_adjustments: input.receipt_adjustments,
+        receipt_payments: input.receipt_payments,
+        context: :edit_save
+      )
+      Receipts::Editing.apply_amount_result!(
+        receipt: receipt,
+        attributes: attributes,
+        amount_result: amount,
+        context: :edit_save,
+        change_set: change_set,
+        tax_details_recalculated: false
+      )
+      expect(Receipts::Editing.update_manual(receipt: receipt, attributes: attributes, items_missing: false)).to be_saved
+      expect(item.reload).to have_attributes(
+        price: 50,
+        original_line_total: original,
+        discount_amount: discount,
+        discount_rate: BigDecimal('0.27'),
+        line_total: net
+      )
+      expect(receipt.reload.total_amount).to eq(gross)
+    end
+
+    source_after_edit = item.reload.attributes
+    expect(Receipts::Processing.run_finalize(run.reload).next_step).to eq(:skipped)
+    expect(item.reload.attributes).to eq(source_after_edit)
+  ensure
+    receipt&.image&.purge
   end
 
   it 'rejects different discount evidence between alternatives and a missing before-total stage' do

@@ -613,19 +613,23 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
 
   def uniform_net_count_selection?(selection, final_amount_result)
     selection.pricing_source_kind == "count_unit_price" &&
-      selection.discount_amount.nil? && selection.discount_rate.nil? &&
       count_tax_semantics == "reproducible_uniform_net" &&
       uniform_net_profile?(final_amount_result)
   end
 
   def uniform_net_count_computed_item_valid?(item, selection)
     preliminary_item = Array(preliminary_amount_result.dig(:computed, :items))[selection.item_index]
+    discount_valid = if selection.discount_amount.nil? && selection.discount_rate.nil?
+      item[:discount_amount].nil? && item[:discount_rate].nil?
+    else
+      computed_discount_valid?(item, selection)
+    end
 
     computed_item_signature(item) == computed_item_signature(preliminary_item) &&
-      exact_integer_matches?(item[:original_line_total], selection.projected_line_total) &&
+      exact_integer_matches?(item[:original_line_total], selection.original_line_total || selection.projected_line_total) &&
       exact_integer_matches?(item[:quantity], selection.quantity.to_i) &&
       item[:quantity_unit_code] == selection.quantity_unit_code &&
-      item[:discount_amount].nil? && item[:discount_rate].nil?
+      discount_valid
   end
 
   def computed_discount_valid?(item, selection)

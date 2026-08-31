@@ -305,8 +305,7 @@ module Receipts::Processing::Contracts
             reason: without_printed_total ? "reference_formula_only" : "formula_matches_printed_total"
           )
         end
-        uniform_net = count_tax_semantics == "reproducible_uniform_net" &&
-          proposal.fetch("options").none? { |option| option.key?("discount") }
+        uniform_net = count_tax_semantics == "reproducible_uniform_net"
         if count_tax_semantics == "reproducible_as_recorded" || uniform_net
           return selected_result(
             proposal,
