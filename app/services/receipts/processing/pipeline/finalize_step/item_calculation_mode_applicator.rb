@@ -502,6 +502,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     return if line_total.nil?
     return unless exact_integer_matches?(attributes[:original_line_total], line_total)
     discount = normalized_hash(option["discount"])
+    discount_rate = option.key?("discount") ? BigDecimal(discount["rate"]) : nil
     projected_line_total = line_total
     if option.key?("discount")
       return unless exact_integer_matches?(attributes[:discount_amount], exact_integer(discount["amount"]))
@@ -510,8 +511,19 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       projection = ReceiptAmountService.item_discount_projection(
         original_line_total: line_total,
         discount_amount: discount["amount"],
-        discount_rate: discount["rate"]
+        discount_rate: nil
       )
+      begin
+        ReceiptAmountService.item_discount_projection(
+          original_line_total: line_total,
+          discount_amount: discount["amount"],
+          discount_rate: discount_rate
+        )
+      rescue ReceiptAmountService::InvalidItemSourceError
+        return unless decision.reviewable? && discount["printed_total_stage"] == "before_item_discount"
+
+        discount_rate = nil
+      end
       projected_line_total = projection.fetch(:projected_amount)
     end
     return unless exact_integer_matches?(attributes[:line_total], projected_line_total)
@@ -526,7 +538,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       explicit_line_total: line_total,
       original_line_total: line_total,
       discount_amount: option.key?("discount") ? exact_integer(discount["amount"]) : nil,
-      discount_rate: option.key?("discount") ? BigDecimal(discount["rate"]) : nil,
+      discount_rate:,
       projected_line_total: decision.projected_line_total,
       review_reason:
     )
@@ -564,6 +576,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         item[:reference_price_tax_inclusion] = selection.reference_price_tax_inclusion
       else
         item[:price] = nil
+        item[:discount_rate] = selection.discount_rate unless selection.discount_amount.nil?
       end
       if selection.reviewable?
         item[:needs_review] = true
@@ -636,7 +649,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     return true if selection.discount_amount.nil? && selection.discount_rate.nil?
 
     exact_integer_matches?(item[:discount_amount], selection.discount_amount) &&
-      exact_decimal_matches?(item[:discount_rate], selection.discount_rate)
+      (selection.discount_rate.nil? ? item[:discount_rate].nil? : exact_decimal_matches?(item[:discount_rate], selection.discount_rate))
   end
 
   def reference_computed_item_valid?(item, selection)
@@ -656,8 +669,27 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     return true if financial_result_signature(final_amount_result) ==
       financial_result_signature(preliminary_amount_result)
     return true if resolved_item_total_transition_valid?(final_amount_result)
+    return true if absolute_discount_transition_valid?(final_amount_result, selections)
 
     no_total_reference_transition_valid?(candidate_params, final_amount_result, selections)
+  end
+
+  def absolute_discount_transition_valid?(final_amount_result, selections)
+    absolute = selections.select do |selection|
+      selection.pricing_source_kind == "explicit_line_total" && selection.reviewable? &&
+        !selection.discount_amount.nil? && selection.discount_rate.nil?
+    end
+    return false if absolute.empty?
+
+    preliminary = financial_result_signature(preliminary_amount_result).deep_dup
+    final = financial_result_signature(final_amount_result)
+    absolute.each do |selection|
+      item = preliminary[:computed_items][selection.item_index]
+      return false unless item.is_a?(Hash)
+
+      item[:discount_rate] = nil
+    end
+    preliminary == final
   end
 
   def resolved_item_total_transition_valid?(final_amount_result)

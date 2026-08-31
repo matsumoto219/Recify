@@ -49,7 +49,11 @@ module Amounts
         end
         submitted_discount_rate = normalize_discount_rate(fetch_value(item, :discount_rate))
         discount_amount = discount_amount_for(item, original_line_total, submitted_discount_rate)
-        discount_rate = discount_rate_for(original_line_total, discount_amount, submitted_discount_rate)
+        discount_rate = if pricing_source_kind == "explicit_line_total" && submitted_discount_rate.nil?
+          nil
+        else
+          discount_rate_for(original_line_total, discount_amount, submitted_discount_rate)
+        end
 
         adjusted_line_total = [ original_line_total - discount_amount.to_i, 0 ].max
 

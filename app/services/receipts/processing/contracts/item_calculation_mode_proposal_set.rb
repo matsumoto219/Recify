@@ -1215,7 +1215,7 @@ module Receipts::Processing::Contracts
         ReceiptAmountService.item_discount_projection(
           original_line_total: normalized_hash(option["source"])["line_total_amount"],
           discount_amount: discount["amount"],
-          discount_rate: discount["rate"]
+          discount_rate: nil
         )
       rescue ReceiptAmountService::InvalidItemSourceError
         nil
@@ -1238,7 +1238,7 @@ module Receipts::Processing::Contracts
           purchased_quantity: source["quantity"],
           purchased_unit_code: source["quantity_unit_code"],
           discount_amount: discount["amount"],
-          discount_rate: discount["rate"]
+          discount_rate: discount["printed_total_stage"] == "before_item_discount" ? nil : discount["rate"]
         )
       rescue ReceiptAmountService::InvalidItemSourceError
         nil

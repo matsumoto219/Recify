@@ -161,7 +161,17 @@ module Receipts::Processing::Contracts
           item_price_limit:,
           item_line_total_limit:
         )
-        return unresolved("source_out_of_bounds", proposal:) if projected.nil?
+        if projected.nil?
+          fallback = discounted_explicit_fallback(proposal, item_price_limit:, item_line_total_limit:)
+          return selected_result(
+            proposal,
+            fallback,
+            state: "reviewable",
+            reason: "formula_total_mismatch"
+          ) if fallback
+
+          return unresolved("source_out_of_bounds", proposal:)
+        end
 
         count = projected.find { |option| option.fetch(:kind) == "count_unit_price" }
         reference = projected.find { |option| option.fetch(:kind) == "reference_quantity_price" }
@@ -185,7 +195,19 @@ module Receipts::Processing::Contracts
             reason: "formula_total_mismatch"
           )
         end
-        return selected_result(proposal, explicit, state: "confirmed", reason: "explicit_total_only") if explicit
+        if explicit
+          option = proposal.fetch("options").find { |entry| entry["pricing_source_kind"] == "explicit_line_total" }
+          if option.key?("discount") && !explicit_discount_rate_matches?(option)
+            return selected_result(
+              proposal,
+              explicit,
+              state: "reviewable",
+              reason: "formula_total_mismatch"
+            )
+          end
+
+          return selected_result(proposal, explicit, state: "confirmed", reason: "explicit_total_only")
+        end
         return selected_formula_result(
           proposal,
           formula,
@@ -213,6 +235,30 @@ module Receipts::Processing::Contracts
             projected_explicit_option(option, item_line_total_limit:)
           end
         end.then { |options| options if options.none?(&:nil?) }
+      end
+
+      def discounted_explicit_fallback(proposal, item_price_limit:, item_line_total_limit:)
+        options = proposal.fetch("options")
+        return unless options.map { |option| option["pricing_source_kind"] } == %w[count_unit_price explicit_line_total]
+
+        count, explicit = options
+        return unless count["discount"] == explicit["discount"] && explicit.dig("discount", "printed_total_stage") == "before_item_discount"
+
+        before = projected_count_option(count.except("discount"), item_price_limit:, item_line_total_limit:)
+        return unless before && before[:amount] == exact_integer(explicit.dig("source", "line_total_amount"))
+
+        projected_explicit_option(explicit, item_line_total_limit:)
+      end
+
+      def explicit_discount_rate_matches?(option)
+        ReceiptAmountService.item_discount_projection(
+          original_line_total: option.dig("source", "line_total_amount"),
+          discount_amount: option.dig("discount", "amount"),
+          discount_rate: option.dig("discount", "rate")
+        )
+        true
+      rescue ReceiptAmountService::InvalidItemSourceError
+        false
       end
 
       def unsupported_reference_tax_semantics?(proposal)
@@ -278,7 +324,7 @@ module Receipts::Processing::Contracts
           projection = ReceiptAmountService.item_discount_projection(
             original_line_total: source["line_total_amount"],
             discount_amount: option.dig("discount", "amount"),
-            discount_rate: option.dig("discount", "rate")
+            discount_rate: nil
           )
           amount = projection.fetch(:projected_amount)
         end

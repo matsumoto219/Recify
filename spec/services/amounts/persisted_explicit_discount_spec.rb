@@ -55,7 +55,14 @@ RSpec.describe Amounts::ItemTotalAggregator do
     expect(result[:items].sole).to include(discount_rate: nil, discount_amount: 17, line_total: 33)
 
     result = described_class.new(items: editing_items('discount_amount' => '18'), context: :edit_save).call
-    expect(result[:items].sole).to include(discount_amount: 18, line_total: 32)
+    expect(result[:items].sole).to include(discount_amount: 18, discount_rate: nil, line_total: 32)
+  end
+
+  it 'absolute sourceへ利用者が率を明示した場合だけ率で再計算する' do
+    item.assign_attributes(original_line_total: 318, discount_amount: 128, line_total: 190, discount_rate: nil)
+    result = described_class.new(items: editing_items('discount_rate' => '40'), context: :edit_save).call
+
+    expect(result[:items].sole).to include(original_line_total: 318, discount_amount: 127, discount_rate: BigDecimal('0.4'), line_total: 191)
   end
 
   it '保存済み割引前後金額の算術不整合や欠損を保持扱いにしない' do

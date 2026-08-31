@@ -168,6 +168,202 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     application
   end
 
+  def rounding_discount_context
+    context = before_discount_context(count: true)
+    context[:item].merge!(price: 318, original_line_total: 318, line_total: 190, discount_amount: 128, discount_rate: BigDecimal('0.4'))
+    context[:snapshot][:candidates][:total_amount] = 190
+    context[:candidate][:printed_line_total][:amount] = '318'
+    context[:candidate][:options].first[:source][:price_amount] = '318'
+    context[:candidate][:options].last[:source][:line_total_amount] = '318'
+    context[:candidate][:options].each { |option| option[:discount].merge!(amount: '128', rate: '0.4') }
+    context
+  end
+
+  it 'keeps complete count evidence but selects absolute explicit source when only rate rounding disagrees' do
+    context = rounding_discount_context
+
+    expect(build_proposals(context)&.sole&.fetch('options')&.size).to eq(2)
+    expect(decision_for(context)).to have_attributes(
+      state: 'reviewable',
+      selected_pricing_source_kind: 'explicit_line_total',
+      projected_line_total: 190
+    )
+  end
+
+  it 'applies absolute explicit discount without promoting the printed diagnostic rate' do
+    context = application_context(rounding_discount_context)
+    result = apply(context)
+
+    expect(result).to be_applied
+    expect(result.params[:receipt_items_attributes].sole).to include(
+      pricing_source_kind: 'explicit_line_total',
+      price: nil,
+      original_line_total: 318,
+      discount_amount: 128,
+      discount_rate: nil,
+      line_total: 190
+    )
+    expect(result.amount_result[:resolved]).to eq(context[:amount_result][:resolved])
+  end
+
+  it 'supports a complete explicit-only before-discount source without inventing count evidence' do
+    context = rounding_discount_context
+    context[:candidate][:options].shift
+
+    expect(build_proposals(context).sole.fetch('options').size).to eq(1)
+    expect(decision_for(context)).to have_attributes(
+      state: 'reviewable',
+      selected_pricing_source_kind: 'explicit_line_total',
+      projected_line_total: 190
+    )
+    expect(apply(application_context(context))).to be_applied
+  end
+
+  it 'does not recover malformed or unrelated count evidence as a rounding fallback' do
+    mutations = [
+      ->(context) { context[:candidate][:options].first[:source][:price_amount] = '317' },
+      ->(context) { context[:candidate][:options].first[:source][:quantity] = '0' },
+      ->(context) { context[:candidate][:options].first[:source][:quantity_unit_code] = 'unknown' },
+      ->(context) { context[:candidate][:options].first[:source][:unexpected] = '318' },
+      ->(context) { context[:candidate][:options].first[:discount][:printed_total_stage] = 'after_item_discount' },
+      ->(context) { context[:candidate][:options].first[:discount][:evidence][:amount][:provider_span_end] = 90 },
+      ->(context) { context[:candidate][:options].each { |option| option[:discount][:rate] = '0.4001' } },
+      ->(context) { context[:candidate][:options].each { |option| option[:discount][:rate] = '1' } },
+      ->(context) { context[:candidate][:options].each { |option| option[:discount][:amount] = '319' } }
+    ]
+
+    mutations.each do |mutation|
+      context = rounding_discount_context
+      mutation.call(context)
+      expect(build_proposals(context)).to be_nil
+    end
+
+    expect(decision_for(rounding_discount_context, item_line_total_limit: 317)).not_to be_reviewable
+  end
+
+  it 'does not allow absolute fallback to change any computed amount or keep an inferred rate' do
+    mutations = [
+      ->(amount) { amount[:computed][:items].sole[:original_line_total] += 1 },
+      ->(amount) { amount[:computed][:items].sole[:discount_amount] += 1 },
+      ->(amount) { amount[:computed][:items].sole[:discount_rate] = BigDecimal('0.4') },
+      ->(amount) { amount[:computed][:items].sole[:line_total] += 1 },
+      ->(amount) { amount[:computed][:items].sole[:tax_rate] = BigDecimal('0.08') },
+      ->(amount) { amount[:resolved][:total] += 1 }
+    ]
+
+    mutations.each do |mutation|
+      context = application_context(rounding_discount_context)
+      result = apply(context) do |params|
+        amount_for(params).deep_dup.tap { |amount| mutation.call(amount) }
+      end
+
+      expect(result).not_to be_applied
+    end
+  end
+
+  it 'does not canonicalize another item discount or financial fields during absolute fallback' do
+    %i[discount_rate discount_amount line_total].each do |field|
+      context = application_context(rounding_discount_context)
+      other_item = {
+        name: '別検証品',
+        price: nil,
+        quantity: 1,
+        line_total: 100,
+        original_line_total: 100,
+        tax_rate: BigDecimal('0'),
+        position_index: 1
+      }
+      context[:params][:receipt_items_attributes] << other_item.deep_dup
+      context[:ocr_result][:candidates][:items] << other_item.deep_dup
+      context[:ocr_result][:candidate_counts][:items] = { actual_count: 2, snapshot_count: 2 }
+      context[:params][:receipt_attributes][:total_amount] = 290
+      context[:amount_result] = amount_for(context[:params])
+      expect(apply(context)).to be_applied
+
+      result = apply(context) do |params|
+        amount_for(params).deep_dup.tap { |amount| amount[:computed][:items].last[field] = 1 }
+      end
+
+      expect(result).not_to be_applied
+    end
+  end
+
+  it 'saves absolute explicit source through unchanged editing, source changes and finalize retry' do
+    context = rounding_discount_context
+    ocr = {
+      success: true,
+      candidates: context[:snapshot][:candidates].merge(
+        item_calculation_mode_candidates: [ context[:candidate] ],
+        tax_amount: 0,
+        tax_rate: BigDecimal('0'),
+        tax_details: [],
+        payments: [],
+        adjustment_candidates: []
+      )
+    }
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = Receipts::Processing.start(receipt: receipt, source: 'upload').run
+    Receipts::Processing.record_ocr_snapshot(run, ocr)
+    Receipts::Processing.record_finalize_decision(
+      run,
+      Receipts::Processing::Contracts::FinalizeDecision.new(
+        finalize_strategy: 'ocr_only',
+        error_code: nil,
+        error_message: nil,
+        receipt_attributes: {},
+        ocr_result: nil,
+        ai_result: nil,
+        metadata: {}
+      )
+    )
+    expect(Receipts::Processing.run_finalize(run.reload).next_step).to eq(:done)
+    item = receipt.reload.receipt_items.sole
+    expect(item).to have_attributes(
+      pricing_source_kind: 'explicit_line_total',
+      price: nil,
+      original_line_total: 318,
+      discount_amount: 128,
+      discount_rate: nil,
+      line_total: 190
+    )
+    expect(item.review_reasons).to include('item_pricing_mode_uncertain')
+
+    [ [ 318, 128, 190 ], [ 400, 128, 272 ], [ 400, 100, 300 ] ].each do |original, discount, total|
+      attributes = { 'receipt_items_attributes' => { '0' => { 'id' => item.id.to_s, 'original_line_total' => original.to_s, 'discount_amount' => discount.to_s } } }
+      input = Receipts::Editing.build_input(receipt: receipt, permitted: attributes)
+      change_set = Receipts::Editing.change_set(receipt: receipt, permitted: attributes)
+      amount = ReceiptAmountService.call(
+        receipt: receipt.attributes.symbolize_keys.merge(receipt.amount_source_semantics_for_edit).merge(subtotal_amount: nil, tax_amount: nil, total_amount: nil),
+        receipt_items: input.receipt_items,
+        receipt_tax_details: [],
+        receipt_adjustments: input.receipt_adjustments,
+        receipt_payments: input.receipt_payments,
+        context: :edit_save
+      )
+      Receipts::Editing.apply_amount_result!(
+        receipt: receipt,
+        attributes: attributes,
+        amount_result: amount,
+        context: :edit_save,
+        change_set: change_set,
+        tax_details_recalculated: false
+      )
+      expect(Receipts::Editing.update_manual(receipt: receipt, attributes: attributes, items_missing: false)).to be_saved
+      expect(item.reload).to have_attributes(
+        original_line_total: original,
+        discount_amount: discount,
+        discount_rate: nil,
+        line_total: total
+      )
+    end
+
+    before = item.attributes
+    expect(Receipts::Processing.run_finalize(run.reload).next_step).to eq(:skipped)
+    expect(item.reload.attributes).to eq(before)
+  ensure
+    receipt&.image&.purge
+  end
+
   it 'round-trips a complete same-item discount without changing the existing count source tuple' do
     context = discount_context
     proposals = build_proposals(context)

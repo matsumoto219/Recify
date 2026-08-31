@@ -304,7 +304,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
           selection.explicit_line_total == selection.projected_line_total &&
           exact_item_total_matches?(item, selection.explicit_line_total)
       end
-      return false unless item[:discount_amount].is_a?(Integer) && item[:discount_rate].is_a?(BigDecimal)
+      return false unless item[:discount_amount].is_a?(Integer)
+      return false unless selection.discount_rate.nil? ? item[:discount_rate].nil? : item[:discount_rate].is_a?(BigDecimal)
       return false unless item[:discount_amount] == selection.discount_amount && item[:discount_rate] == selection.discount_rate
 
       projection = ReceiptAmountService.item_discount_projection(
