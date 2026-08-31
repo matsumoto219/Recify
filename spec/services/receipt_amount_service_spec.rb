@@ -219,7 +219,6 @@ RSpec.describe ReceiptAmountService do
     it '不完全・過精度・範囲外・丸め不一致の割引sourceを拒否する' do
       invalid_discounts = [
         { discount_amount: nil, discount_rate: '0.27' },
-        { discount_amount: '14', discount_rate: nil },
         { discount_amount: '14', discount_rate: '0' },
         { discount_amount: '50', discount_rate: '1' },
         { discount_amount: '14', discount_rate: '0.2701' },
@@ -256,6 +255,38 @@ RSpec.describe ReceiptAmountService do
         exact_amount: Rational(50, 1),
         projected_amount: 50
       )
+    end
+
+    it '明示割引額だけのcount sourceは率を推測せず共通projectionへ渡す' do
+      expect(described_class.count_item_extension_projection(
+        price_amount: '101',
+        purchased_quantity: '2',
+        purchased_unit_code: 'piece',
+        discount_amount: '31'
+      )).to eq(
+        exact_amount: Rational(202, 1),
+        original_line_total: 202,
+        projected_amount: 171,
+        discount_amount: 31
+      )
+    end
+
+    it '割引付きcountの割引前金額は共通source上限内に限定する' do
+      expect(described_class.count_item_extension_projection(
+        price_amount: '999999999999',
+        purchased_quantity: '1',
+        purchased_unit_code: 'piece',
+        discount_amount: '0'
+      )).to include(original_line_total: 999_999_999_999, projected_amount: 999_999_999_999)
+
+      expect {
+        described_class.count_item_extension_projection(
+          price_amount: '500000000000',
+          purchased_quantity: '2',
+          purchased_unit_code: 'piece',
+          discount_amount: '0'
+        )
+      }.to raise_error(described_class::InvalidItemSourceError)
     end
 
     it 'count sourceをexactのまま既存Amount計算へ委譲する' do
@@ -316,6 +347,105 @@ RSpec.describe ReceiptAmountService do
         exact_amount: Rational(0, 1),
         projected_amount: 0
       )
+    end
+  end
+
+  describe '.item_discount_projection' do
+    it '割引前の明示金額とabsolute割引額から既存Amountで計算し推測率を返さない' do
+      result = described_class.item_discount_projection(original_line_total: '202', discount_amount: '31')
+
+      expect(result).to eq(original_line_total: 202, projected_amount: 171, discount_amount: 31)
+      expect(result).to be_frozen
+    end
+
+    it '割引なし・全額割引と明示0円を欠損から区別する' do
+      [ [ '0', '0', 0 ], [ '202', '0', 202 ], [ '202', '202', 0 ] ].each do |original, discount, total|
+        expect(described_class.item_discount_projection(original_line_total: original, discount_amount: discount)).to eq(
+          original_line_total: original.to_i,
+          projected_amount: total,
+          discount_amount: discount.to_i
+        )
+      end
+    end
+
+    it '率sourceはHALF_UPの境界前後で印字割引額と一致しなければ拒否する' do
+      [ [ '49', '13', 36 ], [ '50', '14', 36 ], [ '51', '14', 37 ] ].each do |original, discount, total|
+        expect(described_class.item_discount_projection(
+          original_line_total: original,
+          discount_amount: discount,
+          discount_rate: '0.27'
+        )).to eq(original_line_total: original.to_i, projected_amount: total, discount_amount: discount.to_i)
+      end
+
+      expect {
+        described_class.item_discount_projection(original_line_total: '202', discount_amount: '102', discount_rate: '0.5')
+      }.to raise_error(described_class::InvalidItemSourceError, 'Invalid item pricing source')
+    end
+
+    it '明示割引額は率の丸めと一致しなくても独立したsourceとして保持する' do
+      expect(described_class.item_discount_projection(original_line_total: '202', discount_amount: '102')).to eq(
+        original_line_total: 202,
+        projected_amount: 100,
+        discount_amount: 102
+      )
+    end
+
+    it '不完全・不正型・過精度・範囲外sourceをfail closedにする' do
+      invalid_sources = [
+        { original_line_total: nil },
+        { original_line_total: '-1' },
+        { original_line_total: '50.1' },
+        { original_line_total: '1000000000000' },
+        { original_line_total: 50.0 },
+        { original_line_total: '9' * 65 },
+        { original_line_total: "50\0" },
+        { original_line_total: "\xFF".b.force_encoding(Encoding::UTF_8) },
+        { discount_amount: nil },
+        { discount_amount: '-1' },
+        { discount_amount: '51' },
+        { discount_amount: '14.1' },
+        { discount_amount: 14.0 },
+        { discount_amount: {} },
+        { discount_rate: '0' },
+        { discount_rate: '1' },
+        { discount_rate: '-0.27' },
+        { discount_rate: '0.2701' },
+        { discount_rate: 0.27 },
+        { discount_rate: '9' * 65 },
+        { discount_rate: '0.26' },
+        { discount_rate: [] }
+      ]
+
+      invalid_sources.each do |source|
+        expect {
+          described_class.item_discount_projection(**{ original_line_total: '50', discount_amount: '14', discount_rate: '0.27' }.merge(source))
+        }.to raise_error(described_class::InvalidItemSourceError, 'Invalid item pricing source')
+      end
+    end
+
+    it '整数上限と固定seedの1〜99%をexact sourceのまま計算する' do
+      expect(described_class.item_discount_projection(original_line_total: '999999999999', discount_amount: '0')).to include(
+        original_line_total: 999_999_999_999,
+        projected_amount: 999_999_999_999
+      )
+
+      (1..99).to_a.shuffle(random: Random.new(31)).each do |percent|
+        expect(described_class.item_discount_projection(
+          original_line_total: '100',
+          discount_amount: percent.to_s,
+          discount_rate: format('0.%02d', percent)
+        )).to eq(original_line_total: 100, projected_amount: 100 - percent, discount_amount: percent)
+      end
+    end
+
+    it '入力を変更せずDBやSystemSettingを参照しない' do
+      source = { original_line_total: '202'.freeze, discount_amount: '31'.freeze }.freeze
+      expect(SystemSettings).not_to receive(:fetch)
+      expect(SystemSettings).not_to receive(:limit_for)
+      expect(SystemSettings).not_to receive(:limits_for)
+
+      expect(described_class.item_discount_projection(**source)).to include(projected_amount: 171)
+      expect(source).to eq(original_line_total: '202', discount_amount: '31')
     end
   end
 

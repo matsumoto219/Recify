@@ -696,13 +696,11 @@ class Receipts::Processing::Pipeline
       if selection.discount_amount.nil? && selection.discount_rate.nil?
         return item.discount_amount.nil? && item.discount_rate.nil?
       end
-      return false unless selection.pricing_source_kind == "count_unit_price"
+      return false unless %w[count_unit_price explicit_line_total].include?(selection.pricing_source_kind)
       return false unless item.discount_amount == selection.discount_amount && item.discount_rate == selection.discount_rate
 
-      projection = ReceiptAmountService.count_item_extension_projection(
-        price_amount: selection.price,
-        purchased_quantity: selection.quantity,
-        purchased_unit_code: selection.quantity_unit_code,
+      projection = ReceiptAmountService.item_discount_projection(
+        original_line_total: selection.original_line_total,
         discount_amount: selection.discount_amount,
         discount_rate: selection.discount_rate
       )

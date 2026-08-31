@@ -2809,7 +2809,10 @@ class Ocr::ResponseParser
         [ discount_line, total_line ]
       end
     end
-    return if post_discount_lines.empty? && !printed_total_after_discount?(item, detail)
+    if post_discount_lines.empty? && !printed_total_after_discount?(item, detail)
+      detail[:calculation_mode_discount] = before_item_discount_evidence(analyze_result, items, index, detail)
+      return
+    end
 
     other_items = items.each_with_index.filter_map { |other, other_index| other unless other_index == index }
     exact_lines = post_discount_lines.select do |discount_line, total_line|
@@ -2934,6 +2937,95 @@ class Ocr::ResponseParser
       amount: amount.to_i.to_s,
       rate: rate_text,
       printed_total_stage: "after_item_discount",
+      evidence: evidence
+    }
+  rescue ArgumentError, EncodingError, TypeError
+    nil
+  end
+
+  def before_item_discount_evidence(analyze_result, items, item_index, detail)
+    return unless detail[:amount_lines].one?
+    return unless analyze_result["modelId"] == "prebuilt-receipt" && analyze_result["apiVersion"] == "2024-11-30"
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    content = analyze_result["content"]
+    return unless mapper && content.is_a?(String) && mapper.length(content)
+
+    item = items[item_index]
+    parents = discount_parent_spans(item, content:, mapper:)
+    return unless parents && parents.map { |start, finish| mapper.slice(content, offset: start, length: finish - start) }.join("\n") == item["content"]
+
+    total = item.dig("valueObject", "TotalPrice")
+    return unless total.is_a?(Hash) && total["content"].is_a?(String) && total["content"].valid_encoding?
+    total_content = total["content"].unicode_normalize(:nfkc)
+      .sub(profile.ocr_item_calculation_tax_marker_prefix_pattern, "")
+      .sub(profile.ocr_item_calculation_tax_marker_suffix_pattern, "")
+    return unless total_content.match?(ADJUSTMENT_AMOUNT_ONLY_PATTERN)
+    return unless normalize_amount_for_discount(total_content) == detail[:original_line_total]
+
+    total_span = exact_structured_authority_span(total, content:, mapper:)
+    return unless total_span && parents.any? { |start, finish| total_span[0] >= start && total_span[1] <= finish }
+    return unless items.each_with_index.all? do |other, index|
+      next true if index == item_index
+
+      other_parents = discount_parent_spans(other, content:, mapper:)
+      other_parents && other_parents.none? { |other_parent| parents.any? { |parent| spans_overlap?(*parent, *other_parent) } }
+    end
+
+    pages = analyze_result["pages"]
+    return unless pages.is_a?(Array) && pages.size <= MAX_REFERENCE_PRICING_TOTAL_PAGES
+
+    page_lines = pages.filter_map do |page|
+      lines = page.is_a?(Hash) ? page["lines"] : nil
+      return unless lines.is_a?(Array) && lines.size <= MAX_REFERENCE_PRICING_TOTAL_LINES
+
+      entries = lines.each_with_index.filter_map do |line, line_index|
+        next unless line.is_a?(Hash)
+
+        span = exact_structured_authority_span(line, content:, mapper:)
+        next unless span && parents.any? { |start, finish| span[0] >= start && span[1] <= finish }
+
+        { line: line, span: span, index: line_index }
+      end
+      entries unless entries.empty?
+    end
+    return unless page_lines.one?
+
+    entries = page_lines.sole
+    return unless entries.each_cons(2).all? { |left, right| left[:span][1] <= right[:span][0] }
+
+    block = Ocr::ResponseParser::ItemCalculationDiscountBlock.call(lines: entries.map { |entry| entry[:line]["content"] }, profile:)
+    return unless block && block[:rate] == detail[:rate] && block[:amount] == detail[:amount]
+
+    block_entries = entries[block[:block_start_line_index]..block[:block_end_line_index]]
+    return unless block_entries.first[:span][0] >= total_span[1]
+    return unless block_entries.each_cons(2).all? { |left, right| right[:index] == left[:index] + 1 }
+
+    evidence = block[:evidence].to_h do |key, component|
+      entry = entries[component[:line_index]]
+      span = mapper.span_for_bytes(
+        entry[:line]["content"],
+        byte_offset: component[:byte_offset],
+        byte_length: component[:byte_length]
+      )
+      return unless span
+
+      start = entry[:span][0] + span[:offset]
+      return unless start >= total_span[1]
+
+      [
+        key,
+        {
+          source_field_path: "documents[0].fields.Items[#{item_index}]",
+          provider_span_start: start,
+          provider_span_end: start + span[:length]
+        }
+      ]
+    end
+    {
+      amount: block[:amount].to_s,
+      rate: block[:rate].to_s("F").sub(/0+\z/, "").sub(/\.\z/, ""),
+      printed_total_stage: "before_item_discount",
       evidence: evidence
     }
   rescue ArgumentError, EncodingError, TypeError

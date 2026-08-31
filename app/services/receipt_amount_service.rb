@@ -249,15 +249,58 @@ class ReceiptAmountService
       quantity_unit_code: purchased_unit_code
     }
     exact_amount = exact_price * exact_quantity
-    discount_present = !discount_amount.nil? || !discount_rate.nil?
-    if discount_present
-      exact_discount = Amounts::ExactBoundedDecimal.call(
-        discount_amount,
-        minimum: 0,
-        maximum: exact_amount,
-        maximum_scale: 0,
-        minimum_inclusive: true
+    projected_item = Amounts::ItemTotalAggregator.new(items: [ item ], context: :analysis).call.dig(:items, 0)
+    projected_amount = projected_item[:original_line_total]
+    unless projected_amount.is_a?(Integer) && projected_amount == exact_amount
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "count projection must preserve the exact integer extension"
+    end
+
+    unless discount_amount.nil? && discount_rate.nil?
+      discount_projection = item_discount_projection(
+        original_line_total: projected_amount,
+        discount_amount: discount_amount,
+        discount_rate: discount_rate
       )
+      return discount_projection.merge(exact_amount: exact_amount).freeze
+    end
+
+    {
+      exact_amount: exact_amount,
+      projected_amount: projected_amount
+    }.freeze
+  rescue *INVALID_ITEM_SOURCE_ERRORS
+    raise InvalidItemSourceError, "Invalid item pricing source"
+  end
+
+  def self.item_discount_projection(original_line_total:, discount_amount:, discount_rate: nil)
+    exact_original = Amounts::ExactBoundedDecimal.call(
+      original_line_total,
+      minimum: 0,
+      maximum: COUNT_ITEM_PRICE_ABSOLUTE_MAX.to_r,
+      maximum_scale: 0,
+      minimum_inclusive: true
+    )
+    exact_discount = Amounts::ExactBoundedDecimal.call(
+      discount_amount,
+      minimum: 0,
+      maximum: exact_original || 0,
+      maximum_scale: 0,
+      minimum_inclusive: true
+    )
+    unless exact_original && exact_discount
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "item discount requires bounded exact integer sources"
+    end
+
+    item = {
+      pricing_source_kind: "explicit_line_total",
+      line_total: exact_original.to_i,
+      original_line_total: exact_original.to_i
+    }
+    if discount_rate.nil?
+      item[:discount_amount] = exact_discount.to_i
+    else
       exact_rate = Amounts::ExactBoundedDecimal.call(
         discount_rate,
         minimum: 0,
@@ -265,40 +308,28 @@ class ReceiptAmountService
         maximum_scale: 3,
         minimum_inclusive: false
       )
-      unless exact_discount && exact_rate && exact_rate < 1
+      unless exact_rate && exact_rate < 1
         raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
-          "count discount requires complete bounded exact sources"
+          "item discount requires a bounded exact rate"
       end
 
       item[:discount_rate] = BigDecimal(exact_rate.numerator.to_s) / exact_rate.denominator
     end
 
-    projection_arguments = { items: [ item ], context: :analysis }
-    projection_arguments[:discount_rounding_mode] = :round if discount_present
-    projected_item = Amounts::ItemTotalAggregator.new(**projection_arguments).call.dig(:items, 0)
-    projected_amount = projected_item[:original_line_total]
-    unless projected_amount.is_a?(Integer) && projected_amount == exact_amount
+    projected_item = Amounts::ItemTotalAggregator.new(
+      items: [ item ],
+      context: :analysis,
+      discount_rounding_mode: :round
+    ).call.dig(:items, 0)
+    unless projected_item[:original_line_total] == exact_original.to_i && projected_item[:discount_amount] == exact_discount.to_i
       raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
-        "count projection must preserve the exact integer extension"
-    end
-
-    if discount_present
-      unless projected_item[:discount_amount] == exact_discount.to_i
-        raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
-          "count discount must match the exact rate projection"
-      end
-
-      return {
-        exact_amount: exact_amount,
-        original_line_total: projected_amount,
-        projected_amount: projected_item[:line_total],
-        discount_amount: projected_item[:discount_amount]
-      }.freeze
+        "item discount must match the exact projection"
     end
 
     {
-      exact_amount: exact_amount,
-      projected_amount: projected_amount
+      original_line_total: projected_item[:original_line_total],
+      projected_amount: projected_item[:line_total],
+      discount_amount: projected_item[:discount_amount]
     }.freeze
   rescue *INVALID_ITEM_SOURCE_ERRORS
     raise InvalidItemSourceError, "Invalid item pricing source"

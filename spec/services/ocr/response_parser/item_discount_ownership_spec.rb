@@ -1,12 +1,13 @@
 require 'rails_helper'
 
 RSpec.describe Ocr::ResponseParser do
-  def item_discount_response(header: [ 'K2' ], summary: [ '小計', '926', '合計 926円' ], per_unit_note: '(単品 -75)')
+  def item_discount_response(header: [ 'K2' ], summary: [ '小計', '926', '合計 926円' ], per_unit_note: '(単品 -75)', total_marker: '')
     blocks = [
       [ '検証品A', '¥410', '操作割引07', '30%', '-123' ],
       [ '検証品B', '¥410', '操作割引07', '30%', '-123' ],
       [ '検証K2品', '¥502', '(@251×2個)', '操作割引07', '30%', per_unit_note, '-150' ]
     ]
+    blocks.each { |block| block[1] += total_marker }
     content = +''
     lines = []
     append_line = lambda do |text|
@@ -43,6 +44,16 @@ RSpec.describe Ocr::ResponseParser do
     }
   end
 
+  def calculation_discounts(response)
+    parser = described_class.new(response:)
+    details = nil
+    allow(parser).to receive(:extract_discount_details_by_item_index).and_wrap_original do |method, *arguments|
+      details = method.call(*arguments)
+    end
+    parser.call
+    details.values.filter_map { |detail| detail[:calculation_mode_discount] }
+  end
+
   it '商品名の一部と同じheaderを割引対象にせずprovider parent内の各割引を保持する' do
     [ [], [ 'K2' ], [ 'K2', '30%' ] ].each do |header|
       result = described_class.new(response: item_discount_response(header:)).call
@@ -60,6 +71,49 @@ RSpec.describe Ocr::ResponseParser do
 
     expect(result.dig(:candidates, :items).last).to include(discount_amount: 150, line_total: 352)
     expect(result.dig(:candidates, :adjustment_candidates)).to be_empty
+  end
+
+  it '割引前TotalPriceと連続する複数行割引をexact component proofへする' do
+    discounts = calculation_discounts(item_discount_response)
+
+    expect(discounts.size).to eq(3)
+    expect(discounts).to all(include(
+      printed_total_stage: 'before_item_discount',
+      rate: '0.3',
+      evidence: include(:amount, :rate)
+    ))
+    expect(discounts.last[:amount]).to eq('150')
+  end
+
+  it '既存profileの税markerを金額sourceへ混ぜず前後を確定する' do
+    expect(calculation_discounts(item_discount_response(total_marker: '※')).size).to eq(3)
+    expect(calculation_discounts(item_discount_response(total_marker: 'unknown'))).to be_empty
+  end
+
+  it '割引block外のpage line順ではなくblock内の連続性を検証する' do
+    response = item_discount_response
+    lines = response.dig('analyzeResult', 'pages', 0, 'lines')
+    lines.insert(3, lines.first.deep_dup)
+
+    expect(calculation_discounts(response).size).to eq(3)
+  end
+
+  it '割引block内へ別page lineが割り込めば連続proofを作らない' do
+    response = item_discount_response
+    lines = response.dig('analyzeResult', 'pages', 0, 'lines')
+    lines.insert(5, lines.first.deep_dup)
+
+    expect(calculation_discounts(response).size).to eq(2)
+  end
+
+  it 'TotalPriceのcomponent span破損とparent overlapからproofを作らない' do
+    response = item_discount_response
+    items = response.dig('analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray')
+    items.first.dig('valueObject', 'TotalPrice', 'spans', 0)['offset'] += 1
+    expect(calculation_discounts(response).size).to eq(2)
+
+    items[1]['spans'] = items.first['spans'].deep_dup
+    expect(calculation_discounts(response)).to be_empty
   end
 
   it '個数と単品値引額の数式注記は行割引額の代わりに使わない' do

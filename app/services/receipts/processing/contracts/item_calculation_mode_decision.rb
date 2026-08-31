@@ -274,8 +274,18 @@ module Receipts::Processing::Contracts
 
         amount = exact_integer(source["line_total_amount"])
         return unless amount&.between?(0, item_line_total_limit)
+        if option.key?("discount")
+          projection = ReceiptAmountService.item_discount_projection(
+            original_line_total: source["line_total_amount"],
+            discount_amount: option.dig("discount", "amount"),
+            discount_rate: option.dig("discount", "rate")
+          )
+          amount = projection.fetch(:projected_amount)
+        end
 
         projected_option(option, amount)
+      rescue ReceiptAmountService::InvalidItemSourceError
+        nil
       end
 
       def projected_option(option, amount)

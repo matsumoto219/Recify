@@ -89,6 +89,23 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     described_class.build_all(candidates: [ context.fetch(:candidate) ], ocr_snapshot: context.fetch(:snapshot))
   end
 
+  def before_discount_context(count: false)
+    context = discount_context
+    candidate = context[:candidate]
+    discount = candidate[:options].first[:discount].deep_dup
+    discount[:printed_total_stage] = 'before_item_discount'
+    total_evidence = evidence('documents[0].fields.Items[0].TotalPrice', 30, 32)
+    candidate[:printed_line_total] = { amount: '50', evidence: total_evidence }
+    candidate[:options].last.merge!(
+      source: { line_total_amount: '50' },
+      evidence: { line_total: total_evidence },
+      discount: discount
+    )
+    candidate[:options].first[:discount] = discount.deep_dup
+    candidate[:options].shift unless count
+    context
+  end
+
   def decision_for(context, item_line_total_limit: 999_999)
     Receipts::Processing::Contracts::ItemCalculationModeDecision.call(
       item_identity: context[:item][:ocr_item_identity],
@@ -151,6 +168,155 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       ocr_snapshot: context[:snapshot]
     )).to eq(proposals)
     expect(proposals.sole.dig('options', 0, 'source').keys).to match_array(described_class::COUNT_SOURCE_KEYS)
+  end
+
+  it 'round-trips the before-discount explicit source without replacing it with the derived amount' do
+    context = before_discount_context
+    proposals = build_proposals(context)
+
+    expect(proposals).not_to be_nil
+    expect(described_class.from_snapshot(JSON.parse(JSON.generate(proposals)), ocr_snapshot: context[:snapshot])).to eq(proposals)
+    expect(proposals.sole.dig('options', 0, 'source')).to eq('line_total_amount' => '50')
+  end
+
+  it 'shares one discount proof between count and explicit alternatives without treating it as two discounts' do
+    context = before_discount_context(count: true)
+
+    expect(build_proposals(context)).not_to be_nil
+    expect(decision_for(context)).to have_attributes(
+      state: 'confirmed',
+      selected_pricing_source_kind: 'count_unit_price',
+      projected_line_total: 36
+    )
+  end
+
+  it 'rejects different discount evidence between alternatives and a missing before-total stage' do
+    context = before_discount_context(count: true)
+    context[:candidate][:options].last[:discount][:evidence][:amount][:provider_span_start] += 1
+    expect(build_proposals(context)).to be_nil
+
+    context = before_discount_context
+    context[:candidate][:options].sole[:discount][:printed_total_stage] = 'after_item_discount'
+    expect(build_proposals(context)).to be_nil
+  end
+
+  it 'rejects stale, foreign, overlapping and partial before-discount source evidence' do
+    mutations = [
+      ->(context) { context[:candidate][:options].sole[:discount].delete(:amount) },
+      ->(context) { context[:candidate][:options].sole[:discount][:amount] = '51' },
+      ->(context) { context[:candidate][:options].sole[:discount][:evidence][:amount][:provider_span_start] = 29 },
+      ->(context) { context[:candidate][:options].sole[:discount][:evidence][:rate][:source_field_path] = 'documents[0].fields.Items[1]' },
+      ->(context) { context[:candidate][:options].sole[:discount][:evidence][:rate][:provider_span_end] = 81 },
+      ->(context) { context[:candidate][:conflicts] << 'package' },
+      ->(context) { context[:item][:discount_rate] = nil },
+      ->(context) { context[:item][:discount_amount] = 13 },
+      ->(context) { context[:item][:original_line_total] = 36 }
+    ]
+
+    mutations.each do |mutation|
+      context = before_discount_context
+      mutation.call(context)
+      expect(build_proposals(context)).to be_nil
+    end
+  end
+
+  it 'selects the discounted explicit source using the projected amount' do
+    expect(decision_for(before_discount_context)).to have_attributes(
+      state: 'confirmed',
+      selected_pricing_source_kind: 'explicit_line_total',
+      projected_line_total: 36
+    )
+  end
+
+  it 'applies a discounted explicit source through final normalization without subtracting twice' do
+    result = apply(application_context(before_discount_context))
+
+    expect(result).to be_applied
+    normalized = Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer.items(
+      result.params[:receipt_items_attributes],
+      trusted_item_calculation_mode_sources: result.selections,
+      item_price_limit: 999_999,
+      item_line_total_limit: 999_999
+    )
+    expect(normalized.sole).to include(
+      pricing_source_kind: 'explicit_line_total',
+      price: nil,
+      original_line_total: 50,
+      line_total: 36,
+      discount_amount: 14,
+      discount_rate: BigDecimal('0.27')
+    )
+  end
+
+  it 'persists the discounted explicit source and keeps it unchanged on finalize retry' do
+    context = before_discount_context
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = Receipts::Processing.start(receipt: receipt, source: 'upload').run
+    ocr = {
+      success: true,
+      candidates: context[:snapshot][:candidates].merge(
+        item_calculation_mode_candidates: [ context[:candidate] ],
+        tax_amount: 0,
+        tax_rate: BigDecimal('0'),
+        tax_details: [],
+        payments: [],
+        adjustment_candidates: []
+      )
+    }
+    Receipts::Processing.record_ocr_snapshot(run, ocr)
+    Receipts::Processing.record_finalize_decision(
+      run,
+      Receipts::Processing::Contracts::FinalizeDecision.new(
+        finalize_strategy: 'ocr_only',
+        error_code: nil,
+        error_message: nil,
+        receipt_attributes: {},
+        ocr_result: nil,
+        ai_result: nil,
+        metadata: {}
+      )
+    )
+
+    result = Receipts::Processing.run_finalize(run)
+
+    expect(result.next_step).to eq(:done)
+    expect(receipt.reload.receipt_items.sole).to have_attributes(
+      pricing_source_kind: 'explicit_line_total',
+      price: nil,
+      original_line_total: 50,
+      line_total: 36,
+      discount_amount: 14,
+      discount_rate: BigDecimal('0.27')
+    )
+    saved = receipt.receipt_items.sole.attributes
+    submitted = {
+      'receipt_items_attributes' => {
+        '0' => {
+          'id' => saved.fetch('id').to_s,
+          'pricing_source_kind' => 'explicit_line_total',
+          'original_line_total' => '50',
+          'discount_rate' => '27'
+        }
+      }
+    }
+    attributes = Receipts::EditForm.call(receipt: receipt, attributes: submitted)
+    input = Receipts::Editing.build_input(receipt: receipt, permitted: attributes)
+    edited_amount = ReceiptAmountService.call(
+      receipt: receipt.attributes.symbolize_keys.merge(receipt.amount_source_semantics_for_edit),
+      receipt_items: input.receipt_items,
+      receipt_tax_details: receipt.receipt_tax_details,
+      receipt_adjustments: input.receipt_adjustments,
+      receipt_payments: input.receipt_payments,
+      context: :edit_save
+    )
+    expect(edited_amount.dig(:computed, :items).sole).to include(
+      original_line_total: 50,
+      line_total: 36,
+      discount_amount: 14,
+      discount_rate: BigDecimal('0.27')
+    )
+    expect(Receipts::Processing.run_finalize(run.reload).next_step).to eq(:skipped)
+    expect(receipt.reload.receipt_items.sole.attributes).to eq(saved)
   end
 
   it 'rejects missing, foreign, overlapping, malformed and inconsistent discount evidence' do

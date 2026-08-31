@@ -49,13 +49,13 @@ module Receipts::Processing::Contracts
     ROOT_OPTIONAL_KEYS = %w[destination_kind printed_line_total].freeze
     ROOT_KEYS = (ROOT_REQUIRED_KEYS + ROOT_OPTIONAL_KEYS).freeze
     OPTION_KEYS = %w[proposal_id pricing_source_kind source evidence].freeze
-    DISCOUNTED_COUNT_OPTION_KEYS = (OPTION_KEYS + %w[discount]).freeze
+    DISCOUNTED_OPTION_KEYS = (OPTION_KEYS + %w[discount]).freeze
     REFERENCE_OPTION_KEYS = (OPTION_KEYS + %w[source_candidate_id]).freeze
     COUNT_SOURCE_KEYS = %w[price_amount quantity quantity_unit_code].freeze
     COUNT_EVIDENCE_KEYS = %w[price quantity quantity_unit].freeze
-    COUNT_DISCOUNT_KEYS = %w[amount rate printed_total_stage evidence].freeze
-    COUNT_DISCOUNT_EVIDENCE_KEYS = %w[amount rate].freeze
-    COUNT_DISCOUNT_STAGE = "after_item_discount"
+    DISCOUNT_KEYS = %w[amount rate printed_total_stage evidence].freeze
+    DISCOUNT_EVIDENCE_KEYS = %w[amount rate].freeze
+    DISCOUNT_STAGES = %w[before_item_discount after_item_discount].freeze
     REFERENCE_SOURCE_KEYS = %w[
       reference_price_amount reference_quantity reference_quantity_unit_code
       reference_quantity_origin purchased_quantity purchased_quantity_unit_code
@@ -776,6 +776,10 @@ module Receipts::Processing::Contracts
               ) &&
               item["quantity_unit_code"] == source["purchased_quantity_unit_code"]
           when "explicit_line_total"
+            if option.key?("discount")
+              next context_integer_matches?(item["original_line_total"], source["line_total_amount"], maximum: MAX_AMOUNT, allow_zero: true) &&
+                discount_matches_context?(option, item, projection: explicit_discount_projection(option))
+            end
             discounted_count = options.any? do |entry|
               entry["pricing_source_kind"] == "count_unit_price" && entry.key?("discount")
             end
@@ -794,8 +798,11 @@ module Receipts::Processing::Contracts
       def count_discount_matches_context?(option, item)
         return true unless option.key?("discount")
 
+        discount_matches_context?(option, item, projection: count_discount_projection(option))
+      end
+
+      def discount_matches_context?(option, item, projection:)
         discount = normalized_hash(option["discount"])
-        projection = count_discount_projection(option)
         return false unless projection
         return false unless context_integer_matches?(item["discount_amount"], discount["amount"], maximum: MAX_AMOUNT, allow_zero: true)
         return false unless context_decimal_matches?(
@@ -1064,7 +1071,7 @@ module Receipts::Processing::Contracts
 
         case kind
         when "count_unit_price"
-          expected_keys = option.key?("discount") ? DISCOUNTED_COUNT_OPTION_KEYS : OPTION_KEYS
+          expected_keys = option.key?("discount") ? DISCOUNTED_OPTION_KEYS : OPTION_KEYS
           return false unless exact_keys?(option, expected_keys)
           if option.key?("discount")
             return false unless proposal["conflicts"] == [ "discount" ]
@@ -1083,7 +1090,14 @@ module Receipts::Processing::Contracts
             parent_end: parent_end
           )
         when "explicit_line_total"
-          return false unless exact_keys?(option, OPTION_KEYS)
+          expected_keys = option.key?("discount") ? DISCOUNTED_OPTION_KEYS : OPTION_KEYS
+          return false unless exact_keys?(option, expected_keys)
+          if option.key?("discount")
+            return false unless proposal["conflicts"] == [ "discount" ]
+            return false unless option.dig("discount", "printed_total_stage") == "before_item_discount"
+            return false unless discount_evidence_valid?(option, proposal:, parent_start:, parent_end:)
+            return false unless explicit_discount_projection(option)
+          end
 
           explicit_option_valid?(
             option,
@@ -1148,12 +1162,20 @@ module Receipts::Processing::Contracts
       end
 
       def count_discount_valid?(option, proposal:, parent_start:, parent_end:)
+        return false unless discount_evidence_valid?(option, proposal:, parent_start:, parent_end:)
+
+        projection = count_discount_projection(option)
+        projected_key = option.dig("discount", "printed_total_stage") == "before_item_discount" ? :original_line_total : :projected_amount
+        projection && normalized_hash(proposal["printed_line_total"])["amount"] == projection[projected_key].to_s
+      end
+
+      def discount_evidence_valid?(option, proposal:, parent_start:, parent_end:)
         discount = normalized_hash(option["discount"])
-        return false unless exact_keys?(discount, COUNT_DISCOUNT_KEYS)
-        return false unless discount["printed_total_stage"] == COUNT_DISCOUNT_STAGE
+        return false unless exact_keys?(discount, DISCOUNT_KEYS)
+        return false unless DISCOUNT_STAGES.include?(discount["printed_total_stage"])
 
         evidence = normalized_hash(discount["evidence"])
-        return false unless exact_keys?(evidence, COUNT_DISCOUNT_EVIDENCE_KEYS)
+        return false unless exact_keys?(evidence, DISCOUNT_EVIDENCE_KEYS)
         return false unless evidence.values.all? do |entry|
           component_evidence_valid?(
             entry,
@@ -1163,8 +1185,34 @@ module Receipts::Processing::Contracts
           )
         end
 
-        projection = count_discount_projection(option)
-        projection && normalized_hash(proposal["printed_line_total"])["amount"] == projection[:projected_amount].to_s
+        printed_evidence = normalized_hash(normalized_hash(proposal["printed_line_total"])["evidence"])
+        evidence.values.all? do |entry|
+          if discount["printed_total_stage"] == "before_item_discount"
+            entry["provider_span_start"] >= printed_evidence["provider_span_end"].to_i
+          else
+            entry["provider_span_end"] <= printed_evidence["provider_span_start"].to_i
+          end
+        end
+      end
+
+      def explicit_discount_projection(option)
+        discount = normalized_hash(option["discount"])
+        return unless exact_integer?(discount["amount"], maximum: MAX_AMOUNT, allow_zero: true)
+        return unless exact_decimal?(
+          discount["rate"],
+          maximum: 1,
+          maximum_scale: MAX_DISCOUNT_RATE_SCALE,
+          allow_zero: false
+        )
+        return unless BigDecimal(discount["rate"]) < 1
+
+        ReceiptAmountService.item_discount_projection(
+          original_line_total: normalized_hash(option["source"])["line_total_amount"],
+          discount_amount: discount["amount"],
+          discount_rate: discount["rate"]
+        )
+      rescue ReceiptAmountService::InvalidItemSourceError
+        nil
       end
 
       def count_discount_projection(option)
@@ -2164,10 +2212,11 @@ module Receipts::Processing::Contracts
 
       def all_evidence_nonoverlapping?(proposal)
         evidence = [ proposal["destination_evidence"] ]
+        discounts = proposal["options"].filter_map { |option| option["discount"] }
+        return false if discounts.uniq.size > 1
+
+        evidence.concat(normalized_hash(normalized_hash(discounts.first)["evidence"]).values)
         proposal["options"].each do |option|
-          if option.key?("discount")
-            evidence.concat(normalized_hash(normalized_hash(option["discount"])["evidence"]).values)
-          end
           normalized_hash(option["evidence"]).each_value do |entry|
             normalized = normalized_hash(entry)
             if normalized["kind"] == SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND

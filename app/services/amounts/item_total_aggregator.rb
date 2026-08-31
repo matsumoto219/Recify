@@ -31,7 +31,7 @@ module Amounts
         elsif pricing_source_kind == "reference_quantity_price"
           original_line_total = reference_item_extension_for(item).projected_amount
         elsif pricing_source_kind == "explicit_line_total"
-          preserved_item = persisted_unsubmitted_explicit_item(item)
+          preserved_item = persisted_unsubmitted_explicit_item(item) || persisted_explicit_discount_item(item)
           next preserved_item if preserved_item
 
           original_line_total = explicit_line_total_for(item)
@@ -142,6 +142,31 @@ module Amounts
         discount_amount: to_i_or_nil(fetch_value(item, :amount_persisted_discount_amount)),
         discount_rate: normalize_discount_rate(fetch_value(item, :amount_persisted_discount_rate)),
         line_total: to_i_or_nil(fetch_value(item, :amount_persisted_line_total))
+      )
+    end
+
+    def persisted_explicit_discount_item(item)
+      return unless manual_input_context?
+      return unless fetch_value(item, :amount_persisted_item) == true
+      return unless fetch_value(item, :amount_countable_source_changed) == false
+
+      original_line_total = to_i_or_nil(fetch_value(item, :amount_persisted_original_line_total))
+      discount_amount = to_i_or_nil(fetch_value(item, :amount_persisted_discount_amount))
+      line_total = to_i_or_nil(fetch_value(item, :amount_persisted_line_total))
+      discount_rate = normalize_discount_rate(fetch_value(item, :amount_persisted_discount_rate))
+      return unless original_line_total && discount_amount && line_total
+      return unless original_line_total >= 0 && discount_amount.between?(0, original_line_total) && line_total == original_line_total - discount_amount
+      return unless to_i_or_nil(fetch_value(item, :original_line_total)) == original_line_total
+      return unless to_i_or_nil(fetch_value(item, :discount_amount)) == discount_amount
+      return unless normalize_discount_rate(fetch_value(item, :discount_rate)) == discount_rate
+      return unless [ original_line_total, line_total ].include?(to_i_or_nil(fetch_value(item, :line_total)))
+
+      item_to_hash(item).merge(
+        quantity: normalized_quantity_for(item),
+        original_line_total: original_line_total,
+        discount_amount: discount_amount,
+        discount_rate: discount_rate,
+        line_total: line_total
       )
     end
 

@@ -223,7 +223,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       return false unless selection.projected_line_total.between?(0, item_line_total_limit)
       return false unless trusted_item_calculation_mode_review_valid?(item, selection)
       return false unless item[:pricing_source_kind] == selection.pricing_source_kind
-      unless selection.pricing_source_kind == "count_unit_price"
+      if selection.pricing_source_kind == "reference_quantity_price"
         return false unless item[:discount_amount].nil? && item[:discount_rate].nil?
       end
 
@@ -237,7 +237,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       when "explicit_line_total"
         return false unless reference_source_absent?(item)
 
-        trusted_explicit_source_valid?(item, selection)
+        trusted_explicit_source_valid?(item, selection, item_line_total_limit:)
       else
         false
       end
@@ -296,11 +296,28 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       false
     end
 
-    def trusted_explicit_source_valid?(item, selection)
-      selection.explicit_line_total.is_a?(Integer) &&
-        selection.explicit_line_total == selection.projected_line_total &&
-        item[:price].nil? &&
-        exact_item_total_matches?(item, selection.explicit_line_total)
+    def trusted_explicit_source_valid?(item, selection, item_line_total_limit:)
+      return false unless selection.explicit_line_total.is_a?(Integer) && item[:price].nil?
+      return false unless selection.explicit_line_total.between?(0, item_line_total_limit)
+      if selection.discount_amount.nil? && selection.discount_rate.nil?
+        return item[:discount_amount].nil? && item[:discount_rate].nil? &&
+          selection.explicit_line_total == selection.projected_line_total &&
+          exact_item_total_matches?(item, selection.explicit_line_total)
+      end
+      return false unless item[:discount_amount].is_a?(Integer) && item[:discount_rate].is_a?(BigDecimal)
+      return false unless item[:discount_amount] == selection.discount_amount && item[:discount_rate] == selection.discount_rate
+
+      projection = ReceiptAmountService.item_discount_projection(
+        original_line_total: selection.explicit_line_total,
+        discount_amount: selection.discount_amount,
+        discount_rate: selection.discount_rate
+      )
+      item[:original_line_total] == projection[:original_line_total] &&
+        selection.original_line_total == projection[:original_line_total] &&
+        item[:line_total] == projection[:projected_amount] &&
+        selection.projected_line_total == projection[:projected_amount]
+    rescue ReceiptAmountService::InvalidItemSourceError
+      false
     end
 
     def trusted_reference_item_calculation_source_valid?(item, selection)

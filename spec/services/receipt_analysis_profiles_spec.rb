@@ -491,6 +491,19 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
+    it 'owns contiguous item discount label, rate and absolute amount lines' do
+      aggregate_failures do
+        expect('操作割引07').to match(profile.ocr_item_calculation_discount_label_line_pattern)
+        expect('商品割引 27%'.match(profile.ocr_item_calculation_discount_label_line_pattern)[:rate]).to eq('27')
+        expect('27%'.match(profile.ocr_item_calculation_discount_rate_line_pattern)[:rate]).to eq('27')
+        expect('-123円'.match(profile.ocr_item_calculation_discount_amount_line_pattern)[:amount]).to eq('123')
+        expect('商品30%').not_to match(profile.ocr_item_calculation_discount_label_line_pattern)
+        expect('30%対象').not_to match(profile.ocr_item_calculation_discount_rate_line_pattern)
+        expect('123円').not_to match(profile.ocr_item_calculation_discount_amount_line_pattern)
+        expect('-123円/L').not_to match(profile.ocr_item_calculation_discount_amount_line_pattern)
+      end
+    end
+
     it 'owns the fixed calculation layout labels and item-local tax suffix' do
       aggregate_failures do
         expect('単価 @193円'.match(profile.ocr_item_calculation_layout_price_line_pattern).named_captures).to eq('amount' => '193')

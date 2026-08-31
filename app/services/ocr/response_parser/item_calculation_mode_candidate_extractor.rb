@@ -195,7 +195,10 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     end
     conflicts = conflicts_for(item, item_index, count_option: count_option, description: description)
     if conflicts == [ "discount" ]
-      count_option = discounted_count_option(count_option, printed_line_total, item_index, parent_span, description: description)
+      count_option = discounted_option(count_option, printed_line_total, item_index, parent_span, description: description)
+      if normalized_hash(discount_evidence_by_item_index[item_index])[:printed_total_stage] == "before_item_discount"
+        explicit_option = discounted_option(explicit_option, printed_line_total, item_index, parent_span, description: description) || explicit_option
+      end
     elsif conflicts.any?
       count_option = nil
     end
@@ -536,12 +539,12 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     }
   end
 
-  def discounted_count_option(option, printed_line_total, item_index, parent_span, description:)
+  def discounted_option(option, printed_line_total, item_index, parent_span, description:)
     return if option.nil? || printed_line_total.nil?
 
     discount = normalized_hash(discount_evidence_by_item_index[item_index])
     return unless discount.keys.sort == DISCOUNT_KEYS.sort
-    return unless discount[:printed_total_stage] == "after_item_discount"
+    return unless %w[before_item_discount after_item_discount].include?(discount[:printed_total_stage])
 
     evidence = normalized_hash(discount[:evidence])
     return unless evidence.keys.sort == DISCOUNT_EVIDENCE_KEYS.sort
@@ -558,7 +561,12 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       return unless component[:source_field_path] == item_field_path(item_index)
 
       span = evidence_range(component)
-      return unless span_within?(span, parent_span) && span.end <= printed_line_total.dig(:evidence, :provider_span_start)
+      return unless span_within?(span, parent_span)
+      if discount[:printed_total_stage] == "after_item_discount"
+        return unless span.end <= printed_line_total.dig(:evidence, :provider_span_start)
+      else
+        return unless span.begin >= printed_line_total.dig(:evidence, :provider_span_end)
+      end
 
       raw_value = mapper.slice(content, offset: span.begin, length: span.size)
       raw_value = safe_content(raw_value, maximum_bytes: MAX_EXACT_NUMBER_BYTES)
@@ -571,7 +579,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     return unless discount_components_match_line?(components, parent_spans)
     return unless nonoverlapping_evidence?(
       description.fetch(:evidence),
-      *option.fetch(:evidence).values,
+      *option.fetch(:evidence).except(:line_total).values,
       printed_line_total.fetch(:evidence),
       *components.values
     )
@@ -589,18 +597,21 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   def discount_components_match_line?(components, parent_spans)
     lines = provider_segment_lines(parent_spans, strip: false)
     return false unless lines && lines.size <= MAX_LINES
+    match = Ocr::ResponseParser::ItemCalculationDiscountBlock.call(lines: lines.pluck(:content), profile:)
+    return false unless match
 
-    matches = lines.filter_map do |line|
-      next if line[:content].bytesize > MAX_FIELD_CONTENT_BYTES
-
-      match = profile.ocr_item_calculation_discount_line_pattern.match(line[:content])
-      [ match, line[:provider_span] ] if match
-    end
-    return false unless matches.one?
-
-    match, line_span = matches.sole
     components.all? do |key, component|
-      line_capture_span(match, key, line_span) == evidence_range(component)
+      part = match.fetch(:evidence).fetch(key)
+      line = lines.fetch(part.fetch(:line_index))
+      span = mapper.span_for_bytes(
+        line.fetch(:content),
+        byte_offset: part.fetch(:byte_offset),
+        byte_length: part.fetch(:byte_length)
+      )
+      next false unless span
+
+      start_value = line.fetch(:provider_span).begin + span.fetch(:offset)
+      (start_value...(start_value + span.fetch(:length))) == evidence_range(component)
     end
   end
 

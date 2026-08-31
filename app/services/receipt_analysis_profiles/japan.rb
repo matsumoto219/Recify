@@ -309,6 +309,9 @@ module ReceiptAnalysisProfiles
     OCR_ITEM_CALCULATION_COUNT_QUANTITY_LINE_PATTERN = /\A[ \t]*(?:(?<label>数量)[ \t:：]*)?(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})?[ \t]*\z/u.freeze
     OCR_ITEM_CALCULATION_COUNT_EXPRESSION_PATTERN = /\A[ \t]*(?:[@＠][ \t]*[¥￥]?[ \t]*(?<price>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)(?:[ \t]*円)?[ \t]*(?<separator>[x×])[ \t]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})?|[(（][ \t]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<unit>[\p{L}]{1,24})[ \t]*(?<separator>[x×])[ \t]*(?:単|[@＠])[ \t]*[¥￥]?[ \t]*(?<price>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)(?:[ \t]*円)?[ \t]*[)）])[ \t]*\z/u.freeze
     OCR_ITEM_CALCULATION_DISCOUNT_LINE_PATTERN = /\A[ \t]*(?:(?:商品|明細)?(?:値引(?:き)?|割引)|discount|off)[ \t:：]*(?<rate>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*[%％][ \t]*[-−▲－][ \t]*[¥￥]?[ \t]*(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+))(?:[ \t]*円)?[ \t]*\z/iu.freeze
+    OCR_ITEM_CALCULATION_DISCOUNT_LABEL_LINE_PATTERN = /\A[ \t]*(?:[\p{L}]*?(?:値引(?:き)?|割引)|discount|off)[0-9０-９]*[ \t:：]*(?:(?<rate>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*[%％])?[ \t]*\z/iu.freeze
+    OCR_ITEM_CALCULATION_DISCOUNT_RATE_LINE_PATTERN = /\A[ \t]*(?<rate>[0-9０-９]+(?:[.．][0-9０-９]+)?)[ \t]*[%％][ \t]*\z/u.freeze
+    OCR_ITEM_CALCULATION_DISCOUNT_AMOUNT_LINE_PATTERN = /\A[ \t]*[-−▲－][ \t]*[¥￥]?[ \t]*(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+))(?:[ \t]*円)?[ \t]*\z/u.freeze
     OCR_ITEM_CALCULATION_TAX_MARKER_PREFIX_PATTERN = /\A[*＊]\s*/.freeze
     OCR_ITEM_CALCULATION_TAX_MARKER_SUFFIX_PATTERN = /\s*※\z/.freeze
     OCR_ITEM_CALCULATION_LAYOUT_PRICE_LINE_PATTERN = /\A[ \t]*単価[ \t:：]*[@＠]?[ \t]*[¥￥]?[ \t]*(?<amount>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*円[ \t]*\z/.freeze
@@ -870,6 +873,18 @@ module ReceiptAnalysisProfiles
 
       def ocr_item_calculation_discount_line_pattern
         OCR_ITEM_CALCULATION_DISCOUNT_LINE_PATTERN
+      end
+
+      def ocr_item_calculation_discount_label_line_pattern
+        OCR_ITEM_CALCULATION_DISCOUNT_LABEL_LINE_PATTERN
+      end
+
+      def ocr_item_calculation_discount_rate_line_pattern
+        OCR_ITEM_CALCULATION_DISCOUNT_RATE_LINE_PATTERN
+      end
+
+      def ocr_item_calculation_discount_amount_line_pattern
+        OCR_ITEM_CALCULATION_DISCOUNT_AMOUNT_LINE_PATTERN
       end
 
       def ocr_item_calculation_tax_marker_prefix_pattern

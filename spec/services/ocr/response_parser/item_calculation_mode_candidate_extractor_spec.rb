@@ -807,6 +807,33 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     end
 
     context 'with validated same-item discount evidence' do
+      it 'retains a before-discount printed total and its exact discount on an explicit option' do
+        item, discount = discounted_item_evidence
+        item['content'] = "検証商品\n50\n明細値引 27% -14円"
+        item['spans'].sole['length'] = item['content'].length
+        item['valueObject'].except!('Price', 'Quantity', 'QuantityUnit')
+        total = item['valueObject']['TotalPrice']
+        total['valueCurrency']['amount'] = 50
+        total['content'] = '50'
+        total['spans'].sole['offset'] = 105
+        discount[:printed_total_stage] = 'before_item_discount'
+        discount[:evidence].each_value do |component|
+          component[:provider_span_start] -= 3
+          component[:provider_span_end] -= 3
+        end
+
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        expect(result.sole[:options].sole[:discount]).to eq(discount)
+        expect(result.sole[:options].sole[:source]).to eq(line_total_amount: '50')
+      end
+
       it 'retains the discount conflict and carries complete proof only on the count option' do
         item, discount = discounted_item_evidence
         result = described_class.call(

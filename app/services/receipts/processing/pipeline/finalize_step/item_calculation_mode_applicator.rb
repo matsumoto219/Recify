@@ -342,8 +342,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     return unless options.one?
 
     option = options.sole
-    discounted_count = decision.selected_pricing_source_kind == "count_unit_price" && option.key?("discount")
-    unless discounted_count
+    unless option.key?("discount")
       return SKIPPED_SELECTION if discount_source_present?(attributes)
       return SKIPPED_SELECTION if Array(proposal["conflicts"]).include?("discount")
     end
@@ -502,7 +501,21 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     line_total = exact_integer(source.fetch("line_total_amount"))
     return if line_total.nil?
     return unless exact_integer_matches?(attributes[:original_line_total], line_total)
-    return unless exact_integer_matches?(attributes[:line_total], line_total)
+    discount = normalized_hash(option["discount"])
+    projected_line_total = line_total
+    if option.key?("discount")
+      return unless exact_integer_matches?(attributes[:discount_amount], exact_integer(discount["amount"]))
+      return unless exact_decimal_matches?(attributes[:discount_rate], BigDecimal(discount["rate"]))
+
+      projection = ReceiptAmountService.item_discount_projection(
+        original_line_total: line_total,
+        discount_amount: discount["amount"],
+        discount_rate: discount["rate"]
+      )
+      projected_line_total = projection.fetch(:projected_amount)
+    end
+    return unless exact_integer_matches?(attributes[:line_total], projected_line_total)
+    return unless decision.projected_line_total == projected_line_total
 
     Selection.new(
       item_identity: decision.item_identity,
@@ -511,6 +524,9 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       proposal_id: decision.selected_proposal_id,
       pricing_source_kind: decision.selected_pricing_source_kind,
       explicit_line_total: line_total,
+      original_line_total: line_total,
+      discount_amount: option.key?("discount") ? exact_integer(discount["amount"]) : nil,
+      discount_rate: option.key?("discount") ? BigDecimal(discount["rate"]) : nil,
       projected_line_total: decision.projected_line_total,
       review_reason:
     )
@@ -586,11 +602,11 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         exact_integer_matches?(item[:price], selection.price) &&
           exact_integer_matches?(item[:quantity], selection.quantity.to_i) &&
           item[:quantity_unit_code] == selection.quantity_unit_code &&
-          count_computed_discount_valid?(item, selection)
+          computed_discount_valid?(item, selection)
       when "reference_quantity_price"
         reference_computed_item_valid?(item, selection)
       else
-        item[:price].nil?
+        item[:price].nil? && computed_discount_valid?(item, selection)
       end
     end
   end
@@ -612,7 +628,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       item[:discount_amount].nil? && item[:discount_rate].nil?
   end
 
-  def count_computed_discount_valid?(item, selection)
+  def computed_discount_valid?(item, selection)
     return true if selection.discount_amount.nil? && selection.discount_rate.nil?
 
     exact_integer_matches?(item[:discount_amount], selection.discount_amount) &&
