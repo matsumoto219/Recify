@@ -157,6 +157,102 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     }
   end
 
+  def shared_basis_diagnostic_ocr_result
+    result = item_layout_ocr_result.deep_dup
+    item_identity = 'azure_structured_item_i0_s16_e55'
+    candidate = result.dig(:candidates, :reference_pricing_candidates).sole
+    mode_candidate = result.dig(:candidates, :item_calculation_mode_candidates).sole
+    header_evidence = candidate.dig(:reference_quantity, :evidence).merge(
+      source_field_path: 'pages[0].lines[0]',
+      line_index: 0,
+      provider_span_start: 0,
+      provider_span_end: 4
+    )
+
+    result.dig(:candidates, :items, 0)[:ocr_item_identity] = item_identity
+    candidate.merge!(
+      item_identity: item_identity,
+      destination_kind: 'azure_structured_item',
+      structured_item_index: 0,
+      validation_contract_version: 'azure_item_layout_shared_basis_v1',
+      block_provider_span_start: 16,
+      block_provider_span_end: 55,
+      owned_line_indexes: [ 0, 1, 2, 3, 4 ],
+      validation_state: 'ambiguous',
+      rejection_reasons: [ 'ambiguous_tax_inclusion' ],
+      reference_price_tax_inclusion: 'unknown',
+      tax_inclusion_evidence: nil
+    )
+    candidate.dig(:reference_quantity)[:evidence] = header_evidence
+    mode_candidate.replace(
+      candidate_id: 'azure_items_0_item_calculation_mode',
+      item_identity: item_identity,
+      item_index: 0,
+      source_provider: 'azure_structured',
+      provider_model_id: 'prebuilt-receipt',
+      provider_api_version: '2024-11-30',
+      string_index_type: 'textElements',
+      source_field_path: 'documents[0].fields.Items[0]',
+      provider_span_start: 16,
+      provider_span_end: 55,
+      destination_evidence: {
+        source_field_path: 'documents[0].fields.Items[0].Description',
+        provider_span_start: 16,
+        provider_span_end: 22
+      },
+      printed_line_total: {
+        amount: '1703',
+        evidence: {
+          source_field_path: 'documents[0].fields.Items[0].TotalPrice',
+          provider_span_start: 49,
+          provider_span_end: 55
+        }
+      },
+      conflicts: [],
+      options: [
+        {
+          proposal_id: 'azure_items_0_explicit_line_total',
+          pricing_source_kind: 'explicit_line_total',
+          source: { line_total_amount: '1703' },
+          evidence: {
+            line_total: {
+              source_field_path: 'documents[0].fields.Items[0].TotalPrice',
+              provider_span_start: 49,
+              provider_span_end: 55
+            }
+          }
+        }
+      ]
+    )
+    result
+  end
+
+  def move_shared_basis_row_indexes!(result, name_line_index:)
+    candidate = result.dig(:candidates, :reference_pricing_candidates).sole
+    reference_line_index = name_line_index + 1
+    quantity_line_index = name_line_index + 2
+    total_line_index = name_line_index + 3
+    candidate.merge!(
+      candidate_id: "azure_item_layout_p0_name_l#{name_line_index}_ref_l#{reference_line_index}_" \
+        "qty_l#{quantity_line_index}_total_l#{total_line_index}_reference_pricing",
+      name_line_index: name_line_index,
+      reference_line_index: reference_line_index,
+      purchased_quantity_line_indexes: [ quantity_line_index ],
+      printed_total_line_index: total_line_index,
+      owned_line_indexes: [ 0, *(name_line_index..total_line_index) ]
+    )
+    {
+      reference_price: reference_line_index,
+      purchased_quantity: quantity_line_index,
+      printed_line_total: total_line_index
+    }.each do |component, line_index|
+      candidate.dig(component, :evidence).merge!(
+        source_field_path: "pages[0].lines[#{line_index}]",
+        line_index: line_index
+      )
+    end
+  end
+
   def single_item_gross_summary_ocr_result
     result = item_layout_ocr_result.deep_dup
     result[:lines] << '10%対象 1,549円 内税154円'
@@ -904,6 +1000,106 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
       expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
       expect(snapshot.dig('adoption_proposals', 'reference_pricing')).to be_nil
       expect(snapshot.to_json).not_to include('polygon', 'word_content', 'provider_raw_response')
+    end
+  end
+
+  it 'shared basis header候補を専用contractで保存し計算方式はexplicit-onlyに維持する' do
+    result = shared_basis_diagnostic_ocr_result
+    initial = described_class.ocr_result_snapshot(result)
+    candidate = initial.dig('candidates', 'reference_pricing_candidates').sole
+    proposals = initial.dig('adoption_proposals', 'item_calculation_modes')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+
+    aggregate_failures do
+      expect(candidate).to include(
+        'validation_contract_version' => 'azure_item_layout_shared_basis_v1',
+        'destination_kind' => 'azure_structured_item',
+        'structured_item_index' => 0,
+        'owned_line_indexes' => [ 0, 1, 2, 3, 4 ],
+        'validation_state' => 'ambiguous',
+        'rejection_reasons' => [ 'ambiguous_tax_inclusion' ],
+        'reference_price_tax_inclusion' => 'unknown'
+      )
+      expect(candidate.dig('reference_quantity', 'evidence')).to include(
+        'source_field_path' => 'pages[0].lines[0]',
+        'line_index' => 0,
+        'provider_span_start' => 0,
+        'provider_span_end' => 4
+      )
+      expect(proposals.sole.fetch('options').pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
+      expect(proposals.sum do |proposal|
+        proposal.fetch('options').count { |option| option['pricing_source_kind'] == 'reference_quantity_price' }
+      end).to eq(0)
+      expect(initial.dig('adoption_proposals', 'reference_pricing')).to be_nil
+      expect(copied.dig('candidates', 'reference_pricing_candidates').sole).to eq(candidate)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(proposals)
+    end
+  end
+
+  it 'shared basis header候補のidentity・header evidence・row ownership改変を候補ごと破棄する' do
+    mutations = {
+      unknown_contract: ->(candidate) { candidate[:validation_contract_version] = 'unknown_v1' },
+      wrong_identity: ->(candidate) { candidate[:item_identity] = 'azure_structured_item_i1_s16_e55' },
+      wrong_candidate_tuple: ->(candidate) {
+        candidate[:candidate_id] = 'azure_item_layout_p0_name_l1_ref_l3_qty_l4_total_l5_reference_pricing'
+      },
+      wrong_header_path: ->(candidate) {
+        candidate.dig(:reference_quantity, :evidence)[:source_field_path] = 'pages[0].lines[1]'
+      },
+      header_after_name: ->(candidate) {
+        candidate.dig(:reference_quantity, :evidence).merge!(
+          source_field_path: 'pages[0].lines[5]',
+          line_index: 5,
+          provider_span_start: 56,
+          provider_span_end: 60
+        )
+        candidate[:owned_line_indexes] = [ 1, 2, 3, 4, 5 ]
+      },
+      header_inside_parent: ->(candidate) {
+        candidate.dig(:reference_quantity, :evidence).merge!(
+          provider_span_start: 17,
+          provider_span_end: 20
+        )
+      },
+      missing_header_ownership: ->(candidate) { candidate[:owned_line_indexes] = [ 1, 2, 3, 4 ] },
+      noncontiguous_row: ->(candidate) { candidate[:owned_line_indexes] = [ 0, 1, 2, 4 ] },
+      extra_owned_line: ->(candidate) { candidate[:owned_line_indexes] = [ 0, 1, 2, 3, 4, 5 ] },
+      reference_outside_parent: ->(candidate) {
+        candidate.dig(:reference_price, :evidence).merge!(provider_span_start: 2, provider_span_end: 5)
+      },
+      dimension_mismatch: ->(candidate) {
+        candidate.dig(:purchased_quantity)[:unit_code] = 'milliliter'
+      },
+      premature_valid_state: ->(candidate) {
+        candidate.merge!(validation_state: 'valid', rejection_reasons: [])
+      }
+    }
+
+    snapshots = mutations.transform_values do |mutation|
+      result = shared_basis_diagnostic_ocr_result
+      mutation.call(result.dig(:candidates, :reference_pricing_candidates).sole)
+      described_class.ocr_result_snapshot(result)
+    end
+
+    aggregate_failures do
+      snapshots.each do |name, snapshot|
+        expect(snapshot.dig('candidates', 'reference_pricing_candidates')).to eq([]), name.to_s
+      end
+    end
+  end
+
+  it 'shared basis headerと最初のrowの間を最大3 context lineに制限する' do
+    maximum = shared_basis_diagnostic_ocr_result
+    move_shared_basis_row_indexes!(maximum, name_line_index: 4)
+    overflow = shared_basis_diagnostic_ocr_result
+    move_shared_basis_row_indexes!(overflow, name_line_index: 5)
+
+    maximum_snapshot = described_class.ocr_result_snapshot(maximum)
+    overflow_snapshot = described_class.ocr_result_snapshot(overflow)
+
+    aggregate_failures do
+      expect(maximum_snapshot.dig('candidates', 'reference_pricing_candidates').size).to eq(1)
+      expect(overflow_snapshot.dig('candidates', 'reference_pricing_candidates')).to eq([])
     end
   end
 

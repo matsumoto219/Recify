@@ -13,12 +13,20 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
   MAX_PRODUCT_NAME_GRAPHEMES = 32
   MAX_PRODUCT_WORDS = 8
   MAX_DECIMAL_TOKEN_BYTES = 32
+  MAX_SHARED_HEADER_CONTEXT_LINES = 3
+  MAX_SHARED_HEADER_ROW_LINES = 5
+  MAX_SHARED_HEADER_ROWS = 20
+  MAX_SHARED_HEADER_TO_ROW_GAP_RATIO = 6
+  MAX_SHARED_NAME_TO_CELL_OFFSET_RATIO = 3
+  MAX_SHARED_ROW_TO_ROW_GAP_RATIO = 4
   MAX_VERTICAL_GAP_RATIO = Rational(1, 2)
   MIN_COLUMN_VERTICAL_OVERLAP_RATIO = Rational(7, 8)
+  MAX_SHARED_ROW_OFFSET_DELTA_RATIO = Rational(1, 4)
   SUPPORTED_MODEL_ID = "prebuilt-receipt"
   SUPPORTED_API_VERSION = "2024-11-30"
   SOURCE_KIND = "azure_item_layout"
   VALIDATION_CONTRACT_VERSION = "azure_item_layout_v1"
+  SHARED_BASIS_VALIDATION_CONTRACT_VERSION = "azure_item_layout_shared_basis_v1"
   CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
   DECIMAL_PATTERN = /\A(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\z/.freeze
   INTEGER_AMOUNT_PATTERN = /\A(?:0|[1-9][0-9]*)\z/.freeze
@@ -40,7 +48,7 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
   def call
     return [] unless provider_context_valid?
 
-    raw_blocks = ordinary_blocks + quantity_before_reference_blocks + column_blocks
+    raw_blocks = ordinary_blocks + quantity_before_reference_blocks + column_blocks + shared_basis_header_blocks
     descriptors = raw_blocks.filter_map { |block| descriptor_for(block) }
     return [] unless descriptors.map { |descriptor| descriptor[:candidate_id] }.uniq.size == descriptors.size
     return [] unless descriptors.map { |descriptor| descriptor[:item_identity] }.uniq.size == descriptors.size
@@ -304,6 +312,156 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     end
   end
 
+  def shared_basis_header_blocks
+    headers = lines.filter_map do |line|
+      match = profile.ocr_reference_pricing_item_layout_shared_basis_header_pattern.match(line[:content])
+      [ line, match ] if match
+    end
+    return [] unless headers.one?
+
+    header, header_match = headers.sole
+    header_context = shared_basis_header_context(header, header_match)
+    return [] if header_context.nil?
+
+    boundary_index = shared_basis_table_boundary_index(header.fetch(:index))
+    rows = shared_basis_structured_rows(header, boundary_index:, header_context:)
+    return [] if rows.nil? || rows.empty? || rows.size > MAX_SHARED_HEADER_ROWS
+    return [] unless shared_basis_rows_contiguous?(header, rows)
+    return [] unless shared_basis_table_layout_valid?(header, rows)
+
+    rows.map do |row|
+      {
+        kind: :shared_basis_header,
+        name: row.fetch(:name),
+        reference: row.fetch(:price),
+        purchased_entries: [ row.fetch(:quantity) ],
+        total: row.fetch(:total),
+        structured_item_index: row.fetch(:structured_item_index),
+        header_context_entries: [ header ],
+        owned_entries: row.fetch(:owned_entries),
+        index: row.dig(:name, :index),
+        product_context_start_index: header.fetch(:index) + 1,
+        pseudo_reference_content: "#{row.fetch(:price_amount)}円/#{header_context.fetch(:reference_basis)}",
+        pseudo_quantity_content: "#{row.fetch(:quantity_amount)}#{row.fetch(:quantity_unit)}",
+        pseudo_total_content: "#{row.fetch(:total_amount)}円",
+        shared_basis_header_context: header_context,
+        validation_contract_version: SHARED_BASIS_VALIDATION_CONTRACT_VERSION
+      }
+    end
+  rescue EncodingError, ArgumentError, KeyError, NoMethodError, TypeError
+    []
+  end
+
+  def shared_basis_header_context(header, header_match)
+    reference_quantity = exact_decimal_token(header_match[:reference_quantity])
+    reference_unit = header_match[:reference_unit]&.unicode_normalize(:nfkc)
+    resolution = profile.resolve_quantity_unit(reference_unit)
+    reference_unit_definition = ReceiptQuantityUnit.unit_for(resolution.code) if resolution.known?
+    return if reference_quantity.nil? || BigDecimal(reference_quantity) <= 0
+    return if reference_unit.blank? || reference_unit_definition&.kind != :decimal
+    return unless reference_unit_definition.allows_pricing_role?(:reference)
+
+    heading_bounds = %w[price_heading quantity_heading total_heading].map do |capture_name|
+      column_heading_bounds(header, header_match, capture_name:)
+    end
+    return if heading_bounds.any?(&:nil?)
+    return unless heading_bounds.each_cons(2).all? do |left, right|
+      left.fetch(:right) < right.fetch(:left)
+    end
+
+    reference_basis_evidence = header_capture_evidence(header, header_match, capture_name: "reference_basis")
+    return if reference_basis_evidence.nil?
+
+    {
+      reference_basis: "#{reference_quantity}#{reference_unit}",
+      reference_dimension: reference_unit_definition.dimension,
+      heading_bounds:,
+      reference_basis_evidence:
+    }
+  end
+
+  def shared_basis_structured_rows(header, boundary_index:, header_context:)
+    parents = structured_items.map.with_index do |item, item_index|
+      parent = exact_structured_parent_span(item)
+      return if parent.nil?
+
+      [ item, item_index, parent ]
+    end
+    return if parents.each_cons(2).any? { |left, right| left.fetch(2).end > right.fetch(2).begin }
+    return if parents.any? do |_item, _item_index, parent|
+      parent.begin < header.fetch(:span_end) && parent.end > header.fetch(:span_start)
+    end
+
+    scoped = parents.select do |_item, _item_index, parent|
+      first_line = line_by_span_start(parent.begin)
+      first_line && first_line.fetch(:index) > header.fetch(:index) &&
+        (boundary_index.nil? || first_line.fetch(:index) < boundary_index)
+    end
+    return if scoped.empty?
+
+    scoped.map do |item, item_index, parent|
+      shared_basis_structured_row(item, item_index:, parent:, header:, header_context:)
+    end.tap do |rows|
+      return if rows.any?(&:nil?)
+    end
+  end
+
+  def shared_basis_structured_row(item, item_index:, parent:, header:, header_context:)
+    fields = item["valueObject"]
+    return unless fields.is_a?(Hash)
+
+    name = exact_line_for_field(fields["Description"], parent:)
+    price = exact_line_for_field(fields["Price"], parent:)
+    quantity = exact_line_for_field(fields["Quantity"], parent:)
+    quantity_unit = exact_line_for_field(fields["QuantityUnit"], parent:)
+    total = exact_line_for_field(fields["TotalPrice"], parent:)
+    return if [ name, price, quantity, quantity_unit, total ].any?(&:nil?)
+    return unless quantity == quantity_unit
+    return unless exact_structured_description?(item, name, parent:)
+    return unless name.fetch(:index) < price.fetch(:index)
+    return unless price.fetch(:index) < quantity.fetch(:index)
+    return unless quantity.fetch(:index) < total.fetch(:index)
+
+    return unless parent.begin == name.fetch(:span_start) && parent.end == total.fetch(:span_end)
+
+    owned_entries = lines[name.fetch(:index)..total.fetch(:index)]
+    return unless owned_entries.size.between?(4, MAX_SHARED_HEADER_ROW_LINES)
+    return unless owned_entries.all? do |entry|
+      range_within?(entry.fetch(:span_start), entry.fetch(:span_end), parent.begin, parent.end)
+    end
+    return unless exact_line_sequence?(owned_entries)
+    supporting_entries = owned_entries - [ name, price, quantity, total ]
+    return unless supporting_entries.size <= 1
+    product_code = exact_line_for_field(fields["ProductCode"], parent:)
+    return unless supporting_entries.empty? ? product_code.nil? : supporting_entries == [ product_code ]
+
+    price_amount = exact_structured_jpy_amount(fields["Price"], price)
+    total_amount = exact_structured_jpy_amount(fields["TotalPrice"], total)
+    quantity_value = exact_structured_quantity(fields["Quantity"], fields["QuantityUnit"], quantity)
+    return if price_amount.nil? || total_amount.nil? || quantity_value.nil?
+    return unless quantity_value.fetch(:dimension) == header_context.fetch(:reference_dimension)
+    return unless shared_basis_row_layout_valid?(
+      header,
+      price,
+      quantity,
+      total,
+      heading_bounds: header_context.fetch(:heading_bounds)
+    )
+
+    {
+      structured_item_index: item_index,
+      name:,
+      price:,
+      quantity:,
+      total:,
+      owned_entries:,
+      price_amount:,
+      quantity_amount: quantity_value.fetch(:amount),
+      quantity_unit: quantity_value.fetch(:unit),
+      total_amount:
+    }
+  end
+
   def ordinary_block(
     name:,
     reference:,
@@ -335,7 +493,11 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
   end
 
   def descriptor_for(block)
-    return unless product_name_valid?(block.fetch(:name), first_block_line_index: block.fetch(:index))
+    return unless product_name_valid?(
+      block.fetch(:name),
+      first_block_line_index: block[:product_context_start_index] || block.fetch(:index),
+      structured_item_index: block[:structured_item_index]
+    )
 
     destination = destination_for(block)
     return if destination.nil?
@@ -362,7 +524,7 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
 
     {
       source_kind: SOURCE_KIND,
-      validation_contract_version: VALIDATION_CONTRACT_VERSION,
+      validation_contract_version: block[:validation_contract_version] || VALIDATION_CONTRACT_VERSION,
       page_index: 0,
       candidate_id:,
       item_identity:,
@@ -375,7 +537,9 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
       per_unit_discount_note_present: block[:promotional_note].present?,
       purchased_quantity_line_indexes: block.fetch(:purchased_entries).map { |entry| entry.fetch(:index) },
       printed_total_line_index: block.dig(:total, :index),
-      owned_line_indexes: block.fetch(:owned_entries).map { |entry| entry.fetch(:index) }.sort,
+      owned_line_indexes: (
+        Array(block[:header_context_entries]) + block.fetch(:owned_entries)
+      ).map { |entry| entry.fetch(:index) }.uniq.sort,
       block_provider_span_start: block.fetch(:owned_entries).first.fetch(:span_start),
       block_provider_span_end: block.fetch(:owned_entries).last.fetch(:span_end),
       destination_evidence:,
@@ -452,10 +616,12 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     remapped[:provider_model_id] = SUPPORTED_MODEL_ID
     remapped[:provider_api_version] = SUPPORTED_API_VERSION
     remapped[:string_index_type] = mapper.index_type
-    remapped[:validation_contract_version] = VALIDATION_CONTRACT_VERSION
+    remapped[:validation_contract_version] = block[:validation_contract_version] || VALIDATION_CONTRACT_VERSION
 
     if block[:kind] == :column
       remap_column_candidate!(remapped, block)
+    elsif block[:kind] == :shared_basis_header
+      remap_shared_basis_header_candidate!(remapped, block)
     else
       remap_ordinary_candidate!(remapped, block, pseudo:)
     end
@@ -502,6 +668,24 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
       block.fetch(:header),
       values.fetch(:reference_unit),
       occurrence: 0
+    )
+    candidate.fetch(:purchased_quantity)[:evidence] = exact_entry_evidence(
+      block.fetch(:purchased_entries).sole
+    )
+    candidate.fetch(:printed_line_total)[:evidence] = exact_entry_evidence(block.fetch(:total))
+    raise KeyError if [
+      candidate.dig(:reference_price, :evidence),
+      candidate.dig(:reference_quantity, :evidence),
+      candidate.dig(:purchased_quantity, :evidence),
+      candidate.dig(:printed_line_total, :evidence)
+    ].any?(&:nil?)
+  end
+
+  def remap_shared_basis_header_candidate!(candidate, block)
+    candidate.fetch(:reference_price)[:evidence] = exact_entry_evidence(block.fetch(:reference))
+    candidate.fetch(:reference_quantity)[:evidence] = block.dig(
+      :shared_basis_header_context,
+      :reference_basis_evidence
     )
     candidate.fetch(:purchased_quantity)[:evidence] = exact_entry_evidence(
       block.fetch(:purchased_entries).sole
@@ -646,7 +830,13 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
   def exact_structured_destination(block)
     block_start = block.fetch(:owned_entries).first.fetch(:span_start)
     block_end = block.fetch(:owned_entries).last.fetch(:span_end)
-    matches = structured_items.filter_map.with_index do |item, item_index|
+    candidates = if block[:structured_item_index].is_a?(Integer)
+      item = structured_items[block.fetch(:structured_item_index)]
+      item ? [ [ item, block.fetch(:structured_item_index) ] ] : []
+    else
+      structured_items.each_with_index.to_a
+    end
+    matches = candidates.filter_map do |item, item_index|
       parent = exact_structured_parent_span(item)
       next if parent.nil?
       next unless range_within?(block_start, block_end, parent.begin, parent.end)
@@ -776,7 +966,7 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
   end
 
   def destination_evidence(name)
-    name_words = words.select { |word| word[:line_index] == name[:index] }
+    name_words = words_for_line(name[:index])
     return if name_words.empty? || name_words.size > MAX_PRODUCT_WORDS
     return unless name_words.first[:span_start] == name[:span_start]
     return unless name_words.last[:span_end] == name[:span_end]
@@ -794,7 +984,7 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     )
   end
 
-  def product_name_valid?(name, first_block_line_index:)
+  def product_name_valid?(name, first_block_line_index:, structured_item_index: nil)
     value = name[:content]
     return false unless value.unicode_normalize(:nfkc) == value
     return false unless value.bytesize <= MAX_PRODUCT_NAME_BYTES
@@ -802,8 +992,9 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     return false unless value.match?(PRODUCT_NAME_TOKEN_PATTERN)
     return false if destination_conflict?(value)
     return false if value.match?(profile.ocr_reference_pricing_line_group_package_or_uncertain_pattern)
-    return false unless lines.count { |line| line[:content] == value } == 1
-    return false if destination_evidence(name).nil? && exact_structured_name_line(name).nil?
+    return false unless line_content_counts[value] == 1
+    structured_name = exact_structured_name_line(name, structured_item_index:)
+    return false if destination_evidence(name).nil? && structured_name.nil?
     return false if non_item_document_field_overlap?(name)
 
     previous = lines[first_block_line_index - 1] if first_block_line_index.positive?
@@ -812,8 +1003,14 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     true
   end
 
-  def exact_structured_name_line(name)
-    matches = structured_items.select do |item|
+  def exact_structured_name_line(name, structured_item_index: nil)
+    candidates = if structured_item_index.is_a?(Integer)
+      item = structured_items[structured_item_index]
+      item ? [ item ] : []
+    else
+      structured_items
+    end
+    matches = candidates.select do |item|
       parent = exact_structured_parent_span(item)
       parent && exact_structured_description?(item, name, parent:)
     end
@@ -931,9 +1128,8 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
 
     span_start = header.fetch(:span_start) + provider_span.fetch(:offset)
     span_end = span_start + provider_span.fetch(:length)
-    heading_words = words.select do |word|
-      word[:line_index] == header[:index] &&
-        range_within?(word[:span_start], word[:span_end], span_start, span_end)
+    heading_words = words_for_line(header[:index]).select do |word|
+      range_within?(word[:span_start], word[:span_end], span_start, span_end)
     end
     return if heading_words.empty?
     return unless heading_words.first[:span_start] == span_start
@@ -945,6 +1141,193 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     top = heading_words.map { |word| word.dig(:bounds, :top) }.min
     bottom = heading_words.map { |word| word.dig(:bounds, :bottom) }.max
     { left:, right:, top:, bottom:, width: right - left, height: bottom - top }
+  end
+
+  def words_for_line(line_index)
+    @words_by_line_index ||= words.group_by { |word| word.fetch(:line_index) }
+    @words_by_line_index.fetch(line_index, [])
+  end
+
+  def line_content_counts
+    @line_content_counts ||= lines.map { |line| line.fetch(:content) }.tally
+  end
+
+  def header_capture_evidence(header, header_match, capture_name:)
+    capture_start = header_match.begin(capture_name)
+    capture_end = header_match.end(capture_name)
+    return if capture_start.nil? || capture_end.nil? || capture_end <= capture_start
+
+    byte_start = header.fetch(:content)[0...capture_start].bytesize
+    byte_end = header.fetch(:content)[0...capture_end].bytesize
+    provider_span = mapper.span_for_bytes(
+      header.fetch(:content),
+      byte_offset: byte_start,
+      byte_length: byte_end - byte_start
+    )
+    return if provider_span.nil?
+
+    structural_evidence(
+      header,
+      start_offset: header.fetch(:span_start) + provider_span.fetch(:offset),
+      end_offset: header.fetch(:span_start) + provider_span.fetch(:offset) + provider_span.fetch(:length)
+    )
+  end
+
+  def shared_basis_row_layout_valid?(header, price, quantity, total, heading_bounds:)
+    cells = [ price, quantity, total ]
+    return false unless cells.each_cons(2).all? do |left, right|
+      left.dig(:bounds, :right) < right.dig(:bounds, :left)
+    end
+    return false unless cells.zip(heading_bounds).all? do |cell, heading|
+      center = (cell.dig(:bounds, :left) + cell.dig(:bounds, :right)) / 2
+      center.between?(heading.fetch(:left), heading.fetch(:right)) &&
+        cell.dig(:bounds, :top) > header.dig(:bounds, :bottom)
+    end
+
+    offsets = cells.zip(heading_bounds).map do |cell, heading|
+      cell_center = (cell.dig(:bounds, :top) + cell.dig(:bounds, :bottom)) / 2
+      heading_center = (heading.fetch(:top) + heading.fetch(:bottom)) / 2
+      cell_center - heading_center
+    end
+    maximum_height = cells.map { |cell| cell.dig(:bounds, :height) }.max
+    maximum_height&.positive? && offsets.max - offsets.min <= maximum_height * MAX_SHARED_ROW_OFFSET_DELTA_RATIO
+  end
+
+  def shared_basis_table_layout_valid?(header, rows)
+    return false unless rows.all? { |row| shared_basis_row_destination_layout_valid?(header, row) }
+    return false unless shared_basis_header_to_first_row_layout_valid?(header, rows.first)
+
+    rows.each_cons(2).all? { |upper, lower| shared_basis_row_neighbors?(upper, lower) }
+  end
+
+  def shared_basis_header_to_first_row_layout_valid?(header, row)
+    name = row.fetch(:name)
+    gap = name.dig(:bounds, :top) - header.dig(:bounds, :bottom)
+    maximum_height = [ header.dig(:bounds, :height), name.dig(:bounds, :height) ].max
+    return false unless maximum_height&.positive? && gap >= 0
+    return false unless gap <= maximum_height * MAX_SHARED_HEADER_TO_ROW_GAP_RATIO
+
+    true
+  end
+
+  def shared_basis_row_destination_layout_valid?(header, row)
+    name = row.fetch(:name)
+    cells = [ row.fetch(:price), row.fetch(:quantity), row.fetch(:total) ]
+    return false unless name.dig(:bounds, :left) >= header.dig(:bounds, :left)
+    return false unless name.dig(:bounds, :right) <= header.dig(:bounds, :right)
+    return false unless name.dig(:bounds, :right) <= cells.first.dig(:bounds, :left)
+
+    name_center = vertical_center(name)
+    cells.all? do |cell|
+      offset = vertical_center(cell) - name_center
+      height = [ name.dig(:bounds, :height), cell.dig(:bounds, :height) ].max
+      height&.positive? && offset >= 0 && offset <= height * MAX_SHARED_NAME_TO_CELL_OFFSET_RATIO
+    end
+  end
+
+  def shared_basis_row_neighbors?(upper, lower)
+    upper_entries = [ upper.fetch(:name), upper.fetch(:price), upper.fetch(:quantity), upper.fetch(:total) ]
+    lower_entries = [ lower.fetch(:name), lower.fetch(:price), lower.fetch(:quantity), lower.fetch(:total) ]
+    upper_bottom = upper_entries.map { |entry| entry.dig(:bounds, :bottom) }.max
+    lower_top = lower_entries.map { |entry| entry.dig(:bounds, :top) }.min
+    maximum_height = (upper_entries + lower_entries).map { |entry| entry.dig(:bounds, :height) }.max
+    gap = lower_top - upper_bottom
+
+    maximum_height&.positive? && gap >= 0 && gap <= maximum_height * MAX_SHARED_ROW_TO_ROW_GAP_RATIO
+  end
+
+  def vertical_center(entry)
+    (entry.dig(:bounds, :top) + entry.dig(:bounds, :bottom)) / 2
+  end
+
+  def shared_basis_table_boundary_index(header_index)
+    boundary = lines.drop(header_index + 1).find do |line|
+      text = line.fetch(:content)
+      text.match?(profile.ocr_reference_pricing_line_group_summary_context_pattern) ||
+        text.match?(profile.ocr_payment_anchor_pattern)
+    end
+    boundary&.fetch(:index)
+  end
+
+  def shared_basis_rows_contiguous?(header, rows)
+    previous_index = header.fetch(:index)
+    rows.each_with_index.all? do |row, row_index|
+      owned_entries = row.fetch(:owned_entries)
+      gap_entries = lines[(previous_index + 1)...owned_entries.first.fetch(:index)] || []
+      valid = if row_index.zero?
+        gap_entries.size <= MAX_SHARED_HEADER_CONTEXT_LINES &&
+          gap_entries.all? { |entry| shared_basis_context_entry_safe?(entry, header:) }
+      else
+        gap_entries.empty?
+      end
+      previous_index = owned_entries.last.fetch(:index)
+      valid
+    end
+  end
+
+  def shared_basis_context_entry_safe?(entry, header:)
+    return false unless entry.dig(:bounds, :top) >= header.dig(:bounds, :top)
+    return false unless entry.dig(:bounds, :left) >= header.dig(:bounds, :left)
+    return false unless entry.dig(:bounds, :right) <= header.dig(:bounds, :right)
+
+    entry.fetch(:content).match?(profile.ocr_reference_pricing_item_layout_shared_basis_context_line_pattern)
+  end
+
+  def exact_line_for_field(field, parent: nil)
+    return unless field.is_a?(Hash)
+
+    field_content = bounded_text(field["content"], max_bytes: MAX_LINE_CONTENT_BYTES, allow_newlines: false)
+    span = single_span(field)
+    return if field_content.nil? || span.nil?
+
+    line = line_by_span_start(span.fetch(:offset))
+    return if line.nil? || line.fetch(:span_end) != span.fetch(:offset) + span.fetch(:length)
+    return unless line.fetch(:content) == field_content
+    return if parent && !range_within?(line.fetch(:span_start), line.fetch(:span_end), parent.begin, parent.end)
+
+    line
+  end
+
+  def line_by_span_start(span_start)
+    @lines_by_span_start ||= lines.index_by { |line| line.fetch(:span_start) }
+    @lines_by_span_start[span_start]
+  end
+
+  def exact_structured_jpy_amount(field, entry)
+    return unless exact_field_entry?(field, entry)
+
+    match = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern.match(entry.fetch(:content))
+    amount = exact_decimal_token(match&.[](:amount))
+    currency = field["valueCurrency"]
+    return if amount.nil? || !currency.is_a?(Hash) || currency["currencyCode"] != "JPY"
+    return unless provider_decimal(currency["amount"]) == BigDecimal(amount)
+    if currency["currencySymbol"]
+      symbol = bounded_text(currency["currencySymbol"], max_bytes: 8, allow_newlines: false)
+      return if symbol.nil? || !%w[¥ ￥ 円].include?(symbol.unicode_normalize(:nfkc))
+    end
+
+    amount
+  end
+
+  def exact_structured_quantity(quantity_field, unit_field, entry)
+    return unless exact_field_entry?(quantity_field, entry) && exact_field_entry?(unit_field, entry)
+    return unless quantity_field["content"] == unit_field["content"]
+
+    normalized = entry.fetch(:content).unicode_normalize(:nfkc)
+    match = /\A[ \t]*(?<amount>(?:0|[1-9][0-9]*)(?:\.[0-9]+)?)[ \t]*(?<unit>[\p{L}]{1,24})[ \t]*\z/u.match(normalized)
+    return if match.nil?
+
+    amount = exact_decimal_token(match[:amount])
+    unit = bounded_text(unit_field["valueString"], max_bytes: 64, allow_newlines: false)
+    return if amount.nil? || unit.nil? || unit.unicode_normalize(:nfkc) != match[:unit]
+    return unless provider_decimal(quantity_field["valueNumber"]) == BigDecimal(amount)
+
+    resolution = profile.resolve_quantity_unit(unit)
+    unit_definition = ReceiptQuantityUnit.unit_for(resolution.code) if resolution.known?
+    return unless unit_definition&.kind == :decimal
+    return unless unit_definition.allows_pricing_role?(:purchased)
+
+    { amount:, unit:, unit_code: resolution.code, dimension: unit_definition.dimension }
   end
 
   def unsafe_block_text?(entries, reference:, promotional_note:)
@@ -1017,6 +1400,25 @@ class Ocr::ResponseParser::ReferencePricingItemLayoutExtractor
     return unless normalized.match?(DECIMAL_PATTERN)
 
     BigDecimal(normalized)
+  rescue ArgumentError
+    nil
+  end
+
+  def exact_decimal_token(value)
+    return unless value.is_a?(String) && value.valid_encoding?
+    return if value.bytesize > MAX_DECIMAL_TOKEN_BYTES
+
+    normalized = value.unicode_normalize(:nfkc).delete(",")
+    normalized if exact_decimal_value(normalized)
+  rescue ArgumentError
+    nil
+  end
+
+  def provider_decimal(value)
+    return unless value.is_a?(Numeric) || value.is_a?(String)
+
+    decimal = BigDecimal(value.to_s)
+    decimal if decimal.finite?
   rescue ArgumentError
     nil
   end

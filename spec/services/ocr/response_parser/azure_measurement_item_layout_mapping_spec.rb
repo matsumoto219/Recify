@@ -205,6 +205,50 @@ RSpec.describe 'Azure measurement item-layout mapping' do
     ])
   end
 
+  def shared_basis_table_response
+    response = synthetic_response(
+      [
+        '架空表形式店',
+        '番号 100g当り(円) 重量(?) 金額(円)',
+        '外税',
+        '8.00%',
+        '例示素材A',
+        '00000001',
+        '320円',
+        '250g',
+        '800円',
+        '合計 800円'
+      ],
+      layout: {
+        1 => { left: 20, width: 280, word_lefts: [ 20, 70, 170, 240 ] },
+        6 => { left: 70, top: 152 },
+        7 => { left: 170, top: 152 },
+        8 => { left: 240, top: 152 }
+      }
+    )
+    item = structured_item(
+      response,
+      name_line_index: 4,
+      reference_line_index: 6,
+      quantity_line_index: 7,
+      total_line_index: 8,
+      reference_amount: 320,
+      quantity: 250,
+      quantity_unit: 'g',
+      total_amount: 800
+    )
+    value_object = item.fetch('valueObject')
+    value_object['ProductCode'] = {
+      'content' => '00000001',
+      'valueString' => '00000001',
+      'spans' => [ line_span(response, 5).deep_dup ]
+    }
+    value_object['QuantityUnit']['content'] = '250g'
+    value_object['QuantityUnit']['spans'] = [ line_span(response, 7).deep_dup ]
+    response.dig('analyzeResult', 'documents', 0, 'fields', 'Items')['valueArray'] = [ item ]
+    response
+  end
+
   def modes(candidate)
     candidate.fetch(:options).map { |option| option.fetch(:pricing_source_kind) }
   end
@@ -241,6 +285,28 @@ RSpec.describe 'Azure measurement item-layout mapping' do
       expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
       expect(result.dig(:candidates, :subtotal_amount)).to be_nil
       expect(result.dig(:candidates, :total_amount)).to eq(1703)
+    end
+  end
+
+  it 'round-trips a shared basis diagnostic without adding reference authority before tax is exact' do
+    response = shared_basis_table_response
+    result = parse(response)
+    snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
+    reference = snapshot.dig('candidates', 'reference_pricing_candidates').sole
+    proposals = snapshot.dig('adoption_proposals', 'item_calculation_modes')
+
+    aggregate_failures do
+      expect(reference).to include(
+        'validation_contract_version' => 'azure_item_layout_shared_basis_v1',
+        'validation_state' => 'ambiguous',
+        'rejection_reasons' => [ 'ambiguous_tax_inclusion' ],
+        'owned_line_indexes' => [ 1, 4, 5, 6, 7, 8 ]
+      )
+      expect(result.dig(:candidates, :item_calculation_mode_candidates)).to contain_exactly(
+        include(source_provider: 'azure_structured')
+      )
+      expect(proposals.sole.fetch('options').pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
+      expect(snapshot.dig('adoption_proposals', 'reference_pricing')).to be_nil
     end
   end
 

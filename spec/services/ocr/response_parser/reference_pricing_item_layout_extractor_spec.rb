@@ -104,6 +104,166 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
     end
   end
 
+  def structured_table_item(
+    result,
+    description_line_index:,
+    product_code_line_index: nil,
+    price_line_index:,
+    quantity_line_index:,
+    total_line_index:,
+    price_amount:,
+    quantity_amount:,
+    quantity_unit:,
+    total_amount:
+  )
+    page_lines = result.dig('pages', 0, 'lines')
+    description = page_lines.fetch(description_line_index)
+    price = page_lines.fetch(price_line_index)
+    quantity = page_lines.fetch(quantity_line_index)
+    total = page_lines.fetch(total_line_index)
+    parent_start = description.dig('spans', 0, 'offset')
+    parent_end = total.dig('spans', 0, 'offset') + total.dig('spans', 0, 'length')
+    content = result.fetch('content')
+    field = lambda do |line, value|
+      {
+        'content' => line.fetch('content'),
+        'spans' => line.fetch('spans').deep_dup
+      }.merge(value)
+    end
+    currency = lambda do |amount|
+      { 'valueCurrency' => { 'currencyCode' => 'JPY', 'currencySymbol' => '円', 'amount' => amount } }
+    end
+
+    value_object = {
+      'Description' => field.call(description, 'valueString' => description.fetch('content')),
+      'Price' => field.call(price, currency.call(price_amount)),
+      'Quantity' => field.call(quantity, 'valueNumber' => quantity_amount),
+      'QuantityUnit' => field.call(quantity, 'valueString' => quantity_unit),
+      'TotalPrice' => field.call(total, currency.call(total_amount))
+    }
+    if product_code_line_index
+      product_code = page_lines.fetch(product_code_line_index)
+      value_object['ProductCode'] = field.call(product_code, 'valueString' => product_code.fetch('content'))
+    end
+
+    {
+      'content' => content[parent_start...parent_end],
+      'spans' => [ { 'offset' => parent_start, 'length' => parent_end - parent_start } ],
+      'valueObject' => value_object
+    }
+  end
+
+  def shared_basis_table_result(lines:, layout:, rows:)
+    result = synthetic_analyze_result(lines, layout:)
+    items = rows.map do |row|
+      structured_table_item(result, **row)
+    end
+    result.dig('documents', 0, 'fields', 'Items')['valueArray'] = items
+    result
+  end
+
+  def single_shared_basis_table_result(
+    header: '番号 100g当り(円) 重量(?) 金額(円)',
+    before_name: [],
+    name: '例示素材A',
+    between_name_and_price: [],
+    price: '320円',
+    quantity: '250g',
+    total: '800円',
+    price_amount: 320,
+    quantity_amount: 250,
+    quantity_unit: 'g',
+    total_amount: 800,
+    cell_lefts: [ 70, 170, 240 ],
+    header_word_lefts: [ 20, 70, 170, 240 ],
+    header_width: 280
+  )
+    name_index = 2 + before_name.size
+    price_index = name_index + between_name_and_price.size + 1
+    quantity_index = price_index + 1
+    total_index = quantity_index + 1
+    row_top = 20 + (price_index * 22)
+    lines = [
+      '架空表形式店',
+      header,
+      *before_name,
+      name,
+      *between_name_and_price,
+      price,
+      quantity,
+      total,
+      "小計 #{total}"
+    ]
+    layout = {
+      1 => { left: 20, width: header_width, word_lefts: header_word_lefts },
+      price_index => { left: cell_lefts.fetch(0), top: row_top },
+      quantity_index => { left: cell_lefts.fetch(1), top: row_top },
+      total_index => { left: cell_lefts.fetch(2), top: row_top }
+    }
+
+    shared_basis_table_result(
+      lines:,
+      layout:,
+      rows: [
+        {
+          description_line_index: name_index,
+          product_code_line_index: between_name_and_price.one? ? name_index + 1 : nil,
+          price_line_index: price_index,
+          quantity_line_index: quantity_index,
+          total_line_index: total_index,
+          price_amount:,
+          quantity_amount:,
+          quantity_unit:,
+          total_amount:
+        }
+      ]
+    )
+  end
+
+  def multi_row_shared_basis_table_result(count:)
+    lines = [ '架空表形式店', '番号 100g当り(円) 重量(?) 金額(円)' ]
+    layout = { 1 => { left: 20, width: 280, word_lefts: [ 20, 70, 170, 240 ] } }
+    rows = count.times.map do |index|
+      name_index = lines.size
+      lines.concat([ "例示素材#{index}", '200円', '250g', '500円' ])
+      row_top = 70 + (index * 20)
+      layout.merge!(
+        name_index => { left: 20, top: row_top },
+        name_index + 1 => { left: 100, top: row_top },
+        name_index + 2 => { left: 170, top: row_top },
+        name_index + 3 => { left: 240, top: row_top }
+      )
+      {
+        description_line_index: name_index,
+        price_line_index: name_index + 1,
+        quantity_line_index: name_index + 2,
+        total_line_index: name_index + 3,
+        price_amount: 200,
+        quantity_amount: 250,
+        quantity_unit: 'g',
+        total_amount: 500
+      }
+    end
+    lines << "小計 #{count * 500}円"
+
+    shared_basis_table_result(lines:, layout:, rows:)
+  end
+
+  def translate_line_geometry(result, line_index, x: 0, y: 0)
+    line = result.dig('pages', 0, 'lines', line_index)
+    span = line.fetch('spans').sole
+    entries = [ line ] + result.dig('pages', 0, 'words').select do |word|
+      word_span = word.fetch('span')
+      word_span.fetch('offset') >= span.fetch('offset') &&
+        word_span.fetch('offset') + word_span.fetch('length') <= span.fetch('offset') + span.fetch('length')
+    end
+    entries.each do |entry|
+      entry['polygon'] = entry.fetch('polygon').each_slice(2).flat_map do |left, top|
+        [ left + x, top + y ]
+      end
+    end
+  end
+
   it 'extracts an exact item-local reference, purchased quantity, and printed total block' do
     block = extract([
       '架空計算店',
@@ -365,6 +525,239 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingItemLayoutExtractor do
         purchased: '49.8',
         purchased_unit: 'liter'
       )
+    end
+  end
+
+  it 'binds one exact shared reference basis to one structured row without trusting its quantity heading unit' do
+    result = single_shared_basis_table_result(
+      before_name: [ '外税', '8.00%' ],
+      between_name_and_price: [ '00000001' ],
+      quantity: '0.25kg',
+      quantity_amount: 0.25,
+      quantity_unit: 'kg'
+    )
+
+    block = described_class.call(
+      analyze_result: result,
+      profile: ReceiptAnalysisProfiles.fetch('JPN'),
+      projection: ReceiptAmountService.method(:reference_item_extension_projection)
+    ).sole
+
+    aggregate_failures do
+      expect(block).to include(
+        destination_kind: 'azure_structured_item',
+        structured_item_index: 0,
+        name_line_index: 4,
+        reference_line_index: 6,
+        purchased_quantity_line_indexes: [ 7 ],
+        printed_total_line_index: 8,
+        owned_line_indexes: [ 1, 4, 5, 6, 7, 8 ]
+      )
+      expect(block.dig(:reference_pricing_candidate, :validation_state)).to eq('ambiguous')
+      expect(block.dig(:reference_pricing_candidate, :rejection_reasons)).to eq([ 'ambiguous_tax_inclusion' ])
+      expect(block.dig(:reference_pricing_candidate, :reference_quantity, :evidence)).to include(
+        source_field_path: 'pages[0].lines[1]',
+        line_index: 1
+      )
+      expect(block.dig(:reference_pricing_candidate, :purchased_quantity, :evidence)).to include(
+        source_field_path: 'pages[0].lines[7]',
+        line_index: 7
+      )
+      expect_reference_source(
+        block,
+        price: '320',
+        basis: '100',
+        basis_unit: 'gram',
+        purchased: '0.25',
+        purchased_unit: 'kilogram'
+      )
+    end
+  end
+
+  it 'reuses one exact shared basis for bounded ordered structured rows' do
+    result = multi_row_shared_basis_table_result(count: 2)
+
+    blocks = described_class.call(
+      analyze_result: result,
+      profile: ReceiptAnalysisProfiles.fetch('JPN'),
+      projection: ReceiptAmountService.method(:reference_item_extension_projection)
+    )
+
+    aggregate_failures do
+      expect(blocks.map { |block| block[:structured_item_index] }).to eq([ 0, 1 ])
+      expect(blocks.map { |block| block.dig(:reference_pricing_candidate, :reference_quantity, :amount) }).to eq(%w[100 100])
+      expect(blocks.map { |block| block.dig(:reference_pricing_candidate, :purchased_quantity, :amount) }).to eq(%w[250 250])
+      expect(blocks.map { |block| block.dig(:printed_line_total, :amount) }).to eq(%w[500 500])
+    end
+  end
+
+  it 'fails closed for ambiguous shared headers, unsafe rows, malformed ownership, and invalid table geometry' do
+    formula_mismatch = single_shared_basis_table_result(total: '801円', total_amount: 801)
+    dimension_mismatch = single_shared_basis_table_result(quantity: '250ml', quantity_unit: 'ml')
+    incomplete = single_shared_basis_table_result
+    incomplete.dig('documents', 0, 'fields', 'Items', 'valueArray', 0, 'valueObject').delete('QuantityUnit')
+    overlapping = single_shared_basis_table_result
+    overlapping.dig('documents', 0, 'fields', 'Items', 'valueArray', 0, 'valueObject', 'Quantity', 'spans', 0)
+      .replace(overlapping.dig('documents', 0, 'fields', 'Items', 'valueArray', 0, 'valueObject', 'Price', 'spans', 0))
+    swapped = single_shared_basis_table_result(cell_lefts: [ 170, 70, 240 ])
+    malformed_polygon = single_shared_basis_table_result
+    malformed_polygon.dig('pages', 0, 'lines', 4)['polygon'] = [ 1, 2, 3 ]
+    package = single_shared_basis_table_result(name: '例示素材A 2袋入り')
+    duplicate_item = single_shared_basis_table_result
+    duplicate_item.dig('documents', 0, 'fields', 'Items', 'valueArray') <<
+      duplicate_item.dig('documents', 0, 'fields', 'Items', 'valueArray', 0).deep_dup
+    malformed_span = single_shared_basis_table_result
+    malformed_span.dig('pages', 0, 'lines', 4, 'spans', 0)['length'] = -1
+    cross_page = single_shared_basis_table_result
+    cross_page['pages'] << cross_page.fetch('pages').sole.deep_dup
+    multiple_basis = single_shared_basis_table_result(
+      header: '番号 100g当り(円) 1kg当り(円) 重量(?) 金額(円)',
+      header_word_lefts: [ 20, 60, 125, 195, 255 ],
+      header_width: 320
+    )
+    adjacent = single_shared_basis_table_result(before_name: [ '隣接素材B' ])
+    discount = single_shared_basis_table_result(before_name: [ '通常値引 10円' ])
+    duplicate_header = single_shared_basis_table_result(
+      before_name: [ '番号 100g当り(円) 重量(?) 金額(円)' ]
+    )
+    cross_item_field = multi_row_shared_basis_table_result(count: 2)
+    first_fields = cross_item_field.dig('documents', 0, 'fields', 'Items', 'valueArray', 0, 'valueObject')
+    second_price = cross_item_field.dig(
+      'documents', 0, 'fields', 'Items', 'valueArray', 1, 'valueObject', 'Price'
+    )
+    first_fields.fetch('Price')['spans'] = second_price.fetch('spans').deep_dup
+    slash_context = single_shared_basis_table_result(before_name: [ 'opaque/context' ])
+    numeric_context = single_shared_basis_table_result(before_name: [ '12345' ])
+    competing_basis_context = single_shared_basis_table_result(before_name: [ '100g/1kg' ])
+    unrecognized_context = single_shared_basis_table_result(before_name: [ '---' ])
+    displaced_name = single_shared_basis_table_result
+    translate_line_geometry(displaced_name, 2, x: 240)
+    distant_header_row = single_shared_basis_table_result
+    distant_header_row.dig('pages', 0)['height'] = 1_000
+    (2..5).each { |line_index| translate_line_geometry(distant_header_row, line_index, y: 300) }
+    reversed_name_cells = single_shared_basis_table_result
+    (3..5).each { |line_index| translate_line_geometry(reversed_name_cells, line_index, y: -60) }
+    distant_rows = multi_row_shared_basis_table_result(count: 2)
+    distant_rows.dig('pages', 0)['height'] = 1_000
+    (6..9).each { |line_index| translate_line_geometry(distant_rows, line_index, y: 300) }
+    reversed_rows = multi_row_shared_basis_table_result(count: 2)
+    (6..9).each { |line_index| translate_line_geometry(reversed_rows, line_index, y: -100) }
+    displaced_second_name = multi_row_shared_basis_table_result(count: 2)
+    translate_line_geometry(displaced_second_name, 6, x: 240)
+    displaced_second_cells = multi_row_shared_basis_table_result(count: 2)
+    (7..9).each { |line_index| translate_line_geometry(displaced_second_cells, line_index, y: 80) }
+
+    aggregate_failures do
+      {
+        formula_mismatch:,
+        dimension_mismatch:,
+        incomplete:,
+        overlapping:,
+        swapped:,
+        malformed_polygon:,
+        package:,
+        duplicate_item:,
+        malformed_span:,
+        cross_page:,
+        multiple_basis:,
+        adjacent:,
+        discount:,
+        duplicate_header:,
+        cross_item_field:,
+        slash_context:,
+        numeric_context:,
+        competing_basis_context:,
+        unrecognized_context:,
+        displaced_name:,
+        distant_header_row:,
+        reversed_name_cells:,
+        distant_rows:,
+        reversed_rows:,
+        displaced_second_name:,
+        displaced_second_cells:
+      }.each do |name, result|
+        expect(described_class.call(
+          analyze_result: result,
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          projection: ReceiptAmountService.method(:reference_item_extension_projection)
+        )).to eq([]), name.to_s
+      end
+    end
+  end
+
+  it 'accepts only the bounded context, row-line, and row-count transition values' do
+    cases = {
+      context_three: single_shared_basis_table_result(before_name: [ '外税', '8.00%', '10.00%' ]),
+      context_four: single_shared_basis_table_result(before_name: [ '外税', '8.00%', '10.00%', '5.00%' ]),
+      row_five: single_shared_basis_table_result(between_name_and_price: [ '00000001' ]),
+      row_six: single_shared_basis_table_result(between_name_and_price: %w[00000001 00000002]),
+      rows_twenty: multi_row_shared_basis_table_result(count: 20),
+      rows_twenty_one: multi_row_shared_basis_table_result(count: 21)
+    }
+
+    results = cases.transform_values do |result|
+      described_class.call(
+        analyze_result: result,
+        profile: ReceiptAnalysisProfiles.fetch('JPN'),
+        projection: ReceiptAmountService.method(:reference_item_extension_projection)
+      )
+    end
+
+    aggregate_failures do
+      expect(results.fetch(:context_three).size).to eq(1)
+      expect(results.fetch(:context_four)).to eq([])
+      expect(results.fetch(:row_five).size).to eq(1)
+      expect(results.fetch(:row_six)).to eq([])
+      expect(results.fetch(:rows_twenty).size).to eq(20)
+      expect(results.fetch(:rows_twenty_one)).to eq([])
+    end
+  end
+
+  it 'uses injected shared-header vocabulary instead of hardcoded Japanese labels' do
+    profile = ReceiptAnalysisProfiles.fetch('JPN')
+    allow(profile).to receive(:ocr_reference_pricing_item_layout_shared_basis_header_pattern)
+      .and_return(
+        /\ABASIS (?<price_heading>(?<reference_basis>(?<reference_quantity>[0-9]+)(?<reference_unit>[A-Za-z]+))) (?<quantity_heading>LOAD) (?<total_heading>SUM)\z/
+      )
+    result = single_shared_basis_table_result(header: 'BASIS 100g LOAD SUM')
+
+    custom = described_class.call(
+      analyze_result: result,
+      profile:,
+      projection: ReceiptAmountService.method(:reference_item_extension_projection)
+    )
+    original_result = single_shared_basis_table_result
+    original = described_class.call(
+      analyze_result: original_result,
+      profile:,
+      projection: ReceiptAmountService.method(:reference_item_extension_projection)
+    )
+
+    aggregate_failures do
+      expect(custom).to contain_exactly(include(destination_kind: 'azure_structured_item'))
+      expect(original).to eq([])
+    end
+  end
+
+  it 'uses only the injected positive header-context vocabulary' do
+    profile = ReceiptAnalysisProfiles.fetch('JPN')
+    allow(profile).to receive(:ocr_reference_pricing_item_layout_shared_basis_context_line_pattern)
+      .and_return(/\AALLOWED-CONTEXT\z/)
+
+    accepted = described_class.call(
+      analyze_result: single_shared_basis_table_result(before_name: [ 'ALLOWED-CONTEXT' ]),
+      profile:,
+      projection: ReceiptAmountService.method(:reference_item_extension_projection)
+    )
+    rejected = described_class.call(
+      analyze_result: single_shared_basis_table_result(before_name: [ '外税' ]),
+      profile:,
+      projection: ReceiptAmountService.method(:reference_item_extension_projection)
+    )
+
+    aggregate_failures do
+      expect(accepted.size).to eq(1)
+      expect(rejected).to eq([])
     end
   end
 

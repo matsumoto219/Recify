@@ -571,6 +571,42 @@ RSpec.describe ReceiptAnalysisProfiles do
       end
     end
 
+    it 'owns an exact shared reference-basis table header without trusting the purchased-unit heading' do
+      pattern = profile.ocr_reference_pricing_item_layout_shared_basis_header_pattern
+      match = pattern.match('番号 100g当り(円) 重量(?) 金額(円)')
+      malformed_unit_heading = pattern.match('No. 500mlあたり【円】数量【9】 お値段【円】')
+
+      aggregate_failures do
+        expect(match.named_captures).to include(
+          'reference_basis' => '100g',
+          'reference_quantity' => '100',
+          'reference_unit' => 'g'
+        )
+        expect(malformed_unit_heading.named_captures).to include(
+          'reference_basis' => '500ml',
+          'reference_quantity' => '500',
+          'reference_unit' => 'ml'
+        )
+        expect(malformed_unit_heading.names).not_to include('purchased_unit')
+        expect('番号 100g/1kg当り(円) 重量(g) 金額(円)').not_to match(pattern)
+        expect('番号 100g当り(円) 金額(円) 重量(g)').not_to match(pattern)
+        expect('番号 重量(g) 金額(円)').not_to match(pattern)
+      end
+    end
+
+    it 'owns the bounded shared-basis header context allowlist' do
+      pattern = profile.ocr_reference_pricing_item_layout_shared_basis_context_line_pattern
+
+      aggregate_failures do
+        expect('外税').to match(pattern)
+        expect('8.00%').to match(pattern)
+        expect('opaque/context').not_to match(pattern)
+        expect('100g/1kg').not_to match(pattern)
+        expect('12345').not_to match(pattern)
+        expect('---').not_to match(pattern)
+      end
+    end
+
     it 'owns discount, summary, identifier, and subtotal vocabulary' do
       destination_conflicts = profile.ocr_reference_pricing_line_group_destination_identifier_conflict_patterns
 

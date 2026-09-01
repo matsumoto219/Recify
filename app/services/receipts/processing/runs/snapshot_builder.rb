@@ -83,8 +83,17 @@ module Receipts::Processing::Runs
     REFERENCE_PRICING_LINE_GROUP_PROVIDER_MODELS = %w[prebuilt-receipt].freeze
     REFERENCE_PRICING_LINE_GROUP_API_VERSIONS = %w[2024-11-30].freeze
     REFERENCE_PRICING_LINE_GROUP_VALIDATION_CONTRACTS = %w[azure_line_group_v1].freeze
-    REFERENCE_PRICING_LAYOUT_VALIDATION_CONTRACTS = %w[azure_item_layout_v1].freeze
+    REFERENCE_PRICING_LAYOUT_VALIDATION_CONTRACTS = %w[
+      azure_item_layout_v1
+      azure_item_layout_shared_basis_v1
+    ].freeze
     REFERENCE_PRICING_LAYOUT_DESTINATION_KINDS = %w[azure_layout_item azure_structured_item].freeze
+    REFERENCE_PRICING_SHARED_BASIS_VALIDATION_CONTRACT = "azure_item_layout_shared_basis_v1"
+    MAX_REFERENCE_PRICING_SHARED_BASIS_HEADER_CONTEXT_LINES = 3
+    REFERENCE_PRICING_SHARED_BASIS_CANDIDATE_ID_PATTERN = /
+      \Aazure_item_layout_p(?<page>\d+)_name_l(?<name>\d+)_ref_l(?<reference>\d+)
+      _qty_l(?<quantity>\d+)_total_l(?<total>\d+)_reference_pricing\z
+    /x.freeze
     REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND = "single_item_receipt_gross_summary"
     REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_POLICY_VERSION = "reference_pricing_single_item_gross_summary_policy_v1"
     REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_KEYS = %w[
@@ -990,6 +999,7 @@ module Receipts::Processing::Runs
       }.compact
 
       return unless !line_group || valid_line_group_candidate_snapshot?(snapshot)
+      return unless !item_layout || valid_item_layout_candidate_snapshot?(snapshot)
 
       snapshot
     end
@@ -1781,6 +1791,159 @@ module Receipts::Processing::Runs
         left[:word_index] < right[:word_index] &&
           left[:provider_span_end] <= right[:provider_span_start]
       end
+    end
+
+    def valid_item_layout_candidate_snapshot?(snapshot)
+      case snapshot[:validation_contract_version]
+      when "azure_item_layout_v1"
+        true
+      when REFERENCE_PRICING_SHARED_BASIS_VALIDATION_CONTRACT
+        valid_shared_basis_candidate_snapshot?(snapshot)
+      else
+        false
+      end
+    end
+
+    def valid_shared_basis_candidate_snapshot?(snapshot)
+      metadata = shared_basis_candidate_metadata(snapshot)
+      block = reference_pricing_candidate_block_range(snapshot)
+      parent = reference_pricing_structured_item_range(snapshot)
+      return false if metadata.nil? || block.nil? || parent.nil? || block != parent
+      return false unless valid_shared_basis_identity?(snapshot, metadata:)
+      return false unless valid_shared_basis_line_ownership?(snapshot, metadata:)
+      return false unless valid_shared_basis_components?(snapshot, metadata:, parent:)
+
+      valid_shared_basis_state?(snapshot)
+    rescue ArgumentError, KeyError, NoMethodError, TypeError
+      false
+    end
+
+    def shared_basis_candidate_metadata(snapshot)
+      match = REFERENCE_PRICING_SHARED_BASIS_CANDIDATE_ID_PATTERN.match(snapshot[:candidate_id].to_s)
+      return if match.nil?
+
+      metadata = %i[page name reference quantity total].index_with do |key|
+        Integer(match[key], 10)
+      end
+      return unless metadata.values.all? { |index| index.between?(0, MAX_REFERENCE_PRICING_LINE_INDEX) }
+      return unless metadata[:page].zero?
+      return unless metadata.values_at(:name, :reference, :quantity, :total).each_cons(2).all? do |left, right|
+        left < right
+      end
+
+      expected_id = "azure_item_layout_p#{metadata[:page]}_name_l#{metadata[:name]}_" \
+        "ref_l#{metadata[:reference]}_qty_l#{metadata[:quantity]}_total_l#{metadata[:total]}_reference_pricing"
+      snapshot[:candidate_id] == expected_id ? metadata : nil
+    end
+
+    def valid_shared_basis_identity?(snapshot, metadata:)
+      snapshot[:source_kind] == "azure_item_layout" &&
+        snapshot[:destination_kind] == "azure_structured_item" &&
+        snapshot[:item_index] == snapshot[:structured_item_index] &&
+        snapshot[:page_index] == metadata[:page] &&
+        snapshot[:name_line_index] == metadata[:name] &&
+        snapshot[:reference_line_index] == metadata[:reference] &&
+        snapshot[:printed_total_line_index] == metadata[:total] &&
+        snapshot[:purchased_quantity_line_indexes] == [ metadata[:quantity] ] &&
+        snapshot[:provider_model_id] == "prebuilt-receipt" &&
+        snapshot[:provider_api_version] == "2024-11-30" &&
+        REFERENCE_PRICING_STRING_INDEX_TYPES.include?(snapshot[:string_index_type])
+    end
+
+    def valid_shared_basis_line_ownership?(snapshot, metadata:)
+      row_indexes = (metadata[:name]..metadata[:total]).to_a
+      return false unless row_indexes.size.between?(4, 5)
+
+      owned = snapshot[:owned_line_indexes]
+      return false unless owned.is_a?(Array) && owned.size <= 6
+
+      header_index = owned.first
+      return false unless header_index.is_a?(Integer)
+
+      header_to_name_distance = metadata[:name] - header_index
+      header_to_name_distance.between?(1, MAX_REFERENCE_PRICING_SHARED_BASIS_HEADER_CONTEXT_LINES + 1) &&
+        owned == [ header_index, *row_indexes ]
+    end
+
+    def valid_shared_basis_components?(snapshot, metadata:, parent:)
+      index_type = snapshot[:string_index_type]
+      header = snapshot.dig(:reference_quantity, :evidence)
+      price = snapshot.dig(:reference_price, :evidence)
+      quantity = snapshot.dig(:purchased_quantity, :evidence)
+      total = snapshot.dig(:printed_line_total, :evidence)
+      reference_line = {
+        provider_span_start: snapshot[:reference_line_provider_span_start],
+        provider_span_end: snapshot[:reference_line_provider_span_end]
+      }
+      return false unless shared_basis_evidence_on_line?(
+        header,
+        line_index: snapshot[:owned_line_indexes].first,
+        index_type:
+      ) && header[:provider_span_end] <= parent.begin
+      return false unless {
+        price => metadata[:reference],
+        quantity => metadata[:quantity],
+        total => metadata[:total]
+      }.all? do |evidence, line_index|
+        shared_basis_evidence_on_line?(evidence, line_index:, index_type:) &&
+          reference_pricing_range_within?(evidence, provider_span_start: parent.begin, provider_span_end: parent.end)
+      end
+      return false unless reference_pricing_range_within?(price, reference_line)
+
+      price[:provider_span_end] <= quantity[:provider_span_start] &&
+        quantity[:provider_span_end] <= total[:provider_span_start] &&
+        valid_shared_basis_exact_components?(snapshot)
+    end
+
+    def shared_basis_evidence_on_line?(evidence, line_index:, index_type:)
+      evidence.is_a?(Hash) &&
+        evidence[:source_provider] == "azure_item_layout" &&
+        evidence[:source_field_path] == "pages[0].lines[#{line_index}]" &&
+        evidence[:page_index] == 0 && evidence[:line_index] == line_index &&
+        evidence[:string_index_type] == index_type &&
+        reference_pricing_range_within?(evidence, evidence)
+    end
+
+    def valid_shared_basis_exact_components?(snapshot)
+      reference_price = snapshot[:reference_price]
+      reference_quantity = snapshot[:reference_quantity]
+      purchased_quantity = snapshot[:purchased_quantity]
+      printed_total = snapshot[:printed_line_total]
+      return false unless [ reference_price, reference_quantity, purchased_quantity, printed_total ].all?(Hash)
+      return false unless reference_quantity[:unit_status] == "known"
+      return false unless purchased_quantity[:unit_status] == "known"
+      return false unless reference_quantity[:origin] == "explicit"
+
+      reference_unit = ReceiptQuantityUnit.unit_for(reference_quantity[:unit_code])
+      purchased_unit = ReceiptQuantityUnit.unit_for(purchased_quantity[:unit_code])
+      return false unless reference_unit&.kind == :decimal && purchased_unit&.kind == :decimal
+      return false unless reference_unit.dimension == purchased_unit.dimension
+
+      %i[reference_price reference_quantity purchased_quantity printed_line_total].all? do |component|
+        positive_exact_decimal?(snapshot.dig(component, :amount))
+      end
+    end
+
+    def valid_shared_basis_state?(snapshot)
+      return false unless snapshot[:validation_state] == "ambiguous"
+      return false unless snapshot[:rejection_reasons] == [ "ambiguous_tax_inclusion" ]
+      return false unless snapshot[:reference_price_tax_inclusion] == "unknown"
+      return false unless snapshot[:tax_inclusion_evidence].nil?
+
+      corroboration = snapshot[:corroboration]
+      corroboration.is_a?(Hash) && corroboration.dig(:exact_amount, :numerator).present? &&
+        corroboration.dig(:exact_amount, :denominator).present? &&
+        Array(corroboration[:rounding_matches]).present? &&
+        reference_pricing_single_item_gross_amounts_match_candidate?(
+          snapshot,
+          gross_amount: snapshot.dig(:printed_line_total, :amount).to_i
+        )
+    end
+
+    def positive_exact_decimal?(value)
+      value.is_a?(String) && BigDecimal(value).positive?
+    rescue ArgumentError
+      false
     end
 
     def valid_line_group_candidate_snapshot?(snapshot)
