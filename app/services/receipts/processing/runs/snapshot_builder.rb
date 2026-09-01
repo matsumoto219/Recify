@@ -794,9 +794,24 @@ module Receipts::Processing::Runs
 
     def adoption_proposals_snapshot(result, ocr_snapshot)
       proposals = reference_pricing_adoption_proposals_snapshot(result, ocr_snapshot) || {}
+      tax_details = reference_pricing_tax_detail_structural_evidence_snapshot(result, ocr_snapshot)
+      proposals[:reference_pricing_tax_details] = tax_details if tax_details.present?
       item_calculation_modes = item_calculation_mode_proposals_snapshot(result, ocr_snapshot)
       proposals[:item_calculation_modes] = item_calculation_modes if item_calculation_modes.present?
       proposals
+    end
+
+    def reference_pricing_tax_detail_structural_evidence_snapshot(result, ocr_snapshot)
+      contract = Receipts::Processing::Contracts::ReferencePricingTaxDetailStructuralEvidenceSet
+      if result.key?(:schema_version)
+        return nil unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+        stored = normalized_hash(result[:adoption_proposals])[:reference_pricing_tax_details]
+        contract.from_snapshot(stored, ocr_snapshot:)
+      else
+        metadata = normalized_hash(result[:candidates])[:tax_detail_structural_metadata]
+        contract.build(metadata:, ocr_snapshot:)
+      end
     end
 
     def item_calculation_mode_proposals_snapshot(result, ocr_snapshot)

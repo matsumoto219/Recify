@@ -222,6 +222,7 @@ class Ocr::ResponseParser
         payments: extract_payments(authority_response),                                                             # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
         tax_details: tax_details,
         tax_detail_amount_basis: tax_detail_result[:tax_detail_amount_basis],
+        tax_detail_structural_metadata: tax_detail_result[:tax_detail_structural_metadata],
         adjustment_candidates: adjustment_candidates,
         reference_pricing_candidates: reference_pricing_candidates,
         reference_pricing_block_line_indexes: reference_pricing_block_line_indexes(reference_pricing_blocks),
@@ -2224,6 +2225,9 @@ class Ocr::ResponseParser
     fields = extract_fields(parsed_response)
     details = fields.dig("TaxDetails", "valueArray")
     details = [] unless details.is_a?(Array)
+    structural_metadata = Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor.call(
+      analyze_result: extract_analyze_result(parsed_response)
+    )
 
     tax_detail_rates = details.filter_map do |detail|
       normalize_rate_value(detail.dig("valueObject", "Rate", "valueNumber"))
@@ -2261,9 +2265,52 @@ class Ocr::ResponseParser
       return { tax_details: inferred_from_lines, tax_detail_amount_basis: "net" }
     end
 
-    { tax_details: deduplicate_inferred_tax_details(tax_details).map { |tax_detail| tax_detail.except(:_net_amount_inferred) } }
+    normalized_tax_details = deduplicate_inferred_tax_details(tax_details).map do |tax_detail|
+      tax_detail.except(:_net_amount_inferred)
+    end
+    result = { tax_details: normalized_tax_details }
+    if exact_tax_detail_structural_metadata_matches?(
+      structural_metadata,
+      raw_details: details,
+      normalized_tax_details:,
+      inferred_tax_details: tax_details
+    )
+      result[:tax_detail_structural_metadata] = structural_metadata.to_h
+    end
+    result
   rescue NoMethodError, TypeError
     { tax_details: [] }
+  end
+
+  def exact_tax_detail_structural_metadata_matches?(
+    metadata,
+    raw_details:,
+    normalized_tax_details:,
+    inferred_tax_details:
+  )
+    return false unless metadata.is_a?(Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::Result)
+    return false unless metadata.tax_details.size == raw_details.size
+    return false unless normalized_tax_details.size == raw_details.size
+    return false unless inferred_tax_details.size == raw_details.size
+    return false if inferred_tax_details.any? { |detail| detail[:_net_amount_inferred] == true }
+
+    metadata.tax_details.zip(normalized_tax_details).each_with_index.all? do |(structural, normalized), index|
+      structural.fetch(:tax_detail_index) == index &&
+        exact_tax_detail_metadata_rate_matches?(structural.dig(:rate, :rate), normalized[:rate]) &&
+        structural.dig(:net_amount, :amount) == ReceiptAmountService.parse_amount_or_nil(normalized[:net_amount])&.to_i &&
+        structural.dig(:tax_amount, :amount) == ReceiptAmountService.parse_amount_or_nil(normalized[:amount])&.to_i
+    end
+  rescue ArgumentError, NoMethodError, TypeError
+    false
+  end
+
+  def exact_tax_detail_metadata_rate_matches?(expected, actual)
+    rate = normalize_rate_value(actual)
+    return false if rate.nil?
+
+    BigDecimal(expected) == rate
+  rescue ArgumentError, TypeError
+    false
   end
 
   def complete_multi_rate_tax_details?(tax_details)
