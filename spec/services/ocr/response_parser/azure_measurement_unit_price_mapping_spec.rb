@@ -408,6 +408,43 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
     expect(result.dig(:candidates, :total_amount)).to eq(summary_amount.to_i)
   end
 
+  it 'preserves strict split totals with a bounded purchase count or gross suffix label' do
+    item = positive_cases.first.fetch('item').deep_dup
+    summary_amount = item.dig('valueObject', 'TotalPrice', 'content')
+    cases = {
+      purchase_count: [ '買上合計 1点', '内税', '現金' ],
+      gross_suffix: [ '合計(税込)' ]
+    }
+
+    cases.each do |label, lines|
+      response = synthetic_response(item.deep_dup)
+      analyze_result = response.fetch('analyzeResult')
+      analyze_result['stringIndexType'] = 'utf16CodeUnit'
+      analyze_result.dig('pages', 0).merge!(
+        'pageNumber' => 1,
+        'unit' => 'pixel',
+        'width' => 800,
+        'height' => 1_200
+      )
+      lines.each { |line| append_response_line(response, line) }
+      append_response_line(response, "¥#{summary_amount}")
+      label_line = analyze_result.dig('pages', 0, 'lines', -(lines.size + 1))
+      amount_line = analyze_result.dig('pages', 0, 'lines', -1)
+      label_line['polygon'] = [ 20, 100, 120, 100, 120, 116, 20, 116 ]
+      amount_line['polygon'] = [ 200, 102, 270, 102, 270, 118, 200, 118 ]
+      amount_offset = amount_line.dig('spans', 0, 'offset') + 1
+      analyze_result.dig('documents', 0, 'fields')['Total'] = {
+        'content' => summary_amount,
+        'spans' => [ { 'offset' => amount_offset, 'length' => utf16_length(summary_amount) } ],
+        'valueCurrency' => { 'amount' => summary_amount.to_i, 'currencyCode' => 'JPY' }
+      }
+
+      result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+
+      expect(result.dig(:candidates, :total_amount)).to eq(summary_amount.to_i), label.to_s
+    end
+  end
+
   it 'fails closed from malformed or non-JPY structured Total ownership' do
     item = positive_cases.first.fetch('item').deep_dup
     response = synthetic_response(item)

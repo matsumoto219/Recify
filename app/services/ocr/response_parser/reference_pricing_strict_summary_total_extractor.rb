@@ -5,7 +5,7 @@ class Ocr::ResponseParser::ReferencePricingStrictSummaryTotalExtractor
   MAX_PROVIDER_SPAN = Ocr::ResponseParser::MAX_REFERENCE_PRICING_PROVIDER_SPAN
   MAX_AMOUNT = Ocr::ResponseParser::MAX_REFERENCE_PRICING_TOTAL_AMOUNT
   MAX_PAGE_DIMENSION = 10_000
-  MAX_LABEL_LINE_DISTANCE = 2
+  MAX_LABEL_LINE_DISTANCE = 3
   MAX_CENTER_DISTANCE_RATIO = Rational(2, 5)
   MIN_VERTICAL_OVERLAP_RATIO = Rational(1, 2)
   SOURCE_PROVIDER = "azure_document_total"

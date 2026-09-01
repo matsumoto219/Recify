@@ -127,7 +127,23 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingStrictSummaryTotalExtractor 
     expect(summary).to have_attributes(amount: 600)
   end
 
-  it 'fails closed for a distant, left-side, or third-following amount line' do
+  it 'supports a three-index provider ordering gap only when geometry proves the same visual row' do
+    result = analyze_result(
+      line_contents: [ '買上合計 1点', '内税 54円', '現金', '¥600' ],
+      line_layout: {
+        0 => { left: 20, top: 100, width: 100 },
+        1 => { left: 20, top: 125, width: 90 },
+        2 => { left: 20, top: 150, width: 60 },
+        3 => { left: 200, top: 102, width: 70 }
+      }
+    )
+
+    summary = extract(result, total: total_field(result, line_index: 3))
+
+    expect(summary).to have_attributes(amount: 600)
+  end
+
+  it 'fails closed for a distant, left-side, or fourth-following amount line' do
     distant = analyze_result(
       line_contents: [ '匿名明細 600円', '合計', '¥600' ],
       line_layout: {
@@ -142,19 +158,62 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingStrictSummaryTotalExtractor 
         2 => { left: 20, top: 101, width: 70 }
       }
     )
-    third_following = analyze_result(
-      line_contents: [ '合計', '注記A', '注記B', '¥600' ],
+    fourth_following = analyze_result(
+      line_contents: [ '合計', '注記A', '注記B', '注記C', '¥600' ],
       line_layout: {
         0 => { left: 20, top: 100, width: 60 },
-        3 => { left: 200, top: 101, width: 70 }
+        4 => { left: 200, top: 101, width: 70 }
       }
     )
 
     aggregate_failures do
       expect(extract(distant, total: total_field(distant, line_index: 2))).to be_nil
       expect(extract(left_side, total: total_field(left_side, line_index: 2))).to be_nil
-      expect(extract(third_following, total: total_field(third_following, line_index: 3))).to be_nil
+      expect(extract(fourth_following, total: total_field(fourth_following, line_index: 4))).to be_nil
     end
+  end
+
+  it 'accepts the measured vertical-overlap boundary and rejects the first value below it' do
+    boundary = analyze_result(
+      line_contents: [ '合計(税込)', '¥600' ],
+      line_layout: {
+        0 => { left: 20, top: 100, width: 100, height: 20 },
+        1 => { left: 200, top: 110, width: 70, height: 12 }
+      }
+    )
+    below = analyze_result(
+      line_contents: [ '合計(税込)', '¥600' ],
+      line_layout: {
+        0 => { left: 20, top: 100, width: 100, height: 20 },
+        1 => { left: 200, top: 110.001, width: 70, height: 12 }
+      }
+    )
+
+    aggregate_failures do
+      expect(extract(boundary, total: total_field(boundary, line_index: 1))).to have_attributes(amount: 600)
+      expect(extract(below, total: total_field(below, line_index: 1))).to be_nil
+    end
+  end
+
+  it 'does not associate a split label and amount across pages' do
+    result = analyze_result(
+      line_contents: [ '合計(税込)', '¥600' ],
+      line_layout: {
+        0 => { left: 20, top: 100, width: 100 },
+        1 => { left: 200, top: 102, width: 70 }
+      }
+    )
+    total = total_field(result, line_index: 1)
+    amount_line = result.dig('pages', 0, 'lines').pop
+    result.fetch('pages') << {
+      'pageNumber' => 2,
+      'unit' => 'pixel',
+      'width' => 800,
+      'height' => 1_200,
+      'lines' => [ amount_line ]
+    }
+
+    expect(extract(result, total:)).to be_nil
   end
 
   it 'accepts the measured center-distance boundary and rejects the first value beyond it' do
