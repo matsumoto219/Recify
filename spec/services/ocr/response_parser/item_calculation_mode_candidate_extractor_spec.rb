@@ -296,6 +296,130 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
 
   describe '.call' do
     context 'with provider-split count expressions' do
+      it 'links a marked Price multiplier to the immediately following exact Quantity line' do
+        %w[utf16CodeUnit textElements].each do |string_index_type|
+          [ [ '@341x', '2' ], [ '＠３４１×', '２' ] ].each do |price_line, quantity_line|
+            item = count_expression_item(
+              "#{price_line}\n#{quantity_line}",
+              price_content: price_line,
+              quantity_content: quantity_line,
+              price: 341,
+              quantity: 2,
+              total: 682,
+              string_index_type:
+            )
+            original = item.deep_dup
+            result = described_class.call(
+              analyze_result: analyze_result_for([ item ], string_index_type:),
+              profile: ReceiptAnalysisProfiles.fetch('JPN')
+            )
+            option = result.sole.fetch(:options).first
+
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(option[:source]).to eq(price_amount: '341', quantity: '2', quantity_unit_code: 'each')
+            expect(option.dig(:evidence, :price, :source_field_path)).to eq('documents[0].fields.Items[0].Price')
+            expect(option.dig(:evidence, :quantity, :source_field_path)).to eq('documents[0].fields.Items[0].Quantity')
+            expect(option.dig(:evidence, :quantity_unit, :source_field_path)).to eq('documents[0].fields.Items[0]')
+            unit_span = option.fetch(:evidence).fetch(:quantity_unit)
+            mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: string_index_type)
+            expect(mapper.slice(
+              analyze_result_for([ item ], string_index_type:).fetch('content'),
+              offset: unit_span.fetch(:provider_span_start),
+              length: unit_span.fetch(:provider_span_end) - unit_span.fetch(:provider_span_start)
+            )).to eq(price_line.last)
+            expect(item).to eq(original)
+          end
+        end
+      end
+
+      it 'accepts only positive integer Quantity boundaries after a marked Price multiplier' do
+        [ [ 1, true ], [ 9_999, true ], [ 0, false ], [ 10_000, false ] ].each do |quantity, expected|
+          item = count_expression_item(
+            "@341x\n#{quantity}",
+            price_content: '@341x',
+            quantity_content: quantity.to_s,
+            price: 341,
+            quantity:,
+            total: 682
+          )
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.any? { |candidate| modes(candidate).include?('count_unit_price') }).to eq(expected)
+        end
+      end
+
+      it 'rejects incomplete, competing, separated, package, approximate, range and non-count forms' do
+        [
+          [ "@341x\n別明細\n2", '2', 2, nil ],
+          [ "@341x\n\n2", '2', 2, nil ],
+          [ "@341x\n2\n@341x", '2', 2, nil ],
+          [ "@341x\n約2", '約2', 2, nil ],
+          [ "@341x\n2〜3", '2', 2, nil ],
+          [ "@341x\n2個入り", '2', 2, nil ],
+          [ "@341x\n2.5", '2.5', 2.5, nil ],
+          [ "@341x\n2g", '2', 2, 'g' ],
+          [ "@341x extra\n2", '2', 2, nil ]
+        ].each do |expression, quantity_content, quantity, unit|
+          item = count_expression_item(
+            expression,
+            price_content: expression.lines.first.chomp,
+            quantity_content:,
+            price: 341,
+            quantity:,
+            unit:,
+            total: 682
+          )
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'requires exact structured fields and preserves reference and discount conflicts' do
+        mutations = [
+          ->(item) { item['valueObject']['Price']['valueCurrency']['amount'] = 342 },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencyCode'] = 'USD' },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencySymbol'] = '$' },
+          ->(item) { item['valueObject']['Price']['spans'].sole['offset'] += 1 },
+          ->(item) { item['valueObject'].delete('Price') },
+          ->(item) { item['valueObject']['Quantity']['valueNumber'] = 3 },
+          ->(item) { item['valueObject']['Quantity']['spans'].sole['offset'] += 1 },
+          ->(item) { item['valueObject'].delete('Quantity') },
+          ->(item) { item['valueObject']['QuantityUnit'] = {} }
+        ]
+
+        mutations.each do |mutate|
+          item = count_expression_item("@341x\n2", price_content: '@341x', quantity_content: '2', price: 341, quantity: 2, total: 682)
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+
+        item = count_expression_item("@341x\n2", price_content: '@341x', quantity_content: '2', price: 341, quantity: 2, total: 682)
+        [
+          { reference_pricing_candidates: [ { item_index: 0 } ] },
+          { discount_item_indexes: [ 0 ] }
+        ].each do |conflicts|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            **conflicts
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
       it 'uses exact numeric subspans when Price includes the multiplication separator' do
         item = count_expression_item('@123× 2', price_content: '@123×', quantity_content: '2')
         result = described_class.call(

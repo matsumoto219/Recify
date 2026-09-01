@@ -30,6 +30,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   UNIT_PRICE_CONTENT_PATTERN = /\A\s*(?:[x×]\s*)?@\s*(?:(?<prefix>¥|JPY)\s*)?(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)(?:\s*(?<suffix>¥|円))?\)?\s*\z/i.freeze
   QUANTITY_CONTENT_PATTERN = /\A\s*(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)\s*\z/.freeze
   MARKED_COUNT_PRICE_LINE_PATTERN = /\A[ \t]*(?<marker>[@＠])[ \t]*[¥￥]?[ \t]*(?<price>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*\z/.freeze
+  MARKED_COUNT_PRICE_MULTIPLIER_LINE_PATTERN = /\A[ \t]*(?<marker>[@＠])[ \t]*[¥￥]?[ \t]*(?<price>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<separator>[x×])[ \t]*\z/.freeze
   COUNT_QUANTITY_MULTIPLIER_LINE_PATTERN = /\A[ \t]*(?<quantity>(?:[0-9０-９]{1,3}(?:[,，][0-9０-９]{3})+|[0-9０-９]+)(?:[.．][0-9０-９]+)?)[ \t]*(?<separator>[x×])[ \t]*\z/.freeze
   UNIT_TOKEN_PATTERN = /\p{L}+/u.freeze
 
@@ -334,6 +335,7 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     if [ price, quantity, quantity_unit ].any?(&:nil?)
       components = count_expression_components(value_object, item, item_index, parent_span) ||
         marked_count_price_components(value_object, item, item_index, parent_span, quantity: quantity) ||
+        marked_count_price_multiplier_components(value_object, item, item_index, parent_span, quantity: quantity) ||
         quantity_multiplier_components(value_object, item, item_index, price: price, quantity: quantity)
       return if components.nil?
 
@@ -475,6 +477,55 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
     unit = {
       unit_code: ReceiptQuantityUnit.default_code,
       evidence: component_evidence(item_field_path(item_index), line_capture_span(match, :marker, line_span))
+    }
+    [ price, quantity, unit ]
+  end
+
+  def marked_count_price_multiplier_components(value_object, item, item_index, parent_span, quantity:)
+    return if quantity.nil? || value_object.key?("QuantityUnit")
+
+    lines = provider_segment_lines(provider_spans(item), strip: false)
+    return if lines.nil?
+
+    matches = lines.each_with_index.filter_map do |line, index|
+      next if line.fetch(:content).bytesize > MAX_FIELD_CONTENT_BYTES
+
+      match = MARKED_COUNT_PRICE_MULTIPLIER_LINE_PATTERN.match(line.fetch(:content))
+      [ index, match ] if match
+    end
+    return unless matches.one?
+
+    index, match = matches.sole
+    price_line = lines.fetch(index)
+    price_field = value_object["Price"]
+    price_content = safe_content(price_field&.fetch("content", nil), maximum_bytes: MAX_FIELD_CONTENT_BYTES)
+    return if price_content.nil? || price_line.fetch(:content).strip != price_content.strip
+
+    price_span = line_capture_span(match, :price, price_line.fetch(:provider_span))
+    price = count_expression_price_component(price_field, match[:price], price_span, item_index, parent_span)
+    return if price.nil?
+
+    quantity_line = lines[index + 1]
+    return if quantity_line.nil? || quantity_line.fetch(:content).bytesize > MAX_FIELD_CONTENT_BYTES
+
+    quantity_match = profile.ocr_item_calculation_count_quantity_line_pattern.match(quantity_line.fetch(:content))
+    return unless quantity_match && quantity_match[:label].nil? && quantity_match[:unit].nil?
+    return unless line_capture_span(quantity_match, :quantity, quantity_line.fetch(:provider_span)) ==
+      evidence_range(quantity.fetch(:evidence))
+
+    line_separator = mapper.slice(
+      content,
+      offset: price_line.fetch(:provider_span).end,
+      length: quantity_line.fetch(:provider_span).begin - price_line.fetch(:provider_span).end
+    )
+    return unless line_separator && line_separator.match(LINE_BREAK_PATTERN)&.to_s == line_separator
+
+    unit = {
+      unit_code: ReceiptQuantityUnit.default_code,
+      evidence: component_evidence(
+        item_field_path(item_index),
+        line_capture_span(match, :separator, price_line.fetch(:provider_span))
+      )
     }
     [ price, quantity, unit ]
   end
