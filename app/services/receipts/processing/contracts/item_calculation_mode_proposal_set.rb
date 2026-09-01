@@ -2064,7 +2064,7 @@ module Receipts::Processing::Contracts
         return [ "Price" ] if origin == "explicit"
         return [] unless origin == "implicit_per_unit" && amount == "1"
 
-        %w[Price QuantityUnit]
+        %w[Price Quantity QuantityUnit]
       end
 
       def purchased_quantity_component_valid?(value, item_index:, parent_start:, parent_end:, layout_evidence: nil)

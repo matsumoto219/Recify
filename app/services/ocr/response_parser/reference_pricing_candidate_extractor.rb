@@ -68,6 +68,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     Regexp::FIXEDENCODING
   ).freeze
   PURCHASED_QUANTITY_PATTERN = /(?<![0-9０-９])(?<quantity>#{DECIMAL_SOURCE})[ \t]*(?<unit>#{UNIT_SOURCE})/u
+  STRUCTURED_PARENTHETICAL_QUANTITY_PATTERN = /\A[ \t]*(?<quantity>#{DECIMAL_SOURCE})[ \t]*(?<unit>#{UNIT_SOURCE})(?<open>[（(])\z/u
   PRINTED_AMOUNT_PATTERN = /[¥￥]?[ \t]*(?<amount>#{DECIMAL_SOURCE})(?:[ \t]*円)?/u
   DECIMAL_TOKEN_PATTERN = /(?<![0-9０-９])(?<decimal>#{DECIMAL_SOURCE})(?![0-9０-９])/u
   UNIT_TOKEN_PATTERN = /#{UNIT_SOURCE}/u
@@ -192,7 +193,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       value_object: value_object,
       reference_price: reference_price,
       purchased_quantity: purchased_quantity,
-      printed_line_total: printed_line_total
+      printed_line_total: printed_line_total,
+      parenthetical_count_unit_validated: reference_match[:parenthetical_count_unit_validated]
     ))
     reasons = normalize_reasons(reasons)
     corroboration = build_corroboration(
@@ -444,8 +446,9 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       item_index:,
       field_name: "TotalPrice"
     )
-    unit = structured_measurement_unit_lexeme(
-      fields.fetch("QuantityUnit"),
+    unit = structured_measurement_unit_for_quantity(
+      quantity_field: fields.fetch("Quantity"),
+      quantity_unit_field: fields.fetch("QuantityUnit"),
       item_context:,
       item_index:
     )
@@ -461,7 +464,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     )
     return unless structured_currency_value_matches?(fields.fetch("Price"), price[:amount])
     return unless structured_number_value_matches?(fields.fetch("Quantity"), purchased[:amount])
-    return unless structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code])
+    return unless unit[:parenthetical_count_unit_validated] ||
+      structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code])
     return unless structured_currency_value_matches?(fields.fetch("TotalPrice"), printed_total[:amount])
     return unless structured_formula_agrees?(price:, purchased:, unit:, printed_total:)
 
@@ -487,6 +491,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       source_text: price[:content],
       discount_context: false,
       structured_unit_price: true,
+      parenthetical_count_unit_validated: unit[:parenthetical_count_unit_validated] == true,
       structured_purchased_match: {
         quantity_text: purchased[:amount],
         unit_text: unit[:text],
@@ -514,8 +519,9 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       item_index:,
       field_name: "TotalPrice"
     )
-    unit = structured_measurement_unit_lexeme(
-      fields.fetch("QuantityUnit"),
+    unit = structured_measurement_unit_for_quantity(
+      quantity_field: fields.fetch("Quantity"),
+      quantity_unit_field: fields.fetch("QuantityUnit"),
       item_context:,
       item_index:
     )
@@ -530,8 +536,92 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     )
 
     structured_number_value_matches?(fields.fetch("Quantity"), purchased[:amount]) &&
-      structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code]) &&
+      (unit[:parenthetical_count_unit_validated] ||
+        structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code])) &&
       structured_currency_value_matches?(fields.fetch("TotalPrice"), printed_total[:amount])
+  end
+
+  def structured_measurement_unit_for_quantity(quantity_field:, quantity_unit_field:, item_context:, item_index:)
+    mapped_quantity = exact_structured_field(quantity_field, item_context:)
+    return if mapped_quantity.nil?
+
+    quantity_content = mapped_quantity.fetch(:content)
+    return structured_measurement_unit_lexeme(quantity_unit_field, item_context:, item_index:) unless
+      quantity_content.end_with?("(", "（")
+
+    structured_parenthetical_quantity_unit_lexeme(
+      mapped_quantity:,
+      quantity_unit_field:,
+      item_context:,
+      item_index:
+    )
+  end
+
+  def structured_parenthetical_quantity_unit_lexeme(
+    mapped_quantity:,
+    quantity_unit_field:,
+    item_context:,
+    item_index:
+  )
+    match_data = mapped_quantity.fetch(:content).match(STRUCTURED_PARENTHETICAL_QUANTITY_PATTERN)
+    return if match_data.nil?
+
+    resolution = resolve_unit(match_data[:unit])
+    measurement_unit = resolution.known? ? ReceiptQuantityUnit.unit_for(resolution.code) : nil
+    return unless measurement_unit&.kind == :decimal
+    return unless measurement_unit.allows_pricing_role?(:purchased) &&
+      measurement_unit.allows_pricing_role?(:reference)
+
+    mapped_count_unit = exact_structured_field(quantity_unit_field, item_context:)
+    return if mapped_count_unit.nil?
+
+    count_resolution = resolve_unit(mapped_count_unit.fetch(:content))
+    count_unit = count_resolution.known? ? ReceiptQuantityUnit.unit_for(count_resolution.code) : nil
+    return unless count_unit&.kind == :countable
+    return unless structured_unit_value_matches?(quantity_unit_field, count_resolution.code)
+
+    quantity_span = mapped_quantity.fetch(:span)
+    count_span = mapped_count_unit.fetch(:span)
+    return unless span_offset(count_span) == span_end(quantity_span)
+
+    closing_parenthesis = match_data[:open] == "(" ? ")" : "）"
+    containing_segment = segment_containing_range(
+      item_context,
+      span_offset(quantity_span),
+      span_end(count_span) + 1
+    )
+    return if containing_segment.nil?
+
+    closing_slice = mapper.slice(
+      containing_segment.fetch(:content),
+      offset: span_end(count_span) - span_offset(containing_segment.fetch(:span)),
+      length: 1
+    )
+    return unless closing_slice == closing_parenthesis
+
+    unit_start = provider_offset(
+      mapped_quantity.fetch(:content),
+      span_offset(quantity_span),
+      match_data.begin(:unit)
+    )
+    unit_end = provider_offset(
+      mapped_quantity.fetch(:content),
+      span_offset(quantity_span),
+      match_data.end(:unit)
+    )
+
+    {
+      text: match_data[:unit],
+      unit_code: resolution.code,
+      field_span: { "offset" => unit_start, "length" => unit_end - unit_start },
+      evidence: evidence(
+        source_field_path: "documents[0].fields.Items[#{item_index}].Quantity",
+        item_index:,
+        start_offset: unit_start,
+        end_offset: unit_end
+      ),
+      parenthetical_count_unit_validated: true
+    }
   end
 
   def structured_decimal_lexeme(field, item_context:, item_index:, field_name:)
@@ -1406,11 +1496,18 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     nil
   end
 
-  def structured_value_conflict_reasons(value_object:, reference_price:, purchased_quantity:, printed_line_total:)
+  def structured_value_conflict_reasons(
+    value_object:,
+    reference_price:,
+    purchased_quantity:,
+    printed_line_total:,
+    parenthetical_count_unit_validated: false
+  )
     conflicts = [
       structured_numeric_field_conflict?(value_object["Price"], reference_price&.dig(:amount)),
       structured_numeric_field_conflict?(value_object["Quantity"], purchased_quantity&.dig(:amount)),
-      structured_unit_field_conflict?(value_object["QuantityUnit"], purchased_quantity),
+      !parenthetical_count_unit_validated &&
+        structured_unit_field_conflict?(value_object["QuantityUnit"], purchased_quantity),
       structured_numeric_field_conflict?(value_object["TotalPrice"], printed_line_total&.dig(:amount))
     ]
 

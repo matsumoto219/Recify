@@ -678,6 +678,176 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingCandidateExtractor do
         end
       end
 
+      context 'when Azure reports a measured Quantity with a parenthetical count QuantityUnit' do
+        def parenthetical_quantity_fixture(
+          description_content: '商品',
+          quantity_content: '3.50L(',
+          quantity_value: 3.5,
+          quantity_unit_content: '個',
+          quantity_unit_value: '個',
+          closing_parenthesis: ')',
+          separator: ''
+        )
+          segment = "#{description_content} #{quantity_content}#{separator}#{quantity_unit_content}#{closing_parenthesis} ¥1,200 ¥4,200"
+          fixture = owned_span_fixture([ segment ])
+          item = fixture.fetch(:item)
+          item['valueObject'] = {
+            'Description' => field_from_owned_segment(fixture, 0, description_content),
+            'Price' => field_from_owned_segment(
+              fixture,
+              0,
+              '¥1,200',
+              valueCurrency: { 'amount' => 1_200, 'currencyCode' => 'JPY' }
+            ),
+            'Quantity' => field_from_owned_segment(
+              fixture,
+              0,
+              quantity_content,
+              valueNumber: quantity_value
+            ),
+            'QuantityUnit' => field_from_owned_segment(
+              fixture,
+              0,
+              quantity_unit_content,
+              valueString: quantity_unit_value
+            ),
+            'TotalPrice' => field_from_owned_segment(
+              fixture,
+              0,
+              '¥4,200',
+              valueCurrency: { 'amount' => 4_200, 'currencyCode' => 'JPY' }
+            )
+          }
+          fixture
+        end
+
+        it 'uses the unique measurement unit inside exact Quantity content without rewriting QuantityUnit' do
+          fixture = parenthetical_quantity_fixture
+
+          candidate = extract_with_provider_content(
+            [ fixture.fetch(:item) ],
+            fixture.fetch(:document)
+          ).sole
+
+          aggregate_failures do
+            expect(candidate).to include(
+              validation_state: 'ambiguous',
+              rejection_reasons: [ 'ambiguous_tax_inclusion' ]
+            )
+            expect(candidate[:reference_quantity]).to include(
+              amount: '1',
+              unit_code: 'liter',
+              unit_status: 'known',
+              origin: 'implicit_per_unit'
+            )
+            expect(candidate.dig(:reference_quantity, :evidence)).to include(
+              source_field_path: 'documents[0].fields.Items[0].Quantity'
+            )
+            expect(candidate[:purchased_quantity]).to include(
+              amount: '3.5',
+              unit_code: 'liter',
+              unit_status: 'known'
+            )
+            expect(fixture.fetch(:item).dig('valueObject', 'QuantityUnit')).to include(
+              'content' => '個',
+              'valueString' => '個'
+            )
+          end
+        end
+
+        it 'produces the same exact source when corrected QuantityUnit evidence points to the inline unit' do
+          provider_fixture = parenthetical_quantity_fixture
+          corrected_fixture = parenthetical_quantity_fixture(
+            quantity_content: '3.50',
+            quantity_unit_content: 'L',
+            quantity_unit_value: 'L',
+            closing_parenthesis: '(個)'
+          )
+
+          candidates = [ provider_fixture, corrected_fixture ].map do |fixture|
+            extract_with_provider_content(
+              [ fixture.fetch(:item) ],
+              fixture.fetch(:document)
+            ).sole
+          end
+
+          exact_sources = candidates.map do |candidate|
+            {
+              reference_price: candidate.dig(:reference_price, :amount),
+              reference_quantity: candidate.dig(:reference_quantity, :amount),
+              reference_unit: candidate.dig(:reference_quantity, :unit_code),
+              purchased_quantity: candidate.dig(:purchased_quantity, :amount),
+              purchased_unit: candidate.dig(:purchased_quantity, :unit_code),
+              printed_line_total: candidate.dig(:printed_line_total, :amount)
+            }
+          end
+
+          expect(exact_sources.uniq).to contain_exactly(
+            reference_price: '1200',
+            reference_quantity: '1',
+            reference_unit: 'liter',
+            purchased_quantity: '3.5',
+            purchased_unit: 'liter',
+            printed_line_total: '4200'
+          )
+        end
+
+        it 'rejects malformed topology, incompatible units, package context, and value conflicts' do
+          unowned_gap = owned_span_fixture(
+            [ '商品 3.50L(', '個) ¥1,200 ¥4,200' ],
+            gaps: [ "\n所有外\n" ]
+          )
+          unowned_gap.fetch(:item)['valueObject'] = {
+            'Description' => field_from_owned_segment(unowned_gap, 0, '商品'),
+            'Price' => field_from_owned_segment(
+              unowned_gap,
+              1,
+              '¥1,200',
+              valueCurrency: { 'amount' => 1_200, 'currencyCode' => 'JPY' }
+            ),
+            'Quantity' => field_from_owned_segment(unowned_gap, 0, '3.50L(', valueNumber: 3.5),
+            'QuantityUnit' => field_from_owned_segment(
+              unowned_gap,
+              1,
+              '個',
+              valueString: '個'
+            ),
+            'TotalPrice' => field_from_owned_segment(
+              unowned_gap,
+              1,
+              '¥4,200',
+              valueCurrency: { 'amount' => 4_200, 'currencyCode' => 'JPY' }
+            )
+          }
+          malformed = [
+            parenthetical_quantity_fixture(closing_parenthesis: ''),
+            parenthetical_quantity_fixture(separator: "\n"),
+            unowned_gap,
+            parenthetical_quantity_fixture(quantity_unit_content: 'kg', quantity_unit_value: 'kg'),
+            parenthetical_quantity_fixture(quantity_content: '3.50Lkg('),
+            parenthetical_quantity_fixture(quantity_content: '3.50XYZ('),
+            parenthetical_quantity_fixture(quantity_content: '3.50個('),
+            parenthetical_quantity_fixture(quantity_content: '約3.50L('),
+            parenthetical_quantity_fixture(quantity_content: '3.00-3.50L('),
+            parenthetical_quantity_fixture(quantity_content: '2x3.50L('),
+            parenthetical_quantity_fixture(quantity_content: 'gross 3.50L('),
+            parenthetical_quantity_fixture(quantity_content: '3.50L入り('),
+            parenthetical_quantity_fixture(quantity_value: 4),
+            parenthetical_quantity_fixture(description_content: '商品 3.50L入り'),
+            parenthetical_quantity_fixture.tap do |fixture|
+              fixture.fetch(:item).dig('valueObject', 'TotalPrice', 'valueCurrency')['amount'] = 4_201
+            end
+          ]
+
+          malformed.each do |fixture|
+            expect(extract_with_provider_content(
+              [ fixture.fetch(:item) ],
+              fixture.fetch(:document)
+            )).to eq([])
+          end
+        end
+      end
+
       it 'accepts the bounded maximum of sixteen ordered owned spans' do
         fixture = complete_multi_span_fixture(extra_segments: Array.new(13, '商品'))
 

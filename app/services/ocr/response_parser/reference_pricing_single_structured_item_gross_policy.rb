@@ -197,7 +197,7 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       return [] unless component[:origin] == "implicit_per_unit"
       return [] unless exact_decimal(component[:amount], maximum:) == BigDecimal("1")
 
-      %w[Price QuantityUnit]
+      %w[Price Quantity QuantityUnit]
     end
 
     def exact_evidence_valid?(evidence)

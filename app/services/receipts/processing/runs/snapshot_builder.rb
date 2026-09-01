@@ -1189,7 +1189,7 @@ module Receipts::Processing::Runs
       reference_quantity_paths = if reference_quantity[:origin].to_s == "implicit_per_unit"
         return false unless exact_decimal_string(reference_quantity[:amount]) == "1"
 
-        %w[Price QuantityUnit]
+        %w[Price Quantity QuantityUnit]
       else
         [ "Price" ]
       end

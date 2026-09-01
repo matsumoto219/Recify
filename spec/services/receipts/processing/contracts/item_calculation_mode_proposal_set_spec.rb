@@ -803,6 +803,32 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       end
     end
 
+    it 'Quantity内のimplicit per-unit単位evidenceをexact sourceとしてround-tripする' do
+      result = parsed_structured_inner_tax_reference_result(implicit_per_unit: true)
+      reference = result.dig(:candidates, :reference_pricing_candidates).sole
+      reference.dig(:reference_quantity, :evidence)[:source_field_path] =
+        'documents[0].fields.Items[0].Quantity'
+      snapshot = snapshot_without_proposals(result)
+
+      proposal = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      ).sole
+      reference_option = proposal.fetch('options').find do |option|
+        option.fetch('pricing_source_kind') == 'reference_quantity_price'
+      end
+
+      aggregate_failures do
+        expect(reference_option.dig('evidence', 'reference_quantity', 'source_field_path')).to eq(
+          'documents[0].fields.Items[0].Quantity'
+        )
+        expect(described_class.from_snapshot(
+          JSON.parse(JSON.generate([ proposal ])),
+          ocr_snapshot: JSON.parse(JSON.generate(snapshot))
+        )).to eq([ proposal ])
+      end
+    end
+
     it 'item-layoutの印字明細金額だけをcanonicalなexact proposalとしてround-tripする' do
       candidate = item_layout_candidate
       snapshot = item_layout_snapshot(candidate)

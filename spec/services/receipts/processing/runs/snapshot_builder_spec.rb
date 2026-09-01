@@ -1011,6 +1011,41 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     end
   end
 
+  it 'Quantity内のimplicit per-unit単位evidenceをbounded candidate snapshotへ保存しretryで再検証する' do
+    result = single_structured_item_inner_tax_ocr_result
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+    reference[:reference_price][:amount] = '1703'
+    reference[:reference_quantity].merge!(
+      amount: '1',
+      origin: 'implicit_per_unit',
+      evidence: reference[:reference_quantity][:evidence].merge(
+        source_field_path: 'documents[0].fields.Items[0].Quantity'
+      )
+    )
+    reference[:purchased_quantity][:amount] = '1'
+    reference[:corroboration] = {
+      exact_amount: { numerator: '1703', denominator: '1' },
+      projected_amount: 1703,
+      printed_line_total: '1703',
+      rounding_matches: %w[floor half_up ceil]
+    }
+
+    initial = described_class.ocr_result_snapshot(result)
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    stored = initial.dig('candidates', 'reference_pricing_candidates').sole
+
+    aggregate_failures do
+      expect(stored.dig('reference_quantity', 'evidence', 'source_field_path')).to eq(
+        'documents[0].fields.Items[0].Quantity'
+      )
+      expect(stored.dig('tax_inclusion_evidence', 'kind')).to eq(
+        'single_item_receipt_inner_tax_summary'
+      )
+      expect(copied.dig('candidates', 'reference_pricing_candidates').sole).to eq(stored)
+      expect(stored.to_json).not_to include('raw_text', 'provider_raw_response', 'valueString')
+    end
+  end
+
   it 'native Item内税根拠のunknown field・partial overlap・amount不一致を部分保存しない' do
     unknown = single_structured_item_inner_tax_ocr_result
     unknown.dig(
