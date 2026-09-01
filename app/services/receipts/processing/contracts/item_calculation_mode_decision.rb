@@ -118,13 +118,13 @@ module Receipts::Processing::Contracts
         proposals = PROPOSAL_CONTRACT.from_snapshot(item_proposals, ocr_snapshot:)
         return nil unless proposals.is_a?(Array)
 
-        proposals = proposals.sort_by { |proposal| proposal.fetch("item_identity") }
         unconfirmed_reference_identities = PROPOSAL_CONTRACT.unconfirmed_reference_formula_item_identities(
           proposals: proposals,
           ocr_snapshot: ocr_snapshot
         )
         return nil unless unconfirmed_reference_identities.is_a?(Array)
 
+        proposals = proposals.sort_by { |proposal| proposal.fetch("item_identity") }
         unconfirmed_reference_identity_set = unconfirmed_reference_identities.index_with(true)
         decisions = if !COUNT_TAX_SEMANTICS.include?(count_tax_semantics)
           proposals.map { |proposal| unresolved("proposal_invalid", proposal:) }
