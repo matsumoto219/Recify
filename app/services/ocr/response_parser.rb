@@ -9,10 +9,12 @@ class Ocr::ResponseParser
   MAX_REFERENCE_PRICING_TOTAL_LINES = 150
   MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES = 512
   MAX_REFERENCE_PRICING_TOTAL_AMOUNT = 999_999_999_999
+  MAX_REFERENCE_PRICING_PAGE_DIMENSION = 10_000
   MAX_REFERENCE_PRICING_AUTHORITY_FIELD_NODES = 512
   MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS = 100
   MAX_REFERENCE_PRICING_AUTHORITY_HASH_ENTRIES = 100
   MAX_REFERENCE_PRICING_AUTHORITY_FIELDS = 100
+  MAX_REFERENCE_PRICING_AUTHORITY_SPANS = 16
   MAX_ITEM_DISCOUNT_SOURCE_REFS = 16
   REFERENCE_PRICING_AUTHORITY_VALUE_KEYS = %w[
     content
@@ -1207,7 +1209,8 @@ class Ocr::ResponseParser
         field,
         content:,
         mapper:,
-        block_ranges:
+        block_ranges:,
+        pages: analyze_result["pages"]
       )
         filtered[field_name] = field
       end
@@ -1246,7 +1249,7 @@ class Ocr::ResponseParser
     end
   end
 
-  def structured_authority_field_owned_outside_blocks?(field, content:, mapper:, block_ranges:)
+  def structured_authority_field_owned_outside_blocks?(field, content:, mapper:, block_ranges:, pages:)
     return false unless field.is_a?(Hash)
 
     stack = [ field ]
@@ -1263,10 +1266,12 @@ class Ocr::ResponseParser
 
         has_authority_value = REFERENCE_PRICING_AUTHORITY_VALUE_KEYS.any? { |key| node.key?(key) }
         if node.key?("spans") || has_authority_value
-          span_range = exact_structured_authority_span(node, content:, mapper:)
-          return false if span_range.nil?
-          return false if block_ranges.any? do |block_start, block_end|
-            spans_overlap?(span_range.first, span_range.last, block_start, block_end)
+          span_ranges = exact_structured_authority_span_ranges(node, content:, mapper:)
+          return false if span_ranges.nil?
+          return false if span_ranges.any? do |span_start, span_end|
+            block_ranges.any? do |block_start, block_end|
+              spans_overlap?(span_start, span_end, block_start, block_end)
+            end
           end
 
           exact_span_found = true if has_authority_value
@@ -1274,6 +1279,11 @@ class Ocr::ResponseParser
         children = []
         node.each do |key, value|
           next if key == "spans"
+          if key == "boundingRegions"
+            return false unless valid_structured_authority_bounding_regions?(value, pages:)
+
+            next
+          end
           next unless value.is_a?(Hash) || value.is_a?(Array)
 
           children << value
@@ -1296,6 +1306,112 @@ class Ocr::ResponseParser
     end
 
     exact_span_found
+  end
+
+  def exact_structured_authority_span_ranges(field, content:, mapper:)
+    field_content = field["content"]
+    spans = field["spans"]
+    return unless field_content.is_a?(String) && field_content.valid_encoding?
+    return if field_content.blank? || field_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+    return unless spans.is_a?(Array) &&
+      spans.size.between?(1, MAX_REFERENCE_PRICING_AUTHORITY_SPANS) &&
+      spans.all?(Hash)
+
+    total_length = 0
+    total_bytes = 0
+    previous_end = nil
+    fragments = []
+    ranges = spans.map do |span|
+      span_start = span["offset"]
+      span_length = span["length"]
+      return unless span_start.is_a?(Integer) && span_length.is_a?(Integer)
+      return if span_start.negative? || span_length <= 0
+      return if span_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN ||
+        span_length > MAX_REFERENCE_PRICING_PROVIDER_SPAN - span_start
+
+      span_end = span_start + span_length
+      return if previous_end && span_start < previous_end
+
+      fragment = mapper.slice(content, offset: span_start, length: span_length)
+      return unless fragment.is_a?(String) && fragment.valid_encoding?
+
+      total_length += span_length
+      total_bytes += fragment.bytesize
+      return if total_length > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES ||
+        total_bytes > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+
+      previous_end = span_end
+      fragments << fragment
+      [ span_start, span_end ]
+    end
+    return unless fragments.join("\n") == field_content
+
+    ranges
+  rescue EncodingError, ArgumentError, NoMethodError, TypeError
+    nil
+  end
+
+  def valid_structured_authority_bounding_regions?(regions, pages:)
+    return false unless regions.is_a?(Array) &&
+      regions.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
+    return false unless pages.is_a?(Array) &&
+      pages.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
+
+    page_dimensions = pages.each_with_object({}) do |page, dimensions|
+      return false unless page.is_a?(Hash)
+
+      page_number = page["pageNumber"]
+      width = page["width"]
+      height = page["height"]
+      return false unless page_number.is_a?(Integer) &&
+        page_number.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
+      return false if dimensions.key?(page_number)
+      return false unless valid_structured_authority_page_dimension?(width) &&
+        valid_structured_authority_page_dimension?(height)
+
+      dimensions[page_number] = [ width, height ]
+    end
+
+    regions.all? do |region|
+      next false unless region.is_a?(Hash) && region.size == 2
+      next false unless region.key?("pageNumber") && region.key?("polygon")
+
+      dimensions = page_dimensions[region["pageNumber"]]
+      dimensions && valid_structured_authority_polygon?(
+        region["polygon"],
+        page_width: dimensions[0],
+        page_height: dimensions[1]
+      )
+    end
+  rescue ArgumentError, NoMethodError, TypeError
+    false
+  end
+
+  def valid_structured_authority_page_dimension?(value)
+    value.is_a?(Numeric) && value.finite? && value.positive? &&
+      value <= MAX_REFERENCE_PRICING_PAGE_DIMENSION
+  end
+
+  def valid_structured_authority_polygon?(polygon, page_width:, page_height:)
+    return false unless polygon.is_a?(Array) && polygon.size == 8
+    return false unless polygon.all? { |coordinate| coordinate.is_a?(Numeric) && coordinate.finite? }
+
+    points = polygon.each_slice(2).to_a
+    return false unless points.all? do |x, y|
+      x.between?(0, page_width) && y.between?(0, page_height)
+    end
+
+    cross_products = points.each_index.map do |index|
+      first = points.fetch(index)
+      second = points.fetch((index + 1) % points.size)
+      third = points.fetch((index + 2) % points.size)
+      ((second[0] - first[0]) * (third[1] - second[1])) -
+        ((second[1] - first[1]) * (third[0] - second[0]))
+    end
+
+    cross_products.all?(&:positive?) || cross_products.all?(&:negative?)
+  rescue ArgumentError, NoMethodError, TypeError
+    false
   end
 
   def exact_structured_authority_span(field, content:, mapper:)

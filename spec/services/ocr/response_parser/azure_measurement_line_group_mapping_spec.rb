@@ -21,6 +21,120 @@ RSpec.describe 'Azure measurement line-group mapping' do
     value.scan(/\X/).length
   end
 
+  def filter_reference_pricing_authority_fields(response, block_response: response)
+    block_analyze_result = block_response.fetch('analyzeResult')
+    reference_span = block_analyze_result.dig('pages', 0, 'lines', 1, 'spans', 0)
+    quantity_span = block_analyze_result.dig('pages', 0, 'lines', 2, 'spans', 0)
+    parser = Ocr::ResponseParser.new(
+      response:,
+      provider: 'azure_document_intelligence',
+      profile: ReceiptAnalysisProfiles.fetch('JPN')
+    )
+    filtered = parser.send(
+      :response_without_reference_pricing_block_fields,
+      response,
+      [
+        {
+          source_kind: 'azure_line_group',
+          block_provider_span_start: reference_span.fetch('offset'),
+          block_provider_span_end: quantity_span.fetch('offset') + quantity_span.fetch('length')
+        }
+      ]
+    )
+
+    filtered.dig('analyzeResult', 'documents', 0, 'fields')
+  end
+
+  def summary_currency_field(response)
+    summary_word = response.dig('analyzeResult', 'pages', 0, 'words').last
+    {
+      'type' => 'currency',
+      'content' => summary_word.fetch('content'),
+      'spans' => [ summary_word.fetch('span').deep_dup ],
+      'boundingRegions' => [
+        {
+          'pageNumber' => 1,
+          'polygon' => summary_word.fetch('polygon').deep_dup
+        }
+      ],
+      'valueCurrency' => { 'amount' => 300, 'currencyCode' => 'JPY' }
+    }
+  end
+
+  def multi_span_tax_detail_response
+    response = rewrite_page_lines!(
+      line_group_response.deep_dup,
+      [
+        'SYNTH-AUTHORITY',
+        '税込 120円/1 L',
+        '計量 2.5 L',
+        '10%対象 270円',
+        '内税 30円',
+        '合計 300円'
+      ]
+    )
+    analyze_result = response.fetch('analyzeResult')
+    lines = analyze_result.dig('pages', 0, 'lines')
+    first_line = lines.fetch(3)
+    second_line = lines.fetch(4)
+    analyze_result.dig('documents', 0, 'fields')['TaxDetails'] = {
+      'type' => 'array',
+      'valueArray' => [
+        {
+          'type' => 'object',
+          'content' => [ first_line.fetch('content'), second_line.fetch('content') ].join("\n"),
+          'spans' => [
+            first_line.fetch('spans').sole.deep_dup,
+            second_line.fetch('spans').sole.deep_dup
+          ],
+          'boundingRegions' => [
+            {
+              'pageNumber' => 1,
+              'polygon' => [ 20, 58, 240, 58, 240, 102, 20, 102 ]
+            }
+          ],
+          'valueObject' => {
+            'Description' => {
+              'type' => 'string',
+              'content' => first_line.fetch('content'),
+              'spans' => first_line.fetch('spans').map(&:deep_dup),
+              'valueString' => first_line.fetch('content')
+            },
+            'Amount' => {
+              'type' => 'currency',
+              'content' => second_line.fetch('content'),
+              'spans' => second_line.fetch('spans').map(&:deep_dup),
+              'valueCurrency' => { 'amount' => 30, 'currencyCode' => 'JPY' }
+            }
+          }
+        }
+      ]
+    }
+    response
+  end
+
+  def multi_span_authority_response(span_count:, fragment: nil)
+    authority_lines = Array.new(span_count) { |index| fragment || "A#{index}" }
+    response = rewrite_page_lines!(
+      line_group_response.deep_dup,
+      [ 'SYNTH-AUTHORITY', '税込 120円/1 L', '計量 2.5 L', *authority_lines, '合計 300円' ]
+    )
+    analyze_result = response.fetch('analyzeResult')
+    page = analyze_result.dig('pages', 0)
+    page['height'] = [ page.fetch('height'), (authority_lines.size + 5) * 16 ].max
+    lines = page.fetch('lines').slice(3, authority_lines.size)
+    analyze_result.dig('documents', 0, 'fields')['Total'] = {
+      'type' => 'string',
+      'content' => lines.map { |line| line.fetch('content') }.join("\n"),
+      'spans' => lines.map { |line| line.fetch('spans').sole.deep_dup },
+      'boundingRegions' => [
+        { 'pageNumber' => 1, 'polygon' => [ 20, 58, 240, 58, 240, 74, 20, 74 ] }
+      ],
+      'valueString' => authority_lines.join("\n")
+    }
+    response
+  end
+
   def rewrite_page_lines!(response, lines)
     analyze_result = response.fetch('analyzeResult')
     cursor = 0
@@ -438,6 +552,142 @@ RSpec.describe 'Azure measurement line-group mapping' do
         source_kind: 'azure_line_group', validation_state: 'valid'
       )
       expect(result.dig(:candidates, :store_address)).to be_nil
+    end
+  end
+
+  it 'accepts bounded Azure boundingRegions metadata on receipt authority fields outside the strict block' do
+    response = line_group_response.deep_dup
+    fields = response.dig('analyzeResult', 'documents', 0, 'fields')
+    expect(filter_reference_pricing_authority_fields(response)).to have_key('Total')
+
+    currency_field = summary_currency_field(response)
+    tax_detail = {
+      'type' => 'object',
+      'content' => currency_field.fetch('content'),
+      'spans' => currency_field.fetch('spans').map(&:deep_dup),
+      'boundingRegions' => currency_field.fetch('boundingRegions').map(&:deep_dup),
+      'valueObject' => {
+        'Amount' => currency_field.deep_dup
+      }
+    }
+    fields.merge!(
+      'Total' => currency_field.deep_dup,
+      'Subtotal' => currency_field.deep_dup,
+      'TotalTax' => currency_field.deep_dup,
+      'TaxDetails' => { 'type' => 'array', 'valueArray' => [ tax_detail ] }
+    )
+
+    filtered_fields = filter_reference_pricing_authority_fields(response)
+
+    expect(filtered_fields.keys).to include('Total', 'Subtotal', 'TotalTax', 'TaxDetails')
+  end
+
+  it 'accepts an ordered bounded multi-span TaxDetails parent outside the strict block' do
+    response = multi_span_tax_detail_response
+
+    expect(filter_reference_pricing_authority_fields(response)).to have_key('TaxDetails')
+  end
+
+  it 'bounds authority multi-spans and rejects reordered, overlapping, mismatched, and block-owned spans' do
+    maximum = multi_span_authority_response(
+      span_count: Ocr::ResponseParser::MAX_REFERENCE_PRICING_AUTHORITY_SPANS
+    )
+    excessive = multi_span_authority_response(
+      span_count: Ocr::ResponseParser::MAX_REFERENCE_PRICING_AUTHORITY_SPANS + 1
+    )
+    reordered = multi_span_tax_detail_response
+    reordered_parent = reordered.dig('analyzeResult', 'documents', 0, 'fields', 'TaxDetails', 'valueArray', 0)
+    reordered_parent['spans'].reverse!
+    overlapping = multi_span_tax_detail_response
+    overlapping_parent = overlapping.dig('analyzeResult', 'documents', 0, 'fields', 'TaxDetails', 'valueArray', 0)
+    overlapping_parent['spans'].last['offset'] = overlapping_parent.dig('spans', 0, 'offset') + 1
+    mismatched = multi_span_tax_detail_response
+    mismatched.dig(
+      'analyzeResult', 'documents', 0, 'fields', 'TaxDetails', 'valueArray', 0
+    )['content'] += 'x'
+    block_owned = multi_span_tax_detail_response
+    block_parent = block_owned.dig('analyzeResult', 'documents', 0, 'fields', 'TaxDetails', 'valueArray', 0)
+    reference_line = block_owned.dig('analyzeResult', 'pages', 0, 'lines', 1)
+    outside_line = block_owned.dig('analyzeResult', 'pages', 0, 'lines', 3)
+    block_parent['spans'] = [
+      reference_line.fetch('spans').sole.deep_dup,
+      outside_line.fetch('spans').sole.deep_dup
+    ]
+    block_parent['content'] = [
+      reference_line.fetch('content'),
+      outside_line.fetch('content')
+    ].join("\n")
+    oversized = multi_span_authority_response(span_count: 1, fragment: 'x' * 513)
+
+    aggregate_failures do
+      expect(filter_reference_pricing_authority_fields(maximum)).to have_key('Total')
+      expect(filter_reference_pricing_authority_fields(excessive)).not_to have_key('Total')
+      expect(filter_reference_pricing_authority_fields(reordered)).not_to have_key('TaxDetails')
+      expect(filter_reference_pricing_authority_fields(overlapping)).not_to have_key('TaxDetails')
+      expect(filter_reference_pricing_authority_fields(mismatched)).not_to have_key('TaxDetails')
+      expect(filter_reference_pricing_authority_fields(block_owned)).not_to have_key('TaxDetails')
+      expect(filter_reference_pricing_authority_fields(oversized)).not_to have_key('Total')
+    end
+  end
+
+  it 'fails closed for malformed boundingRegions, unknown primitive arrays, and overlapping authority spans' do
+    response = line_group_response.deep_dup
+    valid_field = summary_currency_field(response)
+    reference_word = response.dig('analyzeResult', 'pages', 0, 'words', 2)
+    invalid_fields = {
+      'empty regions' => valid_field.deep_dup.tap { |field| field['boundingRegions'] = [] },
+      'unknown page' => valid_field.deep_dup.tap do |field|
+        field.dig('boundingRegions', 0)['pageNumber'] = 2
+      end,
+      'malformed polygon' => valid_field.deep_dup.tap do |field|
+        field.dig('boundingRegions', 0)['polygon'] = [ 54, 130, 94 ]
+      end,
+      'out-of-bounds polygon' => valid_field.deep_dup.tap do |field|
+        field.dig('boundingRegions', 0, 'polygon')[2] = 301
+      end,
+      'crossed polygon' => valid_field.deep_dup.tap do |field|
+        field.dig('boundingRegions', 0)['polygon'] = [ 54, 130, 94, 146, 94, 130, 54, 146 ]
+      end,
+      'unknown region key' => valid_field.deep_dup.tap do |field|
+        field.dig('boundingRegions', 0)['providerExtension'] = 'unsupported'
+      end,
+      'oversized region' => valid_field.deep_dup.tap do |field|
+        100.times { |index| field.dig('boundingRegions', 0)["providerExtension#{index}"] = index }
+      end,
+      'unknown primitive array' => valid_field.deep_dup.merge('providerExtension' => [ 1 ]),
+      'overlapping span' => valid_field.deep_dup.tap do |field|
+        field['content'] = reference_word.fetch('content')
+        field['spans'] = [ reference_word.fetch('span').deep_dup ]
+      end
+    }
+
+    invalid_fields.each do |label, field|
+      candidate = response.deep_dup
+      candidate.dig('analyzeResult', 'documents', 0, 'fields')['Total'] = field
+
+      expect(filter_reference_pricing_authority_fields(candidate, block_response: response)).not_to have_key('Total'), label
+    end
+  end
+
+  it 'fails closed when page geometry is missing, oversized, or has duplicate page numbers' do
+    response = line_group_response.deep_dup
+    response.dig('analyzeResult', 'documents', 0, 'fields')['Total'] = summary_currency_field(response)
+    invalid_pages = {
+      'missing pages' => nil,
+      'missing dimensions' => [ { 'pageNumber' => 1 } ],
+      'oversized dimensions' => response.dig('analyzeResult', 'pages').deep_dup.tap do |pages|
+        pages.sole['width'] = 10_001
+      end,
+      'duplicate page number' => response.dig('analyzeResult', 'pages').deep_dup.then do |pages|
+        pages + [ pages.sole.deep_dup ]
+      end
+    }
+
+    invalid_pages.each do |label, pages|
+      candidate = response.deep_dup
+      candidate.dig('analyzeResult')['pages'] = pages
+
+      expect(filter_reference_pricing_authority_fields(candidate, block_response: response)).not_to have_key('Total'), label
     end
   end
 
