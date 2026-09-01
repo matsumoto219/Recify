@@ -95,6 +95,29 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     Ocr::ResponseParser.new(response: raw, provider: :fixture).call
   end
 
+  def parsed_ambiguous_structured_reference_result
+    raw = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
+    )
+    analyze_result = raw.fetch('analyzeResult')
+    item = analyze_result.dig('documents', 0, 'fields', 'Items', 'valueArray').sole
+    price = item.dig('valueObject', 'Price')
+    price_content = '基準 ¥497/100g'
+    total = item.dig('valueObject', 'TotalPrice')
+    total_content = '¥1,699'
+
+    analyze_result.fetch('content')[4, 12] = price_content
+    item.fetch('content')[4, 12] = price_content
+    price['content'] = price_content
+    price.fetch('valueCurrency')['amount'] = 497
+    analyze_result.fetch('content')[22, 6] = total_content
+    item.fetch('content')[22, 6] = total_content
+    total['content'] = total_content
+    total.fetch('valueCurrency')['amount'] = 1699
+
+    Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+  end
+
   def parsed_structured_inner_tax_reference_result(implicit_per_unit: false)
     result = parsed_structured_reference_result.deep_dup
     result.dig(:candidates).merge!(total_amount: 1703, tax_amount: 154)
@@ -1634,6 +1657,48 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
         expect(described_class.send(:total_serialized_within_bound?, at_total_limit)).to be(true)
         expect(described_class.send(:total_serialized_within_bound?, above_total_limit)).to be(false)
       end
+    end
+  end
+
+  describe '.unconfirmed_reference_formula_item_identities' do
+    it '税区分だけ未確定なexact reference候補をstrong explicitと同じItemへ限定して返す' do
+      result = parsed_ambiguous_structured_reference_result
+      snapshot = snapshot_without_proposals(result)
+      proposals = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      )
+
+      identities = described_class.unconfirmed_reference_formula_item_identities(
+        proposals: proposals,
+        ocr_snapshot: snapshot
+      )
+
+      aggregate_failures do
+        expect(proposals.sole['conflicts']).to eq([ 'reference_expression' ])
+        expect(proposals.sole['options'].pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
+        expect(identities).to eq([ proposals.sole.fetch('item_identity') ])
+        expect(identities).to be_frozen
+      end
+    end
+
+    it '通常のexplicitだけのItemにはreference診断を付けない' do
+      result = parsed_ocr_result
+      result.dig(:candidates, :reference_pricing_candidates).clear
+      result.dig(:candidates, :item_calculation_mode_candidates).each do |candidate|
+        candidate[:conflicts] = []
+        candidate[:options].select! { |option| option[:pricing_source_kind] == 'explicit_line_total' }
+      end
+      snapshot = snapshot_without_proposals(result)
+      proposals = described_class.build_all(
+        candidates: result.dig(:candidates, :item_calculation_mode_candidates),
+        ocr_snapshot: snapshot
+      )
+
+      expect(described_class.unconfirmed_reference_formula_item_identities(
+        proposals: proposals,
+        ocr_snapshot: snapshot
+      )).to eq([])
     end
   end
 end

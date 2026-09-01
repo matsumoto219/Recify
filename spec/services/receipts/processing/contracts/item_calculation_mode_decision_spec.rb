@@ -409,6 +409,112 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeDecision do
       end
     end
 
+    it '税基準を確定できないexactな基準価格式と印字合計が競合する場合もexplicitをreviewableにする' do
+      context = proposal_context_for(
+        parsed_structured_reference_result(
+          total_amount: 1699,
+          reference_price_amount: 497,
+          tax_marker: '基準'
+        )
+      )
+      before = context.deep_dup
+
+      decision = result_for(context, count_tax_semantics: 'unknown')
+
+      aggregate_failures do
+        expect(context.dig(:proposal, 'conflicts')).to eq([ 'reference_expression' ])
+        expect(context.dig(:proposal, 'options').pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
+        expect(decision).to be_reviewable
+        expect(decision.reason).to eq('reference_formula_unconfirmed')
+        expect(decision.selected_pricing_source_kind).to eq('explicit_line_total')
+        expect(decision.projected_line_total).to eq(1699)
+        expect(context).to eq(before)
+      end
+    end
+
+    it '税基準だけ未確定ならHALF_UP結果と印字合計が一致してもexplicitをreviewableにする' do
+      context = proposal_context_for(
+        parsed_structured_reference_result(tax_marker: '基準')
+      )
+
+      decision = result_for(context, count_tax_semantics: 'unknown')
+
+      aggregate_failures do
+        expect(
+          context.dig(
+            :snapshot,
+            :candidates,
+            :reference_pricing_candidates,
+            0,
+            :corroboration,
+            :rounding_matches
+          )
+        ).to include('half_up')
+        expect(decision).to be_reviewable
+        expect(decision.reason).to eq('reference_formula_unconfirmed')
+        expect(decision.selected_pricing_source_kind).to eq('explicit_line_total')
+        expect(decision.projected_line_total).to eq(1703)
+      end
+    end
+
+    it '曖昧なreference診断の理由・unit・evidence・corroborationが不正なら通常explicitをconfirmedのまま維持する' do
+      context = proposal_context_for(
+        parsed_structured_reference_result(
+          total_amount: 1699,
+          reference_price_amount: 497,
+          tax_marker: '基準'
+        )
+      )
+      mutations = [
+        ->(candidate) { candidate[:rejection_reasons] << 'dimension_mismatch' },
+        ->(candidate) { candidate.dig(:purchased_quantity)[:unit_code] = 'milliliter' },
+        ->(candidate) { candidate.dig(:reference_price, :evidence)[:source_provider] = 'unknown' },
+        ->(candidate) { candidate.dig(:corroboration, :exact_amount)[:numerator] = '1' },
+        ->(candidate) { candidate.dig(:corroboration)[:rounding_matches] = [] },
+        ->(candidate) { candidate[:tax_inclusion_evidence] = { kind: 'invented' } }
+      ]
+
+      mutations.each do |mutation|
+        snapshot = context.fetch(:snapshot).deep_dup
+        mutation.call(snapshot.dig(:candidates, :reference_pricing_candidates).sole)
+        decision = result_for(context, ocr_snapshot: snapshot, count_tax_semantics: 'unknown')
+
+        aggregate_failures do
+          expect(decision).to be_confirmed
+          expect(decision.reason).to eq('explicit_total_only')
+          expect(decision.selected_pricing_source_kind).to eq('explicit_line_total')
+          expect(decision.projected_line_total).to eq(1699)
+        end
+      end
+    end
+
+    it '同じItemに曖昧なreference candidateが複数ある場合は診断を採用せず通常explicitを維持する' do
+      context = proposal_context_for(
+        parsed_structured_reference_result(
+          total_amount: 1699,
+          reference_price_amount: 497,
+          tax_marker: '基準'
+        )
+      )
+      snapshot = context.fetch(:snapshot).deep_dup
+      candidates = snapshot.dig(:candidates, :reference_pricing_candidates)
+      duplicate = candidates.sole.deep_dup
+      duplicate[:candidate_id] = 'azure_items_0_reference_pricing_alternative'
+      candidates << duplicate
+      counts = snapshot.dig(:candidate_counts, :reference_pricing_candidates)
+      counts[:actual_count] += 1
+      counts[:snapshot_count] += 1
+
+      decision = result_for(context, ocr_snapshot: snapshot, count_tax_semantics: 'unknown')
+
+      aggregate_failures do
+        expect(decision).to be_confirmed
+        expect(decision.reason).to eq('explicit_total_only')
+        expect(decision.selected_pricing_source_kind).to eq('explicit_line_total')
+        expect(decision.projected_line_total).to eq(1699)
+      end
+    end
+
     it '印字合計がないgrossの基準価格formulaをreferenceとしてconfirmedにする' do
       context = proposal_context_for(parsed_structured_reference_result(with_total: false))
       decision = result_for(context, count_tax_semantics: 'unknown')

@@ -85,6 +85,10 @@ module Receipts::Processing::Contracts
       tax_inclusion_evidence
     ].freeze
     REFERENCE_CANDIDATE_OPTIONAL_KEYS = %w[printed_line_total corroboration].freeze
+    UNCONFIRMED_REFERENCE_CANDIDATE_REQUIRED_KEYS =
+      (REFERENCE_CANDIDATE_REQUIRED_KEYS - %w[tax_inclusion_evidence]).freeze
+    UNCONFIRMED_REFERENCE_CANDIDATE_OPTIONAL_KEYS =
+      (REFERENCE_CANDIDATE_OPTIONAL_KEYS + %w[tax_inclusion_evidence]).freeze
     REFERENCE_PRICE_COMPONENT_KEYS = %w[amount evidence].freeze
     REFERENCE_QUANTITY_COMPONENT_KEYS = %w[
       amount unit_code unit_status origin evidence
@@ -211,6 +215,29 @@ module Receipts::Processing::Contracts
         return nil unless total_serialized_within_bound?(proposals)
 
         deep_copy(proposals)
+      rescue ArgumentError, EncodingError, JSON::GeneratorError, TypeError
+        nil
+      end
+
+      def unconfirmed_reference_formula_item_identities(proposals:, ocr_snapshot:)
+        context = ocr_context(ocr_snapshot)
+        return nil if context.nil?
+        return nil unless proposals.is_a?(Array) && proposals.size <= MAX_SETS
+
+        canonical = proposals.map do |proposal|
+          normalized = bounded_normalized_hash(proposal)
+          next if normalized.nil?
+          next unless proposal_valid?(normalized, context: context)
+          next unless integrity_valid?(normalized, context: context)
+
+          normalized
+        end
+        return nil if canonical.any?(&:nil?)
+        return nil unless collection_valid?(canonical, context: context)
+
+        canonical.filter_map do |proposal|
+          proposal["item_identity"] if unconfirmed_reference_formula?(proposal, context: context)
+        end.freeze
       rescue ArgumentError, EncodingError, JSON::GeneratorError, TypeError
         nil
       end
@@ -1727,6 +1754,80 @@ module Receipts::Processing::Contracts
         )
       end
 
+      def unconfirmed_reference_formula?(proposal, context:)
+        return false unless proposal["source_provider"] == SOURCE_PROVIDER
+        return false unless proposal["conflicts"] == [ "reference_expression" ]
+        return false unless proposal["printed_line_total"].is_a?(Hash)
+
+        options = proposal["options"]
+        return false unless options.is_a?(Array) && options.one?
+
+        explicit = normalized_hash(options.sole)
+        return false unless explicit["pricing_source_kind"] == "explicit_line_total"
+        return false unless exact_keys?(explicit, OPTION_KEYS)
+
+        item_index = proposal["item_index"]
+        expected_candidate_id = "azure_items_#{item_index}_reference_pricing"
+        matches = context.dig("candidates", "reference_pricing_candidates").select do |candidate|
+          candidate["item_index"] == item_index
+        end
+        return false unless matches.one?
+        return false unless matches.sole["candidate_id"] == expected_candidate_id
+
+        unconfirmed_reference_candidate_valid?(matches.sole, proposal: proposal)
+      end
+
+      def unconfirmed_reference_candidate_valid?(candidate, proposal:)
+        return false unless exact_optional_keys?(
+          candidate,
+          required: UNCONFIRMED_REFERENCE_CANDIDATE_REQUIRED_KEYS,
+          optional: UNCONFIRMED_REFERENCE_CANDIDATE_OPTIONAL_KEYS
+        )
+        return false unless candidate["validation_state"] == "ambiguous"
+        return false unless candidate["rejection_reasons"] == [ "ambiguous_tax_inclusion" ]
+        return false unless candidate["reference_price_tax_inclusion"] == "unknown"
+        return false unless candidate["tax_inclusion_evidence"].nil?
+
+        item_index = proposal["item_index"]
+        parent_start = proposal["provider_span_start"]
+        parent_end = proposal["provider_span_end"]
+        return false unless reference_price_component_valid?(
+          candidate["reference_price"],
+          item_index: item_index,
+          parent_start: parent_start,
+          parent_end: parent_end
+        )
+        return false unless reference_quantity_component_valid?(
+          candidate["reference_quantity"],
+          item_index: item_index,
+          parent_start: parent_start,
+          parent_end: parent_end
+        )
+        return false unless purchased_quantity_component_valid?(
+          candidate["purchased_quantity"],
+          item_index: item_index,
+          parent_start: parent_start,
+          parent_end: parent_end
+        )
+
+        source = reference_source(candidate)
+        return false unless compatible_reference_units?(
+          source["reference_quantity_unit_code"],
+          source["purchased_quantity_unit_code"]
+        )
+
+        projection = reference_projection(source)
+        return false if projection.nil?
+        return false unless projection.fetch(:projected_amount).between?(0, MAX_AMOUNT)
+        return false unless reference_printed_corroboration_valid?(
+          candidate,
+          candidate: proposal,
+          projection: projection
+        )
+
+        reference_rounding_matches_exact?(candidate["corroboration"], projection: projection)
+      end
+
       def hybrid_reference_candidate_valid?(reference_candidate, candidate:, context:)
         return false unless exact_optional_keys?(
           reference_candidate,
@@ -2142,6 +2243,19 @@ module Receipts::Processing::Contracts
           value["printed_line_total"] == printed_amount &&
           matches.is_a?(Array) && matches.uniq == matches &&
           (matches - REFERENCE_ROUNDING_MATCHES).empty?
+      end
+
+      def reference_rounding_matches_exact?(value, projection:)
+        corroboration = normalized_hash(value)
+        exact_amount = projection.fetch(:exact_amount).to_r
+        printed_amount = corroboration["printed_line_total"]
+        expected = {
+          "floor" => exact_amount.floor,
+          "half_up" => (exact_amount + Rational(1, 2)).floor,
+          "ceil" => exact_amount.ceil
+        }.filter_map { |kind, amount| kind if amount.to_s == printed_amount }
+
+        expected.any? && corroboration["rounding_matches"] == expected
       end
 
       def explicit_option_valid?(option, proposal:, parent_start:, parent_end:)

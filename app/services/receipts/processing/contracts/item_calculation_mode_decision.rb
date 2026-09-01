@@ -8,6 +8,7 @@ module Receipts::Processing::Contracts
       reference_formula_only
       explicit_total_only
       formula_total_mismatch
+      reference_formula_unconfirmed
       count_tax_semantics_unknown
       reference_tax_semantics_unsupported
       source_out_of_bounds
@@ -118,6 +119,13 @@ module Receipts::Processing::Contracts
         return nil unless proposals.is_a?(Array)
 
         proposals = proposals.sort_by { |proposal| proposal.fetch("item_identity") }
+        unconfirmed_reference_identities = PROPOSAL_CONTRACT.unconfirmed_reference_formula_item_identities(
+          proposals: proposals,
+          ocr_snapshot: ocr_snapshot
+        )
+        return nil unless unconfirmed_reference_identities.is_a?(Array)
+
+        unconfirmed_reference_identity_set = unconfirmed_reference_identities.index_with(true)
         decisions = if !COUNT_TAX_SEMANTICS.include?(count_tax_semantics)
           proposals.map { |proposal| unresolved("proposal_invalid", proposal:) }
         elsif !valid_limit?(item_price_limit) || !valid_limit?(item_line_total_limit)
@@ -128,7 +136,10 @@ module Receipts::Processing::Contracts
               proposal,
               count_tax_semantics:,
               item_price_limit:,
-              item_line_total_limit:
+              item_line_total_limit:,
+              unconfirmed_reference_formula: unconfirmed_reference_identity_set.key?(
+                proposal.fetch("item_identity")
+              )
             )
           end
         end
@@ -140,7 +151,13 @@ module Receipts::Processing::Contracts
 
       private
 
-      def decision_for(proposal, count_tax_semantics:, item_price_limit:, item_line_total_limit:)
+      def decision_for(
+        proposal,
+        count_tax_semantics:,
+        item_price_limit:,
+        item_line_total_limit:,
+        unconfirmed_reference_formula:
+      )
         if unsupported_reference_tax_semantics?(proposal)
           explicit = proposal.fetch("options").find do |option|
             option.fetch("pricing_source_kind") == "explicit_line_total"
@@ -196,6 +213,13 @@ module Receipts::Processing::Contracts
           )
         end
         if explicit
+          return selected_result(
+            proposal,
+            explicit,
+            state: "reviewable",
+            reason: "reference_formula_unconfirmed"
+          ) if unconfirmed_reference_formula
+
           option = proposal.fetch("options").find { |entry| entry["pricing_source_kind"] == "explicit_line_total" }
           if option.key?("discount") && !explicit_discount_rate_matches?(option)
             return selected_result(
