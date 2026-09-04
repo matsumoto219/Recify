@@ -268,6 +268,7 @@ class Ocr::ResponseParser
         items: calculation_layout&.fetch(:items) || extract_items(
           authority_response,
           authority_lines,
+          reference_pricing_candidates: reference_pricing_candidates,
           item_calculation_mode_candidates: item_calculation_mode_candidates,
           retained_item_indexes: retained_item_indexes,
           item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
@@ -2782,6 +2783,7 @@ class Ocr::ResponseParser
   def extract_items(
     parsed_response,
     lines = [],
+    reference_pricing_candidates: [],
     item_calculation_mode_candidates: [],
     retained_item_indexes: nil,
     item_layout_descriptors: [],
@@ -2851,6 +2853,14 @@ class Ocr::ResponseParser
       source = options.sole[:source]
       sources[item_index] = source if ReceiptQuantityUnit.countable?(source[:quantity_unit_code])
     end
+    reference_quantity_overlays_by_index = Ocr::ResponseParser::ReferencePricingStructuredItemQuantityOverlay.call(
+      analyze_result: extract_analyze_result(parsed_response),
+      profile:,
+      items:,
+      reference_pricing_candidates:,
+      item_calculation_mode_candidates:,
+      excluded_item_indexes: fragment_indexes | layout_descriptors.filter_map { |descriptor| descriptor[:structured_item_index] }
+    )
 
     items.filter_map.with_index do |item, index|
       next fragment_replacements[index].deep_dup if fragment_replacements.key?(index)
@@ -2863,6 +2873,7 @@ class Ocr::ResponseParser
       value_object = item["valueObject"] || {}
       count_source = count_sources_by_index[index]
       layout_overlay = layout_overlays_by_index[index]
+      reference_quantity_overlay = reference_quantity_overlays_by_index[index]
       amount_field_name = value_object["TotalPrice"].present? ? "TotalPrice" : "Price"
       amount_field = value_object[amount_field_name]
       total_price = if layout_overlay
@@ -2882,7 +2893,8 @@ class Ocr::ResponseParser
         else
           original_line_total
         end
-      purchased_quantity = layout_overlay&.dig(:reference_pricing_candidate, :purchased_quantity)
+      purchased_quantity = layout_overlay&.dig(:reference_pricing_candidate, :purchased_quantity) ||
+        reference_quantity_overlay
       quantity_unit_resolution = if purchased_quantity
         ReceiptQuantityUnit::Resolution.new(
           code: purchased_quantity[:unit_code],
