@@ -117,10 +117,19 @@ class Ocr::ResponseParser
       authority_lines,
       reference_pricing_candidates:
     )
+    subtotal_amount = extract_subtotal_amount(
+      authority_response,
+      authority_lines,
+      reference_pricing_candidates:
+    )
     tax_detail_result = extract_tax_detail_result(authority_response, authority_lines)
     tax_details = tax_detail_result[:tax_details]
     tax_amount = extract_tax_amount(authority_response, authority_lines, tax_details:)
     adjustment_candidates = extract_adjustment_candidates(authority_response, authority_lines)
+    adjustment_candidates = reject_exact_external_tax_detail_adjustments(
+      adjustment_candidates,
+      tax_detail_structural_metadata: tax_detail_result[:tax_detail_structural_result]
+    )
     reference_pricing_candidates = promote_single_structured_item_gross_reference_pricing(
       analyze_result:,
       structured_items:,
@@ -140,6 +149,18 @@ class Ocr::ResponseParser
       receipt_total: total_amount,
       receipt_tax: tax_amount,
       tax_details:,
+      adjustment_candidates:,
+      discount_count: discount_details_by_item_index.size
+    )
+    reference_pricing_candidates = promote_shared_basis_external_tax_reference_pricing(
+      analyze_result:,
+      candidates: reference_pricing_candidates,
+      accepted_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+      retained_item_indexes:,
+      receipt_subtotal: subtotal_amount,
+      receipt_total: total_amount,
+      receipt_tax: tax_amount,
+      tax_detail_structural_metadata: tax_detail_result[:tax_detail_structural_result],
       adjustment_candidates:,
       discount_count: discount_details_by_item_index.size
     )
@@ -180,10 +201,15 @@ class Ocr::ResponseParser
       authority_response = response_without_reference_pricing_block_fields(parsed_response, reference_pricing_blocks)
       authority_lines = lines_without_reference_pricing_blocks(normalized_lines, reference_pricing_blocks)
       total_amount = extract_total_amount(authority_response, authority_lines)
+      subtotal_amount = extract_subtotal_amount(authority_response, authority_lines)
       tax_detail_result = extract_tax_detail_result(authority_response, authority_lines)
       tax_details = tax_detail_result[:tax_details]
       tax_amount = extract_tax_amount(authority_response, authority_lines, tax_details:)
       adjustment_candidates = extract_adjustment_candidates(authority_response, authority_lines)
+      adjustment_candidates = reject_exact_external_tax_detail_adjustments(
+        adjustment_candidates,
+        tax_detail_structural_metadata: tax_detail_result[:tax_detail_structural_result]
+      )
     elsif calculation_fragments.any?
       item_calculation_mode_candidates += calculation_fragments.map { |entry| entry.fetch(:candidate) }
       item_calculation_mode_candidates.sort_by! { |candidate| candidate.fetch(:item_index) }
@@ -206,11 +232,7 @@ class Ocr::ResponseParser
           profile: profile
         ),
         total_amount: total_amount,
-        subtotal_amount: extract_subtotal_amount(
-          authority_response,
-          authority_lines,
-          reference_pricing_candidates:
-        ),
+        subtotal_amount: subtotal_amount,
         tax_amount: tax_amount,
         tax_rate: extract_tax_rate(authority_response),
         payment_method_text: extract_payment_method_text(authority_response, authority_raw_text, authority_lines),
@@ -810,6 +832,70 @@ class Ocr::ResponseParser
     candidates
   end
 
+  def promote_shared_basis_external_tax_reference_pricing(
+    analyze_result:,
+    candidates:,
+    accepted_descriptors:,
+    retained_item_indexes:,
+    receipt_subtotal:,
+    receipt_total:,
+    receipt_tax:,
+    tax_detail_structural_metadata:,
+    adjustment_candidates:,
+    discount_count:
+  )
+    candidates = Array(candidates)
+    descriptors = Array(accepted_descriptors)
+    retained_indexes = Array(retained_item_indexes)
+    return candidates unless descriptors.one? && retained_indexes.one?
+
+    descriptor = descriptors.sole
+    return candidates unless descriptor[:destination_kind] == "azure_structured_item"
+    return candidates unless descriptor[:structured_item_index] == retained_indexes.sole
+
+    candidate_id = descriptor.dig(:reference_pricing_candidate, :candidate_id)
+    matches = candidates.select do |candidate|
+      candidate.is_a?(Hash) &&
+        candidate[:source_kind] == "azure_item_layout" &&
+        candidate[:candidate_id] == candidate_id &&
+        candidate[:item_identity] == descriptor[:item_identity] &&
+        candidate[:item_index] == retained_indexes.sole
+    end
+    return candidates unless matches.one?
+
+    candidate = matches.sole
+    evidence = Ocr::ResponseParser::ReferencePricingSharedBasisExternalTaxEvidenceExtractor.call(
+      analyze_result:,
+      profile:,
+      receipt_subtotal:,
+      receipt_total:,
+      receipt_tax:,
+      tax_detail_structural_metadata:
+    )
+    policy = Ocr::ResponseParser::ReferencePricingSharedBasisExternalTaxPolicy.call(
+      candidate:,
+      item_identities: [ descriptor[:item_identity] ],
+      block_candidate_ids: [ candidate_id ],
+      destination_identities: [ descriptor[:item_identity] ],
+      external_tax_evidence: evidence,
+      tax_detail_structural_metadata:,
+      adjustment_count: Array(adjustment_candidates).size,
+      discount_count: discount_count + descriptors.count { |entry| entry[:per_unit_discount_note_present] },
+      item_line_total_limit: ReceiptAmountService.receipt_item_line_total_max
+    )
+    return candidates unless policy.eligible?
+
+    promoted = candidate.deep_dup.merge(
+      validation_state: "valid",
+      rejection_reasons: [],
+      reference_price_tax_inclusion: policy.reference_price_tax_inclusion,
+      tax_inclusion_evidence: shared_basis_external_tax_evidence(evidence, policy:)
+    )
+    candidates.map { |entry| entry.equal?(candidate) ? promoted : entry }
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    candidates
+  end
+
   def competing_tax_basis_count(tax_details)
     rates = Array(tax_details).filter_map do |detail|
       normalize_rate_value(detail[:rate]) if detail.is_a?(Hash)
@@ -838,6 +924,18 @@ class Ocr::ResponseParser
       tax_detail_parent: evidence.tax_detail_parent.deep_dup,
       tax_description: evidence.tax_description.deep_dup,
       tax_amount: evidence.tax_amount.deep_dup,
+      document_tax_total: evidence.document_tax_total.deep_dup,
+      summary_total: evidence.summary_total.deep_dup
+    }
+  end
+
+  def shared_basis_external_tax_evidence(evidence, policy:)
+    {
+      kind: evidence.kind,
+      string_index_type: evidence.string_index_type,
+      policy_contract_version: policy.contract_version,
+      tax_detail_index: evidence.tax_detail_index,
+      subtotal: evidence.subtotal.deep_dup,
       document_tax_total: evidence.document_tax_total.deep_dup,
       summary_total: evidence.summary_total.deep_dup
     }
@@ -1935,6 +2033,76 @@ class Ocr::ResponseParser
     []
   end
 
+  def reject_exact_external_tax_detail_adjustments(candidates, tax_detail_structural_metadata:)
+    candidates = Array(candidates)
+    metadata = tax_detail_structural_metadata
+    return candidates unless metadata.is_a?(Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::Result)
+    return candidates unless metadata.source_provider ==
+      Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SOURCE_PROVIDER
+    return candidates unless metadata.provider_model_id ==
+      Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SUPPORTED_MODEL_ID
+    return candidates unless metadata.provider_api_version ==
+      Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SUPPORTED_API_VERSION
+
+    tax_pairs = metadata.tax_details.filter_map do |detail|
+      next unless detail.is_a?(Hash)
+
+      tax_inclusion = detail[:tax_inclusion_evidence]
+      rate = detail[:rate]
+      tax_amount = detail[:tax_amount]
+      next unless exact_external_tax_inclusion_evidence?(tax_inclusion, detail:)
+      next unless exact_external_tax_detail_child_evidence?(rate, detail:, field_name: "Rate")
+      next unless exact_external_tax_detail_child_evidence?(tax_amount, detail:, field_name: "Amount")
+      next unless rate[:page_index] == tax_inclusion[:page_index]
+      next unless rate[:page_index] == tax_amount[:page_index]
+      next unless tax_amount[:line_index] == rate[:line_index] + 1
+
+      [ rate[:line_index], tax_amount[:amount] ]
+    end
+    return candidates if tax_pairs.empty?
+
+    candidates.reject do |candidate|
+      next false unless candidate.is_a?(Hash)
+      next false unless candidate[:candidate_reason] == "label_next_amount"
+
+      amount = exact_adjustment_amount(candidate[:amount])
+      tax_pairs.include?([ candidate[:source_line_index], amount ])
+    end
+  rescue ArgumentError, NoMethodError, TypeError
+    candidates
+  end
+
+  def exact_external_tax_inclusion_evidence?(evidence, detail:)
+    index = detail[:tax_detail_index]
+    evidence.is_a?(Hash) &&
+      evidence[:kind] == Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::EXTERNAL_TAX_EVIDENCE_KIND &&
+      evidence[:tax_inclusion] == Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::EXTERNAL_TAX_INCLUSION &&
+      evidence[:source_provider] == Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SOURCE_PROVIDER &&
+      evidence[:source_field_path] == "documents[0].fields.TaxDetails[#{index}].Description" &&
+      evidence[:tax_detail_index] == index
+  end
+
+  def exact_external_tax_detail_child_evidence?(evidence, detail:, field_name:)
+    index = detail[:tax_detail_index]
+    evidence.is_a?(Hash) &&
+      evidence[:source_provider] == Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SOURCE_PROVIDER &&
+      evidence[:source_field_path] == "documents[0].fields.TaxDetails[#{index}].#{field_name}" &&
+      evidence[:tax_detail_index] == index &&
+      evidence[:page_index].is_a?(Integer) && evidence[:page_index] >= 0 &&
+      evidence[:line_index].is_a?(Integer) && evidence[:line_index] >= 0 &&
+      evidence[:string_index_type].is_a?(String) &&
+      evidence[:provider_span_start].is_a?(Integer) && evidence[:provider_span_start] >= 0 &&
+      evidence[:provider_span_end].is_a?(Integer) &&
+      evidence[:provider_span_end] > evidence[:provider_span_start]
+  end
+
+  def exact_adjustment_amount(value)
+    decimal = BigDecimal(value.to_s)
+    decimal.to_i if decimal.frac.zero? && decimal.between?(0, MAX_REFERENCE_PRICING_TOTAL_AMOUNT)
+  rescue ArgumentError
+    nil
+  end
+
   def signed_amount_candidate(lines, index, items)
     line = lines[index].to_s
     return nil unless amount_only_line?(line)
@@ -2226,7 +2394,8 @@ class Ocr::ResponseParser
     details = fields.dig("TaxDetails", "valueArray")
     details = [] unless details.is_a?(Array)
     structural_metadata = Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor.call(
-      analyze_result: extract_analyze_result(parsed_response)
+      analyze_result: extract_analyze_result(parsed_response),
+      profile:
     )
 
     tax_detail_rates = details.filter_map do |detail|
@@ -2276,6 +2445,7 @@ class Ocr::ResponseParser
       inferred_tax_details: tax_details
     )
       result[:tax_detail_structural_metadata] = structural_metadata.to_h
+      result[:tax_detail_structural_result] = structural_metadata
     end
     result
   rescue NoMethodError, TypeError

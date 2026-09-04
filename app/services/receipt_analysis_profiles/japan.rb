@@ -302,6 +302,7 @@ module ReceiptAnalysisProfiles
     OCR_TAX_AMOUNT_DESCRIPTION_PATTERN = /消費税|税額|tax/i.freeze
     OCR_TAX_CONTEXT_LABEL_PATTERN = /小\s*計|対象|消費税|税額|内税|外税|税抜|税込|tax/i.freeze
     OCR_REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_INNER_TAX_DESCRIPTION_PATTERN = /\A(?:内税|内消費税(?:等)?)\z/.freeze
+    OCR_REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_DESCRIPTION_PATTERN = /\A(?:外税|税別|税抜)\z/.freeze
     OCR_ITEM_DISCOUNT_KEYWORD_PATTERN = /値引|割引|discount/i.freeze
     OCR_ITEM_CALCULATION_PACKAGE_QUANTITY_PATTERN = /[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)\s*(?:入(?:り)?|詰|パック)/i.freeze
     OCR_ITEM_CALCULATION_PACKAGE_CAPACITY_PATTERN = /(?:[0-9０-９]+\s*(?:個|点|本|袋|枚|台|箱|セット)\s*(?:セット|[x×]\s*[0-9０-９]+(?:[.．][0-9０-９]+)?\s*\p{L}+)|[0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:mg|g|kg|ml|l|cc)\s*(?:入(?:り)?|詰|パック|セット))/iu.freeze
@@ -844,6 +845,10 @@ module ReceiptAnalysisProfiles
 
       def ocr_reference_pricing_single_structured_item_inner_tax_description_pattern
         OCR_REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_INNER_TAX_DESCRIPTION_PATTERN
+      end
+
+      def ocr_reference_pricing_shared_basis_external_tax_description_pattern
+        OCR_REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_DESCRIPTION_PATTERN
       end
 
       def ocr_tax_rate_target_line_pattern(rate_label)

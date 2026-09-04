@@ -12,12 +12,14 @@ class Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor
   MAX_PATH_BYTES = 256
   MAX_RATE_SCALE = 6
   SOURCE_PROVIDER = "azure_structured"
+  EXTERNAL_TAX_EVIDENCE_KIND = "external_tax"
+  EXTERNAL_TAX_INCLUSION = "net"
   SUPPORTED_MODEL_ID = "prebuilt-receipt"
   SUPPORTED_API_VERSION = "2024-11-30"
   CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
   LINE_BREAK_PATTERN = /[\r\n\u0085\u2028\u2029]/.freeze
-  RATE_PATTERN = /\A[\s[:punct:]]*(?<rate>(?:0|[1-9][0-9]*)(?:\.[0-9]+)?)[\s]*[%％][\s[:punct:]]*\z/.freeze
-  JPY_AMOUNT_PATTERN = /\A[\s[:punct:]¥￥円]*(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+))[\s[:punct:]¥￥円]*\z/.freeze
+  RATE_PATTERN = /\A\s*(?<rate>(?:0|[1-9][0-9]*)(?:\.[0-9]+)?)\s*[%％]\s*\z/.freeze
+  JPY_AMOUNT_PATTERN = /\A\s*(?:[¥￥]\s*)?(?<amount>(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+))\s*(?:円)?\s*\z/.freeze
 
   Result = Data.define(
     :source_provider,
@@ -27,12 +29,13 @@ class Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor
     :tax_details
   )
 
-  def self.call(analyze_result:)
-    new(analyze_result:).call
+  def self.call(analyze_result:, profile:)
+    new(analyze_result:, profile:).call
   end
 
-  def initialize(analyze_result:)
+  def initialize(analyze_result:, profile:)
     @analyze_result = analyze_result
+    @profile = profile
   end
 
   def call
@@ -57,7 +60,7 @@ class Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor
 
   private
 
-  attr_reader :analyze_result, :content, :lines, :mapper, :page_dimensions
+  attr_reader :analyze_result, :content, :lines, :mapper, :page_dimensions, :profile
 
   def provider_context_valid?
     return false unless analyze_result.is_a?(Hash)
@@ -167,6 +170,12 @@ class Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor
     return unless value_object.is_a?(Hash)
 
     path = "documents[0].fields.TaxDetails[#{index}]"
+    tax_inclusion_evidence = exact_tax_inclusion_evidence(
+      value_object["Description"],
+      parent:,
+      source_field_path: "#{path}.Description",
+      tax_detail_index: index
+    )
     rate = exact_rate_field(
       value_object["Rate"],
       parent:,
@@ -188,13 +197,15 @@ class Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor
       positive: false
     )
     return if [ rate, net_amount, tax_amount ].any?(&:nil?)
-    return if [ rate, net_amount, tax_amount ].combination(2).any? do |left, right|
+    child_evidence = [ tax_inclusion_evidence, rate, net_amount, tax_amount ].compact
+    return if child_evidence.combination(2).any? do |left, right|
       ranges_overlap?(left, right)
     end
 
     {
       tax_detail_index: index,
       parent: parent.except(:bounds),
+      tax_inclusion_evidence:,
       rate:,
       net_amount:,
       tax_amount:
@@ -227,6 +238,42 @@ class Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor
       end.freeze,
       bounds:
     }.freeze
+  end
+
+  def exact_tax_inclusion_evidence(field, parent:, source_field_path:, tax_detail_index:)
+    return unless field.is_a?(Hash)
+    return unless profile.respond_to?(:ocr_reference_pricing_shared_basis_external_tax_description_pattern)
+
+    field_content = bounded_content(
+      field["content"],
+      maximum_bytes: MAX_LINE_CONTENT_BYTES,
+      allow_line_breaks: false
+    )
+    value_string = bounded_content(
+      field["valueString"],
+      maximum_bytes: MAX_LINE_CONTENT_BYTES,
+      allow_line_breaks: false
+    )
+    span = exact_single_span(field["spans"])
+    return if field_content.nil? || value_string.nil? || span.nil?
+    return unless field_content == value_string && exact_provider_content?(field_content, span)
+
+    normalized = field_content.unicode_normalize(:nfkc).strip
+    return unless normalized.match?(
+      profile.ocr_reference_pricing_shared_basis_external_tax_description_pattern
+    )
+
+    evidence = child_evidence(
+      field,
+      span:,
+      parent:,
+      source_field_path:,
+      tax_detail_index:
+    )
+    evidence&.merge(
+      kind: EXTERNAL_TAX_EVIDENCE_KIND,
+      tax_inclusion: EXTERNAL_TAX_INCLUSION
+    )&.freeze
   end
 
   def exact_rate_field(field, parent:, source_field_path:, tax_detail_index:)
@@ -384,7 +431,6 @@ class Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor
     return if value.respond_to?(:finite?) && !value.finite?
 
     rate = BigDecimal(value.to_s)
-    rate /= 100 if rate > 1
     return unless rate.positive? && rate <= 1
 
     text = rate.to_s("F").sub(/\.?0+\z/, "")

@@ -7,8 +7,17 @@ RSpec.describe Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor do
     value.scan(/\X/u).size
   end
 
-  def build_analyze_result(string_index_type: 'textElements')
-    line_contents = [ '外税', '8.00%', '593円', '47円' ]
+  def build_analyze_result(
+    string_index_type: 'textElements',
+    description: '外税',
+    rate_content: '8.00%',
+    provider_rate: 0.08,
+    net_amount_content: '593円',
+    provider_net_amount: 593.0,
+    tax_amount_content: '47円',
+    provider_tax_amount: 47.0
+  )
+    line_contents = [ description, rate_content, net_amount_content, tax_amount_content ]
     content = line_contents.join("\n")
     offset = 0
     lines = line_contents.map.with_index do |line_content, line_index|
@@ -47,15 +56,15 @@ RSpec.describe Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor do
       ],
       'spans' => [ parent_span.call(0, 1), parent_span.call(2, 3) ],
       'valueObject' => {
-        'Description' => field.call(0, 'valueString' => '外税'),
-        'Rate' => field.call(1, 'valueNumber' => 0.08),
+        'Description' => field.call(0, 'valueString' => description),
+        'Rate' => field.call(1, 'valueNumber' => provider_rate),
         'NetAmount' => field.call(
           2,
-          'valueCurrency' => { 'amount' => 593.0, 'currencyCode' => 'JPY' }
+          'valueCurrency' => { 'amount' => provider_net_amount, 'currencyCode' => 'JPY' }
         ),
         'Amount' => field.call(
           3,
-          'valueCurrency' => { 'amount' => 47.0, 'currencyCode' => 'JPY' }
+          'valueCurrency' => { 'amount' => provider_tax_amount, 'currencyCode' => 'JPY' }
         )
       }
     }
@@ -84,8 +93,8 @@ RSpec.describe Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor do
     }
   end
 
-  def extract(result = build_analyze_result)
-    described_class.call(analyze_result: result)
+  def extract(result = build_analyze_result, profile: ReceiptAnalysisProfiles.fetch('JPN'))
+    described_class.call(analyze_result: result, profile: profile)
   end
 
   it 'Rate・NetAmount・Amountをparentの個別spanへ結ぶbounded metadataにする' do
@@ -122,7 +131,30 @@ RSpec.describe Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor do
         source_field_path: 'documents[0].fields.TaxDetails[0].Amount',
         line_index: 3
       )
+      expect(detail.fetch(:tax_inclusion_evidence)).to include(
+        kind: 'external_tax',
+        tax_inclusion: 'net',
+        source_field_path: 'documents[0].fields.TaxDetails[0].Description',
+        line_index: 0
+      )
       expect(result.to_h.to_json).not_to match(/外税|content|polygon|description|raw_response/)
+    end
+  end
+
+  it '外税semanticはprofileのexact patternだけで分類する' do
+    profile = ReceiptAnalysisProfiles.fetch('JPN')
+    allow(profile).to receive(:ocr_reference_pricing_shared_basis_external_tax_description_pattern)
+      .and_return(/\AEXTERNAL-ONLY\z/)
+
+    default_result = extract
+    custom_result = build_analyze_result(description: 'EXTERNAL-ONLY')
+
+    aggregate_failures do
+      expect(default_result.tax_details.sole.fetch(:tax_inclusion_evidence)).to be_nil
+      expect(extract(custom_result, profile:).tax_details.sole.fetch(:tax_inclusion_evidence)).to include(
+        kind: 'external_tax',
+        tax_inclusion: 'net'
+      )
     end
   end
 
@@ -144,6 +176,29 @@ RSpec.describe Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor do
     )['valueNumber'] = 0.1
 
     expect(extract(mismatched)).to be_nil
+  end
+
+  it '符号付きrateと金額lexemeを正値へ読み替えない' do
+    signed_rates = [ '+8%', '-8%', '＋8%', '－8%', '−8%' ]
+    signed_amounts = [ '+47円', '-47円', '＋47円', '－47円', '−47円' ]
+
+    aggregate_failures do
+      signed_rates.each do |rate_content|
+        expect(extract(build_analyze_result(rate_content:))).to be_nil
+      end
+      signed_amounts.each do |tax_amount_content|
+        expect(extract(build_analyze_result(tax_amount_content:))).to be_nil
+      end
+    end
+  end
+
+  it 'percentageは一度だけfractionへ変換し0%・100%・100%超の境界を固定する' do
+    aggregate_failures do
+      expect(extract(build_analyze_result(rate_content: '0%', provider_rate: 0))).to be_nil
+      expect(extract(build_analyze_result(rate_content: '100%', provider_rate: 1))).to be_present
+      expect(extract(build_analyze_result(rate_content: '101%', provider_rate: 1.01))).to be_nil
+      expect(extract(build_analyze_result(rate_content: '800%', provider_rate: 8))).to be_nil
+    end
   end
 
   it '欠損child・parent外child・重複span・malformed polygonをfail-closedにする' do

@@ -34,7 +34,8 @@ module Receipts::Processing::Contracts
       source_provider provider_model_id provider_api_version string_index_type tax_details
     ].freeze
     ROOT_KEYS = (%w[schema_version creation_stage] + METADATA_KEYS + %w[integrity_checksum]).freeze
-    TAX_DETAIL_KEYS = %w[tax_detail_index parent rate net_amount tax_amount].freeze
+    TAX_DETAIL_KEYS = %w[tax_detail_index parent tax_inclusion_evidence rate net_amount tax_amount].freeze
+    LEGACY_TAX_DETAIL_KEYS = (TAX_DETAIL_KEYS - %w[tax_inclusion_evidence]).freeze
     PARENT_KEYS = %w[source_provider source_field_path tax_detail_index provider_spans].freeze
     PARENT_SPAN_KEYS = %w[provider_span_start provider_span_end].freeze
     RATE_KEYS = %w[
@@ -44,6 +45,10 @@ module Receipts::Processing::Contracts
     AMOUNT_KEYS = %w[
       source_provider source_field_path tax_detail_index page_index line_index string_index_type
       provider_span_start provider_span_end amount
+    ].freeze
+    TAX_INCLUSION_KEYS = %w[
+      kind tax_inclusion source_provider source_field_path tax_detail_index page_index line_index
+      string_index_type provider_span_start provider_span_end
     ].freeze
 
     class << self
@@ -116,20 +121,40 @@ module Receipts::Processing::Contracts
       end
 
       def tax_detail_valid?(value, expected_index:, proposal:)
-        return false unless exact_keys?(value, TAX_DETAIL_KEYS)
+        return false unless exact_keys?(value, TAX_DETAIL_KEYS) || exact_keys?(value, LEGACY_TAX_DETAIL_KEYS)
         return false unless value["tax_detail_index"] == expected_index
 
         parent = value["parent"]
+        tax_inclusion = value["tax_inclusion_evidence"]
         rate = value["rate"]
         net_amount = value["net_amount"]
         tax_amount = value["tax_amount"]
         return false unless parent_valid?(parent, expected_index:)
+        return false unless tax_inclusion.nil? || tax_inclusion_valid?(
+          tax_inclusion,
+          expected_index:,
+          proposal:,
+          parent:
+        )
         return false unless rate_valid?(rate, expected_index:, proposal:, parent:)
         return false unless amount_valid?(net_amount, expected_index:, proposal:, parent:, positive: true, field: "NetAmount")
         return false unless amount_valid?(tax_amount, expected_index:, proposal:, parent:, positive: false, field: "Amount")
 
-        child_spans = [ rate, net_amount, tax_amount ]
+        child_spans = [ tax_inclusion, rate, net_amount, tax_amount ].compact
         child_spans.combination(2).none? { |left, right| spans_overlap?(left, right) }
+      end
+
+      def tax_inclusion_valid?(value, expected_index:, proposal:, parent:)
+        return false unless child_evidence_valid?(
+          value,
+          expected_keys: TAX_INCLUSION_KEYS,
+          expected_index:,
+          proposal:,
+          parent:,
+          expected_path: "#{tax_detail_path(expected_index)}.Description"
+        )
+
+        value["kind"] == "external_tax" && value["tax_inclusion"] == "net"
       end
 
       def parent_valid?(value, expected_index:)

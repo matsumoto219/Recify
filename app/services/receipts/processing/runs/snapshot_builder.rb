@@ -107,6 +107,17 @@ module Receipts::Processing::Runs
       (REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_STRUCTURAL_KEYS + %w[amount]).freeze
     REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_TAX_KEYS =
       (REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_STRUCTURAL_KEYS + %w[rate net_amount tax_amount gross_amount]).freeze
+    REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND = "shared_basis_external_tax_summary"
+    REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_POLICY_VERSION =
+      "reference_pricing_shared_basis_external_tax_policy_v1"
+    REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_KEYS = %w[
+      kind string_index_type policy_contract_version tax_detail_index subtotal
+      document_tax_total summary_total
+    ].freeze
+    REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_AMOUNT_KEYS = %w[
+      source_provider source_field_path page_index line_index string_index_type
+      provider_span_start provider_span_end amount
+    ].freeze
     REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND = "single_item_receipt_inner_tax_summary"
     REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION =
       "reference_pricing_single_structured_item_gross_policy_v1"
@@ -796,7 +807,11 @@ module Receipts::Processing::Runs
       proposals = reference_pricing_adoption_proposals_snapshot(result, ocr_snapshot) || {}
       tax_details = reference_pricing_tax_detail_structural_evidence_snapshot(result, ocr_snapshot)
       proposals[:reference_pricing_tax_details] = tax_details if tax_details.present?
-      item_calculation_modes = item_calculation_mode_proposals_snapshot(result, ocr_snapshot)
+      proposal_context = ocr_snapshot.deep_dup
+      if tax_details.present?
+        proposal_context[:adoption_proposals] = { reference_pricing_tax_details: tax_details }
+      end
+      item_calculation_modes = item_calculation_mode_proposals_snapshot(result, proposal_context)
       proposals[:item_calculation_modes] = item_calculation_modes if item_calculation_modes.present?
       proposals
     end
@@ -1029,8 +1044,104 @@ module Receipts::Processing::Runs
           evidence[:kind].to_s == REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND
         return reference_pricing_single_item_gross_summary_snapshot(evidence, candidate:)
       end
+      if source_kind == "azure_item_layout" &&
+          evidence[:kind].to_s == REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+        return reference_pricing_shared_basis_external_tax_snapshot(evidence, candidate:)
+      end
 
       reference_pricing_evidence_snapshot(value, source_kind:)
+    end
+
+    def reference_pricing_shared_basis_external_tax_snapshot(value, candidate:)
+      return {} unless exact_snapshot_keys?(value, REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_KEYS)
+      return {} unless candidate[:validation_contract_version].to_s ==
+        REFERENCE_PRICING_SHARED_BASIS_VALIDATION_CONTRACT
+      return {} unless candidate[:reference_price_tax_inclusion].to_s == "net"
+      return {} unless candidate[:validation_state].to_s == "valid"
+      return {} unless Array(candidate[:rejection_reasons]).empty?
+
+      index_type = enum_string(value[:string_index_type], REFERENCE_PRICING_STRING_INDEX_TYPES)
+      return {} if index_type.nil? || index_type != candidate[:string_index_type].to_s
+      return {} unless value[:kind].to_s == REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+      return {} unless value[:policy_contract_version].to_s ==
+        REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_POLICY_VERSION
+      return {} unless value[:tax_detail_index] == 0
+
+      entries = {
+        subtotal: "documents[0].fields.Subtotal",
+        document_tax_total: "documents[0].fields.TotalTax",
+        summary_total: "documents[0].fields.Total"
+      }.to_h do |key, expected_path|
+        entry = reference_pricing_shared_basis_external_tax_amount_snapshot(
+          value[key],
+          index_type:,
+          expected_path:
+        )
+        return {} if entry.empty?
+
+        [ key, entry ]
+      end
+      return {} if entries.values.combination(2).any? { |left, right| reference_pricing_ranges_overlap?(left, right) }
+
+      block = reference_pricing_candidate_block_range(candidate)
+      parent = reference_pricing_structured_item_range(candidate)
+      return {} if block.nil? || parent.nil?
+      return {} if entries.values.any? do |entry|
+        reference_pricing_range_overlaps_block?(entry, block) ||
+          reference_pricing_range_overlaps_block?(entry, parent)
+      end
+      return {} unless entries[:subtotal][:amount] + entries[:document_tax_total][:amount] ==
+        entries[:summary_total][:amount]
+      return {} unless reference_pricing_single_item_gross_amounts_match_candidate?(
+        candidate,
+        gross_amount: entries[:subtotal][:amount]
+      )
+
+      {
+        kind: REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND,
+        string_index_type: index_type,
+        policy_contract_version: REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_POLICY_VERSION,
+        tax_detail_index: 0,
+        **entries
+      }
+    rescue ArgumentError, TypeError
+      {}
+    end
+
+    def reference_pricing_shared_basis_external_tax_amount_snapshot(value, index_type:, expected_path:)
+      entry = normalized_hash(value)
+      return {} unless exact_snapshot_keys?(
+        entry,
+        REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_AMOUNT_KEYS
+      )
+      return {} unless entry[:source_provider].to_s == "azure_structured"
+      return {} unless entry[:source_field_path].to_s == expected_path
+      return {} unless entry[:string_index_type].to_s == index_type
+
+      page_index = bounded_non_negative_integer(entry[:page_index], maximum: MAX_REFERENCE_PRICING_PAGE_INDEX)
+      line_index = bounded_non_negative_integer(entry[:line_index], maximum: MAX_REFERENCE_PRICING_LINE_INDEX)
+      span_start = bounded_non_negative_integer(
+        entry[:provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        entry[:provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      amount = bounded_non_negative_integer(entry[:amount], maximum: MAX_REFERENCE_PRICING_RECEIPT_AMOUNT)
+      return {} unless page_index == 0 && line_index && span_start && span_end && span_end > span_start
+      return {} if amount.nil?
+
+      {
+        source_provider: "azure_structured",
+        source_field_path: expected_path,
+        page_index: 0,
+        line_index:,
+        string_index_type: index_type,
+        provider_span_start: span_start,
+        provider_span_end: span_end,
+        amount:
+      }
     end
 
     def reference_pricing_single_structured_item_gross_snapshot(value, candidate:)
@@ -1940,19 +2051,25 @@ module Receipts::Processing::Runs
     end
 
     def valid_shared_basis_state?(snapshot)
-      return false unless snapshot[:validation_state] == "ambiguous"
-      return false unless snapshot[:rejection_reasons] == [ "ambiguous_tax_inclusion" ]
-      return false unless snapshot[:reference_price_tax_inclusion] == "unknown"
-      return false unless snapshot[:tax_inclusion_evidence].nil?
-
       corroboration = snapshot[:corroboration]
-      corroboration.is_a?(Hash) && corroboration.dig(:exact_amount, :numerator).present? &&
+      return false unless corroboration.is_a?(Hash) && corroboration.dig(:exact_amount, :numerator).present? &&
         corroboration.dig(:exact_amount, :denominator).present? &&
         Array(corroboration[:rounding_matches]).present? &&
         reference_pricing_single_item_gross_amounts_match_candidate?(
           snapshot,
           gross_amount: snapshot.dig(:printed_line_total, :amount).to_i
         )
+
+      if snapshot[:validation_state] == "ambiguous"
+        snapshot[:rejection_reasons] == [ "ambiguous_tax_inclusion" ] &&
+          snapshot[:reference_price_tax_inclusion] == "unknown" &&
+          snapshot[:tax_inclusion_evidence].nil?
+      else
+        snapshot[:validation_state] == "valid" && snapshot[:rejection_reasons] == [] &&
+          snapshot[:reference_price_tax_inclusion] == "net" &&
+          snapshot.dig(:tax_inclusion_evidence, :kind) ==
+            REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+      end
     end
 
     def positive_exact_decimal?(value)

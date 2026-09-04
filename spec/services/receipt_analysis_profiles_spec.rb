@@ -320,6 +320,21 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile OCR shared-basis external-tax descriptions' do
+    it '共有基準表のnet authorityへ利用できるexactな外税descriptionだけを定義する' do
+      pattern = described_class.fetch('JPN').ocr_reference_pricing_shared_basis_external_tax_description_pattern
+
+      aggregate_failures do
+        expect('外税').to match(pattern)
+        expect('税別').to match(pattern)
+        expect('税抜').to match(pattern)
+        expect('内税').not_to match(pattern)
+        expect('消費税').not_to match(pattern)
+        expect('外税対象').not_to match(pattern)
+      end
+    end
+  end
+
   describe 'JPN profile item tax-rate evidence' do
     it '税ラベルに結合した率と独立した税率行を商品割合や割引率と区別する' do
       pattern = described_class.fetch('JPN').ocr_item_tax_rate_pattern

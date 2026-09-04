@@ -19,6 +19,18 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingTaxDetailStructu
               { provider_span_start: 130, provider_span_end: 150 }
             ]
           },
+          tax_inclusion_evidence: {
+            kind: 'external_tax',
+            tax_inclusion: 'net',
+            source_provider: 'azure_structured',
+            source_field_path: 'documents[0].fields.TaxDetails[0].Description',
+            tax_detail_index: 0,
+            page_index: 0,
+            line_index: 10,
+            string_index_type: 'textElements',
+            provider_span_start: 100,
+            provider_span_end: 102
+          },
           rate: {
             source_provider: 'azure_structured',
             source_field_path: 'documents[0].fields.TaxDetails[0].Rate',
@@ -88,6 +100,10 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingTaxDetailStructu
         'integrity_checksum' => match(/\A[0-9a-f]{64}\z/)
       )
       expect(proposal.fetch('tax_details').sole.dig('rate', 'rate')).to eq('0.08')
+      expect(proposal.fetch('tax_details').sole.fetch('tax_inclusion_evidence')).to include(
+        'kind' => 'external_tax',
+        'tax_inclusion' => 'net'
+      )
       expect(restored).to eq(proposal)
       expect(metadata).to eq(source)
       expect(JSON.generate(proposal).bytesize).to be <= described_class::MAX_SERIALIZED_BYTES
@@ -104,6 +120,7 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingTaxDetailStructu
       proposal.deep_merge('tax_details' => [ { 'rate' => { 'rate' => '0.1' } } ]),
       proposal.deep_merge('tax_details' => [ { 'rate' => { 'content' => '8%' } } ]),
       proposal.deep_merge('tax_details' => [ { 'parent' => { 'polygon' => [ 0, 0, 1, 1 ] } } ]),
+      proposal.deep_merge('tax_details' => [ { 'tax_inclusion_evidence' => { 'tax_inclusion' => 'gross' } } ]),
       proposal.deep_merge('tax_details' => [ { 'net_amount' => { 'amount' => 594 } } ]),
       proposal.deep_merge('tax_details' => [ { 'parent' => { 'provider_spans' => [] } } ])
     ]

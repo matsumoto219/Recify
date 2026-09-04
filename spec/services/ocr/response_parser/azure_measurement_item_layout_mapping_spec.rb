@@ -49,7 +49,7 @@ RSpec.describe 'Azure measurement item-layout mapping' do
     fields = extra_fields.merge(
       'Items' => { 'type' => 'array', 'valueArray' => items }
     )
-    summary_index = lines.rindex { |line| line.match?(/\A合計/) }
+    summary_index = lines.rindex { |line| line.match?(/\A合計.*\d/) }
     if summary_index
       line = page_lines.fetch(summary_index)
       amount = line.fetch('content').scan(/\d[\d,]*/).sole
@@ -249,6 +249,90 @@ RSpec.describe 'Azure measurement item-layout mapping' do
     response
   end
 
+  def shared_basis_external_tax_response(tax_description: '外税')
+    response = synthetic_response(
+      [
+        '架空表形式店',
+        '番号 100g当り(円) 重量(?) 金額(円)',
+        '外税',
+        '8.00%',
+        '例示素材B',
+        '00000002',
+        '298円',
+        '199g',
+        '593円',
+        '小計',
+        '593円',
+        '593円',
+        tax_description,
+        '8.00%',
+        '47円',
+        '合計',
+        '640円'
+      ],
+      layout: {
+        1 => { left: 20, width: 280, word_lefts: [ 20, 70, 170, 240 ] },
+        6 => { left: 70, top: 152 },
+        7 => { left: 170, top: 152 },
+        8 => { left: 240, top: 152 },
+        15 => { left: 20, top: 372, width: 60 },
+        16 => { left: 240, top: 372, width: 60 }
+      }
+    )
+    item = structured_item(
+      response,
+      name_line_index: 4,
+      reference_line_index: 6,
+      quantity_line_index: 7,
+      total_line_index: 8,
+      reference_amount: 298,
+      quantity: 199,
+      quantity_unit: 'g',
+      total_amount: 593
+    )
+    value_object = item.fetch('valueObject')
+    value_object['ProductCode'] = {
+      'content' => '00000002',
+      'valueString' => '00000002',
+      'spans' => [ line_span(response, 5).deep_dup ]
+    }
+    value_object['QuantityUnit']['content'] = '199g'
+    value_object['QuantityUnit']['spans'] = [ line_span(response, 7).deep_dup ]
+
+    analyze_result = response.fetch('analyzeResult')
+    lines = analyze_result.dig('pages', 0, 'lines')
+    field = lambda do |line_index, value|
+      line = lines.fetch(line_index)
+      {
+        'content' => line.fetch('content'),
+        'boundingRegions' => [ { 'pageNumber' => 1, 'polygon' => line.fetch('polygon').deep_dup } ],
+        'spans' => [ line.fetch('spans').sole.deep_dup ]
+      }.merge(value)
+    end
+    tax_start = line_span(response, 11).fetch('offset')
+    tax_end = line_span(response, 14).then { |span| span.fetch('offset') + span.fetch('length') }
+    tax_detail = {
+      'content' => lines[11..14].pluck('content').join("\n"),
+      'boundingRegions' => [
+        { 'pageNumber' => 1, 'polygon' => [ 10, 250, 320, 250, 320, 390, 10, 390 ] }
+      ],
+      'spans' => [ { 'offset' => tax_start, 'length' => tax_end - tax_start } ],
+      'valueObject' => {
+        'Description' => field.call(12, 'valueString' => tax_description),
+        'Rate' => field.call(13, 'valueNumber' => 0.08),
+        'NetAmount' => field.call(11, 'valueCurrency' => { 'amount' => 593.0, 'currencyCode' => 'JPY' }),
+        'Amount' => field.call(14, 'valueCurrency' => { 'amount' => 47.0, 'currencyCode' => 'JPY' })
+      }
+    }
+    fields = analyze_result.dig('documents', 0, 'fields')
+    fields['Items']['valueArray'] = [ item ]
+    fields['Subtotal'] = field.call(10, 'valueCurrency' => { 'amount' => 593.0, 'currencyCode' => 'JPY' })
+    fields['TaxDetails'] = { 'type' => 'array', 'valueArray' => [ tax_detail ] }
+    fields['TotalTax'] = field.call(14, 'valueCurrency' => { 'amount' => 47.0, 'currencyCode' => 'JPY' })
+    fields['Total'] = field.call(16, 'valueCurrency' => { 'amount' => 640.0, 'currencyCode' => 'JPY' })
+    response
+  end
+
   def modes(candidate)
     candidate.fetch(:options).map { |option| option.fetch(:pricing_source_kind) }
   end
@@ -307,6 +391,57 @@ RSpec.describe 'Azure measurement item-layout mapping' do
       )
       expect(proposals.sole.fetch('options').pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
       expect(snapshot.dig('adoption_proposals', 'reference_pricing')).to be_nil
+    end
+  end
+
+  it 'promotes one exact shared-basis row with external-tax structure to a net reference candidate' do
+    result = parse(shared_basis_external_tax_response)
+    snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
+    reference = snapshot.dig('candidates', 'reference_pricing_candidates').sole
+    tax_details = snapshot.dig('adoption_proposals', 'reference_pricing_tax_details')
+    mode_proposals = snapshot.dig('adoption_proposals', 'item_calculation_modes')
+
+    aggregate_failures do
+      expect(reference).to include(
+        'validation_contract_version' => 'azure_item_layout_shared_basis_v1',
+        'validation_state' => 'valid',
+        'rejection_reasons' => [],
+        'reference_price_tax_inclusion' => 'net'
+      )
+      expect(reference.fetch('tax_inclusion_evidence')).to include(
+        'kind' => 'shared_basis_external_tax_summary',
+        'policy_contract_version' => 'reference_pricing_shared_basis_external_tax_policy_v1',
+        'tax_detail_index' => 0
+      )
+      expect(tax_details.fetch('tax_details').sole.fetch('tax_inclusion_evidence')).to include(
+        'kind' => 'external_tax',
+        'tax_inclusion' => 'net'
+      )
+      expect(result.dig(:candidates, :subtotal_amount)).to eq(593.0)
+      expect(result.dig(:candidates, :tax_amount)).to eq(47.0)
+      expect(result.dig(:candidates, :total_amount)).to eq(640.0)
+      expect(result.dig(:candidates, :adjustment_candidates)).to eq([])
+      expect(mode_proposals.sole.fetch('options').pluck('pricing_source_kind')).to eq(
+        %w[reference_quantity_price explicit_line_total]
+      )
+      expect(reference.fetch('tax_inclusion_evidence').to_json).not_to match(/例示素材B|外税|provider_raw_response/)
+      expect(tax_details.to_json).not_to match(/例示素材B|外税|provider_raw_response/)
+    end
+  end
+
+  it 'keeps a rate-adjacent amount when TaxDetails does not prove the external-tax semantic' do
+    result = parse(shared_basis_external_tax_response(tax_description: '内税'))
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+
+    aggregate_failures do
+      expect(reference).to include(
+        validation_state: 'ambiguous',
+        rejection_reasons: [ 'ambiguous_tax_inclusion' ],
+        reference_price_tax_inclusion: 'unknown'
+      )
+      expect(result.dig(:candidates, :adjustment_candidates)).to contain_exactly(
+        include(source_line_index: 13, amount: 47, candidate_reason: 'label_next_amount')
+      )
     end
   end
 

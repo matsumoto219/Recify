@@ -133,6 +133,17 @@ module Receipts::Processing::Contracts
     SINGLE_ITEM_GROSS_SUMMARY_TAX_KEYS = (LAYOUT_REFERENCE_CONTEXT_EVIDENCE_KEYS + %w[
       rate net_amount tax_amount gross_amount
     ]).freeze
+    SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND = "shared_basis_external_tax_summary"
+    SHARED_BASIS_EXTERNAL_TAX_POLICY_VERSION = "reference_pricing_shared_basis_external_tax_policy_v1"
+    SHARED_BASIS_VALIDATION_CONTRACT_VERSION = "azure_item_layout_shared_basis_v1"
+    SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KEYS = %w[
+      kind string_index_type policy_contract_version tax_detail_index subtotal
+      document_tax_total summary_total
+    ].freeze
+    SHARED_BASIS_EXTERNAL_TAX_AMOUNT_KEYS = %w[
+      source_provider source_field_path page_index line_index string_index_type
+      provider_span_start provider_span_end amount
+    ].freeze
     SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND = "single_item_receipt_inner_tax_summary"
     SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION = "reference_pricing_single_structured_item_gross_policy_v1"
     SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KEYS = %w[
@@ -176,6 +187,10 @@ module Receipts::Processing::Contracts
     LAYOUT_CANDIDATE_ID_PATTERN = /
       \Aazure_item_layout_p0_name_l(?<name>\d+)_ref_l(?<reference>\d+)
       _qty_l(?<quantity>\d+)_total_l(?<total>\d+)_item_calculation_mode\z
+    /x.freeze
+    SHARED_BASIS_REFERENCE_CANDIDATE_ID_PATTERN = /
+      \Aazure_item_layout_p0_name_l(?<name>0|[1-9]\d*)_ref_l(?<reference>0|[1-9]\d*)
+      _qty_l(?<quantity>0|[1-9]\d*)_total_l(?<total>0|[1-9]\d*)_reference_pricing\z
     /x.freeze
     CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
 
@@ -329,6 +344,9 @@ module Receipts::Processing::Contracts
           reference_candidate["item_index"] == item_index &&
             reference_candidate["candidate_id"] == expected_candidate_id
         end
+        if matches.empty? && !layout_candidate?(candidate)
+          matches = shared_basis_external_tax_reference_matches(candidate, context:)
+        end
         return unless matches.one?
 
         reference_candidate = matches.sole
@@ -366,7 +384,8 @@ module Receipts::Processing::Contracts
         evidence = normalized_hash(value)
         return deep_copy(evidence) if [
           SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND,
-          SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+          SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND,
+          SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
         ].include?(evidence["kind"])
 
         proposal_evidence(value)
@@ -631,6 +650,39 @@ module Receipts::Processing::Contracts
 
         layout_producer_contracts(metadata).any? do |contract|
           indexes == producer_line_indexes(metadata, contract.fetch(:owned))
+        end
+      end
+
+      def exact_shared_basis_owned_line_indexes?(value, metadata:)
+        indexes = value
+        return false unless indexes.is_a?(Array) && indexes.size.between?(5, 6)
+        return false unless indexes.uniq == indexes && indexes.sort == indexes
+        return false unless indexes.all? do |index|
+          index.is_a?(Integer) && index.between?(0, MAX_LAYOUT_LINE_INDEX)
+        end
+
+        row_indexes = (metadata.fetch(:name_line_index)..metadata.fetch(:total_line_index)).to_a
+        return false unless row_indexes.size.between?(4, 5)
+
+        header_index = indexes.first
+        (metadata.fetch(:name_line_index) - header_index).between?(1, 4) &&
+          indexes == [ header_index, *row_indexes ]
+      end
+
+      def shared_basis_external_tax_reference_matches(candidate, context:)
+        context.dig("candidates", "reference_pricing_candidates").select do |reference_candidate|
+          reference_candidate["source_kind"] == LAYOUT_SOURCE_PROVIDER &&
+            reference_candidate["candidate_id"].to_s.match?(SHARED_BASIS_REFERENCE_CANDIDATE_ID_PATTERN) &&
+            reference_candidate["item_index"] == candidate["item_index"] &&
+            reference_candidate["item_identity"] == candidate["item_identity"] &&
+            reference_candidate["destination_kind"] == "azure_structured_item" &&
+            reference_candidate["structured_item_index"] == candidate["item_index"] &&
+            reference_candidate["validation_contract_version"] == SHARED_BASIS_VALIDATION_CONTRACT_VERSION &&
+            reference_candidate["validation_state"] == "valid" &&
+            reference_candidate["rejection_reasons"] == [] &&
+            reference_candidate["reference_price_tax_inclusion"] == "net" &&
+            reference_candidate.dig("tax_inclusion_evidence", "kind") ==
+              SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
         end
       end
 
@@ -1281,7 +1333,15 @@ module Receipts::Processing::Contracts
         else
           "azure_items_#{item_index}_reference_pricing"
         end
-        return false unless option["source_candidate_id"] == expected_candidate_id
+        tax_evidence = normalized_hash(evidence["tax_inclusion"])
+        source_candidate_valid = option["source_candidate_id"] == expected_candidate_id
+        if !source_candidate_valid && !layout_candidate?(proposal) &&
+            tax_evidence["kind"] == SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+          source_candidate_valid = option["source_candidate_id"].to_s.match?(
+            SHARED_BASIS_REFERENCE_CANDIDATE_ID_PATTERN
+          )
+        end
+        return false unless source_candidate_valid
         return false unless reference_source_valid?(source)
 
         if hybrid_layout_candidate?(proposal)
@@ -1290,6 +1350,13 @@ module Receipts::Processing::Contracts
             proposal: proposal,
             parent_start: parent_start,
             parent_end: parent_end
+          )
+        elsif tax_evidence["kind"] == SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+          return false unless structured_destination_shared_basis_option_evidence_valid?(
+            evidence,
+            proposal:,
+            parent_start:,
+            parent_end:
           )
         else
           paths = {
@@ -1310,7 +1377,6 @@ module Receipts::Processing::Contracts
               )
             end
           end
-          tax_evidence = normalized_hash(evidence["tax_inclusion"])
           if tax_evidence["kind"] == SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
             return false unless single_structured_item_gross_evidence_valid?(
               tax_evidence,
@@ -1391,6 +1457,33 @@ module Receipts::Processing::Contracts
           proposal: proposal,
           parent_start: parent_start,
           parent_end: parent_end
+        )
+      end
+
+      def structured_destination_shared_basis_option_evidence_valid?(
+        evidence,
+        proposal:,
+        parent_start:,
+        parent_end:
+      )
+        reference_price = normalized_hash(evidence["reference_price"])
+        reference_quantity = normalized_hash(evidence["reference_quantity"])
+        purchased_quantity = normalized_hash(evidence["purchased_quantity"])
+        return false unless [ reference_price, reference_quantity, purchased_quantity ].all? do |entry|
+          exact_keys?(entry, COMPONENT_EVIDENCE_KEYS) &&
+            layout_line_index(entry["source_field_path"]) &&
+            valid_span?(entry["provider_span_start"], entry["provider_span_end"])
+        end
+        return false unless reference_price["provider_span_start"] >= parent_start
+        return false unless purchased_quantity["provider_span_end"] <= parent_end
+        return false unless reference_quantity["provider_span_end"] <= parent_start
+        return false unless reference_price["provider_span_end"] <= purchased_quantity["provider_span_start"]
+
+        shared_basis_external_tax_evidence_valid?(
+          evidence["tax_inclusion"],
+          proposal:,
+          parent_start:,
+          parent_end:
         )
       end
 
@@ -1477,6 +1570,142 @@ module Receipts::Processing::Contracts
           value["source_field_path"].bytesize <= MAX_PATH_BYTES &&
           value["string_index_type"] == string_index_type &&
           valid_span?(value["provider_span_start"], value["provider_span_end"])
+      end
+
+      def shared_basis_external_tax_evidence_valid?(
+        value,
+        proposal:,
+        parent_start:,
+        parent_end:,
+        context: nil
+      )
+        evidence = normalized_hash(value)
+        return false unless exact_keys?(evidence, SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KEYS)
+        return false unless evidence["kind"] == SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+        return false unless evidence["policy_contract_version"] == SHARED_BASIS_EXTERNAL_TAX_POLICY_VERSION
+        return false unless evidence["string_index_type"] == proposal["string_index_type"]
+        return false unless evidence["tax_detail_index"] == 0
+
+        entries = {
+          "subtotal" => "documents[0].fields.Subtotal",
+          "document_tax_total" => "documents[0].fields.TotalTax",
+          "summary_total" => "documents[0].fields.Total"
+        }.to_h do |key, expected_path|
+          entry = normalized_hash(evidence[key])
+          return false unless shared_basis_external_tax_amount_evidence_valid?(
+            entry,
+            expected_path:,
+            string_index_type: proposal["string_index_type"]
+          )
+
+          [ key, entry ]
+        end
+        return false if entries.values.combination(2).any? { |left, right| evidence_ranges_overlap?(left, right) }
+        return false unless entries.values.all? do |entry|
+          evidence_outside_parent?(entry, parent_start:, parent_end:)
+        end
+
+        subtotal = bounded_exact_integer_value(entries.dig("subtotal", "amount"), allow_zero: true)
+        tax = bounded_exact_integer_value(entries.dig("document_tax_total", "amount"), allow_zero: true)
+        total = bounded_exact_integer_value(entries.dig("summary_total", "amount"), allow_zero: true)
+        return false if [ subtotal, tax, total ].any?(&:nil?)
+        return false unless subtotal + tax == total
+        return true if context.nil?
+
+        shared_basis_external_tax_context_valid?(
+          context:,
+          evidence: entries,
+          subtotal:,
+          tax:,
+          total:,
+          parent_start:,
+          parent_end:
+        )
+      rescue ArgumentError, TypeError
+        false
+      end
+
+      def shared_basis_external_tax_amount_evidence_valid?(value, expected_path:, string_index_type:)
+        line_index = value["line_index"]
+        exact_keys?(value, SHARED_BASIS_EXTERNAL_TAX_AMOUNT_KEYS) &&
+          value["source_provider"] == SOURCE_PROVIDER && value["page_index"] == 0 &&
+          line_index.is_a?(Integer) && line_index.between?(0, MAX_LAYOUT_LINE_INDEX) &&
+          value["source_field_path"] == expected_path &&
+          value["source_field_path"].bytesize <= MAX_PATH_BYTES &&
+          value["string_index_type"] == string_index_type &&
+          valid_span?(value["provider_span_start"], value["provider_span_end"]) &&
+          !bounded_exact_integer_value(value["amount"], allow_zero: true).nil?
+      end
+
+      def shared_basis_external_tax_context_valid?(
+        context:,
+        evidence:,
+        subtotal:,
+        tax:,
+        total:,
+        parent_start:,
+        parent_end:
+      )
+        return false unless context_integer_matches?(
+          context.dig("candidates", "subtotal_amount"),
+          subtotal.to_s,
+          maximum: MAX_AMOUNT,
+          allow_zero: true
+        )
+        return false unless context_integer_matches?(
+          context.dig("candidates", "tax_amount"),
+          tax.to_s,
+          maximum: MAX_AMOUNT,
+          allow_zero: true
+        )
+        return false unless context_integer_matches?(
+          context.dig("candidates", "total_amount"),
+          total.to_s,
+          maximum: MAX_AMOUNT,
+          allow_zero: true
+        )
+
+        details = context["reference_pricing_tax_details"]
+        return false unless details.is_a?(Hash) && details["tax_details"].is_a?(Array) &&
+          details["tax_details"].one?
+
+        detail = normalized_hash(details["tax_details"].sole)
+        tax_evidence = normalized_hash(detail["tax_inclusion_evidence"])
+        net_amount = normalized_hash(detail["net_amount"])
+        tax_amount = normalized_hash(detail["tax_amount"])
+        return false unless detail["tax_detail_index"] == 0
+        return false unless shared_basis_tax_detail_outside_item_block?(
+          detail,
+          parent_start:,
+          parent_end:
+        )
+        return false unless tax_evidence["kind"] == "external_tax" && tax_evidence["tax_inclusion"] == "net"
+        return false unless bounded_exact_integer_value(net_amount["amount"], allow_zero: true) == subtotal
+        return false unless bounded_exact_integer_value(tax_amount["amount"], allow_zero: true) == tax
+
+        document_tax_total = evidence.fetch("document_tax_total")
+        tax_amount["provider_span_start"] == document_tax_total["provider_span_start"] &&
+          tax_amount["provider_span_end"] == document_tax_total["provider_span_end"]
+      end
+
+      def shared_basis_tax_detail_outside_item_block?(detail, parent_start:, parent_end:)
+        parent = normalized_hash(detail["parent"])
+        parent_spans = parent["provider_spans"]
+        return false unless parent_spans.is_a?(Array) && parent_spans.any?
+        return false unless parent_spans.all? do |span|
+          span = normalized_hash(span)
+          valid_span?(span["provider_span_start"], span["provider_span_end"]) &&
+            evidence_outside_parent?(span, parent_start:, parent_end:)
+        end
+
+        %w[tax_inclusion_evidence rate net_amount tax_amount].all? do |key|
+          child = normalized_hash(detail[key])
+          valid_span?(child["provider_span_start"], child["provider_span_end"]) &&
+            evidence_outside_parent?(child, parent_start:, parent_end:) &&
+            parent_spans.one? do |span|
+              evidence_within_parent?(child, parent: normalized_hash(span))
+            end
+        end
       end
 
       def single_structured_item_gross_evidence_valid?(
@@ -1658,12 +1887,23 @@ module Receipts::Processing::Contracts
         return true if calculation_layout_candidate?(proposal)
         return true if layout_only_candidate?(proposal)
 
-        references = context.dig("candidates", "reference_pricing_candidates").select do |candidate|
-          reference_candidate_claims_valid?(
-            candidate,
-            item_index: proposal["item_index"],
-            proposal: proposal
-          )
+        shared_basis_matches = if layout_candidate?(proposal)
+          []
+        else
+          shared_basis_external_tax_reference_matches(proposal, context:)
+        end
+        references = if shared_basis_matches.any?
+          shared_basis_matches.select do |candidate|
+            reference_candidate_valid?(candidate, candidate: proposal, context:)
+          end
+        else
+          context.dig("candidates", "reference_pricing_candidates").select do |candidate|
+            reference_candidate_claims_valid?(
+              candidate,
+              item_index: proposal["item_index"],
+              proposal: proposal
+            )
+          end
         end
         option = proposal["options"].find do |entry|
           normalized_hash(entry)["pricing_source_kind"] == "reference_quantity_price"
@@ -1690,6 +1930,13 @@ module Receipts::Processing::Contracts
         return false unless SUPPORTED_STRING_INDEX_TYPES.include?(candidate["string_index_type"])
         if hybrid_layout_candidate?(candidate)
           return hybrid_reference_candidate_valid?(reference_candidate, candidate:, context:)
+        end
+        if reference_candidate["validation_contract_version"] == SHARED_BASIS_VALIDATION_CONTRACT_VERSION
+          return structured_destination_shared_basis_reference_candidate_valid?(
+            reference_candidate,
+            candidate:,
+            context:
+          )
         end
         return false unless exact_optional_keys?(
           reference_candidate,
@@ -1752,6 +1999,65 @@ module Receipts::Processing::Contracts
           candidate: candidate,
           projection: projection
         )
+      end
+
+      def structured_destination_shared_basis_reference_candidate_valid?(
+        reference_candidate,
+        candidate:,
+        context:
+      )
+        return false unless candidate["source_provider"] == SOURCE_PROVIDER
+        return false unless exact_optional_keys?(
+          reference_candidate,
+          required: LAYOUT_REFERENCE_CANDIDATE_REQUIRED_KEYS,
+          optional: LAYOUT_REFERENCE_CANDIDATE_OPTIONAL_KEYS
+        )
+        shared_basis_matches = shared_basis_external_tax_reference_matches(candidate, context:)
+        return false unless shared_basis_matches.one?
+        return false unless shared_basis_matches.sole == reference_candidate
+
+        metadata = shared_basis_reference_candidate_metadata(reference_candidate)
+        return false if metadata.nil?
+        parent_start = candidate["provider_span_start"]
+        parent_end = candidate["provider_span_end"]
+        return false unless reference_candidate["block_provider_span_start"] == parent_start
+        return false unless reference_candidate["block_provider_span_end"] == parent_end
+        return false unless exact_shared_basis_owned_line_indexes?(
+          reference_candidate["owned_line_indexes"],
+          metadata:
+        )
+
+        exact_shared_basis_external_tax_reference_candidate_valid?(
+          reference_candidate,
+          candidate:,
+          context:,
+          metadata:,
+          item_index: candidate["item_index"],
+          parent_start:,
+          parent_end:
+        )
+      end
+
+      def shared_basis_reference_candidate_metadata(reference_candidate)
+        match = SHARED_BASIS_REFERENCE_CANDIDATE_ID_PATTERN.match(reference_candidate["candidate_id"].to_s)
+        return if match.nil?
+
+        metadata = {
+          name_line_index: Integer(match[:name], 10),
+          reference_line_index: Integer(match[:reference], 10),
+          quantity_line_index: Integer(match[:quantity], 10),
+          total_line_index: Integer(match[:total], 10)
+        }
+        return unless metadata.values.all? { |index| index.between?(0, MAX_LAYOUT_LINE_INDEX) }
+        return unless metadata.values.each_cons(2).all? { |left, right| left < right }
+        return unless reference_candidate["name_line_index"] == metadata.fetch(:name_line_index)
+        return unless reference_candidate["reference_line_index"] == metadata.fetch(:reference_line_index)
+        return unless reference_candidate["purchased_quantity_line_indexes"] == [ metadata.fetch(:quantity_line_index) ]
+        return unless reference_candidate["printed_total_line_index"] == metadata.fetch(:total_line_index)
+
+        metadata
+      rescue ArgumentError
+        nil
       end
 
       def unconfirmed_reference_formula?(proposal, context:)
@@ -1934,6 +2240,115 @@ module Receipts::Processing::Contracts
           candidate: candidate,
           projection: projection
         )
+      end
+
+      def exact_shared_basis_external_tax_reference_candidate_valid?(
+        reference_candidate,
+        candidate:,
+        context:,
+        metadata:,
+        item_index:,
+        parent_start:,
+        parent_end:
+      )
+        return false unless shared_basis_reference_line_span_valid?(
+          reference_candidate,
+          metadata:,
+          parent_start:,
+          parent_end:
+        )
+
+        layout_evidence = ->(line_indexes) { { candidate:, line_indexes: } }
+        return false unless reference_price_component_valid?(
+          reference_candidate["reference_price"],
+          item_index:,
+          parent_start:,
+          parent_end:,
+          layout_evidence: layout_evidence.call([ metadata.fetch(:reference_line_index) ])
+        )
+        return false unless shared_basis_reference_quantity_component_valid?(
+          reference_candidate["reference_quantity"],
+          candidate:,
+          line_index: reference_candidate["owned_line_indexes"].first,
+          parent_start:,
+          parent_end:
+        )
+        return false unless purchased_quantity_component_valid?(
+          reference_candidate["purchased_quantity"],
+          item_index:,
+          parent_start:,
+          parent_end:,
+          layout_evidence: layout_evidence.call([ metadata.fetch(:quantity_line_index) ])
+        )
+        return false unless reference_candidate["reference_price_tax_inclusion"] == "net"
+        return false unless shared_basis_external_tax_evidence_valid?(
+          reference_candidate["tax_inclusion_evidence"],
+          proposal: candidate,
+          parent_start:,
+          parent_end:,
+          context:
+        )
+
+        source = reference_source(reference_candidate)
+        return false unless compatible_reference_units?(
+          source["reference_quantity_unit_code"],
+          source["purchased_quantity_unit_code"]
+        )
+
+        projection = reference_projection(source)
+        return false if projection.nil?
+
+        shared_basis_external_tax_printed_corroboration_valid?(
+          reference_candidate,
+          candidate:,
+          projection:
+        )
+      end
+
+      def shared_basis_reference_line_span_valid?(reference_candidate, metadata:, parent_start:, parent_end:)
+        line_start = reference_candidate["reference_line_provider_span_start"]
+        line_end = reference_candidate["reference_line_provider_span_end"]
+        return false unless valid_span?(line_start, line_end)
+        return false unless line_start >= parent_start && line_end <= parent_end
+
+        reference_price_evidence = normalized_hash(reference_candidate.dig("reference_price", "evidence"))
+        evidence_within_line_span?(
+          reference_price_evidence,
+          expected_line_index: metadata.fetch(:reference_line_index),
+          line_start:,
+          line_end:
+        )
+      end
+
+      def shared_basis_reference_quantity_component_valid?(
+        value,
+        candidate:,
+        line_index:,
+        parent_start:,
+        parent_end:
+      )
+        component = normalized_hash(value)
+        return false unless exact_keys?(component, REFERENCE_QUANTITY_COMPONENT_KEYS)
+        return false unless exact_decimal?(
+          component["amount"],
+          maximum: ReceiptItem::REFERENCE_QUANTITY_MAX,
+          maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
+          allow_zero: false
+        )
+        return false unless REFERENCE_UNIT_STATUSES.include?(component["unit_status"])
+        return false unless component["origin"] == "explicit"
+        return false unless ReceiptQuantityUnit.unit_for(component["unit_code"])&.allows_pricing_role?(:reference)
+
+        evidence = normalized_hash(component["evidence"])
+        return false unless exact_keys?(evidence, LAYOUT_REFERENCE_CONTEXT_EVIDENCE_KEYS)
+        return false unless evidence["source_provider"] == LAYOUT_SOURCE_PROVIDER
+        return false unless evidence["source_field_path"] == layout_line_path(line_index)
+        return false unless evidence["page_index"] == 0 && evidence["line_index"] == line_index
+        return false unless evidence["string_index_type"] == candidate["string_index_type"]
+        return false unless valid_span?(evidence["provider_span_start"], evidence["provider_span_end"])
+        return false unless evidence["provider_span_end"] <= parent_start
+
+        parent_end > parent_start
       end
 
       def layout_reference_line_span_valid?(
@@ -2231,6 +2646,55 @@ module Receipts::Processing::Contracts
         )
       end
 
+      def shared_basis_external_tax_printed_corroboration_valid?(reference_candidate, candidate:, projection:)
+        printed = normalized_hash(reference_candidate["printed_line_total"])
+        corroboration = normalized_hash(reference_candidate["corroboration"])
+        root_printed = normalized_hash(candidate["printed_line_total"])
+        explicit = Array(candidate["options"]).find do |option|
+          normalized_hash(option)["pricing_source_kind"] == "explicit_line_total"
+        end
+        return false if [ printed, corroboration, root_printed ].any?(&:empty?) || explicit.nil?
+        return false unless exact_keys?(printed, REFERENCE_PRINTED_TOTAL_KEYS)
+
+        return false unless exact_integer?(printed["amount"], maximum: MAX_AMOUNT, allow_zero: true)
+        if layout_candidate?(candidate)
+          metadata = layout_candidate_metadata(candidate)
+          return false if metadata.nil?
+          return false unless layout_reference_context_evidence_valid?(
+            printed["evidence"],
+            candidate:,
+            expected_line_index: metadata.fetch(:total_line_index),
+            parent_start: candidate["provider_span_start"],
+            parent_end: candidate["provider_span_end"]
+          )
+        else
+          metadata = shared_basis_reference_candidate_metadata(reference_candidate)
+          return false if metadata.nil?
+          evidence = normalized_hash(printed["evidence"])
+          return false unless layout_reference_context_evidence_valid?(
+            evidence,
+            candidate: reference_candidate,
+            expected_line_index: metadata.fetch(:total_line_index),
+            parent_start: candidate["provider_span_start"],
+            parent_end: candidate["provider_span_end"]
+          )
+        end
+        return false unless normalized_hash(explicit["source"])["line_total_amount"] == printed["amount"]
+        return false unless root_printed["amount"] == printed["amount"]
+        if layout_candidate?(candidate)
+          return false unless proposal_evidence(printed["evidence"]) == proposal_evidence(root_printed["evidence"])
+        end
+
+        subtotal = normalized_hash(reference_candidate.dig("tax_inclusion_evidence", "subtotal"))
+        return false unless subtotal["amount"].to_s == printed["amount"]
+
+        reference_corroboration_valid?(
+          corroboration,
+          printed_amount: printed["amount"],
+          projection:
+        )
+      end
+
       def reference_corroboration_valid?(value, printed_amount:, projection:)
         return false unless exact_keys?(value, REFERENCE_CORROBORATION_KEYS)
 
@@ -2349,6 +2813,10 @@ module Receipts::Processing::Contracts
               document_tax_total = normalized_hash(normalized["document_tax_total"])
               tax_amount = normalized_hash(normalized["tax_amount"])
               evidence << document_tax_total unless evidence_ranges_equal?(tax_amount, document_tax_total)
+            elsif normalized["kind"] == SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+              evidence << normalized["subtotal"]
+              evidence << normalized["document_tax_total"]
+              evidence << normalized["summary_total"]
             else
               evidence << entry
             end
@@ -2476,19 +2944,35 @@ module Receipts::Processing::Contracts
         end
         return nil unless reference_candidate_ids.uniq.size == reference_candidate_ids.size
 
+        raw_tax_details = bounded_context_hash(source["adoption_proposals"], maximum_entries: 8)&.fetch(
+          "reference_pricing_tax_details",
+          nil
+        )
+        reference_pricing_tax_details = if raw_tax_details.nil?
+          nil
+        else
+          Receipts::Processing::Contracts::ReferencePricingTaxDetailStructuralEvidenceSet.from_snapshot(
+            raw_tax_details,
+            ocr_snapshot: source
+          )
+        end
+        return nil unless raw_tax_details.nil? || reference_pricing_tax_details
+
         {
           "schema_version" => OCR_RESULT_SCHEMA_VERSION,
           "candidates" => {
             "items" => items,
             "reference_pricing_candidates" => reference_candidates,
+            "subtotal_amount" => bounded_context_amount(candidates["subtotal_amount"], allow_zero: true),
             "total_amount" => bounded_context_amount(candidates["total_amount"], allow_zero: false),
             "tax_amount" => bounded_context_amount(candidates["tax_amount"], allow_zero: false)
           }.compact,
           "candidate_counts" => {
             "reference_pricing_candidates" => reference_counts,
             "item_calculation_mode_candidates" => proposal_counts
-          }
-        }
+          },
+          "reference_pricing_tax_details" => reference_pricing_tax_details
+        }.compact
       end
 
       def context_item_identity_valid?(identity)
@@ -2553,6 +3037,14 @@ module Receipts::Processing::Contracts
           "item_identity" => proposal["item_identity"],
           "item_index" => proposal["item_index"]
         }
+        shared_basis_external_tax_option = Array(proposal["options"]).any? do |option|
+          normalized_hash(option).dig("evidence", "tax_inclusion", "kind") ==
+            SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+        end
+        if shared_basis_external_tax_option
+          payload["ocr_binding"]["reference_pricing_tax_details_checksum"] =
+            context.dig("reference_pricing_tax_details", "integrity_checksum")
+        end
 
         Digest::SHA256.hexdigest(JSON.generate(deep_canonical_value(payload)))
       end

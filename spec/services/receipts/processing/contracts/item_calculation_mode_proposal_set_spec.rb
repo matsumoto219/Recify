@@ -879,7 +879,8 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
         expect(proposal).to include(
           'source_provider' => 'azure_item_layout',
           'destination_kind' => 'azure_structured_item',
-          'item_identity' => 'azure_structured_item_i0_s0_e22'
+          'item_identity' => 'azure_structured_item_i0_s0_e22',
+          'integrity_checksum' => '7555e5bb0421e6d0cedfcce48fb2f08c3fe2491cef2223fcdf9018aab753da84'
         )
         expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
           reference_quantity_price

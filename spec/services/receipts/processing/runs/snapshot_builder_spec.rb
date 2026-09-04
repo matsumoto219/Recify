@@ -227,6 +227,93 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     result
   end
 
+  def shared_basis_external_tax_ocr_result
+    result = shared_basis_diagnostic_ocr_result
+    candidate = result.dig(:candidates, :reference_pricing_candidates).sole
+    summary_lines = [ '小計 1,703円', '外税', '10%', '1,703円 154円', '合計 1,857円' ]
+    result[:lines].concat(summary_lines)
+    result[:case_preserved_lines].concat(summary_lines)
+    amount_evidence = lambda do |path, line_index, span, amount|
+      {
+        source_provider: 'azure_structured',
+        source_field_path: path,
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: 'textElements',
+        provider_span_start: span.begin,
+        provider_span_end: span.end,
+        amount: amount
+      }
+    end
+    tax_detail_evidence = lambda do |path, line_index, span|
+      {
+        source_provider: 'azure_structured',
+        source_field_path: path,
+        tax_detail_index: 0,
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: 'textElements',
+        provider_span_start: span.begin,
+        provider_span_end: span.end
+      }
+    end
+
+    result.dig(:candidates).merge!(
+      subtotal_amount: 1703,
+      tax_amount: 154,
+      total_amount: 1857,
+      tax_details: [ { description: '外税', rate: 0.1, net_amount: 1703, amount: 154 } ],
+      tax_detail_structural_metadata: {
+        source_provider: 'azure_structured',
+        provider_model_id: 'prebuilt-receipt',
+        provider_api_version: '2024-11-30',
+        string_index_type: 'textElements',
+        tax_details: [
+          {
+            tax_detail_index: 0,
+            parent: {
+              source_provider: 'azure_structured',
+              source_field_path: 'documents[0].fields.TaxDetails[0]',
+              tax_detail_index: 0,
+              provider_spans: [
+                { provider_span_start: 70, provider_span_end: 75 },
+                { provider_span_start: 80, provider_span_end: 88 }
+              ]
+            },
+            tax_inclusion_evidence: tax_detail_evidence.call(
+              'documents[0].fields.TaxDetails[0].Description', 7, 70...72
+            ).merge(kind: 'external_tax', tax_inclusion: 'net'),
+            rate: tax_detail_evidence.call(
+              'documents[0].fields.TaxDetails[0].Rate', 8, 73...75
+            ).merge(rate: '0.1'),
+            net_amount: tax_detail_evidence.call(
+              'documents[0].fields.TaxDetails[0].NetAmount', 9, 80...84
+            ).merge(amount: 1703),
+            tax_amount: tax_detail_evidence.call(
+              'documents[0].fields.TaxDetails[0].Amount', 9, 85...88
+            ).merge(amount: 154)
+          }
+        ]
+      }
+    )
+    candidate.merge!(
+      validation_state: 'valid',
+      rejection_reasons: [],
+      reference_price_tax_inclusion: 'net',
+      tax_inclusion_evidence: {
+        kind: 'shared_basis_external_tax_summary',
+        string_index_type: 'textElements',
+        policy_contract_version: 'reference_pricing_shared_basis_external_tax_policy_v1',
+        tax_detail_index: 0,
+        subtotal: amount_evidence.call('documents[0].fields.Subtotal', 6, 60...64, 1703),
+        document_tax_total: amount_evidence.call('documents[0].fields.TotalTax', 9, 85...88, 154),
+        summary_total: amount_evidence.call('documents[0].fields.Total', 10, 90...94, 1857)
+      }
+    )
+    result.dig(:candidates, :item_calculation_mode_candidates).sole[:conflicts] = [ 'reference_expression' ]
+    result
+  end
+
   def move_shared_basis_row_indexes!(result, name_line_index:)
     candidate = result.dig(:candidates, :reference_pricing_candidates).sole
     reference_line_index = name_line_index + 1
@@ -1033,6 +1120,102 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
       expect(initial.dig('adoption_proposals', 'reference_pricing')).to be_nil
       expect(copied.dig('candidates', 'reference_pricing_candidates').sole).to eq(candidate)
       expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(proposals)
+    end
+  end
+
+  it 'shared basisとexternal-taxのexact構造証拠をnet reference proposalへ結合してretryする' do
+    initial = described_class.ocr_result_snapshot(shared_basis_external_tax_ocr_result)
+    reference = initial.dig('candidates', 'reference_pricing_candidates').sole
+    tax_details = initial.dig('adoption_proposals', 'reference_pricing_tax_details')
+    proposal = initial.dig('adoption_proposals', 'item_calculation_modes').sole
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(copied)
+
+    aggregate_failures do
+      expect(reference).to include(
+        'validation_state' => 'valid',
+        'reference_price_tax_inclusion' => 'net'
+      )
+      expect(tax_details).to include(
+        'schema_version' => 'reference_pricing_tax_detail_structural_evidence_set_v1',
+        'integrity_checksum' => match(/\A[0-9a-f]{64}\z/)
+      )
+      expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+        reference_quantity_price
+        explicit_line_total
+      ])
+      expect(proposal.dig('options', 0, 'source')).to eq(
+        'reference_price_amount' => '498',
+        'reference_quantity' => '100',
+        'reference_quantity_unit_code' => 'gram',
+        'reference_quantity_origin' => 'explicit',
+        'purchased_quantity' => '342',
+        'purchased_quantity_unit_code' => 'gram',
+        'reference_price_tax_inclusion' => 'net'
+      )
+      expect(proposal.dig('options', 0, 'evidence', 'tax_inclusion')).to eq(
+        reference.fetch('tax_inclusion_evidence')
+      )
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(proposal)
+      expect(rehydrated.dig(:adoption_proposals, 'item_calculation_modes').sole).to eq(proposal)
+      expect([ reference.fetch('tax_inclusion_evidence'), tax_details, proposal ].to_json).not_to include(
+        'raw_text',
+        'product_name',
+        'store_name',
+        'polygon'
+      )
+    end
+  end
+
+  it 'shared basis external-taxの構造metadataが生成時に欠損・不一致ならexplicitだけを維持する' do
+    missing = shared_basis_external_tax_ocr_result
+    missing.dig(:candidates).delete(:tax_detail_structural_metadata)
+    mismatched = shared_basis_external_tax_ocr_result
+    mismatched.dig(
+      :candidates,
+      :tax_detail_structural_metadata,
+      :tax_details,
+      0,
+      :tax_amount
+    )[:amount] = 153
+
+    snapshots = [ missing, mismatched ].map { |result| described_class.ocr_result_snapshot(result) }
+
+    aggregate_failures do
+      snapshots.each do |snapshot|
+        expect(snapshot.dig('adoption_proposals', 'reference_pricing_tax_details')).to be_nil
+        expect(snapshot.dig('candidates', 'reference_pricing_candidates').sole).to include(
+          'validation_state' => 'valid',
+          'reference_price_tax_inclusion' => 'net'
+        )
+        expect(snapshot.dig('adoption_proposals', 'item_calculation_modes').sole.fetch('options'))
+          .to contain_exactly(include('pricing_source_kind' => 'explicit_line_total'))
+      end
+    end
+  end
+
+  it '保存済みshared basis external-taxのTaxDetail sibling欠損・改変時はproposal全体を復元しない' do
+    initial = described_class.ocr_result_snapshot(shared_basis_external_tax_ocr_result)
+    missing = initial.deep_dup
+    missing.dig('adoption_proposals').delete('reference_pricing_tax_details')
+    mutated = initial.deep_dup
+    mutated.dig(
+      'adoption_proposals',
+      'reference_pricing_tax_details',
+      'tax_details',
+      0,
+      'tax_amount'
+    )['amount'] = 153
+
+    missing_copy = described_class.ocr_result_snapshot(missing)
+    mutated_copy = described_class.ocr_result_snapshot(mutated)
+
+    aggregate_failures do
+      expect(missing_copy.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+      expect(mutated_copy.dig('adoption_proposals', 'reference_pricing_tax_details')).to be_nil
+      expect(mutated_copy.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+      expect(missing_copy.dig('candidates', 'tax_details').sole).to include('amount' => 154)
+      expect(mutated_copy.dig('candidates', 'tax_details').sole).to include('amount' => 154)
     end
   end
 
