@@ -4733,6 +4733,34 @@ RSpec.describe ReceiptAmountService do
         end
       end
 
+      it 'reference grossのabsolute discountを1回だけ適用しrateを生成しない' do
+        result = call_service(
+          receipt: {},
+          receipt_items: [
+            reference_formula_item(
+              reference_price_amount: '149',
+              reference_quantity: '1',
+              reference_quantity_unit_code: 'liter',
+              quantity: '50.03',
+              quantity_unit_code: 'liter',
+              discount_amount: 150,
+              discount_rate: nil
+            )
+          ],
+          context: :analysis
+        )
+
+        aggregate_failures do
+          expect(result.dig(:resolved, :total)).to eq(7_304)
+          expect(result.dig(:computed, :items).sole).to include(
+            original_line_total: 7_454,
+            discount_amount: 150,
+            discount_rate: nil,
+            line_total: 7_304
+          )
+        end
+      end
+
       it 'reference netにitem discount・purchase adjustment・payment adjustmentを各責務で1回だけ適用する' do
         result = call_service(
           receipt: {},
