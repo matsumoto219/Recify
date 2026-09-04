@@ -289,13 +289,13 @@ module Receipts::Processing::Contracts
         reference = proposal.fetch("options").find do |option|
           option.fetch("pricing_source_kind") == "reference_quantity_price"
         end
-        reference && reference.dig("source", "reference_price_tax_inclusion") != "gross"
+        reference && !supported_reference_tax_semantics?(reference)
       end
 
       def projected_reference_option(option, item_line_total_limit:)
         source = option.fetch("source")
         return unless source.keys.sort == PROPOSAL_CONTRACT::REFERENCE_SOURCE_KEYS.sort
-        return unless source["reference_price_tax_inclusion"] == "gross"
+        return unless supported_reference_tax_semantics?(option)
 
         projection = ReceiptAmountService.reference_item_extension_projection(
           reference_price_amount: source["reference_price_amount"],
@@ -310,6 +310,14 @@ module Receipts::Processing::Contracts
         projected_option(option, amount)
       rescue ReceiptAmountService::InvalidItemSourceError
         nil
+      end
+
+      def supported_reference_tax_semantics?(option)
+        tax_inclusion = option.dig("source", "reference_price_tax_inclusion")
+        return true if tax_inclusion == "gross"
+
+        tax_inclusion == "net" && option.dig("evidence", "tax_inclusion", "kind") ==
+          PROPOSAL_CONTRACT::SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
       end
 
       def projected_count_option(option, item_price_limit:, item_line_total_limit:)

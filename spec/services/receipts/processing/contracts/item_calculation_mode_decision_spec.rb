@@ -222,6 +222,21 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeDecision do
     parsed_ocr_result(raw)
   end
 
+  def shared_basis_external_tax_context
+    raw = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_summary_net_anonymized.json').read
+    )
+    result = parsed_ocr_result(raw)
+
+    snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
+    proposals = snapshot.dig('adoption_proposals', 'item_calculation_modes')
+    {
+      proposal: proposals.sole,
+      proposals: proposals,
+      snapshot: snapshot
+    }
+  end
+
   def counted_application_queries
     queries = []
     subscriber = lambda do |_name, _started, _finished, _id, payload|
@@ -558,6 +573,53 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeDecision do
         expect(result_for(with_total).reason).to eq('reference_tax_semantics_unsupported')
         expect(result_for(without_total)).to be_unresolved
         expect(result_for(without_total).reason).to eq('reference_tax_semantics_unsupported')
+      end
+    end
+
+    it 'checksum検証済みの共有外税evidenceだけはnet referenceをconfirmedにする' do
+      context = shared_basis_external_tax_context
+
+      decision = result_for(context, count_tax_semantics: 'unknown')
+
+      aggregate_failures do
+        expect(context.dig(:proposal, 'options', 0, 'evidence', 'tax_inclusion', 'kind')).to eq(
+          'shared_basis_external_tax_summary'
+        )
+        expect(decision).to be_confirmed
+        expect(decision.reason).to eq('formula_matches_printed_total')
+        expect(decision.selected_pricing_source_kind).to eq('reference_quantity_price')
+        expect(decision.projected_line_total).to eq(593)
+      end
+    end
+
+    it '共有外税evidenceまたはTaxDetail siblingの欠損・改変をnet authorityへ通さない' do
+      context = shared_basis_external_tax_context
+      missing_sibling = context.fetch(:snapshot).deep_dup
+      missing_sibling.dig('adoption_proposals').delete('reference_pricing_tax_details')
+      tampered_sibling = context.fetch(:snapshot).deep_dup
+      tampered_sibling.dig(
+        'adoption_proposals',
+        'reference_pricing_tax_details',
+        'tax_details',
+        0,
+        'tax_amount'
+      )['amount'] = 153
+      tampered_evidence = context.fetch(:proposals).deep_dup
+      tampered_evidence.dig(0, 'options', 0, 'evidence', 'tax_inclusion')['kind'] = 'item_local'
+
+      aggregate_failures do
+        expect(result_for(context, ocr_snapshot: missing_sibling)).to be_unresolved
+        expect(result_for(context, ocr_snapshot: tampered_sibling)).to be_unresolved
+        expect(result_for(context, item_proposals: tampered_evidence)).to be_unresolved
+      end
+    end
+
+    it '共有外税net source金額をprojectionとして上限境界まで許可する' do
+      context = shared_basis_external_tax_context
+
+      aggregate_failures do
+        expect(result_for(context, item_line_total_limit: 593)).to be_confirmed
+        expect(result_for(context, item_line_total_limit: 592)).to be_unresolved
       end
     end
 

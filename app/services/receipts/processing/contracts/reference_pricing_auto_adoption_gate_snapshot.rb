@@ -313,7 +313,7 @@ module Receipts::Processing::Contracts
             option["pricing_source_kind"] == "reference_quantity_price"
         end
         return nil unless options.one?
-        return nil unless options.sole.dig("source", "reference_price_tax_inclusion") == "gross"
+        return nil unless supported_reference_tax_semantics?(options.sole)
 
         {
           "binding_kind" => STRUCTURED_ITEM_BINDING_KIND,
@@ -324,6 +324,14 @@ module Receipts::Processing::Contracts
           "proposal_checksum" => proposal["integrity_checksum"],
           "receipt_lock_version" => receipt_lock_version
         }
+      end
+
+      def supported_reference_tax_semantics?(option)
+        tax_inclusion = option.dig("source", "reference_price_tax_inclusion")
+        return true if tax_inclusion == "gross"
+
+        tax_inclusion == "net" && option.dig("evidence", "tax_inclusion", "kind") ==
+          ItemCalculationModeProposalSet::SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
       end
 
       def contract_versions_valid?(snapshot)

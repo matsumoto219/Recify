@@ -36,6 +36,15 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
   end
 
+  def shared_basis_external_tax_ocr_snapshot
+    raw_json = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_summary_net_anonymized.json').read
+    )
+    result = Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+
+    Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(result)
+  end
+
   def bound_gate_for(receipt, ocr_snapshot: destination_ocr_snapshot)
     run = create(:receipt_analysis_run, receipt:)
     start_snapshot = described_class.capture_start(
@@ -46,6 +55,40 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     bound = described_class.bind(start_snapshot, run:, ocr_snapshot:)
 
     [ run, bound ]
+  end
+
+  def stub_shared_basis_external_tax_net_batch(ocr_snapshot, **decision_overrides)
+    proposal = ocr_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole.deep_dup
+    reference = proposal.fetch('options').find do |option|
+      option.fetch('pricing_source_kind') == 'reference_quantity_price'
+    end
+    reference.dig('source')['reference_price_tax_inclusion'] = 'net'
+    reference.dig('evidence')['tax_inclusion'] = {
+      'kind' => 'shared_basis_external_tax_summary'
+    }
+    decision_attributes = {
+      state: 'confirmed',
+      reason: 'formula_matches_printed_total',
+      candidate_id: proposal.fetch('candidate_id'),
+      item_identity: proposal.fetch('item_identity'),
+      selected_proposal_id: reference.fetch('proposal_id'),
+      selected_pricing_source_kind: 'reference_quantity_price',
+      projected_line_total: 1703,
+      option_proposal_ids: proposal.fetch('options').pluck('proposal_id')
+    }.merge(decision_overrides)
+    decision = Receipts::Processing::Contracts::ItemCalculationModeDecision::Result.new(**decision_attributes)
+    batch = Receipts::Processing::Contracts::ItemCalculationModeDecision::BatchResult.new(
+      proposals: [ proposal ],
+      decisions: [ decision ]
+    )
+    allow(Receipts::Processing::Contracts::ItemCalculationModeProposalSet).to receive(
+      :from_snapshot
+    ).and_return([ proposal ])
+    allow(Receipts::Processing::Contracts::ItemCalculationModeDecision).to receive(
+      :evaluate_all
+    ).and_return(batch)
+
+    [ proposal, reference ]
   end
 
   it 'run開始時のsetting state・generation・Receipt/image stateをbounded v4 snapshotへ固定する' do
@@ -356,6 +399,73 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
         'polygon'
       )
     end
+  end
+
+  it 'validated shared external-tax net decisionをstructured destinationへbindする' do
+    ocr_snapshot = shared_basis_external_tax_ocr_snapshot
+    proposal = ocr_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+    reference = proposal.fetch('options').find do |option|
+      option.fetch('pricing_source_kind') == 'reference_quantity_price'
+    end
+
+    binding = described_class.proposal_binding_for(
+      ocr_snapshot:,
+      receipt_lock_version: 0
+    )
+
+    expect(binding).to eq(
+      'binding_kind' => 'azure_structured_item_reference',
+      'candidate_identity' => proposal.fetch('candidate_id'),
+      'destination_identity' => proposal.fetch('item_identity'),
+      'selected_proposal_identity' => reference.fetch('proposal_id'),
+      'decision_contract_version' => 'item_calculation_mode_decision_v1',
+      'proposal_checksum' => proposal.fetch('integrity_checksum'),
+      'receipt_lock_version' => 0
+    )
+  end
+
+  it 'generic net evidenceはconfirmed decisionでもstructured bindingへ通さない' do
+    ocr_snapshot = structured_reference_ocr_snapshot
+    _proposal, reference = stub_shared_basis_external_tax_net_batch(ocr_snapshot)
+    reference.dig('evidence')['tax_inclusion'] = {
+      'source_field_path' => 'documents[0].fields.Items[0].Price',
+      'provider_span_start' => 4,
+      'provider_span_end' => 6
+    }
+
+    expect(
+      described_class.proposal_binding_for(ocr_snapshot:, receipt_lock_version: 0)
+    ).to be_nil
+  end
+
+  it 'shared net decisionのcandidate・destination・proposal identity不一致をbindしない' do
+    cases = {
+      candidate: { candidate_id: 'azure_items_1_item_calculation_mode' },
+      destination: { item_identity: 'azure_structured_item_i1_s0_e28' },
+      proposal: { selected_proposal_id: 'azure_items_1_reference_quantity_price' }
+    }
+
+    cases.each do |name, overrides|
+      ocr_snapshot = structured_reference_ocr_snapshot
+      stub_shared_basis_external_tax_net_batch(ocr_snapshot, **overrides)
+
+      expect(
+        described_class.proposal_binding_for(ocr_snapshot:, receipt_lock_version: 0)
+      ).to be_nil, name.to_s
+    end
+  end
+
+  it '改変されたstructured proposal checksumをbindしない' do
+    ocr_snapshot = structured_reference_ocr_snapshot
+    ocr_snapshot.dig(
+      'adoption_proposals',
+      'item_calculation_modes',
+      0
+    )['integrity_checksum'] = '0' * 64
+
+    expect(
+      described_class.proposal_binding_for(ocr_snapshot:, receipt_lock_version: 0)
+    ).to be_nil
   end
 
   it 'structured bindingのcandidateとselected proposalが同じprovider prefixでなければ拒否する' do
