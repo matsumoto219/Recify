@@ -139,7 +139,8 @@ class Ocr::ResponseParser
       receipt_tax: tax_amount,
       tax_details:,
       adjustment_candidates:,
-      discount_count: discount_details_by_item_index.size
+      discount_count: discount_details_by_item_index.size,
+      discount_evidence: discount_details_by_item_index.dig(0, :calculation_mode_discount)
     )
     structured_items_gross_promotion = promote_structured_items_gross_reference_pricing(
       analyze_result:,
@@ -741,7 +742,8 @@ class Ocr::ResponseParser
     receipt_tax:,
     tax_details:,
     adjustment_candidates:,
-    discount_count:
+    discount_count:,
+    discount_evidence:
   )
     candidates = Array(candidates)
     retained_indexes = Array(retained_item_indexes)
@@ -762,6 +764,7 @@ class Ocr::ResponseParser
       summary_gross_evidence: evidence,
       adjustment_count: Array(adjustment_candidates).size,
       discount_count:,
+      discount_evidence:,
       competing_tax_basis_count: competing_tax_basis_count(tax_details),
       item_line_total_limit: ReceiptAmountService.receipt_item_line_total_max
     )
@@ -3126,10 +3129,18 @@ class Ocr::ResponseParser
           next
         end
 
-        detail = (details[target_index] ||= { amount: 0, rate: nil, original_line_total: nil, amount_lines: [], source_refs: [] })
+        detail = (details[target_index] ||= {
+          amount: 0,
+          rate: nil,
+          original_line_total: nil,
+          amount_lines: [],
+          amount_entries: [],
+          source_refs: []
+        })
         detail[:amount] += amount
         detail[:rate] ||= current_rate
         detail[:amount_lines] << line
+        detail[:amount_entries] << entry
         detail[:source_refs].concat(pending_sources)
         waiting_discount = false
       end
@@ -3142,6 +3153,7 @@ class Ocr::ResponseParser
       reconcile_discount_total_stage(items, index, detail)
       detail[:source_refs] = [] unless detail[:amount].positive? || detail[:calculation_mode_discount]
       detail.delete(:amount_lines)
+      detail.delete(:amount_entries)
       [ index, detail ]
     end.to_h
   end
@@ -3203,6 +3215,7 @@ class Ocr::ResponseParser
       (groups[parent[2]] ||= []) << {
         text: lines[index],
         line_index: index,
+        provider_line: line,
         description_component: description_spans_by_index.fetch(parent[2]).include?(span)
       }
     end
@@ -3349,7 +3362,8 @@ class Ocr::ResponseParser
       end
     end
     if post_discount_lines.empty? && !printed_total_after_discount?(item, detail)
-      detail[:calculation_mode_discount] = before_item_discount_evidence(analyze_result, items, index, detail)
+      detail[:calculation_mode_discount] = before_item_discount_evidence(analyze_result, items, index, detail) ||
+        before_item_absolute_discount_evidence(analyze_result, items, index, detail)
       return
     end
 
@@ -3566,6 +3580,80 @@ class Ocr::ResponseParser
       rate: block[:rate].to_s("F").sub(/0+\z/, "").sub(/\.\z/, ""),
       printed_total_stage: "before_item_discount",
       evidence: evidence
+    }
+  rescue ArgumentError, EncodingError, TypeError
+    nil
+  end
+
+  def before_item_absolute_discount_evidence(analyze_result, items, item_index, detail)
+    return unless detail[:rate].nil?
+    return unless Array(detail[:amount_lines]).one? && Array(detail[:amount_entries]).one? && Array(detail[:source_refs]).one?
+    return unless analyze_result["modelId"] == "prebuilt-receipt" && analyze_result["apiVersion"] == "2024-11-30"
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    content = analyze_result["content"]
+    return unless mapper && content.is_a?(String) && mapper.length(content)
+
+    item = items[item_index]
+    parents = discount_parent_spans(item, content:, mapper:)
+    return unless parents && parents.map { |start, finish| mapper.slice(content, offset: start, length: finish - start) }.join("\n") == item["content"]
+
+    total = item.dig("valueObject", "TotalPrice")
+    return unless total.is_a?(Hash) && total["content"].is_a?(String) && total["content"].valid_encoding?
+
+    total_content = total["content"].unicode_normalize(:nfkc)
+      .sub(profile.ocr_item_calculation_tax_marker_prefix_pattern, "")
+      .sub(profile.ocr_item_calculation_tax_marker_suffix_pattern, "")
+    return unless total_content.match?(ADJUSTMENT_AMOUNT_ONLY_PATTERN)
+    return unless normalize_amount_for_discount(total_content) == detail[:original_line_total]
+
+    total_span = exact_structured_authority_span(total, content:, mapper:)
+    return unless total_span && parents.any? { |start, finish| total_span[0] >= start && total_span[1] <= finish }
+
+    entry = detail[:amount_entries].sole
+    line = entry[:provider_line]
+    raw_content = line.is_a?(Hash) ? line["content"] : nil
+    return unless raw_content.is_a?(String) && raw_content.valid_encoding?
+    return if raw_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+
+    line_span = exact_structured_authority_span(line, content:, mapper:)
+    return unless line_span && parents.any? { |start, finish| line_span[0] >= start && line_span[1] <= finish }
+    return unless line_span[0] >= total_span[1]
+
+    tokens = Analysis.money_token_matches(
+      text: raw_content,
+      money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+      profile:,
+      allow_bare_money: false
+    ).select { |token| token[:raw_text].match?(/[▲△\-−]/) }
+    return unless tokens.one? && tokens.sole[:amount] == detail[:amount]
+
+    source_ref = detail[:source_refs].sole
+    return unless source_ref[:source_line_index] == entry[:line_index]
+    return unless source_ref[:amount] == detail[:amount]
+
+    token = tokens.sole
+    span = mapper.span_for_bytes(
+      raw_content,
+      byte_offset: raw_content[0...token[:span_start]].bytesize,
+      byte_length: token[:raw_text].bytesize
+    )
+    return if span.nil?
+
+    start = line_span[0] + span[:offset]
+    finish = start + span[:length]
+    return unless start >= total_span[1] && finish <= line_span[1]
+
+    {
+      amount: detail[:amount].to_i.to_s,
+      printed_total_stage: "before_item_discount",
+      evidence: {
+        amount: {
+          source_field_path: "documents[0].fields.Items[#{item_index}]",
+          provider_span_start: start,
+          provider_span_end: finish
+        }
+      }
     }
   rescue ArgumentError, EncodingError, TypeError
     nil

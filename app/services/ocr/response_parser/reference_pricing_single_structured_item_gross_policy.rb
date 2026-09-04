@@ -65,6 +65,7 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       summary_gross_evidence:,
       adjustment_count:,
       discount_count:,
+      discount_evidence:,
       competing_tax_basis_count:,
       item_line_total_limit:
     )
@@ -75,7 +76,6 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       )
       return result("conflict_present") unless no_conflicts?(
         adjustment_count:,
-        discount_count:,
         competing_tax_basis_count:
       )
 
@@ -85,12 +85,22 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       candidate_metadata = exact_candidate(candidate, evidence:, maximum: item_line_total_limit)
       return result("candidate_invalid") if candidate_metadata.nil?
 
+      discount_amount = exact_discount_amount(
+        discount_count:,
+        discount_evidence:,
+        candidate:,
+        evidence:,
+        maximum: item_line_total_limit
+      )
+      return result("conflict_present") if discount_amount.nil?
+
       projection = reference_projection(candidate, maximum: item_line_total_limit)
       return result("projection_invalid") if projection.nil?
       return result("amount_mismatch") unless amounts_match?(
         candidate:,
         evidence:,
         projection:,
+        discount_amount:,
         maximum: item_line_total_limit
       )
 
@@ -111,8 +121,40 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       item_count == 1 && retained_item_indexes == [ 0 ]
     end
 
-    def no_conflicts?(adjustment_count:, discount_count:, competing_tax_basis_count:)
-      [ adjustment_count, discount_count, competing_tax_basis_count ].all? { |value| value == 0 }
+    def no_conflicts?(adjustment_count:, competing_tax_basis_count:)
+      [ adjustment_count, competing_tax_basis_count ].all? { |value| value == 0 }
+    end
+
+    def exact_discount_amount(discount_count:, discount_evidence:, candidate:, evidence:, maximum:)
+      return 0 if discount_count == 0 && discount_evidence.nil?
+      return unless discount_count == 1 && discount_evidence.is_a?(Hash)
+      return unless discount_evidence.keys.sort == %i[amount evidence printed_total_stage]
+      return unless discount_evidence[:printed_total_stage] == "before_item_discount"
+
+      amount = exact_integer(discount_evidence[:amount], maximum:, positive: true)
+      return if amount.nil?
+
+      component = discount_evidence[:evidence]
+      return unless component.is_a?(Hash) && component.keys == [ :amount ]
+
+      amount_evidence = component[:amount]
+      return unless amount_evidence.is_a?(Hash)
+      return unless amount_evidence.keys.sort == %i[
+        provider_span_end provider_span_start source_field_path
+      ]
+      return unless amount_evidence[:source_field_path] == "documents[0].fields.Items[0]"
+
+      item_parent = evidence_value(evidence, :item_parent)
+      return unless valid_span_within?(amount_evidence, item_parent)
+
+      printed_evidence = candidate.dig(:printed_line_total, :evidence)
+      return unless valid_span?(printed_evidence)
+      return unless amount_evidence[:provider_span_start] >= printed_evidence[:provider_span_end]
+      return unless COMPONENT_NAMES.all? do |component_name|
+        ranges_disjoint?(amount_evidence, candidate.dig(component_name, :evidence))
+      end
+
+      amount
     end
 
     def exact_evidence(value)
@@ -317,7 +359,7 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
       nil
     end
 
-    def amounts_match?(candidate:, evidence:, projection:, maximum:)
+    def amounts_match?(candidate:, evidence:, projection:, discount_amount:, maximum:)
       return false unless exact_evidence_valid?(evidence)
 
       projected_amount = projection.fetch(:projected_amount)
@@ -341,7 +383,7 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy
         projection.fetch(:exact_amount)
       )
 
-      [ projected_amount, printed, summary ].uniq.one?
+      projected_amount == printed && projected_amount - discount_amount == summary
     end
 
     def corroboration_exact_amount_valid?(value, exact_amount)

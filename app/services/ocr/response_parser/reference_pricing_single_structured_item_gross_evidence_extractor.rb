@@ -2,6 +2,7 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossEvidenceExtr
   MAX_LINES = Ocr::ResponseParser::MAX_REFERENCE_PRICING_TOTAL_LINES
   MAX_LINE_CONTENT_BYTES = Ocr::ResponseParser::MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
   MAX_PARENT_CONTENT_BYTES = 4_096
+  MAX_PARENT_SPANS = Ocr::ResponseParser::MAX_REFERENCE_PRICING_AUTHORITY_SPANS
   MAX_PATH_BYTES = 160
   MAX_PAGE_DIMENSION = 10_000
   MAX_AMOUNT = Ocr::ResponseParser::MAX_REFERENCE_PRICING_TOTAL_AMOUNT
@@ -197,10 +198,18 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossEvidenceExtr
 
     entry = values.sole
     field_content = bounded_content(entry["content"], maximum_bytes: MAX_PARENT_CONTENT_BYTES)
-    span = exact_span(entry["spans"])
-    return if field_content.nil? || span.nil? || exact_polygon_bounds(entry).nil?
-    return unless mapper.length(field_content) == span.fetch(:length)
-    return unless mapper.slice(content, offset: span.fetch(:offset), length: span.fetch(:length)) == field_content
+    spans = exact_parent_spans(entry["spans"])
+    return if field_content.nil? || spans.nil? || exact_polygon_bounds(entry).nil?
+    return unless spans.map do |span|
+      mapper.slice(content, offset: span.fetch(:offset), length: span.fetch(:length))
+    end.join("\n") == field_content
+
+    first = spans.first
+    last = spans.last
+    span = {
+      offset: first.fetch(:offset),
+      length: last.fetch(:offset) + last.fetch(:length) - first.fetch(:offset)
+    }
 
     structural_parent(
       source_field_path:,
@@ -374,6 +383,20 @@ class Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossEvidenceExtr
     return if offset + length > mapper.length(content)
 
     { offset:, length: }
+  end
+
+  def exact_parent_spans(spans)
+    return unless spans.is_a?(Array) && spans.size.between?(1, MAX_PARENT_SPANS)
+
+    validated = spans.map do |span|
+      exact_span([ span ])
+    end
+    return if validated.any?(&:nil?)
+    return unless validated.each_cons(2).all? do |left, right|
+      left.fetch(:offset) + left.fetch(:length) <= right.fetch(:offset)
+    end
+
+    validated
   end
 
   def finite_positive_page_dimension(value)

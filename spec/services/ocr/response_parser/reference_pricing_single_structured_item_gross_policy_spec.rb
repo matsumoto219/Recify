@@ -96,10 +96,21 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPol
       summary_gross_evidence: evidence_value,
       adjustment_count: 0,
       discount_count: 0,
+      discount_evidence: nil,
       competing_tax_basis_count: 0,
       item_line_total_limit: NATIVE_ITEM_LINE_TOTAL_LIMIT,
       **overrides
     )
+  end
+
+  def absolute_discount_evidence
+    {
+      amount: '150',
+      printed_total_stage: 'before_item_discount',
+      evidence: {
+        amount: structural('documents[0].fields.Items[0]', 28, 30).except(:source_provider)
+      }
+    }
   end
 
   it 'native candidateの唯一の不足がtax inclusionならgrossへ昇格できる' do
@@ -174,6 +185,54 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPol
       expect(evaluate(adjustment_count: 1)).not_to be_eligible
       expect(evaluate(discount_count: 1)).not_to be_eligible
       expect(evaluate(competing_tax_basis_count: 1)).not_to be_eligible
+    end
+  end
+
+  it '同一Itemの割引前TotalPriceと絶対額値引き後summaryをgrossへ昇格できる' do
+    discounted_summary = evidence.to_h.deep_dup
+    discounted_summary[:summary_total][:amount] = 450
+
+    expect(
+      evaluate(
+        evidence_value: discounted_summary,
+        discount_count: 1,
+        discount_evidence: absolute_discount_evidence
+      )
+    ).to be_eligible
+  end
+
+  it '率・別Item・複数・stage不明な値引きはgross昇格へ使わない' do
+    discounted_summary = evidence.to_h.deep_dup
+    discounted_summary[:summary_total][:amount] = 450
+    mutations = [
+      absolute_discount_evidence.merge(rate: '0.25'),
+      absolute_discount_evidence.deep_dup.tap do |value|
+        value[:evidence][:amount][:source_field_path] = 'documents[0].fields.Items[1]'
+      end,
+      absolute_discount_evidence.deep_dup.tap do |value|
+        value[:evidence][:amount][:provider_span_start] = 29
+        value[:evidence][:amount][:provider_span_end] = 31
+      end,
+      absolute_discount_evidence.merge(printed_total_stage: 'after_item_discount')
+    ]
+
+    aggregate_failures do
+      mutations.each do |discount_evidence|
+        expect(
+          evaluate(
+            evidence_value: discounted_summary,
+            discount_count: 1,
+            discount_evidence: discount_evidence
+          )
+        ).not_to be_eligible
+      end
+      expect(
+        evaluate(
+          evidence_value: discounted_summary,
+          discount_count: 2,
+          discount_evidence: absolute_discount_evidence
+        )
+      ).not_to be_eligible
     end
   end
 

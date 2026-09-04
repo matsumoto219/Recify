@@ -5,17 +5,18 @@ RSpec.describe Ocr::ResponseParser do
     header: [ 'K2' ],
     summary: [ '小計', '926', '合計 926円' ],
     per_unit_note: '(単品 -75)',
+    rate_line: '30%',
     total_marker: '',
     first_discount_interstitial: nil,
     first_discount_target_component_indexes: []
   )
-    first_block = [ '検証品A', '¥410', '操作割引07', '30%' ]
+    first_block = [ '検証品A', '¥410', '操作割引07', rate_line ].compact
     first_block.concat(Array(first_discount_interstitial))
     first_block << '-123'
     blocks = [
       first_block,
-      [ '検証品B', '¥410', '操作割引07', '30%', '-123' ],
-      [ '検証K2品', '¥502', '(@251×2個)', '操作割引07', '30%', per_unit_note, '-150' ]
+      [ '検証品B', '¥410', '操作割引07', rate_line, '-123' ].compact,
+      [ '検証K2品', '¥502', '(@251×2個)', '操作割引07', rate_line, per_unit_note, '-150' ].compact
     ]
     blocks.each { |block| block[1] += total_marker }
     content = +''
@@ -142,6 +143,17 @@ RSpec.describe Ocr::ResponseParser do
       evidence: include(:amount, :rate)
     ))
     expect(discounts.last[:amount]).to eq('150')
+  end
+
+  it '同一provider Item内の割引前TotalPriceと絶対額値引きをrateなしproofへする' do
+    discounts = calculation_discounts(item_discount_response(rate_line: nil, per_unit_note: nil))
+
+    expect(discounts.size).to eq(3)
+    expect(discounts).to all(include(
+      printed_total_stage: 'before_item_discount',
+      evidence: { amount: include(source_field_path: match(/documents\[0\]\.fields\.Items\[\d+\]/)) }
+    ))
+    expect(discounts).to all(satisfy { |discount| !discount.key?(:rate) })
   end
 
   it '既存profileの税markerを金額sourceへ混ぜず前後を確定する' do

@@ -243,6 +243,45 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossEvi
     end
   end
 
+  it 'single native Itemの非連続spanを各fragmentのexact contentから検証する' do
+    response = build_analyze_result
+    item = response.dig('documents', 0, 'fields', 'Items', 'valueArray', 0)
+    lines = response.dig('pages', 0, 'lines')
+    first = lines.fetch(0).dig('spans', 0).deep_dup
+    second_start = lines.fetch(1).dig('spans', 0, 'offset')
+    second_end = lines.fetch(3).dig('spans', 0).then { |span| span.fetch('offset') + span.fetch('length') }
+    item['spans'] = [ first, { 'offset' => second_start, 'length' => second_end - second_start } ]
+
+    evidence = extract(response)
+
+    expect(evidence.item_parent).to include(
+      provider_span_start: first.fetch('offset'),
+      provider_span_end: second_end
+    )
+  end
+
+  it 'single native Itemの重複・逆順・過剰fragmentを拒否する' do
+    response = build_analyze_result
+    item = response.dig('documents', 0, 'fields', 'Items', 'valueArray', 0)
+    span = item.fetch('spans').sole
+    midpoint = span.fetch('offset') + 4
+    fragments = [
+      { 'offset' => span.fetch('offset'), 'length' => 8 },
+      { 'offset' => midpoint, 'length' => span.fetch('length') - 4 }
+    ]
+
+    aggregate_failures do
+      item['spans'] = fragments
+      expect(extract(response)).to be_nil
+
+      item['spans'] = fragments.reverse
+      expect(extract(response)).to be_nil
+
+      item['spans'] = [ span.deep_dup ] * 17
+      expect(extract(response)).to be_nil
+    end
+  end
+
   it 'parserで保持されるwhole Floatのreceipt taxはexact lexemeとの照合値に限定する' do
     evidence = extract(receipt_total: 600.0, receipt_tax: 54.0)
 
