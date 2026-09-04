@@ -3092,7 +3092,7 @@ class Ocr::ResponseParser
         if amount.nil?
           unless item_discount_keyword_line?(line) || extract_discount_rate_from_line(line)
             matches = labels.each_index.select { |label_index| labels[label_index].present? && discount_target_line_matches_label?(line, labels[label_index]) }
-            target_index = matches.one? ? matches.sole : nil
+            target_index = nil if matches.any? && matches != [ index ]
           end
           next
         end

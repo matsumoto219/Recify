@@ -1,9 +1,18 @@
 require 'rails_helper'
 
 RSpec.describe Ocr::ResponseParser do
-  def item_discount_response(header: [ 'K2' ], summary: [ '小計', '926', '合計 926円' ], per_unit_note: '(単品 -75)', total_marker: '')
+  def item_discount_response(
+    header: [ 'K2' ],
+    summary: [ '小計', '926', '合計 926円' ],
+    per_unit_note: '(単品 -75)',
+    total_marker: '',
+    first_discount_interstitial: nil
+  )
+    first_block = [ '検証品A', '¥410', '操作割引07', '30%' ]
+    first_block << first_discount_interstitial if first_discount_interstitial
+    first_block << '-123'
     blocks = [
-      [ '検証品A', '¥410', '操作割引07', '30%', '-123' ],
+      first_block,
       [ '検証品B', '¥410', '操作割引07', '30%', '-123' ],
       [ '検証K2品', '¥502', '(@251×2個)', '操作割引07', '30%', per_unit_note, '-150' ]
     ]
@@ -142,6 +151,22 @@ RSpec.describe Ocr::ResponseParser do
     lines.insert(5, lines.first.deep_dup)
 
     expect(calculation_discounts(response).size).to eq(2)
+  end
+
+  it 'provider parent内の無関係な注記を跨いでも同じ明細の割引所有権を維持する' do
+    result = described_class.new(
+      response: item_discount_response(first_discount_interstitial: '適用案内')
+    ).call
+
+    expect(result.dig(:candidates, :items).map { |item| item[:discount_amount] }).to eq([ 123, 123, 150 ])
+  end
+
+  it 'provider parent内に別明細の商品名が現れても割引を別明細へ付け替えない' do
+    result = described_class.new(
+      response: item_discount_response(first_discount_interstitial: '検証品B')
+    ).call
+
+    expect(result.dig(:candidates, :items).map { |item| item[:discount_amount] }).to eq([ nil, 123, 150 ])
   end
 
   [ :left, :right ].each do |side|
