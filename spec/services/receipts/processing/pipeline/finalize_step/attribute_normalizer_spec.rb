@@ -57,8 +57,10 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
     quantity: BigDecimal('342'),
     quantity_unit: 'gram',
     tax_inclusion: 'gross',
+    tax_inclusion_evidence_kind: nil,
     price: nil,
     explicit_line_total: nil,
+    original_line_total: nil,
     projected_line_total: 1703
   )
     Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicator::Selection.new(
@@ -74,7 +76,9 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       reference_quantity: reference_quantity,
       reference_quantity_unit_code: reference_unit,
       reference_price_tax_inclusion: tax_inclusion,
+      reference_price_tax_inclusion_evidence_kind: tax_inclusion_evidence_kind,
       explicit_line_total: explicit_line_total,
+      original_line_total: original_line_total,
       projected_line_total: projected_line_total
     )
   end
@@ -99,6 +103,22 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       discount_rate: nil,
       position_index: selection.position_index
     }.merge(overrides)
+  end
+
+  def shared_basis_external_tax_net_selection(**overrides)
+    defaults = {
+      identity: 'azure_structured_item_i0_s41_e70',
+      proposal_id: 'azure_items_0_reference_quantity_price',
+      reference_price: BigDecimal('298'),
+      reference_quantity: BigDecimal('100'),
+      quantity: BigDecimal('199'),
+      tax_inclusion: 'net',
+      tax_inclusion_evidence_kind: 'shared_basis_external_tax_summary',
+      original_line_total: 593,
+      projected_line_total: 640
+    }
+
+    reference_selection(**defaults.merge(overrides))
   end
 
   def trusted_items(items, selections)
@@ -339,6 +359,44 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         original_line_total: BigDecimal('1703'),
         line_total: BigDecimal('1703')
       )
+    end
+
+    it '共有基準と外税summaryで検証済みのnet reference sourceだけを税込派生額と分離して保持する' do
+      selection = shared_basis_external_tax_net_selection
+      source = reference_source(selection, original_line_total: 593, line_total: 640)
+
+      result = trusted_items([ source ], [ selection ]).sole
+
+      expect(result).to include(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('298'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'net',
+        quantity: BigDecimal('199'),
+        quantity_unit_code: 'gram',
+        original_line_total: BigDecimal('593'),
+        line_total: BigDecimal('640')
+      )
+    end
+
+    it '共有外税netのevidence kindとsource・derived額が不一致ならauthorityだけを破棄する' do
+      selection = shared_basis_external_tax_net_selection
+      source = reference_source(selection, original_line_total: 593, line_total: 640)
+      cases = [
+        [ shared_basis_external_tax_net_selection(tax_inclusion_evidence_kind: nil), source ],
+        [ shared_basis_external_tax_net_selection(tax_inclusion_evidence_kind: 'item_local'), source ],
+        [ shared_basis_external_tax_net_selection(original_line_total: 594), source ],
+        [ selection, source.merge(original_line_total: 594) ],
+        [ selection, source.merge(line_total: 639) ]
+      ]
+
+      cases.each do |candidate, attributes|
+        result = trusted_items([ attributes ], [ candidate ]).sole
+
+        expect(result).not_to have_key(:pricing_source_kind)
+      end
     end
 
     it 'structured destinationへmalformed layout proposalや別source kindを接続しない' do

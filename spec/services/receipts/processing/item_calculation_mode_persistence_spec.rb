@@ -699,6 +699,153 @@ RSpec.describe 'OCR item calculation mode persistence' do
     end
   end
 
+  it 'SystemSetting有効時に共有外税summary net proposalを既存Amount経由でreference authorityへ保存しretryで変更しない' do
+    create_reference_pricing_setting(true)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      fixture: 'ocr_azure_item_calculation_reference_summary_net_anonymized',
+      strategy: :ocr_only
+    )
+    proposal_before = run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+    reference_option = proposal_before.fetch('options').find do |option|
+      option['pricing_source_kind'] == 'reference_quantity_price'
+    end
+
+    first_result = Receipts::Processing.run_finalize(run)
+    item = receipt.reload.receipt_items.sole
+    persisted_source = item.attributes.slice(
+      'pricing_source_kind',
+      'reference_price_amount',
+      'reference_quantity',
+      'reference_quantity_unit_code',
+      'reference_price_tax_inclusion',
+      'quantity',
+      'quantity_unit_code',
+      'original_line_total',
+      'line_total'
+    )
+    second_result = Receipts::Processing.run_finalize(run.reload)
+
+    aggregate_failures do
+      expect(first_result.next_step).to eq(:done)
+      expect(second_result).to have_attributes(next_step: :skipped, skip_reason: :terminal_run)
+      expect(receipt.reload).to have_attributes(
+        status: 'review_needed',
+        subtotal_amount: 593,
+        tax_amount: 47,
+        total_amount: 640
+      )
+      expect(reference_option).to include(
+        'pricing_source_kind' => 'reference_quantity_price',
+        'source' => include(
+          'reference_price_amount' => '298',
+          'reference_quantity' => '100',
+          'reference_quantity_unit_code' => 'gram',
+          'purchased_quantity' => '199',
+          'purchased_quantity_unit_code' => 'gram',
+          'reference_price_tax_inclusion' => 'net'
+        ),
+        'evidence' => include(
+          'tax_inclusion' => include('kind' => 'shared_basis_external_tax_summary')
+        )
+      )
+      expect(item).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('298'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'net',
+        quantity: BigDecimal('199'),
+        quantity_unit_code: 'gram',
+        original_line_total: 593,
+        line_total: 640
+      )
+      expect(item.reload.attributes.slice(*persisted_source.keys)).to eq(persisted_source)
+      expect(run.reload.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to eq(
+        proposal_before.fetch('integrity_checksum')
+      )
+      expect(run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(
+        proposal_before
+      )
+    end
+  end
+
+  it 'SystemSetting無効時も共有外税summary net proposalと印字額を維持しauthorityへ昇格しない' do
+    create_reference_pricing_setting(false)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      fixture: 'ocr_azure_item_calculation_reference_summary_net_anonymized',
+      strategy: :ocr_only
+    )
+    proposal_before = run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+
+    Receipts::Processing.run_finalize(run)
+
+    item = receipt.reload.receipt_items.sole
+    aggregate_failures do
+      expect(receipt).to have_attributes(
+        status: 'review_needed',
+        subtotal_amount: 593,
+        tax_amount: 47,
+        total_amount: 640
+      )
+      expect(item).to have_attributes(
+        pricing_source_kind: nil,
+        reference_price_amount: nil,
+        reference_quantity: nil,
+        reference_quantity_unit_code: nil,
+        reference_price_tax_inclusion: nil,
+        original_line_total: 593,
+        line_total: 593
+      )
+      expect(proposal_before.fetch('options')).to include(
+        include(
+          'pricing_source_kind' => 'reference_quantity_price',
+          'source' => include('reference_price_tax_inclusion' => 'net'),
+          'evidence' => include(
+            'tax_inclusion' => include('kind' => 'shared_basis_external_tax_summary')
+          )
+        )
+      )
+      expect(run.reload.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+      expect(run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(
+        proposal_before
+      )
+    end
+  end
+
+  it '共有外税summary net run開始後にSystemSetting世代が変われば再度ONでも採用しない' do
+    setting = create_reference_pricing_setting(true)
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(
+      receipt,
+      fixture: 'ocr_azure_item_calculation_reference_summary_net_anonymized',
+      strategy: :ocr_only
+    )
+    setting.update!(value: SystemSettings.stored_value(false))
+    setting.update!(value: SystemSettings.stored_value(true))
+
+    Receipts::Processing.run_finalize(run)
+
+    item = receipt.reload.receipt_items.sole
+    aggregate_failures do
+      expect(receipt).to have_attributes(subtotal_amount: 593, tax_amount: 47, total_amount: 640)
+      expect(item).to have_attributes(
+        pricing_source_kind: nil,
+        reference_price_amount: nil,
+        reference_quantity: nil,
+        reference_quantity_unit_code: nil,
+        reference_price_tax_inclusion: nil,
+        original_line_total: 593,
+        line_total: 593
+      )
+      expect(run.reload.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+    end
+  end
+
   it 'SystemSetting無効時もstructured proposalと印字額を維持するがreference authorityは作らない' do
     create_reference_pricing_setting(false)
     receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')

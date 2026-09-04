@@ -434,6 +434,192 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     end
   end
 
+  it '共有外税のexact evidenceとFenceが一致する場合だけnet reference sourceへ適用する' do
+    context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+    gate_result = structured_reference_gate_result(context)
+
+    result = result_for(context, reference_pricing_gate_result: gate_result)
+
+    aggregate_failures do
+      expect(result).to be_applied
+      expect(result.selections.sole).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: BigDecimal('298'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'net',
+        reference_price_tax_inclusion_evidence_kind: 'shared_basis_external_tax_summary',
+        quantity: BigDecimal('199'),
+        quantity_unit_code: 'gram',
+        printed_line_total: 593,
+        original_line_total: 593,
+        projected_line_total: 640
+      )
+      expect(result.params.fetch(:receipt_items_attributes).sole).to include(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('298'),
+        reference_quantity: BigDecimal('100'),
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'net',
+        original_line_total: 593,
+        line_total: 593
+      )
+      expect(result.amount_result[:resolved]).to eq(subtotal: 593, tax: 47, total: 640, tax_rate: BigDecimal('0.08'))
+      expect(result.amount_result.dig(:computed, :items).sole).to include(
+        price: nil,
+        original_line_total: 593,
+        line_total: 640
+      )
+      expect(result.amount_result.dig(:computed, :item_amount_basis)).to eq(:line_total_as_recorded)
+      expect(result.amount_result.dig(:amount_engine, :selected_basis)).to eq('printed_tax_details_net')
+    end
+  end
+
+  it '共有外税netでもevidence kindが欠損・改変された場合は適用しない' do
+    context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+    gate_result = structured_reference_gate_result(context)
+
+    [ nil, 'item_local' ].each do |evidence_kind|
+      ocr_result = context.fetch(:ocr_result).deep_dup
+      tax_inclusion_evidence = ocr_result.dig(
+        :adoption_proposals,
+        'item_calculation_modes',
+        0,
+        'options',
+        0,
+        'evidence',
+        'tax_inclusion'
+      )
+      if evidence_kind
+        tax_inclusion_evidence['kind'] = evidence_kind
+      else
+        tax_inclusion_evidence.delete('kind')
+      end
+      amount_called = false
+
+      result = result_for(
+        context,
+        ocr_result:,
+        reference_pricing_gate_result: gate_result
+      ) do
+        amount_called = true
+        raise 'Amount must not run for unsupported net evidence'
+      end
+
+      aggregate_failures(evidence_kind.inspect) do
+        expect(amount_called).to be(false)
+        expect(result).not_to be_applied
+        expect(result.params.fetch(:receipt_items_attributes).sole[:pricing_source_kind]).to be_nil
+      end
+    end
+  end
+
+  it '共有外税netの適用でAmountの金額・税basis・engine選択が契約から1つでも逸脱する場合は全適用を破棄する' do
+    mutations = {
+      resolved_subtotal: ->(amount) { amount[:resolved][:subtotal] += 1 },
+      computed_line_total: ->(amount) { amount.dig(:computed, :items).sole[:line_total] -= 1 },
+      computed_item_basis: ->(amount) { amount[:computed][:item_amount_basis] = :line_total_as_net },
+      selected_basis: ->(amount) { amount[:amount_engine][:selected_basis] = 'external_tax_from_receipt' }
+    }
+
+    mutations.each do |name, mutation|
+      context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+      gate_result = structured_reference_gate_result(context)
+
+      result = result_for(context, reference_pricing_gate_result: gate_result) do |candidate_params|
+        amount_for(candidate_params).deep_dup.tap { |amount| mutation.call(amount) }
+      end
+
+      aggregate_failures(name) do
+        expect(result).not_to be_applied
+        expect(result.params).to equal(context.fetch(:params))
+        expect(result.amount_result).to equal(context.fetch(:amount_result))
+      end
+    end
+  end
+
+  it '共有外税netのpreliminaryとfinalが同じunsafe状態でもauthorityへ適用しない' do
+    mutations = {
+      rejected: ->(amount) { amount[:selected_candidate_status] = 'rejected' },
+      no_safe_candidate: ->(amount) { amount[:amount_engine][:no_safe_candidate] = true },
+      unsafe_to_auto_complete: ->(amount) { amount[:safe_to_auto_complete] = false }
+    }
+
+    mutations.each do |name, mutation|
+      context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+      gate_result = structured_reference_gate_result(context)
+      context[:amount_result] = context.fetch(:amount_result).deep_dup.tap { |amount| mutation.call(amount) }
+
+      result = result_for(context, reference_pricing_gate_result: gate_result) do |candidate_params|
+        amount_for(candidate_params).deep_dup.tap { |amount| mutation.call(amount) }
+      end
+
+      aggregate_failures(name) do
+        expect(result).not_to be_applied
+        expect(result.params).to equal(context.fetch(:params))
+        expect(result.amount_result).to equal(context.fetch(:amount_result))
+      end
+    end
+  end
+
+  it '共有外税netは永続する税込派生額の上限ちょうどだけを適用する' do
+    context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+    gate_result = structured_reference_gate_result(context)
+
+    at_limit = result_for(
+      context,
+      reference_pricing_gate_result: gate_result,
+      item_line_total_limit: 640
+    )
+    below_limit = result_for(
+      context,
+      reference_pricing_gate_result: gate_result,
+      item_line_total_limit: 639
+    )
+
+    aggregate_failures do
+      expect(at_limit).to be_applied
+      expect(at_limit.selections.sole).to have_attributes(
+        original_line_total: 593,
+        projected_line_total: 640
+      )
+      expect(below_limit).not_to be_applied
+    end
+  end
+
+  it '共有外税netのreceiptへadjustmentが加わった場合はsummary totalをitem grossへ転用しない' do
+    context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+    gate_result = structured_reference_gate_result(context)
+    params = context.fetch(:params).deep_dup
+    params[:receipt_adjustments_attributes] = [
+      {
+        kind: 'coupon',
+        label: '調整',
+        amount: 1,
+        sign: 'discount',
+        position_index: 1
+      }
+    ]
+    amount_called = false
+
+    result = result_for(
+      context,
+      params:,
+      reference_pricing_gate_result: gate_result
+    ) do
+      amount_called = true
+      raise 'Amount must not run when a receipt adjustment invalidates shared net evidence'
+    end
+
+    aggregate_failures do
+      expect(amount_called).to be(false)
+      expect(result).not_to be_applied
+      expect(result.params).to equal(params)
+      expect(result.params.fetch(:receipt_items_attributes).sole[:pricing_source_kind]).to be_nil
+    end
+  end
+
   it '印字明細額なしのexact structured referenceだけはAmountの不足額解消を限定的に許可する' do
     context = fixture_context(
       'ocr_azure_item_calculation_reference_gross_anonymized',

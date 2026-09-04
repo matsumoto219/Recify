@@ -343,7 +343,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         selection.quantity <= ReceiptItem::REFERENCE_QUANTITY_MAX &&
         selection.price.nil? &&
         selection.explicit_line_total.nil? &&
-        selection.reference_price_tax_inclusion == "gross" &&
+        trusted_reference_item_calculation_tax_semantics_valid?(selection) &&
         item[:price].nil? &&
         item[:quantity] == selection.quantity &&
         item[:quantity_unit_code] == purchased_unit.code &&
@@ -352,10 +352,32 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         item[:reference_quantity] == selection.reference_quantity &&
         item[:reference_quantity_unit_code] == reference_unit.code &&
         item[:reference_quantity_unit_raw].nil? &&
-        item[:reference_price_tax_inclusion] == "gross" &&
-        exact_item_total_matches?(item, selection.projected_line_total)
+        item[:reference_price_tax_inclusion] == selection.reference_price_tax_inclusion &&
+        trusted_reference_item_calculation_totals_valid?(item, selection)
     rescue ReceiptQuantityUnit::ConversionError
       false
+    end
+
+    def trusted_reference_item_calculation_tax_semantics_valid?(selection)
+      if selection.reference_price_tax_inclusion == "gross"
+        return selection.reference_price_tax_inclusion_evidence_kind.nil?
+      end
+
+      selection.reference_price_tax_inclusion == "net" &&
+        selection.reference_price_tax_inclusion_evidence_kind ==
+          Receipts::Processing::Contracts::ItemCalculationModeProposalSet::SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+    end
+
+    def trusted_reference_item_calculation_totals_valid?(item, selection)
+      if selection.reference_price_tax_inclusion == "gross"
+        return exact_item_total_matches?(item, selection.projected_line_total)
+      end
+      return false unless selection.original_line_total.is_a?(Integer)
+
+      item[:original_line_total].is_a?(Integer) &&
+        item[:line_total].is_a?(Integer) &&
+        item[:original_line_total] == selection.original_line_total &&
+        item[:line_total] == selection.projected_line_total
     end
 
     def exact_count_quantity?(value)

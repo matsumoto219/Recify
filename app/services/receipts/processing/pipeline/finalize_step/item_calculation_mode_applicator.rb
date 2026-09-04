@@ -100,6 +100,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     :reference_quantity,
     :reference_quantity_unit_code,
     :reference_price_tax_inclusion,
+    :reference_price_tax_inclusion_evidence_kind,
     :explicit_line_total,
     :printed_line_total,
     :original_line_total,
@@ -121,6 +122,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       reference_quantity: nil,
       reference_quantity_unit_code: nil,
       reference_price_tax_inclusion: nil,
+      reference_price_tax_inclusion_evidence_kind: nil,
       explicit_line_total: nil,
       printed_line_total: nil,
       original_line_total: nil,
@@ -142,6 +144,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         reference_quantity: reference_quantity,
         reference_quantity_unit_code: reference_quantity_unit_code&.dup&.freeze,
         reference_price_tax_inclusion: reference_price_tax_inclusion&.dup&.freeze,
+        reference_price_tax_inclusion_evidence_kind: reference_price_tax_inclusion_evidence_kind&.dup&.freeze,
         explicit_line_total: explicit_line_total,
         printed_line_total: printed_line_total,
         original_line_total: original_line_total,
@@ -404,11 +407,13 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     purchased_unit = canonical_unit(source.fetch("purchased_quantity_unit_code"))
     return if [ reference_price, reference_quantity, purchased_quantity, reference_unit, purchased_unit ].any?(&:nil?)
     return unless ReceiptQuantityUnit.convertible?(from: purchased_unit, to: reference_unit)
-    return unless source["reference_price_tax_inclusion"] == "gross"
     return unless exact_decimal_matches?(attributes[:price], reference_price)
     return unless exact_decimal_matches?(attributes[:quantity], purchased_quantity)
     return unless attributes[:quantity_unit_code] == purchased_unit
     return unless attributes[:quantity_unit_raw].nil?
+
+    projection = reference_selection_projection(decision, option)
+    return unless projection
 
     printed_line_total = exact_printed_line_total(proposal, projected: decision.projected_line_total)
     return if proposal["printed_line_total"] && printed_line_total.nil?
@@ -430,13 +435,52 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       reference_price_amount: reference_price,
       reference_quantity:,
       reference_quantity_unit_code: reference_unit,
-      reference_price_tax_inclusion: "gross",
+      reference_price_tax_inclusion: projection.fetch(:tax_inclusion),
+      reference_price_tax_inclusion_evidence_kind: projection[:evidence_kind],
       printed_line_total:,
-      projected_line_total: decision.projected_line_total,
+      original_line_total: projection[:original_line_total],
+      projected_line_total: projection.fetch(:projected_line_total),
       review_reason:
     )
   rescue ReceiptQuantityUnit::ConversionError
     nil
+  end
+
+  def reference_selection_projection(decision, option)
+    source = option.fetch("source")
+    tax_inclusion = source["reference_price_tax_inclusion"]
+    if tax_inclusion == "gross"
+      return {
+        tax_inclusion:,
+        evidence_kind: nil,
+        original_line_total: nil,
+        projected_line_total: decision.projected_line_total
+      }
+    end
+    return unless tax_inclusion == "net"
+    return unless Array(params[:receipt_adjustments_attributes]).empty?
+
+    evidence = normalized_hash(option.dig("evidence", "tax_inclusion"))
+    evidence_kind = evidence[:kind]
+    return unless evidence_kind == PROPOSAL_CONTRACT::SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+
+    subtotal = bounded_evidence_amount(evidence.dig("subtotal", "amount"))
+    tax = bounded_evidence_amount(evidence.dig("document_tax_total", "amount"))
+    total = bounded_evidence_amount(evidence.dig("summary_total", "amount"))
+    return if [ subtotal, tax, total ].any?(&:nil?)
+    return unless subtotal == decision.projected_line_total
+    return unless subtotal + tax == total
+
+    {
+      tax_inclusion:,
+      evidence_kind:,
+      original_line_total: subtotal,
+      projected_line_total: total
+    }
+  end
+
+  def bounded_evidence_amount(value)
+    value if value.is_a?(Integer) && value.between?(0, item_line_total_limit)
   end
 
   def exact_printed_line_total(proposal, projected:)
@@ -662,6 +706,10 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     item[:price].nil? &&
       exact_decimal_matches?(item[:quantity], selection.quantity) &&
       item[:quantity_unit_code] == selection.quantity_unit_code &&
+      exact_decimal_matches?(item[:reference_price_amount], selection.reference_price_amount) &&
+      exact_decimal_matches?(item[:reference_quantity], selection.reference_quantity) &&
+      item[:reference_quantity_unit_code] == selection.reference_quantity_unit_code &&
+      item[:reference_price_tax_inclusion] == selection.reference_price_tax_inclusion &&
       final_context == preliminary_context
   end
 
@@ -670,8 +718,70 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       financial_result_signature(preliminary_amount_result)
     return true if resolved_item_total_transition_valid?(final_amount_result)
     return true if absolute_discount_transition_valid?(final_amount_result, selections)
+    return true if shared_basis_external_tax_net_reference_transition_valid?(
+      candidate_params,
+      final_amount_result,
+      selections
+    )
 
     no_total_reference_transition_valid?(candidate_params, final_amount_result, selections)
+  end
+
+  def shared_basis_external_tax_net_reference_transition_valid?(candidate_params, final_amount_result, selections)
+    return false unless selections.one?
+
+    selection = selections.sole
+    return false unless shared_basis_external_tax_net_reference_selection?(selection)
+    return false unless shared_basis_external_tax_net_candidate_params_valid?(candidate_params, selection)
+    return false unless safe_amount_result?(preliminary_amount_result)
+    return false unless safe_amount_result?(final_amount_result)
+
+    preliminary_signature = financial_result_signature(preliminary_amount_result).deep_dup
+    final_signature = financial_result_signature(final_amount_result)
+    preliminary_signature[:computed_receipt][:item_amount_basis] = :line_total_as_recorded
+    preliminary_signature[:computed_items][selection.item_index][:line_total] = selection.projected_line_total
+    return false unless preliminary_signature == final_signature
+    return false unless normalized_hash(preliminary_amount_result[:amount_engine])[:selected_basis] ==
+      "external_tax_from_receipt"
+    return false unless normalized_hash(final_amount_result[:amount_engine])[:selected_basis] ==
+      "printed_tax_details_net"
+
+    true
+  end
+
+  def shared_basis_external_tax_net_reference_selection?(selection)
+    selection.pricing_source_kind == "reference_quantity_price" &&
+      selection.reference_price_tax_inclusion == "net" &&
+      selection.reference_price_tax_inclusion_evidence_kind ==
+        PROPOSAL_CONTRACT::SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND &&
+      exact_integer_matches?(selection.printed_line_total, selection.original_line_total) &&
+      selection.projected_line_total > selection.original_line_total
+  end
+
+  def shared_basis_external_tax_net_candidate_params_valid?(candidate_params, selection)
+    return false unless non_item_params_unchanged?(candidate_params)
+    return false unless Array(params[:receipt_adjustments_attributes]).empty?
+
+    source_items = Array(params[:receipt_items_attributes])
+    candidate_items = Array(candidate_params[:receipt_items_attributes])
+    return false unless source_items.one? && candidate_items.one? && selection.item_index.zero?
+
+    source_item = normalized_hash(source_items.sole)
+    candidate_item = normalized_hash(candidate_items.sole)
+    return false unless source_item[:discount_amount].nil? && source_item[:discount_rate].nil?
+    return false unless exact_integer_matches?(source_item[:original_line_total], selection.original_line_total)
+    return false unless exact_integer_matches?(source_item[:line_total], selection.original_line_total)
+
+    candidate_item[:pricing_source_kind] == "reference_quantity_price" &&
+      candidate_item[:price].nil? &&
+      exact_decimal_matches?(candidate_item[:quantity], selection.quantity) &&
+      candidate_item[:quantity_unit_code] == selection.quantity_unit_code &&
+      exact_decimal_matches?(candidate_item[:reference_price_amount], selection.reference_price_amount) &&
+      exact_decimal_matches?(candidate_item[:reference_quantity], selection.reference_quantity) &&
+      candidate_item[:reference_quantity_unit_code] == selection.reference_quantity_unit_code &&
+      candidate_item[:reference_price_tax_inclusion] == "net" &&
+      exact_integer_matches?(candidate_item[:original_line_total], selection.original_line_total) &&
+      exact_integer_matches?(candidate_item[:line_total], selection.original_line_total)
   end
 
   def absolute_discount_transition_valid?(final_amount_result, selections)
@@ -714,7 +824,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     selection = no_total_selections.sole
     return false unless no_total_candidate_params_valid?(candidate_params, selection)
     return false unless no_total_result_context_unchanged?(final_amount_result)
-    return false unless no_total_amount_result_safe?(final_amount_result)
+    return false unless safe_amount_result?(final_amount_result)
     return false unless review_transition_valid?(
       final_amount_result,
       allowed_removed_values: NO_TOTAL_ALLOWED_REMOVED_REVIEW_VALUES
@@ -770,11 +880,11 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         preliminary_engine.slice(:selected_candidate_id, :selected_basis)
   end
 
-  def no_total_amount_result_safe?(final_amount_result)
-    final_amount_result[:selected_candidate_status].to_s == "accepted" &&
-      normalized_hash(final_amount_result[:amount_engine])[:no_safe_candidate] == false &&
-      final_amount_result[:safe_to_auto_complete] == true &&
-      final_amount_result[:needs_review] == false
+  def safe_amount_result?(amount_result)
+    amount_result[:selected_candidate_status].to_s == "accepted" &&
+      normalized_hash(amount_result[:amount_engine])[:no_safe_candidate] == false &&
+      amount_result[:safe_to_auto_complete] == true &&
+      amount_result[:needs_review] == false
   end
 
   def review_transition_valid?(final_amount_result, allowed_removed_values:, allow_remaining_review: false)
