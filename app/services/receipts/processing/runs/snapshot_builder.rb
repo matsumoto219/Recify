@@ -141,6 +141,15 @@ module Receipts::Processing::Runs
       (REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS + %w[amount]).freeze
     REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS =
       (REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_STRUCTURAL_KEYS + %w[amount]).freeze
+    REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND =
+      "structured_items_receipt_inner_tax_summary_member"
+    REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_POLICY_VERSION =
+      "reference_pricing_structured_items_gross_policy_v1"
+    REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_KEYS = %w[
+      kind policy_contract_version item_index
+    ].freeze
+    REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_BOUND_MEMBER_KEYS =
+      (REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_KEYS + %w[evidence_set_checksum]).freeze
     MAX_REFERENCE_PRICING_RECEIPT_AMOUNT = 999_999_999_999
     REFERENCE_PRICING_LINE_GROUP_PROFILE_COUNTRY_CODES = %w[JPN].freeze
     REFERENCE_PRICING_DESTINATION_CONTRACTS = %w[azure_line_group_destination_v1].freeze
@@ -807,9 +816,24 @@ module Receipts::Processing::Runs
       proposals = reference_pricing_adoption_proposals_snapshot(result, ocr_snapshot) || {}
       tax_details = reference_pricing_tax_detail_structural_evidence_snapshot(result, ocr_snapshot)
       proposals[:reference_pricing_tax_details] = tax_details if tax_details.present?
+      structured_items_gross = reference_pricing_structured_items_gross_evidence_snapshot(
+        result,
+        ocr_snapshot
+      )
+      if structured_items_gross.present?
+        proposals[:reference_pricing_structured_items_gross] = structured_items_gross
+        bind_reference_pricing_structured_items_gross_members!(
+          ocr_snapshot,
+          structured_items_gross
+        )
+      end
       proposal_context = ocr_snapshot.deep_dup
-      if tax_details.present?
-        proposal_context[:adoption_proposals] = { reference_pricing_tax_details: tax_details }
+      structural_proposals = {
+        reference_pricing_tax_details: tax_details,
+        reference_pricing_structured_items_gross: structured_items_gross
+      }.compact
+      if structural_proposals.present?
+        proposal_context[:adoption_proposals] = structural_proposals
       end
       item_calculation_modes = item_calculation_mode_proposals_snapshot(result, proposal_context)
       proposals[:item_calculation_modes] = item_calculation_modes if item_calculation_modes.present?
@@ -826,6 +850,42 @@ module Receipts::Processing::Runs
       else
         metadata = normalized_hash(result[:candidates])[:tax_detail_structural_metadata]
         contract.build(metadata:, ocr_snapshot:)
+      end
+    end
+
+    def reference_pricing_structured_items_gross_evidence_snapshot(result, ocr_snapshot)
+      contract = Receipts::Processing::Contracts::ReferencePricingStructuredItemsGrossEvidenceSet
+      if result.key?(:schema_version)
+        return nil unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+        stored = normalized_hash(result[:adoption_proposals])[:reference_pricing_structured_items_gross]
+        contract.from_snapshot(stored, ocr_snapshot:)
+      else
+        metadata = normalized_hash(result[:candidates])[:reference_pricing_structured_items_gross_evidence]
+        contract.build(metadata:, ocr_snapshot:)
+      end
+    end
+
+    def bind_reference_pricing_structured_items_gross_members!(ocr_snapshot, evidence_set)
+      checksum = evidence_set["integrity_checksum"] || evidence_set[:integrity_checksum]
+      members = Array(evidence_set["candidate_members"] || evidence_set[:candidate_members]).index_by do |member|
+        normalized_hash(member)[:item_index]
+      end
+      references = Array(ocr_snapshot.dig(:candidates, :reference_pricing_candidates))
+      references.each do |candidate|
+        normalized_candidate = normalized_hash(candidate)
+        evidence = normalized_hash(normalized_candidate[:tax_inclusion_evidence])
+        next unless evidence[:kind].to_s == REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+
+        member = normalized_hash(members[normalized_candidate[:item_index]])
+        next unless member[:candidate_id].to_s == normalized_candidate[:candidate_id].to_s
+
+        candidate[:tax_inclusion_evidence] = {
+          kind: REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND,
+          policy_contract_version: REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_POLICY_VERSION,
+          evidence_set_checksum: checksum,
+          item_index: normalized_candidate[:item_index]
+        }
       end
     end
 
@@ -1037,6 +1097,10 @@ module Receipts::Processing::Runs
     def reference_pricing_tax_inclusion_evidence_snapshot(value, source_kind:, candidate:)
       evidence = normalized_hash(value)
       if source_kind.nil? &&
+          evidence[:kind].to_s == REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+        return reference_pricing_structured_items_gross_member_snapshot(evidence, candidate:)
+      end
+      if source_kind.nil? &&
           evidence[:kind].to_s == REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
         return reference_pricing_single_structured_item_gross_snapshot(evidence, candidate:)
       end
@@ -1050,6 +1114,32 @@ module Receipts::Processing::Runs
       end
 
       reference_pricing_evidence_snapshot(value, source_kind:)
+    end
+
+    def reference_pricing_structured_items_gross_member_snapshot(value, candidate:)
+      expected_keys = if value.key?(:evidence_set_checksum)
+        REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_BOUND_MEMBER_KEYS
+      else
+        REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_KEYS
+      end
+      return {} unless exact_snapshot_keys?(value, expected_keys)
+      return {} unless value[:kind].to_s == REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+      return {} unless value[:policy_contract_version].to_s ==
+        REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_POLICY_VERSION
+      return {} unless value[:item_index] == candidate[:item_index]
+      return {} unless candidate[:reference_price_tax_inclusion].to_s == "gross"
+      return {} unless candidate[:validation_state].to_s == "valid"
+      return {} unless Array(candidate[:rejection_reasons]).empty?
+
+      checksum = value[:evidence_set_checksum]
+      return {} if checksum && !checksum.to_s.match?(/\A[0-9a-f]{64}\z/)
+
+      {
+        kind: REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND,
+        policy_contract_version: REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_POLICY_VERSION,
+        evidence_set_checksum: checksum,
+        item_index: candidate[:item_index]
+      }.compact
     end
 
     def reference_pricing_shared_basis_external_tax_snapshot(value, candidate:)

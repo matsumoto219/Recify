@@ -166,6 +166,11 @@ module Receipts::Processing::Contracts
       (SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS + %w[amount]).freeze
     SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS =
       (SINGLE_STRUCTURED_ITEM_GROSS_LINE_KEYS + %w[amount]).freeze
+    STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND = "structured_items_receipt_inner_tax_summary_member"
+    STRUCTURED_ITEMS_GROSS_POLICY_VERSION = "reference_pricing_structured_items_gross_policy_v1"
+    STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KEYS = %w[
+      kind policy_contract_version evidence_set_checksum item_index
+    ].freeze
     LAYOUT_PRODUCER_OFFSETS = [
       { reference: 1, reference_quantity: 1, purchased: [ 2 ], total: 3, owned: [ 0, 1, 2, 3 ] },
       { reference: 1, reference_quantity: 1, purchased: [ 3 ], total: 4, owned: [ 0, 1, 2, 3, 4 ] },
@@ -385,6 +390,7 @@ module Receipts::Processing::Contracts
         return deep_copy(evidence) if [
           SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND,
           SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND,
+          STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND,
           SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
         ].include?(evidence["kind"])
 
@@ -463,7 +469,12 @@ module Receipts::Processing::Contracts
           parent_end: parent_end
         )
         return false unless conflicts_valid?(proposal["conflicts"])
-        return false unless options_valid?(proposal, parent_start: parent_start, parent_end: parent_end)
+        return false unless options_valid?(
+          proposal,
+          parent_start: parent_start,
+          parent_end: parent_end,
+          context:
+        )
         return false unless printed_line_total_valid?(
           proposal["printed_line_total"],
           proposal: proposal,
@@ -1110,7 +1121,7 @@ module Receipts::Processing::Contracts
           (value - CONFLICTS).empty?
       end
 
-      def options_valid?(proposal, parent_start:, parent_end:)
+      def options_valid?(proposal, parent_start:, parent_end:, context:)
         return calculation_layout_options_valid?(proposal) if calculation_layout_candidate?(proposal)
 
         options = proposal["options"]
@@ -1141,14 +1152,15 @@ module Receipts::Processing::Contracts
             normalized_hash(option),
             proposal: proposal,
             parent_start: parent_start,
-            parent_end: parent_end
+            parent_end: parent_end,
+            context:
           )
         end
 
         all_evidence_nonoverlapping?(proposal)
       end
 
-      def option_valid?(option, proposal:, parent_start:, parent_end:)
+      def option_valid?(option, proposal:, parent_start:, parent_end:, context:)
         item_index = proposal["item_index"]
         kind = option["pricing_source_kind"]
         return false unless PRICING_SOURCE_KINDS.include?(kind)
@@ -1172,7 +1184,8 @@ module Receipts::Processing::Contracts
             proposal: proposal,
             item_index: item_index,
             parent_start: parent_start,
-            parent_end: parent_end
+            parent_end: parent_end,
+            context:
           )
         when "explicit_line_total"
           expected_keys = option.key?("discount") ? DISCOUNTED_OPTION_KEYS : OPTION_KEYS
@@ -1323,7 +1336,7 @@ module Receipts::Processing::Contracts
         nil
       end
 
-      def reference_option_valid?(option, proposal:, item_index:, parent_start:, parent_end:)
+      def reference_option_valid?(option, proposal:, item_index:, parent_start:, parent_end:, context:)
         source = normalized_hash(option["source"])
         evidence = normalized_hash(option["evidence"])
         return false unless exact_keys?(source, REFERENCE_SOURCE_KEYS)
@@ -1383,6 +1396,17 @@ module Receipts::Processing::Contracts
               proposal: proposal,
               parent_start: parent_start,
               parent_end: parent_end
+            )
+          elsif tax_evidence["kind"] == STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+            return false unless structured_items_gross_member_evidence_valid?(
+              tax_evidence,
+              candidate_id: option["source_candidate_id"],
+              item_index:,
+              parent_start:,
+              parent_end:,
+              source:,
+              printed_line_total: proposal["printed_line_total"],
+              context:
             )
           else
             return false unless reference_tax_component_evidence_valid?(
@@ -1806,6 +1830,41 @@ module Receipts::Processing::Contracts
         false
       end
 
+      def structured_items_gross_member_evidence_valid?(
+        value,
+        candidate_id:,
+        item_index:,
+        parent_start:,
+        parent_end:,
+        source:,
+        printed_line_total:,
+        context:
+      )
+        evidence = normalized_hash(value)
+        return false unless exact_keys?(evidence, STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KEYS)
+        return false unless evidence["kind"] == STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+        return false unless evidence["policy_contract_version"] == STRUCTURED_ITEMS_GROSS_POLICY_VERSION
+        return false unless evidence["item_index"] == item_index
+
+        evidence_set = context["reference_pricing_structured_items_gross"]
+        members = context["structured_items_gross_members"]
+        return false unless evidence_set.is_a?(Hash) && members.is_a?(Hash)
+        return false unless evidence["evidence_set_checksum"] == evidence_set["integrity_checksum"]
+
+        member = normalized_hash(members[item_index])
+        return false unless member["candidate_id"] == candidate_id
+        return false unless member["parent_start"] == parent_start
+        return false unless member["parent_end"] == parent_end
+
+        projection = reference_projection(source)
+        printed_amount = normalized_hash(printed_line_total)["amount"]
+        item_total = member["item_total"]
+        projection.present? && item_total.is_a?(Integer) &&
+          projection.fetch(:projected_amount) == item_total && printed_amount == item_total.to_s
+      rescue ArgumentError, KeyError, TypeError
+        false
+      end
+
       def single_structured_item_parent_valid?(value, expected_keys:, expected_path:, index_key:)
         exact_keys?(value, expected_keys) &&
           value["source_provider"] == SOURCE_PROVIDER &&
@@ -1974,6 +2033,17 @@ module Receipts::Processing::Contracts
             proposal: candidate,
             parent_start: candidate["provider_span_start"],
             parent_end: candidate["provider_span_end"],
+            context:
+          )
+        elsif tax_evidence["kind"] == STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+          return false unless structured_items_gross_member_evidence_valid?(
+            tax_evidence,
+            candidate_id: reference_candidate["candidate_id"],
+            item_index:,
+            parent_start: candidate["provider_span_start"],
+            parent_end: candidate["provider_span_end"],
+            source: reference_source(reference_candidate),
+            printed_line_total: reference_candidate["printed_line_total"],
             context:
           )
         else
@@ -2813,6 +2883,8 @@ module Receipts::Processing::Contracts
               document_tax_total = normalized_hash(normalized["document_tax_total"])
               tax_amount = normalized_hash(normalized["tax_amount"])
               evidence << document_tax_total unless evidence_ranges_equal?(tax_amount, document_tax_total)
+            elsif normalized["kind"] == STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+              next
             elsif normalized["kind"] == SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
               evidence << normalized["subtotal"]
               evidence << normalized["document_tax_total"]
@@ -2944,10 +3016,8 @@ module Receipts::Processing::Contracts
         end
         return nil unless reference_candidate_ids.uniq.size == reference_candidate_ids.size
 
-        raw_tax_details = bounded_context_hash(source["adoption_proposals"], maximum_entries: 8)&.fetch(
-          "reference_pricing_tax_details",
-          nil
-        )
+        adoption_proposals = bounded_context_hash(source["adoption_proposals"], maximum_entries: 8)
+        raw_tax_details = adoption_proposals&.fetch("reference_pricing_tax_details", nil)
         reference_pricing_tax_details = if raw_tax_details.nil?
           nil
         else
@@ -2957,6 +3027,38 @@ module Receipts::Processing::Contracts
           )
         end
         return nil unless raw_tax_details.nil? || reference_pricing_tax_details
+
+        raw_structured_items_gross = adoption_proposals&.fetch(
+          "reference_pricing_structured_items_gross",
+          nil
+        )
+        reference_pricing_structured_items_gross = if raw_structured_items_gross.nil?
+          nil
+        else
+          Receipts::Processing::Contracts::ReferencePricingStructuredItemsGrossEvidenceSet.from_snapshot(
+            raw_structured_items_gross,
+            ocr_snapshot: source
+          )
+        end
+        return nil unless raw_structured_items_gross.nil? || reference_pricing_structured_items_gross
+
+        structured_items_gross_members = if reference_pricing_structured_items_gross
+          reference_pricing_structured_items_gross.fetch("candidate_members").to_h do |member|
+            item_index = member.fetch("item_index")
+            item_total = reference_pricing_structured_items_gross.fetch("item_totals").fetch(item_index)
+            item_parent = reference_pricing_structured_items_gross.fetch("item_parents").fetch(item_index)
+            parent_spans = item_parent.fetch("provider_spans")
+            [
+              item_index,
+              {
+                "candidate_id" => member.fetch("candidate_id"),
+                "item_total" => item_total.fetch("amount"),
+                "parent_start" => parent_spans.first.fetch("provider_span_start"),
+                "parent_end" => parent_spans.last.fetch("provider_span_end")
+              }
+            ]
+          end
+        end
 
         {
           "schema_version" => OCR_RESULT_SCHEMA_VERSION,
@@ -2971,7 +3073,9 @@ module Receipts::Processing::Contracts
             "reference_pricing_candidates" => reference_counts,
             "item_calculation_mode_candidates" => proposal_counts
           },
-          "reference_pricing_tax_details" => reference_pricing_tax_details
+          "reference_pricing_tax_details" => reference_pricing_tax_details,
+          "reference_pricing_structured_items_gross" => reference_pricing_structured_items_gross,
+          "structured_items_gross_members" => structured_items_gross_members
         }.compact
       end
 
@@ -3044,6 +3148,14 @@ module Receipts::Processing::Contracts
         if shared_basis_external_tax_option
           payload["ocr_binding"]["reference_pricing_tax_details_checksum"] =
             context.dig("reference_pricing_tax_details", "integrity_checksum")
+        end
+        structured_items_gross_option = Array(proposal["options"]).any? do |option|
+          normalized_hash(option).dig("evidence", "tax_inclusion", "kind") ==
+            STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+        end
+        if structured_items_gross_option
+          payload["ocr_binding"]["reference_pricing_structured_items_gross_checksum"] =
+            context.dig("reference_pricing_structured_items_gross", "integrity_checksum")
         end
 
         Digest::SHA256.hexdigest(JSON.generate(deep_canonical_value(payload)))

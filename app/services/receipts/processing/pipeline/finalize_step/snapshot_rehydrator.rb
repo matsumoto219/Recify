@@ -12,6 +12,11 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         snapshot.dig(:adoption_proposals, :reference_pricing_tax_details),
         ocr_snapshot: snapshot
       )
+      structured_items_gross =
+        Receipts::Processing::Contracts::ReferencePricingStructuredItemsGrossEvidenceSet.from_snapshot(
+          snapshot.dig(:adoption_proposals, :reference_pricing_structured_items_gross),
+          ocr_snapshot: snapshot
+        )
       item_calculation_modes = Receipts::Processing::Contracts::ItemCalculationModeProposalSet.from_snapshot(
         snapshot.dig(:adoption_proposals, :item_calculation_modes),
         ocr_snapshot: snapshot
@@ -19,6 +24,9 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
       adoption_proposals = {}
       adoption_proposals["reference_pricing"] = proposal if proposal
       adoption_proposals["reference_pricing_tax_details"] = tax_details if tax_details
+      if structured_items_gross
+        adoption_proposals["reference_pricing_structured_items_gross"] = structured_items_gross
+      end
       adoption_proposals["item_calculation_modes"] = item_calculation_modes if item_calculation_modes.present?
 
       {
