@@ -169,6 +169,24 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingSharedBasisExternalTaxEviden
     end
   end
 
+  it 'exact spanを持つdocument amount fieldの2px bbox丸め差だけを許容する' do
+    within_tolerance = build_analyze_result
+    outside_tolerance = build_analyze_result
+    [ within_tolerance, outside_tolerance ].each_with_index do |result, index|
+      delta = index + 2
+      polygon = result.dig('documents', 0, 'fields', 'Total', 'boundingRegions', 0, 'polygon')
+      polygon[2] += delta
+      polygon[4] += delta
+      polygon[5] += delta
+      polygon[7] += delta
+    end
+
+    aggregate_failures do
+      expect(extract(within_tolerance)).to be_present
+      expect(extract(outside_tolerance)).to be_nil
+    end
+  end
+
   it 'document amountの符号を句読点として捨てずfail-closedにする' do
     signed_amounts = [ '+47円', '-47円', '＋47円', '－47円', '−47円' ]
 

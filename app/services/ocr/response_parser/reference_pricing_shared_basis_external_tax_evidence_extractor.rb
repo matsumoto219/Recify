@@ -5,6 +5,7 @@ class Ocr::ResponseParser::ReferencePricingSharedBasisExternalTaxEvidenceExtract
   MAX_PAGE_DIMENSION = Ocr::ResponseParser::MAX_REFERENCE_PRICING_PAGE_DIMENSION
   MAX_AMOUNT = Ocr::ResponseParser::MAX_REFERENCE_PRICING_TOTAL_AMOUNT
   MAX_PATH_BYTES = 160
+  FIELD_LINE_BOUNDS_TOLERANCE = 2
   SUPPORTED_MODEL_ID = "prebuilt-receipt"
   SUPPORTED_API_VERSION = "2024-11-30"
   EVIDENCE_KIND = "shared_basis_external_tax_summary"
@@ -329,11 +330,10 @@ class Ocr::ResponseParser::ReferencePricingSharedBasisExternalTaxEvidenceExtract
   end
 
   def bounds_within?(inner, outer)
-    tolerance = 1
-    inner.fetch(:left) >= outer.fetch(:left) - tolerance &&
-      inner.fetch(:top) >= outer.fetch(:top) - tolerance &&
-      inner.fetch(:right) <= outer.fetch(:right) + tolerance &&
-      inner.fetch(:bottom) <= outer.fetch(:bottom) + tolerance
+    inner.fetch(:left) >= outer.fetch(:left) - FIELD_LINE_BOUNDS_TOLERANCE &&
+      inner.fetch(:top) >= outer.fetch(:top) - FIELD_LINE_BOUNDS_TOLERANCE &&
+      inner.fetch(:right) <= outer.fetch(:right) + FIELD_LINE_BOUNDS_TOLERANCE &&
+      inner.fetch(:bottom) <= outer.fetch(:bottom) + FIELD_LINE_BOUNDS_TOLERANCE
   end
 
   def finite_positive_dimension(value)
