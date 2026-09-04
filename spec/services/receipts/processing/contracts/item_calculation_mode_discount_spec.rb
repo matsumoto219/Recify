@@ -316,15 +316,62 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     }
   end
 
-  def apply(context, &amount_calculator)
+  def apply(context, reference_pricing_gate_result: nil, &amount_calculator)
     Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicator.call(
       params: context[:params],
       ocr_result: context[:ocr_result],
       preliminary_amount_result: context[:amount_result],
       automatic_application_allowed: true,
+      reference_pricing_gate_result:,
       item_price_limit: 999_999,
       item_line_total_limit: 999_999,
       &(amount_calculator || method(:amount_for))
+    )
+  end
+
+  def reference_discount_gate_result(context, **overrides)
+    proposal = context.dig(:ocr_result, :adoption_proposals, :item_calculation_modes).sole
+    reference_option = proposal.fetch('options').find do |option|
+      option['pricing_source_kind'] == 'reference_quantity_price'
+    end
+
+    Receipts::Processing::ReferencePricingAutoAdoptionFence::Result.new(
+      enabled: overrides.fetch(:enabled, true),
+      reason: overrides.fetch(:reason, 'enabled'),
+      binding_kind: overrides.fetch(:binding_kind, 'azure_structured_item_reference'),
+      candidate_identity: overrides.fetch(:candidate_identity, proposal.fetch('candidate_id')),
+      destination_identity: overrides.fetch(:destination_identity, proposal.fetch('item_identity')),
+      selected_proposal_identity: overrides.fetch(:selected_proposal_identity, reference_option.fetch('proposal_id')),
+      proposal_checksum: overrides.fetch(:proposal_checksum, proposal.fetch('integrity_checksum'))
+    )
+  end
+
+  def reference_discount_ocr_result
+    context = absolute_reference_discount_context
+
+    {
+      success: true,
+      lines: [],
+      candidates: context[:snapshot][:candidates].merge(
+        country_region: 'JPN',
+        item_calculation_mode_candidates: [ context[:candidate] ],
+        tax_rate: BigDecimal('0.1'),
+        tax_details: [],
+        payments: [],
+        adjustment_candidates: []
+      )
+    }
+  end
+
+  def reference_discount_finalize_decision
+    Receipts::Processing::Contracts::FinalizeDecision.new(
+      finalize_strategy: 'ocr_only',
+      error_code: nil,
+      error_message: nil,
+      receipt_attributes: {},
+      ocr_result: nil,
+      ai_result: nil,
+      metadata: {}
     )
   end
 
@@ -611,6 +658,404 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       selected_pricing_source_kind: 'reference_quantity_price',
       projected_line_total: 7304
     )
+  end
+
+  it 'preserves the exact discounted reference proposal through the canonical OCR snapshot builder' do
+    snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+      reference_discount_ocr_result
+    )
+    proposal = snapshot.dig('adoption_proposals', 'item_calculation_modes')&.sole
+
+    aggregate_failures do
+      expect(proposal).not_to be_nil
+      expect(proposal&.fetch('options')&.find do |option|
+        option['pricing_source_kind'] == 'reference_quantity_price'
+      end).to include(
+        'source' => include(
+          'reference_price_amount' => '149',
+          'reference_quantity' => '1',
+          'reference_quantity_unit_code' => 'liter',
+          'purchased_quantity' => '50.03',
+          'purchased_quantity_unit_code' => 'liter',
+          'reference_price_tax_inclusion' => 'gross'
+        ),
+        'discount' => include(
+          'amount' => '150',
+          'printed_total_stage' => 'before_item_discount'
+        )
+      )
+      expect(snapshot.dig('candidates', 'reference_pricing_candidates', 0, 'tax_inclusion_evidence')).to include(
+        'kind' => 'single_item_receipt_inner_tax_summary',
+        'summary_total' => include('amount' => 7304)
+      )
+      expect(snapshot.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 1,
+        'snapshot_count' => 1
+      )
+    end
+  end
+
+  it 'preserves a contained numeric TotalPrice span across snapshot retry' do
+    ocr = reference_discount_ocr_result
+    reference_printed = ocr.dig(:candidates, :reference_pricing_candidates).sole.dig(
+      :printed_line_total,
+      :evidence
+    )
+    reference_printed[:provider_span_start] += 1
+
+    initial = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(ocr)
+    copied = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+      JSON.parse(JSON.generate(initial))
+    )
+
+    expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(
+      initial.dig('adoption_proposals', 'item_calculation_modes')
+    )
+    expect(copied.dig('candidates', 'reference_pricing_candidates', 0, 'tax_inclusion_evidence', 'kind')).to eq(
+      'single_item_receipt_inner_tax_summary'
+    )
+  end
+
+  it 'does not reuse an altered stored proposal as a discounted gross proof' do
+    initial = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+      reference_discount_ocr_result
+    )
+    stored = JSON.parse(JSON.generate(initial))
+    stored.dig('adoption_proposals', 'item_calculation_modes', 0)['integrity_checksum'] = '0' * 64
+    stored.dig('candidates')['item_calculation_mode_candidates'] = reference_discount_ocr_result.dig(
+      :candidates,
+      :item_calculation_mode_candidates
+    )
+
+    copied = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(stored)
+
+    expect(copied.dig('candidates', 'reference_pricing_candidates', 0, 'tax_inclusion_evidence')).to be_nil
+    expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+  end
+
+  it 'drops discounted gross tax evidence when its same-item absolute proof is not exact' do
+    mutations = [
+      ->(ocr) { ocr[:candidates][:item_calculation_mode_candidates] << ocr[:candidates][:item_calculation_mode_candidates].sole.deep_dup },
+      ->(ocr) { ocr.dig(:candidates, :item_calculation_mode_candidates, 0, :options, 0, :discount)[:rate] = '0.02' },
+      ->(ocr) do
+        identity = 'azure_structured_item_i0_s1_e80'
+        ocr.dig(:candidates, :item_calculation_mode_candidates, 0)[:item_identity] = identity
+        ocr.dig(:candidates, :items, 0)[:ocr_item_identity] = identity
+      end,
+      ->(ocr) do
+        printed = ocr.dig(:candidates, :item_calculation_mode_candidates, 0, :printed_line_total, :evidence)
+        printed[:provider_span_start] += 1
+      end,
+      ->(ocr) do
+        options = ocr.dig(:candidates, :item_calculation_mode_candidates, 0, :options)
+        extra = options.sole.deep_dup
+        options << extra.deep_dup.merge(proposal_id: 'duplicate_explicit')
+        options << extra.merge(proposal_id: 'third_explicit')
+      end,
+      ->(ocr) do
+        ocr.dig(:candidates, :item_calculation_mode_candidates, 0, :options, 0, :discount, :evidence, :amount)[:source_field_path] =
+          'documents[0].fields.Items[1]'
+      end,
+      ->(ocr) do
+        evidence = ocr.dig(
+          :candidates,
+          :item_calculation_mode_candidates,
+          0,
+          :options,
+          0,
+          :discount,
+          :evidence,
+          :amount
+        )
+        evidence.merge!(provider_span_start: 30, provider_span_end: 31)
+      end,
+      ->(ocr) { ocr.dig(:candidates, :items, 0)[:line_total] = 7303 },
+      ->(ocr) { ocr.dig(:candidates, :reference_pricing_candidates, 0, :tax_inclusion_evidence, :summary_total)[:amount] = 7303 }
+    ]
+
+    mutations.each do |mutation|
+      ocr = reference_discount_ocr_result
+      mutation.call(ocr)
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(ocr)
+
+      expect(snapshot.dig('candidates', 'reference_pricing_candidates', 0, 'tax_inclusion_evidence')).to be_nil
+      expect(snapshot.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+    end
+  end
+
+  it 'applies an exact absolute discount after the gross reference projection' do
+    context = application_context(absolute_reference_discount_context)
+    gate_result = reference_discount_gate_result(context)
+    original_params = context[:params].deep_dup
+
+    result = apply(context, reference_pricing_gate_result: gate_result)
+
+    aggregate_failures do
+      expect(result).to be_applied
+      expect(context[:params]).to eq(original_params)
+      expect(result.selections.sole).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: BigDecimal('149'),
+        reference_quantity: BigDecimal('1'),
+        reference_quantity_unit_code: 'liter',
+        reference_price_tax_inclusion: 'gross',
+        reference_price_tax_inclusion_evidence_kind: 'single_item_receipt_inner_tax_summary',
+        quantity: BigDecimal('50.03'),
+        quantity_unit_code: 'liter',
+        printed_line_total: 7454,
+        original_line_total: 7454,
+        discount_amount: 150,
+        discount_rate: nil,
+        projected_line_total: 7304
+      )
+      expect(result.params[:receipt_items_attributes].sole).to include(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('149'),
+        reference_quantity: BigDecimal('1'),
+        reference_quantity_unit_code: 'liter',
+        reference_price_tax_inclusion: 'gross',
+        quantity: BigDecimal('50.03'),
+        quantity_unit_code: 'liter',
+        original_line_total: 7454,
+        discount_amount: 150,
+        discount_rate: nil,
+        line_total: 7304
+      )
+      expect(result.amount_result.dig(:computed, :items).sole).to include(
+        original_line_total: 7454,
+        discount_amount: 150,
+        discount_rate: nil,
+        line_total: 7304
+      )
+      expect(result.amount_result.dig(:resolved, :total)).to eq(7304)
+    end
+  end
+
+  it 'keeps the discounted reference tuple across trusted final normalization' do
+    context = application_context(absolute_reference_discount_context)
+    result = apply(context, reference_pricing_gate_result: reference_discount_gate_result(context))
+
+    normalized = Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer.items(
+      result.params[:receipt_items_attributes],
+      trusted_item_calculation_mode_sources: result.selections,
+      item_price_limit: 999_999,
+      item_line_total_limit: 999_999
+    )
+
+    expect(normalized.sole).to include(
+      pricing_source_kind: 'reference_quantity_price',
+      price: nil,
+      reference_price_amount: BigDecimal('149'),
+      reference_quantity: BigDecimal('1'),
+      reference_quantity_unit_code: 'liter',
+      reference_price_tax_inclusion: 'gross',
+      quantity: BigDecimal('50.03'),
+      quantity_unit_code: 'liter',
+      original_line_total: 7454,
+      discount_amount: 150,
+      discount_rate: nil,
+      line_total: 7304
+    )
+  end
+
+  it 'rejects changed or partial discounted reference tuples at trusted final normalization' do
+    context = application_context(absolute_reference_discount_context)
+    result = apply(context, reference_pricing_gate_result: reference_discount_gate_result(context))
+    normalizer = Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
+    item_mutations = [
+      { original_line_total: 7453 },
+      { discount_amount: 149 },
+      { discount_amount: nil },
+      { discount_rate: BigDecimal('0.02') },
+      { line_total: 7303 }
+    ]
+
+    item_mutations.each do |mutation|
+      items = result.params[:receipt_items_attributes].deep_dup
+      items.sole.merge!(mutation)
+      normalized = normalizer.items(
+        items,
+        trusted_item_calculation_mode_sources: result.selections,
+        item_price_limit: 999_999,
+        item_line_total_limit: 999_999
+      )
+
+      expect(normalized.sole[:pricing_source_kind]).to be_nil
+    end
+
+    invalid_selections = [
+      result.selections.sole.with(discount_rate: BigDecimal('0.02')),
+      result.selections.sole.with(reference_price_tax_inclusion_evidence_kind: nil),
+      result.selections.sole.with(reference_price_tax_inclusion_evidence_kind: 'item_local')
+    ]
+    invalid_selections.each do |selection|
+      normalized = normalizer.items(
+        result.params[:receipt_items_attributes],
+        trusted_item_calculation_mode_sources: [ selection ],
+        item_price_limit: 999_999,
+        item_line_total_limit: 999_999
+      )
+
+      expect(normalized.sole[:pricing_source_kind]).to be_nil
+    end
+  end
+
+  it 'rejects final Amount drift in every discounted reference source and derived field' do
+    baseline_context = application_context(absolute_reference_discount_context)
+    baseline_gate = reference_discount_gate_result(baseline_context)
+    expect(apply(baseline_context, reference_pricing_gate_result: baseline_gate)).to be_applied
+
+    mutations = [
+      ->(item) { item[:original_line_total] -= 1 },
+      ->(item) { item[:discount_amount] -= 1 },
+      ->(item) { item[:discount_rate] = BigDecimal('0.02') },
+      ->(item) { item[:line_total] -= 1 },
+      ->(item) { item[:reference_price_amount] += 1 },
+      ->(item) { item[:reference_quantity] += 1 },
+      ->(item) { item[:quantity] += 1 }
+    ]
+
+    mutations.each do |mutation|
+      context = application_context(absolute_reference_discount_context)
+      gate_result = reference_discount_gate_result(context)
+      result = apply(context, reference_pricing_gate_result: gate_result) do |params|
+        amount_for(params).deep_dup.tap do |amount|
+          mutation.call(amount[:computed][:items].sole)
+        end
+      end
+
+      expect(result).not_to be_applied
+    end
+  end
+
+  it 'persists the discounted reference authority atomically and keeps finalize retry idempotent' do
+    create(
+      :system_setting,
+      key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+      value: SystemSettings.stored_value(true)
+    )
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = Receipts::Processing.start(receipt:, source: 'upload').run
+    Receipts::Processing.record_ocr_snapshot(run, reference_discount_ocr_result)
+    Receipts::Processing.record_finalize_decision(run, reference_discount_finalize_decision)
+    proposal_before = run.reload.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole.deep_dup
+
+    first_result = Receipts::Processing.run_finalize(run)
+    item = receipt.reload.receipt_items.sole
+    persisted = item.attributes
+    second_result = Receipts::Processing.run_finalize(run.reload)
+
+    aggregate_failures do
+      expect(first_result.next_step).to eq(:done)
+      expect(second_result).to have_attributes(next_step: :skipped, skip_reason: :terminal_run)
+      expect(receipt.reload.total_amount).to eq(7304)
+      expect(item).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        price: nil,
+        reference_price_amount: BigDecimal('149'),
+        reference_quantity: BigDecimal('1'),
+        reference_quantity_unit_code: 'liter',
+        reference_price_tax_inclusion: 'gross',
+        quantity: BigDecimal('50.03'),
+        quantity_unit_code: 'liter',
+        original_line_total: 7454,
+        discount_amount: 150,
+        discount_rate: nil,
+        line_total: 7304
+      )
+      expect(item.reload.attributes).to eq(persisted)
+      expect(run.reload.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to eq(
+        proposal_before.fetch('integrity_checksum')
+      )
+      expect(run.ocr_result_snapshot.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(proposal_before)
+    end
+  ensure
+    receipt&.image&.purge
+  end
+
+  it 'retries a transient transaction failure without leaving a discounted reference claim or duplicate item' do
+    create(
+      :system_setting,
+      key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+      value: SystemSettings.stored_value(true)
+    )
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = Receipts::Processing.start(receipt:, source: 'upload').run
+    Receipts::Processing.record_ocr_snapshot(run, reference_discount_ocr_result)
+    Receipts::Processing.record_finalize_decision(run, reference_discount_finalize_decision)
+    proposal_checksum = run.reload.ocr_result_snapshot.dig(
+      'adoption_proposals',
+      'item_calculation_modes'
+    ).sole.fetch('integrity_checksum')
+    calls = 0
+    allow(Receipts::Processing).to receive(:record_final_result).and_wrap_original do |original, *arguments, **keywords|
+      calls += 1
+      raise ActiveRecord::Deadlocked if calls == 1
+
+      original.call(*arguments, **keywords)
+    end
+
+    expect {
+      Receipts::Processing.run_finalize(run)
+    }.to raise_error(Receipts::Processing::RetryableFinalizeError)
+
+    aggregate_failures do
+      expect(receipt.reload).to have_attributes(status: 'processing')
+      expect(receipt.receipt_items).to be_empty
+      expect(run.reload).to be_active
+      expect(run.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+      expect(run.metadata.dig('stage_execution_claims', 'finalize')).to be_nil
+    end
+
+    expect(Receipts::Processing.run_finalize(run.reload).next_step).to eq(:done)
+    persisted = receipt.reload.receipt_items.sole.attributes
+    expect(Receipts::Processing.run_finalize(run.reload).next_step).to eq(:skipped)
+
+    aggregate_failures do
+      expect(receipt.reload.receipt_items.count).to eq(1)
+      expect(receipt.receipt_items.sole).to have_attributes(
+        pricing_source_kind: 'reference_quantity_price',
+        original_line_total: 7454,
+        discount_amount: 150,
+        discount_rate: nil,
+        line_total: 7304
+      )
+      expect(receipt.receipt_items.sole.reload.attributes).to eq(persisted)
+      expect(run.reload.status).to eq('succeeded')
+      expect(run.metadata.dig('reference_pricing_auto_adoption_claim', 'proposal_checksum')).to eq(
+        proposal_checksum
+      )
+      expect(calls).to eq(2)
+    end
+  ensure
+    receipt&.image&.purge
+  end
+
+  it 'rolls back discounted reference authority and claim when final result persistence fails' do
+    create(
+      :system_setting,
+      key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
+      value: SystemSettings.stored_value(true)
+    )
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = Receipts::Processing.start(receipt:, source: 'upload').run
+    Receipts::Processing.record_ocr_snapshot(run, reference_discount_ocr_result)
+    Receipts::Processing.record_finalize_decision(run, reference_discount_finalize_decision)
+    allow(Receipts::Processing).to receive(:record_final_result).and_raise('summary write failed')
+
+    expect { Receipts::Processing.run_finalize(run) }.to raise_error('summary write failed')
+
+    aggregate_failures do
+      expect(receipt.reload.receipt_items).to be_empty
+      expect(receipt).to have_attributes(status: 'failed')
+      expect(run.reload).to have_attributes(status: 'failed')
+      expect(run.metadata).not_to have_key('reference_pricing_auto_adoption_claim')
+      expect(run.metadata.dig('stage_execution_claims', 'finalize')).to be_nil
+      expect(run.final_result_summary).to be_blank
+    end
+  ensure
+    receipt&.image&.purge
   end
 
   it 'validates the undiscounted reference projection bound separately from the final amount' do

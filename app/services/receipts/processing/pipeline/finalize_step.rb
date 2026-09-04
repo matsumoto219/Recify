@@ -409,6 +409,9 @@ class Receipts::Processing::Pipeline
       count_sources = selections.select do |selection|
         selection.pricing_source_kind == "count_unit_price"
       end.index_by(&:item_identity)
+      reference_sources = selections.select do |selection|
+        selection.pricing_source_kind == "reference_quantity_price"
+      end.index_by(&:item_identity)
 
       Array(items_attributes).map.with_index do |item_attributes, index|
         calculated_item = calculated_items[index]
@@ -420,6 +423,11 @@ class Receipts::Processing::Pipeline
           source_item,
           normalized_calculated_item,
           count_sources[source_item[:ocr_item_identity]]
+        )
+        normalized_calculated_item = reference_source_persistence_item(
+          source_item,
+          normalized_calculated_item,
+          reference_sources[source_item[:ocr_item_identity]]
         )
         calculated_tax_rate = normalize_tax_rate(normalized_calculated_item[:tax_rate])
         preserve_missing_amount = preserve_missing_ocr_item_amount?(source_item, normalized_calculated_item)
@@ -448,6 +456,24 @@ class Receipts::Processing::Pipeline
       calculated_item.merge(
         price: selection.price,
         original_line_total: selection.original_line_total || selection.projected_line_total,
+        line_total: selection.projected_line_total
+      )
+    end
+
+    def reference_source_persistence_item(source_item, calculated_item, selection)
+      return calculated_item unless selection
+      return calculated_item unless source_item[:pricing_source_kind] == "reference_quantity_price"
+      return calculated_item unless source_item[:position_index] == selection.position_index
+      return calculated_item unless source_item[:reference_price_amount] == selection.reference_price_amount
+      return calculated_item unless source_item[:reference_quantity] == selection.reference_quantity
+      return calculated_item unless source_item[:reference_quantity_unit_code] == selection.reference_quantity_unit_code
+      return calculated_item unless source_item[:quantity] == selection.quantity
+      return calculated_item unless source_item[:quantity_unit_code] == selection.quantity_unit_code
+
+      calculated_item.merge(
+        original_line_total: selection.original_line_total || selection.projected_line_total,
+        discount_amount: selection.discount_amount,
+        discount_rate: selection.discount_rate,
         line_total: selection.projected_line_total
       )
     end
@@ -696,18 +722,36 @@ class Receipts::Processing::Pipeline
       if selection.discount_amount.nil? && selection.discount_rate.nil?
         return item.discount_amount.nil? && item.discount_rate.nil?
       end
-      return false unless %w[count_unit_price explicit_line_total].include?(selection.pricing_source_kind)
+      return false unless %w[count_unit_price reference_quantity_price explicit_line_total].include?(
+        selection.pricing_source_kind
+      )
       return false unless item.discount_amount == selection.discount_amount && item.discount_rate == selection.discount_rate
 
-      projection = ReceiptAmountService.item_discount_projection(
-        original_line_total: selection.original_line_total,
-        discount_amount: selection.discount_amount,
-        discount_rate: selection.discount_rate
-      )
+      projection = item_calculation_mode_discount_projection(item, selection)
       item.original_line_total == projection[:original_line_total] &&
         item.line_total == projection[:projected_amount]
     rescue ReceiptAmountService::InvalidItemSourceError
       false
+    end
+
+    def item_calculation_mode_discount_projection(item, selection)
+      if selection.pricing_source_kind == "reference_quantity_price"
+        return ReceiptAmountService.reference_item_extension_projection(
+          reference_price_amount: item.reference_price_amount,
+          reference_quantity: item.reference_quantity,
+          reference_unit_code: item.reference_quantity_unit_code,
+          purchased_quantity: item.quantity,
+          purchased_unit_code: item.quantity_unit_code,
+          discount_amount: item.discount_amount,
+          discount_rate: item.discount_rate
+        )
+      end
+
+      ReceiptAmountService.item_discount_projection(
+        original_line_total: selection.original_line_total,
+        discount_amount: selection.discount_amount,
+        discount_rate: selection.discount_rate
+      )
     end
 
     def raise_item_calculation_mode_persistence_invariant!

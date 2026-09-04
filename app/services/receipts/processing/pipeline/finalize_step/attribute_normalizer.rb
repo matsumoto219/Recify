@@ -223,9 +223,6 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       return false unless selection.projected_line_total.between?(0, item_line_total_limit)
       return false unless trusted_item_calculation_mode_review_valid?(item, selection)
       return false unless item[:pricing_source_kind] == selection.pricing_source_kind
-      if selection.pricing_source_kind == "reference_quantity_price"
-        return false unless item[:discount_amount].nil? && item[:discount_rate].nil?
-      end
 
       case selection.pricing_source_kind
       when "count_unit_price"
@@ -233,7 +230,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
 
         trusted_count_source_valid?(item, selection, item_price_limit:, item_line_total_limit:)
       when "reference_quantity_price"
-        trusted_reference_item_calculation_source_valid?(item, selection)
+        trusted_reference_item_calculation_source_valid?(item, selection, item_line_total_limit:)
       when "explicit_line_total"
         return false unless reference_source_absent?(item)
 
@@ -321,7 +318,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       false
     end
 
-    def trusted_reference_item_calculation_source_valid?(item, selection)
+    def trusted_reference_item_calculation_source_valid?(item, selection, item_line_total_limit:)
       reference_unit = ReceiptQuantityUnit.unit_for(selection.reference_quantity_unit_code)
       purchased_unit = ReceiptQuantityUnit.unit_for(selection.quantity_unit_code)
       return false unless reference_unit&.code == selection.reference_quantity_unit_code
@@ -353,13 +350,16 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         item[:reference_quantity_unit_code] == reference_unit.code &&
         item[:reference_quantity_unit_raw].nil? &&
         item[:reference_price_tax_inclusion] == selection.reference_price_tax_inclusion &&
-        trusted_reference_item_calculation_totals_valid?(item, selection)
+        trusted_reference_item_calculation_totals_valid?(item, selection, item_line_total_limit:)
     rescue ReceiptQuantityUnit::ConversionError
       false
     end
 
     def trusted_reference_item_calculation_tax_semantics_valid?(selection)
       if selection.reference_price_tax_inclusion == "gross"
+        return selection.reference_price_tax_inclusion_evidence_kind ==
+          Receipts::Processing::Contracts::ItemCalculationModeProposalSet::SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND if selection.discount_amount
+
         return selection.reference_price_tax_inclusion_evidence_kind.nil?
       end
 
@@ -368,16 +368,40 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
           Receipts::Processing::Contracts::ItemCalculationModeProposalSet::SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
     end
 
-    def trusted_reference_item_calculation_totals_valid?(item, selection)
-      if selection.reference_price_tax_inclusion == "gross"
-        return exact_item_total_matches?(item, selection.projected_line_total)
-      end
-      return false unless selection.original_line_total.is_a?(Integer)
+    def trusted_reference_item_calculation_totals_valid?(item, selection, item_line_total_limit:)
+      if selection.discount_amount.nil? && selection.discount_rate.nil?
+        return false unless item[:discount_amount].nil? && item[:discount_rate].nil?
+        return exact_item_total_matches?(item, selection.projected_line_total) if selection.reference_price_tax_inclusion == "gross"
+        return false unless selection.original_line_total.is_a?(Integer)
 
-      item[:original_line_total].is_a?(Integer) &&
-        item[:line_total].is_a?(Integer) &&
-        item[:original_line_total] == selection.original_line_total &&
-        item[:line_total] == selection.projected_line_total
+        return item[:original_line_total].is_a?(Integer) &&
+          item[:line_total].is_a?(Integer) &&
+          item[:original_line_total] == selection.original_line_total &&
+          item[:line_total] == selection.projected_line_total
+      end
+      return false unless selection.reference_price_tax_inclusion == "gross"
+      return false unless selection.discount_amount.is_a?(Integer) && selection.discount_rate.nil?
+      return false unless selection.original_line_total.is_a?(Integer)
+      return false unless selection.original_line_total.between?(0, item_line_total_limit)
+      return false unless item[:original_line_total].is_a?(Integer) && item[:line_total].is_a?(Integer)
+      return false unless item[:discount_amount] == selection.discount_amount && item[:discount_rate].nil?
+
+      projection = ReceiptAmountService.reference_item_extension_projection(
+        reference_price_amount: selection.reference_price_amount,
+        reference_quantity: selection.reference_quantity,
+        reference_unit_code: selection.reference_quantity_unit_code,
+        purchased_quantity: selection.quantity,
+        purchased_unit_code: selection.quantity_unit_code,
+        discount_amount: selection.discount_amount
+      )
+      item[:original_line_total] == projection[:original_line_total] &&
+        selection.original_line_total == projection[:original_line_total] &&
+        selection.printed_line_total == projection[:original_line_total] &&
+        item[:line_total] == projection[:projected_amount] &&
+        selection.projected_line_total == projection[:projected_amount] &&
+        item[:discount_amount] == projection[:discount_amount]
+    rescue ReceiptAmountService::InvalidItemSourceError
+      false
     end
 
     def exact_count_quantity?(value)
@@ -549,6 +573,14 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
           reference_quantity_unit_raw: nil,
           reference_price_tax_inclusion: selection.reference_price_tax_inclusion
         )
+        if selection.discount_amount
+          attributes.merge!(
+            original_line_total: selection.original_line_total,
+            line_total: selection.projected_line_total,
+            discount_amount: selection.discount_amount,
+            discount_rate: nil
+          )
+        end
       else
         attributes.merge!(
           original_line_total: selection.explicit_line_total,

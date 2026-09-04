@@ -177,7 +177,9 @@ class ReceiptAmountService
     reference_quantity:,
     reference_unit_code:,
     purchased_quantity:,
-    purchased_unit_code:
+    purchased_unit_code:,
+    discount_amount: nil,
+    discount_rate: nil
   )
     exact_price = Amounts::ExactBoundedDecimal.call(
       reference_price_amount,
@@ -213,6 +215,19 @@ class ReceiptAmountService
       purchased_unit_code: purchased_unit_code,
       reference_price_tax_inclusion: :gross
     )
+
+    unless discount_amount.nil? && discount_rate.nil?
+      unless discount_rate.nil?
+        raise Amounts::ReferenceItemExtension::InvalidSourceError,
+          "reference projection requires an exact absolute discount"
+      end
+
+      discount_projection = item_discount_projection(
+        original_line_total: result.projected_amount,
+        discount_amount: discount_amount
+      )
+      return discount_projection.merge(exact_amount: result.exact_amount).freeze
+    end
 
     {
       exact_amount: result.exact_amount,

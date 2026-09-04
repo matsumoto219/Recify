@@ -415,13 +415,22 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     projection = reference_selection_projection(decision, option)
     return unless projection
 
-    printed_line_total = exact_printed_line_total(proposal, projected: decision.projected_line_total)
+    printed_projection = projection[:original_line_total] || projection.fetch(:projected_line_total)
+    printed_line_total = exact_printed_line_total(proposal, projected: printed_projection)
     return if proposal["printed_line_total"] && printed_line_total.nil?
     if printed_line_total
       return unless exact_integer_matches?(attributes[:original_line_total], printed_line_total)
-      return unless exact_integer_matches?(attributes[:line_total], printed_line_total)
+      source_line_total = if projection.fetch(:tax_inclusion) == "net"
+        printed_line_total
+      else
+        projection.fetch(:projected_line_total)
+      end
+      return unless exact_integer_matches?(attributes[:line_total], source_line_total)
     else
       return unless attributes[:original_line_total].nil? && attributes[:line_total].nil?
+    end
+    if projection[:discount_amount]
+      return unless exact_integer_matches?(attributes[:discount_amount], projection[:discount_amount])
     end
 
     Selection.new(
@@ -439,6 +448,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       reference_price_tax_inclusion_evidence_kind: projection[:evidence_kind],
       printed_line_total:,
       original_line_total: projection[:original_line_total],
+      discount_amount: projection[:discount_amount],
+      discount_rate: projection[:discount_rate],
       projected_line_total: projection.fetch(:projected_line_total),
       review_reason:
     )
@@ -450,11 +461,34 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     source = option.fetch("source")
     tax_inclusion = source["reference_price_tax_inclusion"]
     if tax_inclusion == "gross"
+      discount = normalized_hash(option["discount"])
+      projection_arguments = {
+        reference_price_amount: source.fetch("reference_price_amount"),
+        reference_quantity: source.fetch("reference_quantity"),
+        reference_unit_code: source.fetch("reference_quantity_unit_code"),
+        purchased_quantity: source.fetch("purchased_quantity"),
+        purchased_unit_code: source.fetch("purchased_quantity_unit_code")
+      }
+      evidence_kind = nil
+      if option.key?("discount")
+        return unless discount.keys.sort == %w[amount evidence printed_total_stage]
+        return unless discount[:printed_total_stage] == "before_item_discount"
+
+        evidence_kind = normalized_hash(option.dig("evidence", "tax_inclusion"))[:kind]
+        return unless evidence_kind == PROPOSAL_CONTRACT::SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+
+        projection_arguments[:discount_amount] = discount[:amount]
+      end
+      projection = ReceiptAmountService.reference_item_extension_projection(**projection_arguments)
+      return unless decision.projected_line_total == projection.fetch(:projected_amount)
+
       return {
         tax_inclusion:,
-        evidence_kind: nil,
-        original_line_total: nil,
-        projected_line_total: decision.projected_line_total
+        evidence_kind:,
+        original_line_total: projection[:original_line_total],
+        discount_amount: projection[:discount_amount],
+        discount_rate: nil,
+        projected_line_total: projection.fetch(:projected_amount)
       }
     end
     return unless tax_inclusion == "net"
@@ -618,6 +652,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         item[:reference_quantity_unit_code] = selection.reference_quantity_unit_code
         item[:reference_quantity_unit_raw] = nil
         item[:reference_price_tax_inclusion] = selection.reference_price_tax_inclusion
+        item[:discount_amount] = selection.discount_amount
+        item[:discount_rate] = selection.discount_rate
       else
         item[:price] = nil
         item[:discount_rate] = selection.discount_rate unless selection.discount_amount.nil?
@@ -700,8 +736,11 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     preliminary_item = normalized_hash(
       Array(preliminary_amount_result.dig(:computed, :items))[selection.item_index]
     )
-    final_context = item.slice(*NO_TOTAL_STABLE_SELECTED_ITEM_FIELDS)
-    preliminary_context = preliminary_item.slice(*NO_TOTAL_STABLE_SELECTED_ITEM_FIELDS)
+    discount_valid = if selection.discount_amount.nil? && selection.discount_rate.nil?
+      item[:discount_amount].nil? && item[:discount_rate].nil?
+    else
+      computed_discount_valid?(item, selection)
+    end
 
     item[:price].nil? &&
       exact_decimal_matches?(item[:quantity], selection.quantity) &&
@@ -710,7 +749,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       exact_decimal_matches?(item[:reference_quantity], selection.reference_quantity) &&
       item[:reference_quantity_unit_code] == selection.reference_quantity_unit_code &&
       item[:reference_price_tax_inclusion] == selection.reference_price_tax_inclusion &&
-      final_context == preliminary_context
+      discount_valid &&
+      item[:tax_rate] == preliminary_item[:tax_rate]
   end
 
   def financial_transition_valid?(candidate_params, final_amount_result, selections)
@@ -786,8 +826,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
 
   def absolute_discount_transition_valid?(final_amount_result, selections)
     absolute = selections.select do |selection|
-      selection.pricing_source_kind == "explicit_line_total" && selection.reviewable? &&
-        !selection.discount_amount.nil? && selection.discount_rate.nil?
+      absolute_discount_rate_normalization_selection?(selection)
     end
     return false if absolute.empty?
 
@@ -800,6 +839,16 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       item[:discount_rate] = nil
     end
     preliminary == final
+  end
+
+  def absolute_discount_rate_normalization_selection?(selection)
+    return false if selection.discount_amount.nil? || !selection.discount_rate.nil?
+    return true if selection.pricing_source_kind == "explicit_line_total" && selection.reviewable?
+
+    selection.pricing_source_kind == "reference_quantity_price" &&
+      selection.reference_price_tax_inclusion == "gross" &&
+      selection.reference_price_tax_inclusion_evidence_kind ==
+        PROPOSAL_CONTRACT::SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
   end
 
   def resolved_item_total_transition_valid?(final_amount_result)

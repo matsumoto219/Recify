@@ -156,6 +156,50 @@ RSpec.describe ReceiptAmountService do
       expect(result).to be_frozen
     end
 
+    it 'referenceの割引前projectionへ確定absolute割引を1回だけ適用する' do
+      result = described_class.reference_item_extension_projection(
+        reference_price_amount: '149',
+        reference_quantity: '1',
+        reference_unit_code: 'liter',
+        purchased_quantity: '50.03',
+        purchased_unit_code: 'liter',
+        discount_amount: '150'
+      )
+
+      expect(result).to eq(
+        exact_amount: Rational(745_447, 100),
+        original_line_total: 7_454,
+        projected_amount: 7_304,
+        discount_amount: 150
+      )
+      expect(result).to be_frozen
+    end
+
+    it 'reference projectionの不完全・過精度・範囲外discount sourceを拒否する' do
+      invalid_discounts = [
+        { discount_amount: nil, discount_rate: '0.02' },
+        { discount_amount: '-1' },
+        { discount_amount: '7455' },
+        { discount_amount: '150.1' },
+        { discount_amount: 150.0 },
+        { discount_amount: [] },
+        { discount_amount: nil, discount_rate: false }
+      ]
+
+      invalid_discounts.each do |discount|
+        expect {
+          described_class.reference_item_extension_projection(
+            reference_price_amount: '149',
+            reference_quantity: '1',
+            reference_unit_code: 'liter',
+            purchased_quantity: '50.03',
+            purchased_unit_code: 'liter',
+            **discount
+          )
+        }.to raise_error(described_class::InvalidItemSourceError)
+      end
+    end
+
     it 'unknown unitやdimension不一致をpublic source errorへ正規化する' do
       expect {
         described_class.reference_item_extension_projection(
