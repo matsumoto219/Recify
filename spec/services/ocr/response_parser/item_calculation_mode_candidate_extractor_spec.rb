@@ -195,6 +195,26 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     [ item, { amount: '14', rate: '0.27', printed_total_stage: 'after_item_discount', evidence: evidence } ]
   end
 
+  def absolute_reference_discount_evidence
+    item = exact_item(price: 149, quantity: 50.03, unit: 'L', total: 7454)
+    item['content'] = "#{item.fetch('content')}\n値引 -150円"
+    item.fetch('spans').sole['length'] = item.fetch('content').length
+    token_start = item.fetch('spans').sole.fetch('offset') + item.fetch('content').rindex('-150円')
+    discount = {
+      amount: '150',
+      printed_total_stage: 'before_item_discount',
+      evidence: {
+        amount: {
+          source_field_path: 'documents[0].fields.Items[0]',
+          provider_span_start: token_start,
+          provider_span_end: token_start + '-150円'.length
+        }
+      }
+    }
+
+    [ item, discount ]
+  end
+
   def discontiguous_item_evidence(description: '検証商品(税込1%)', split_description: false, string_index_type: 'utf16CodeUnit')
     item, discount = discounted_item_evidence(description:, string_index_type:)
     source_lines = item.fetch('content').lines(chomp: true)
@@ -931,6 +951,62 @@ RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
     end
 
     context 'with validated same-item discount evidence' do
+      it 'retains an exact absolute discount after the same reference Item before-discount TotalPrice' do
+        item, discount = absolute_reference_discount_evidence
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: [ valid_native_reference_candidate(projected_amount: 7454) ],
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        aggregate_failures do
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+          expect(result.sole[:conflicts]).to eq(%w[discount reference_expression])
+          expect(result.sole[:options].sole[:discount]).to eq(discount)
+          expect(result.sole[:options].sole[:discount]).not_to have_key(:rate)
+        end
+      end
+
+      it 'rejects an absolute reference discount without exactly one signed token owned by the same Item' do
+        mutations = [
+          ->(discount) { discount[:rate] = '0.02' },
+          ->(discount) { discount[:printed_total_stage] = 'after_item_discount' },
+          ->(discount) { discount[:amount] = '151' },
+          ->(discount) { discount[:evidence][:amount][:source_field_path] = 'documents[0].fields.Items[1]' },
+          ->(discount) { discount[:evidence][:amount][:provider_span_start] += 1 },
+          ->(discount) { discount[:evidence][:amount][:provider_span_end] -= 1 }
+        ]
+
+        mutations.each do |mutate|
+          item, discount = absolute_reference_discount_evidence
+          mutate.call(discount)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: [ valid_native_reference_candidate(projected_amount: 7454) ],
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(result.sole[:options].sole).not_to have_key(:discount)
+        end
+      end
+
+      it 'preserves same-item absolute discount evidence when another Item also has a discount' do
+        item, discount = absolute_reference_discount_evidence
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: [ valid_native_reference_candidate(projected_amount: 7454) ],
+          discount_item_indexes: [ 0, 1 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(result.sole[:options].sole[:discount]).to eq(discount)
+      end
+
       it 'retains a before-discount printed total and its exact discount on an explicit option' do
         item, discount = discounted_item_evidence
         item['content'] = "検証商品\n50\n明細値引 27% -14円"

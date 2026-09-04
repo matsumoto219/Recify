@@ -20,6 +20,8 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
   CONFLICTS = %w[count_semantics discount package reference_expression].freeze
   DISCOUNT_KEYS = %w[amount rate printed_total_stage evidence].freeze
   DISCOUNT_EVIDENCE_KEYS = %w[amount rate].freeze
+  ABSOLUTE_DISCOUNT_KEYS = %w[amount printed_total_stage evidence].freeze
+  ABSOLUTE_DISCOUNT_EVIDENCE_KEYS = %w[amount].freeze
   COMPONENT_EVIDENCE_KEYS = %w[source_field_path provider_span_start provider_span_end].freeze
   JPY_CURRENCY_SYMBOLS = %w[¥ 円].freeze
   CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
@@ -200,6 +202,17 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
       if normalized_hash(discount_evidence_by_item_index[item_index])[:printed_total_stage] == "before_item_discount"
         explicit_option = discounted_option(explicit_option, printed_line_total, item_index, parent_span, description: description) || explicit_option
       end
+    elsif conflicts == %w[discount reference_expression] &&
+        valid_reference_pricing_item_indexes.include?(item_index) &&
+        discount_item_indexes.include?(item_index)
+      count_option = nil
+      explicit_option = absolute_discounted_option(
+        explicit_option,
+        printed_line_total,
+        item_index,
+        parent_span,
+        description:
+      ) || explicit_option
     elsif conflicts.any?
       count_option = nil
     end
@@ -643,6 +656,94 @@ class Ocr::ResponseParser::ItemCalculationModeCandidateExtractor
         evidence: components
       }
     )
+  end
+
+  def absolute_discounted_option(option, printed_line_total, item_index, parent_span, description:)
+    return if option.nil? || printed_line_total.nil?
+
+    discount = normalized_hash(discount_evidence_by_item_index[item_index])
+    return unless discount.keys.sort == ABSOLUTE_DISCOUNT_KEYS.sort
+    return unless discount[:printed_total_stage] == "before_item_discount"
+
+    evidence = normalized_hash(discount[:evidence])
+    return unless evidence.keys.sort == ABSOLUTE_DISCOUNT_EVIDENCE_KEYS.sort
+
+    amount = lexeme_decimal(discount[:amount])
+    return unless amount && amount.frac.zero? && amount.positive? && amount <= MAX_AMOUNT
+    return unless canonical_decimal_string(amount) == discount[:amount]
+
+    component = normalized_hash(evidence[:amount])
+    return unless component.keys.sort == COMPONENT_EVIDENCE_KEYS.sort
+    return unless component[:source_field_path] == item_field_path(item_index)
+
+    span = evidence_range(component)
+    return unless span_within?(span, parent_span)
+    return unless span.begin >= printed_line_total.dig(:evidence, :provider_span_end)
+
+    raw_value = mapper.slice(content, offset: span.begin, length: span.size)
+    raw_value = safe_content(raw_value, maximum_bytes: MAX_EXACT_NUMBER_BYTES)
+    return unless raw_value
+
+    tokens = Analysis.money_token_matches(
+      text: raw_value,
+      money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+      profile:,
+      allow_bare_money: false
+    )
+    return unless tokens.one?
+    return unless tokens.sole[:span_start].zero? && tokens.sole[:span_end] == raw_value.length
+    return unless tokens.sole[:amount] == amount.to_i
+    return unless tokens.sole[:raw_text].match?(profile.adjustment_sign_evidence_pattern)
+
+    stored_component = component_evidence(item_field_path(item_index), span)
+    parent_spans = provider_spans(items.fetch(item_index))
+    return unless evidence_within_parent?([ stored_component ], parent_spans, description: description)
+    return unless absolute_discount_component_matches_line?(stored_component, parent_spans, amount: amount.to_i)
+    return unless nonoverlapping_evidence?(
+      description.fetch(:evidence),
+      printed_line_total.fetch(:evidence),
+      stored_component
+    )
+
+    option.merge(
+      discount: {
+        amount: discount[:amount],
+        printed_total_stage: discount[:printed_total_stage],
+        evidence: { amount: stored_component }
+      }
+    )
+  end
+
+  def absolute_discount_component_matches_line?(component, parent_spans, amount:)
+    lines = provider_segment_lines(parent_spans, strip: false)
+    return false unless lines
+
+    matches = lines.filter_map do |line|
+      tokens = Analysis.money_token_matches(
+        text: line.fetch(:content),
+        money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+        profile:,
+        allow_bare_money: false
+      )
+      next unless tokens.one?
+
+      token = tokens.sole
+      next unless token[:amount] == amount
+      next unless token[:raw_text].match?(profile.adjustment_sign_evidence_pattern)
+
+      span = mapper.span_for_bytes(
+        line.fetch(:content),
+        byte_offset: line.fetch(:content)[0...token[:span_start]].bytesize,
+        byte_length: token[:raw_text].bytesize
+      )
+      next if span.nil?
+
+      start_value = line.fetch(:provider_span).begin + span.fetch(:offset)
+      (start_value...(start_value + span.fetch(:length))) == evidence_range(component)
+    end
+    matches.one?
+  rescue ArgumentError, EncodingError, TypeError
+    false
   end
 
   def discount_components_match_line?(components, parent_spans)

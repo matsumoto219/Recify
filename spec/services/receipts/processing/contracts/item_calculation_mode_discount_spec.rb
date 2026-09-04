@@ -89,6 +89,18 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     described_class.build_all(candidates: [ context.fetch(:candidate) ], ocr_snapshot: context.fetch(:snapshot))
   end
 
+  def recompute_integrity!(proposal, snapshot:)
+    context = described_class.send(:ocr_context, snapshot)
+    proposal['integrity_checksum'] = described_class.send(:integrity_checksum, proposal, context:)
+  end
+
+  def normalized_node_payload(extra_nodes:)
+    24.times.to_h do |index|
+      value_count = index < extra_nodes ? 5 : 4
+      [ "key_#{index}", Array.new(value_count, 0) ]
+    end
+  end
+
   def before_discount_context(count: false)
     context = discount_context
     candidate = context[:candidate]
@@ -104,6 +116,164 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
     candidate[:options].first[:discount] = discount.deep_dup
     candidate[:options].shift unless count
     context
+  end
+
+  def absolute_reference_discount_context
+    path = 'documents[0].fields.Items[0]'
+    identity = 'azure_structured_item_i0_s0_e80'
+    total_evidence = evidence("#{path}.TotalPrice", 30, 34)
+    discount = {
+      amount: '150',
+      printed_total_stage: 'before_item_discount',
+      evidence: { amount: evidence(path, 40, 45) }
+    }
+    candidate = {
+      candidate_id: 'azure_items_0_item_calculation_mode',
+      item_identity: identity,
+      item_index: 0,
+      source_provider: 'azure_structured',
+      provider_model_id: 'prebuilt-receipt',
+      provider_api_version: '2024-11-30',
+      string_index_type: 'textElements',
+      source_field_path: path,
+      provider_span_start: 0,
+      provider_span_end: 80,
+      destination_evidence: evidence("#{path}.Description", 0, 4),
+      printed_line_total: { amount: '7454', evidence: total_evidence },
+      conflicts: %w[discount reference_expression],
+      options: [
+        {
+          proposal_id: 'azure_items_0_explicit_line_total',
+          pricing_source_kind: 'explicit_line_total',
+          source: { line_total_amount: '7454' },
+          evidence: { line_total: total_evidence },
+          discount: discount
+        }
+      ]
+    }
+    item = {
+      ocr_item_identity: identity,
+      name: '検証品',
+      price: 149,
+      quantity: BigDecimal('50.03'),
+      quantity_unit_code: 'liter',
+      quantity_unit_raw: nil,
+      original_line_total: 7454,
+      line_total: 7304,
+      discount_amount: 150,
+      discount_rate: nil,
+      tax_rate: BigDecimal('0.1'),
+      position_index: 0
+    }
+    reference_component = lambda do |field, amount, span_start, span_end|
+      {
+        amount: amount,
+        evidence: {
+          source_provider: 'azure_structured',
+          source_field_path: "#{path}.#{field}",
+          item_index: 0,
+          provider_span_start: span_start,
+          provider_span_end: span_end
+        }
+      }
+    end
+    line = lambda do |source_path, line_index, span_start, span_end, source_provider: 'azure_structured'|
+      {
+        source_provider: source_provider,
+        source_field_path: source_path,
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: 'textElements',
+        provider_span_start: span_start,
+        provider_span_end: span_end
+      }
+    end
+    reference = {
+      candidate_id: 'azure_items_0_reference_pricing',
+      item_index: 0,
+      validation_state: 'valid',
+      rejection_reasons: [],
+      reference_price: reference_component.call('Price', '149', 10, 13),
+      reference_quantity: reference_component.call('QuantityUnit', '1', 20, 21).merge(
+        unit_code: 'liter',
+        unit_status: 'known',
+        origin: 'implicit_per_unit'
+      ),
+      purchased_quantity: reference_component.call('Quantity', '50.03', 14, 19).merge(
+        unit_code: 'liter',
+        unit_status: 'known'
+      ),
+      reference_price_tax_inclusion: 'gross',
+      tax_inclusion_evidence: {
+        kind: 'single_item_receipt_inner_tax_summary',
+        string_index_type: 'textElements',
+        policy_contract_version: 'reference_pricing_single_structured_item_gross_policy_v1',
+        item_parent: {
+          source_provider: 'azure_structured',
+          source_field_path: path,
+          item_index: 0,
+          provider_span_start: 0,
+          provider_span_end: 80
+        },
+        tax_detail_parent: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TaxDetails[0]',
+          tax_detail_index: 0,
+          provider_span_start: 90,
+          provider_span_end: 105
+        },
+        tax_description: line.call(
+          'documents[0].fields.TaxDetails[0].Description', 4, 90, 95
+        ).merge(tax_detail_index: 0),
+        tax_amount: line.call(
+          'documents[0].fields.TaxDetails[0].Amount', 5, 96, 99
+        ).merge(tax_detail_index: 0, amount: 664),
+        document_tax_total: line.call(
+          'documents[0].fields.TotalTax', 5, 96, 99
+        ).merge(amount: 664),
+        summary_total: line.call(
+          'pages[0].lines[7]', 7, 110, 114, source_provider: 'azure_document_total'
+        ).merge(amount: 7304)
+      },
+      printed_line_total: {
+        amount: '7454',
+        evidence: {
+          source_provider: 'azure_structured',
+          source_field_path: "#{path}.TotalPrice",
+          item_index: 0,
+          provider_span_start: 30,
+          provider_span_end: 34
+        }
+      },
+      corroboration: {
+        exact_amount: { numerator: '745447', denominator: '100' },
+        projected_amount: 7454,
+        printed_line_total: '7454',
+        rounding_matches: %w[floor half_up]
+      }
+    }
+    snapshot = {
+      schema_version: described_class::OCR_RESULT_SCHEMA_VERSION,
+      success: true,
+      candidates: {
+        items: [ item ],
+        reference_pricing_candidates: [ reference ],
+        total_amount: 7304,
+        tax_amount: 664
+      },
+      candidate_counts: {
+        items: { actual_count: 1, snapshot_count: 1 },
+        reference_pricing_candidates: { actual_count: 1, snapshot_count: 1 },
+        item_calculation_mode_candidates: { actual_count: 1, snapshot_count: 1 }
+      },
+      truncated: {
+        items: false,
+        reference_pricing_candidates: false,
+        item_calculation_mode_candidates: false
+      }
+    }
+
+    { candidate: candidate, snapshot: snapshot, item: item }
   end
 
   def decision_for(context, item_line_total_limit: 999_999, count_tax_semantics: 'reproducible_as_recorded')
@@ -394,6 +564,103 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
       selected_pricing_source_kind: 'count_unit_price',
       projected_line_total: 36
     )
+  end
+
+  it 'round-trips an exact same-item reference proposal with an absolute discount' do
+    context = absolute_reference_discount_context
+    proposals = build_proposals(context)
+
+    aggregate_failures do
+      expect(proposals).not_to be_nil
+      expect(JSON.generate(proposals.sole).bytesize).to be <= described_class::MAX_SERIALIZED_BYTES
+      expect(proposals.sole.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+        reference_quantity_price
+        explicit_line_total
+      ])
+      expect(proposals.sole.fetch('options').pluck('discount').uniq).to eq([
+        {
+          'amount' => '150',
+          'printed_total_stage' => 'before_item_discount',
+          'evidence' => {
+            'amount' => evidence('documents[0].fields.Items[0]', 40, 45).deep_stringify_keys
+          }
+        }
+      ])
+      expect(described_class.from_snapshot(
+        JSON.parse(JSON.generate(proposals)),
+        ocr_snapshot: JSON.parse(JSON.generate(context[:snapshot]))
+      )).to eq(proposals)
+    end
+  end
+
+  it 'fails closed at the first node beyond the normalized bound for a discounted proposal' do
+    within_bound = normalized_node_payload(extra_nodes: 15)
+    over_bound = normalized_node_payload(extra_nodes: 16)
+
+    aggregate_failures do
+      expect(described_class.send(:bounded_normalized_hash, within_bound)).to eq(within_bound)
+      expect(described_class.send(:bounded_normalized_hash, over_bound)).to be_nil
+      expect(described_class.send(:bounded_normalized_hash, { 'optional' => nil })).to eq('optional' => nil)
+    end
+  end
+
+  it 'confirms the reference proposal when its discounted projection matches the printed final amount' do
+    expect(decision_for(absolute_reference_discount_context)).to have_attributes(
+      state: 'confirmed',
+      reason: 'formula_matches_printed_total',
+      selected_pricing_source_kind: 'reference_quantity_price',
+      projected_line_total: 7304
+    )
+  end
+
+  it 'validates the undiscounted reference projection bound separately from the final amount' do
+    expect(decision_for(absolute_reference_discount_context, item_line_total_limit: 7453)).to be_unresolved
+    expect(decision_for(absolute_reference_discount_context, item_line_total_limit: 7454)).to be_confirmed
+  end
+
+  it 'fails closed for a rated, foreign, later-stage or inconsistent absolute reference discount' do
+    mutations = [
+      ->(context) { context[:candidate][:options].sole[:discount][:rate] = '0.02' },
+      ->(context) { context[:candidate][:options].sole[:discount][:printed_total_stage] = 'after_item_discount' },
+      ->(context) { context[:candidate][:options].sole[:discount][:evidence][:amount][:source_field_path] = 'documents[0].fields.Items[1]' },
+      ->(context) { context[:candidate][:options].sole[:discount][:amount] = '151' },
+      ->(context) { context[:item][:discount_rate] = BigDecimal('0.02') },
+      ->(context) { context[:item][:discount_amount] = 151 },
+      ->(context) { context[:item][:original_line_total] = 7453 },
+      ->(context) { context[:item][:line_total] = 7303 }
+    ]
+
+    mutations.each do |mutation|
+      context = absolute_reference_discount_context
+      mutation.call(context)
+      expect(build_proposals(context)).to be_nil
+    end
+  end
+
+  it 'rejects diverging reference and explicit discount evidence after checksum recomputation' do
+    context = absolute_reference_discount_context
+    proposals = build_proposals(context)
+    proposals.sole.fetch('options').first.fetch('discount')['amount'] = '151'
+    recompute_integrity!(proposals.sole, snapshot: context[:snapshot])
+
+    expect(described_class.from_snapshot(
+      JSON.parse(JSON.generate(proposals)),
+      ocr_snapshot: context[:snapshot]
+    )).to be_nil
+  end
+
+  it 'rejects a discounted projection and summary Total mismatch after checksum recomputation' do
+    context = absolute_reference_discount_context
+    proposals = build_proposals(context)
+    context[:snapshot][:candidates][:total_amount] = 7303
+    context[:snapshot][:candidates][:reference_pricing_candidates].sole[:tax_inclusion_evidence][:summary_total][:amount] = 7303
+    proposals.sole.dig('options', 0, 'evidence', 'tax_inclusion', 'summary_total')['amount'] = 7303
+    recompute_integrity!(proposals.sole, snapshot: context[:snapshot])
+
+    expect(described_class.from_snapshot(
+      JSON.parse(JSON.generate(proposals)),
+      ocr_snapshot: context[:snapshot]
+    )).to be_nil
   end
 
   it 'confirms a complete discounted count source when uniform net semantics are reproducible' do

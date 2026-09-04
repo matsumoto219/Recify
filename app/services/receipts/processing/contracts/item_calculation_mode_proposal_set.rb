@@ -24,7 +24,7 @@ module Receipts::Processing::Contracts
     MAX_PROVIDER_SPAN = 10_000_000
     MAX_ITEM_INDEX = MAX_SETS - 1
     MAX_LAYOUT_LINE_INDEX = 149
-    MAX_NORMALIZED_NODES = 128
+    MAX_NORMALIZED_NODES = 136
     MAX_REFERENCE_CANDIDATE_NODES = 192
     MAX_REFERENCE_CANDIDATE_COLLECTION_SIZE = 32
     MAX_NORMALIZED_DEPTH = 8
@@ -51,10 +51,13 @@ module Receipts::Processing::Contracts
     OPTION_KEYS = %w[proposal_id pricing_source_kind source evidence].freeze
     DISCOUNTED_OPTION_KEYS = (OPTION_KEYS + %w[discount]).freeze
     REFERENCE_OPTION_KEYS = (OPTION_KEYS + %w[source_candidate_id]).freeze
+    DISCOUNTED_REFERENCE_OPTION_KEYS = (REFERENCE_OPTION_KEYS + %w[discount]).freeze
     COUNT_SOURCE_KEYS = %w[price_amount quantity quantity_unit_code].freeze
     COUNT_EVIDENCE_KEYS = %w[price quantity quantity_unit].freeze
     DISCOUNT_KEYS = %w[amount rate printed_total_stage evidence].freeze
     DISCOUNT_EVIDENCE_KEYS = %w[amount rate].freeze
+    ABSOLUTE_DISCOUNT_KEYS = %w[amount printed_total_stage evidence].freeze
+    ABSOLUTE_DISCOUNT_EVIDENCE_KEYS = %w[amount].freeze
     DISCOUNT_STAGES = %w[before_item_discount after_item_discount].freeze
     REFERENCE_SOURCE_KEYS = %w[
       reference_price_amount reference_quantity reference_quantity_unit_code
@@ -361,7 +364,7 @@ module Receipts::Processing::Contracts
           context: context
         )
 
-        {
+        option = {
           "proposal_id" => expected_option_id(candidate, kind: "reference_quantity_price"),
           "pricing_source_kind" => "reference_quantity_price",
           "source_candidate_id" => reference_candidate["candidate_id"],
@@ -383,6 +386,21 @@ module Receipts::Processing::Contracts
             )
           }
         }
+        discount = absolute_reference_discount(candidate)
+        option["discount"] = discount if discount
+        option
+      end
+
+      def absolute_reference_discount(candidate)
+        return unless candidate["conflicts"] == %w[discount reference_expression]
+
+        explicit = Array(candidate["options"]).find do |option|
+          normalized_hash(option)["pricing_source_kind"] == "explicit_line_total"
+        end
+        return if explicit.nil?
+
+        discount = normalized_hash(explicit["discount"])
+        deep_copy(discount) if exact_keys?(discount, ABSOLUTE_DISCOUNT_KEYS)
       end
 
       def proposal_tax_inclusion_evidence(value)
@@ -864,7 +882,8 @@ module Receipts::Processing::Contracts
                 maximum_scale: ReceiptItem::REFERENCE_QUANTITY_MAX_SCALE,
                 allow_zero: false
               ) &&
-              item["quantity_unit_code"] == source["purchased_quantity_unit_code"]
+              item["quantity_unit_code"] == source["purchased_quantity_unit_code"] &&
+              reference_discount_matches_context?(option, item)
           when "explicit_line_total"
             if option.key?("discount")
               next context_integer_matches?(item["original_line_total"], source["line_total_amount"], maximum: MAX_AMOUNT, allow_zero: true) &&
@@ -891,17 +910,27 @@ module Receipts::Processing::Contracts
         discount_matches_context?(option, item, projection: count_discount_projection(option))
       end
 
+      def reference_discount_matches_context?(option, item)
+        return true unless option.key?("discount")
+
+        discount_matches_context?(option, item, projection: reference_discount_projection(option))
+      end
+
       def discount_matches_context?(option, item, projection:)
         discount = normalized_hash(option["discount"])
         return false unless projection
         return false unless context_integer_matches?(item["discount_amount"], discount["amount"], maximum: MAX_AMOUNT, allow_zero: true)
-        return false unless context_decimal_matches?(
-          item["discount_rate"],
-          discount["rate"],
-          maximum: 1,
-          maximum_scale: MAX_DISCOUNT_RATE_SCALE,
-          allow_zero: false
-        )
+        if exact_keys?(discount, ABSOLUTE_DISCOUNT_KEYS)
+          return false unless item["discount_rate"].nil?
+        else
+          return false unless context_decimal_matches?(
+            item["discount_rate"],
+            discount["rate"],
+            maximum: 1,
+            maximum_scale: MAX_DISCOUNT_RATE_SCALE,
+            allow_zero: false
+          )
+        end
 
         context_integer_matches?(item["original_line_total"], projection[:original_line_total].to_s, maximum: MAX_AMOUNT, allow_zero: true) &&
           context_integer_matches?(item["line_total"], projection[:projected_amount].to_s, maximum: MAX_AMOUNT, allow_zero: true)
@@ -1142,7 +1171,19 @@ module Receipts::Processing::Contracts
             return false unless proposal["conflicts"] == [ "discount" ] && count.key?("discount")
           end
           if modes.include?("reference_quantity_price")
-            return false unless proposal["conflicts"] == [ "reference_expression" ]
+            reference = options.find do |option|
+              option["pricing_source_kind"] == "reference_quantity_price"
+            end
+            if reference.key?("discount")
+              explicit = options.find do |option|
+                option["pricing_source_kind"] == "explicit_line_total"
+              end
+              return false unless proposal["conflicts"] == %w[discount reference_expression]
+              return false unless explicit&.key?("discount")
+              return false unless reference["discount"] == explicit["discount"]
+            else
+              return false unless proposal["conflicts"] == [ "reference_expression" ]
+            end
             return false if modes.include?("count_unit_price")
           end
         end
@@ -1177,7 +1218,18 @@ module Receipts::Processing::Contracts
 
           count_option_valid?(option, item_index: item_index, parent_start: parent_start, parent_end: parent_end)
         when "reference_quantity_price"
-          return false unless exact_keys?(option, REFERENCE_OPTION_KEYS)
+          expected_keys = option.key?("discount") ? DISCOUNTED_REFERENCE_OPTION_KEYS : REFERENCE_OPTION_KEYS
+          return false unless exact_keys?(option, expected_keys)
+          if option.key?("discount")
+            return false unless proposal["conflicts"] == %w[discount reference_expression]
+            return false unless absolute_discount_evidence_valid?(
+              option,
+              proposal:,
+              parent_start:,
+              parent_end:
+            )
+            return false unless reference_discount_projection(option)
+          end
 
           reference_option_valid?(
             option,
@@ -1191,9 +1243,19 @@ module Receipts::Processing::Contracts
           expected_keys = option.key?("discount") ? DISCOUNTED_OPTION_KEYS : OPTION_KEYS
           return false unless exact_keys?(option, expected_keys)
           if option.key?("discount")
-            return false unless proposal["conflicts"] == [ "discount" ]
-            return false unless option.dig("discount", "printed_total_stage") == "before_item_discount"
-            return false unless discount_evidence_valid?(option, proposal:, parent_start:, parent_end:)
+            if proposal["conflicts"] == [ "discount" ]
+              return false unless option.dig("discount", "printed_total_stage") == "before_item_discount"
+              return false unless discount_evidence_valid?(option, proposal:, parent_start:, parent_end:)
+            elsif proposal["conflicts"] == %w[discount reference_expression]
+              return false unless absolute_discount_evidence_valid?(
+                option,
+                proposal:,
+                parent_start:,
+                parent_end:
+              )
+            else
+              return false
+            end
             return false unless explicit_discount_projection(option)
           end
 
@@ -1293,16 +1355,37 @@ module Receipts::Processing::Contracts
         end
       end
 
+      def absolute_discount_evidence_valid?(option, proposal:, parent_start:, parent_end:)
+        discount = normalized_hash(option["discount"])
+        return false unless exact_keys?(discount, ABSOLUTE_DISCOUNT_KEYS)
+        return false unless discount["printed_total_stage"] == "before_item_discount"
+        return false unless exact_integer?(discount["amount"], maximum: MAX_AMOUNT, allow_zero: false)
+
+        evidence = normalized_hash(discount["evidence"])
+        return false unless exact_keys?(evidence, ABSOLUTE_DISCOUNT_EVIDENCE_KEYS)
+        return false unless component_evidence_valid?(
+          evidence["amount"],
+          expected_path: proposal["source_field_path"],
+          parent_start:,
+          parent_end:
+        )
+
+        printed_evidence = normalized_hash(normalized_hash(proposal["printed_line_total"])["evidence"])
+        normalized_hash(evidence["amount"])["provider_span_start"] >= printed_evidence["provider_span_end"].to_i
+      end
+
       def explicit_discount_projection(option)
         discount = normalized_hash(option["discount"])
         return unless exact_integer?(discount["amount"], maximum: MAX_AMOUNT, allow_zero: true)
-        return unless exact_decimal?(
-          discount["rate"],
-          maximum: 1,
-          maximum_scale: MAX_DISCOUNT_RATE_SCALE,
-          allow_zero: false
-        )
-        return unless BigDecimal(discount["rate"]) < 1
+        unless exact_keys?(discount, ABSOLUTE_DISCOUNT_KEYS)
+          return unless exact_decimal?(
+            discount["rate"],
+            maximum: 1,
+            maximum_scale: MAX_DISCOUNT_RATE_SCALE,
+            allow_zero: false
+          )
+          return unless BigDecimal(discount["rate"]) < 1
+        end
 
         ReceiptAmountService.item_discount_projection(
           original_line_total: normalized_hash(option["source"])["line_total_amount"],
@@ -1331,6 +1414,23 @@ module Receipts::Processing::Contracts
           purchased_unit_code: source["quantity_unit_code"],
           discount_amount: discount["amount"],
           discount_rate: discount["printed_total_stage"] == "before_item_discount" ? nil : discount["rate"]
+        )
+      rescue ReceiptAmountService::InvalidItemSourceError
+        nil
+      end
+
+      def reference_discount_projection(option)
+        discount = normalized_hash(option["discount"])
+        return unless exact_keys?(discount, ABSOLUTE_DISCOUNT_KEYS)
+        return unless exact_integer?(discount["amount"], maximum: MAX_AMOUNT, allow_zero: false)
+
+        reference = reference_projection(normalized_hash(option["source"]))
+        return if reference.nil?
+
+        ReceiptAmountService.item_discount_projection(
+          original_line_total: reference.fetch(:projected_amount),
+          discount_amount: discount["amount"],
+          discount_rate: nil
         )
       rescue ReceiptAmountService::InvalidItemSourceError
         nil
@@ -1418,7 +1518,39 @@ module Receipts::Processing::Contracts
           end
         end
 
-        reference_projection(source).present?
+        if option.key?("discount")
+          absolute_reference_discount_summary_valid?(
+            option,
+            proposal:,
+            context:,
+            tax_evidence:
+          )
+        else
+          reference_projection(source).present?
+        end
+      end
+
+      def absolute_reference_discount_summary_valid?(option, proposal:, context:, tax_evidence:)
+        return false unless tax_evidence["kind"] == SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+
+        reference = reference_projection(normalized_hash(option["source"]))
+        discounted = reference_discount_projection(option)
+        printed = normalized_hash(proposal["printed_line_total"])
+        summary = normalized_hash(tax_evidence["summary_total"])
+        return false if reference.nil? || discounted.nil?
+        return false unless exact_integer?(printed["amount"], maximum: MAX_AMOUNT, allow_zero: true)
+
+        summary_amount = bounded_exact_integer_value(summary["amount"], allow_zero: false)
+        return false if summary_amount.nil?
+
+        reference.fetch(:projected_amount).to_s == printed["amount"] &&
+          discounted.fetch(:projected_amount) == summary_amount &&
+          context_integer_matches?(
+            context.dig("candidates", "total_amount"),
+            summary_amount.to_s,
+            maximum: MAX_AMOUNT,
+            allow_zero: false
+          )
       end
 
       def reference_source_valid?(source)
@@ -3240,62 +3372,66 @@ module Receipts::Processing::Contracts
         maximum_collection_size: MAX_NORMALIZED_COLLECTION_SIZE
       )
         budget = { remaining: maximum_nodes }
+        invalid = Object.new
         normalized = bounded_normalized_value(
           value,
           budget: budget,
           depth: 0,
-          maximum_collection_size: maximum_collection_size
+          maximum_collection_size: maximum_collection_size,
+          invalid: invalid
         )
-        normalized if normalized.is_a?(Hash)
+        normalized if normalized.is_a?(Hash) && !normalized.equal?(invalid)
       end
 
-      def bounded_normalized_value(value, budget:, depth:, maximum_collection_size:)
-        return nil if depth > MAX_NORMALIZED_DEPTH
+      def bounded_normalized_value(value, budget:, depth:, maximum_collection_size:, invalid:)
+        return invalid if depth > MAX_NORMALIZED_DEPTH
 
         budget[:remaining] -= 1
-        return nil if budget[:remaining].negative?
+        return invalid if budget[:remaining].negative?
 
         case value
         when Hash
-          return nil if value.size > maximum_collection_size
+          return invalid if value.size > maximum_collection_size
 
           value.each_with_object({}) do |(key, entry), result|
             key = key.to_s
-            return nil unless bounded_string?(key, maximum: MAX_NORMALIZED_STRING_BYTES)
-            return nil if result.key?(key)
+            return invalid unless bounded_string?(key, maximum: MAX_NORMALIZED_STRING_BYTES)
+            return invalid if result.key?(key)
 
             normalized = bounded_normalized_value(
               entry,
               budget: budget,
               depth: depth + 1,
-              maximum_collection_size: maximum_collection_size
+              maximum_collection_size: maximum_collection_size,
+              invalid: invalid
             )
-            return nil if normalized.nil? && !entry.nil?
+            return invalid if normalized.equal?(invalid)
 
             result[key] = normalized
           end
         when Array
-          return nil if value.size > maximum_collection_size
+          return invalid if value.size > maximum_collection_size
 
           value.map do |entry|
             normalized = bounded_normalized_value(
               entry,
               budget: budget,
               depth: depth + 1,
-              maximum_collection_size: maximum_collection_size
+              maximum_collection_size: maximum_collection_size,
+              invalid: invalid
             )
-            return nil if normalized.nil? && !entry.nil?
+            return invalid if normalized.equal?(invalid)
 
             normalized
           end
         when String
-          return nil unless bounded_string?(value, maximum: MAX_NORMALIZED_STRING_BYTES)
+          return invalid unless bounded_string?(value, maximum: MAX_NORMALIZED_STRING_BYTES)
 
           value.dup
         when Integer, TrueClass, FalseClass, NilClass
           value
         else
-          nil
+          invalid
         end
       end
 
