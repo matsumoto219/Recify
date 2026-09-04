@@ -6,10 +6,11 @@ RSpec.describe Ocr::ResponseParser do
     summary: [ '小計', '926', '合計 926円' ],
     per_unit_note: '(単品 -75)',
     total_marker: '',
-    first_discount_interstitial: nil
+    first_discount_interstitial: nil,
+    first_discount_target_component_indexes: []
   )
     first_block = [ '検証品A', '¥410', '操作割引07', '30%' ]
-    first_block << first_discount_interstitial if first_discount_interstitial
+    first_block.concat(Array(first_discount_interstitial))
     first_block << '-123'
     blocks = [
       first_block,
@@ -30,11 +31,22 @@ RSpec.describe Ocr::ResponseParser do
       start = content.length
       item_lines = block.map(&append_line)
       amount = index == 2 ? 502 : 410
+      description_lines = [ item_lines.first ]
+      if index.zero?
+        description_lines.concat(
+          first_discount_target_component_indexes.map { |offset| item_lines.fetch(4 + offset) }
+        )
+      end
+      description = description_lines.map { |line| line.fetch('content') }.join("\n")
       {
         'content' => block.join("\n"),
         'spans' => [ { 'offset' => start, 'length' => content.length - start - 1 } ],
         'valueObject' => {
-          'Description' => { 'valueString' => block.first, **item_lines.first },
+          'Description' => {
+            'content' => description,
+            'valueString' => description,
+            'spans' => description_lines.flat_map { |line| line.fetch('spans').map(&:deep_dup) }
+          },
           'TotalPrice' => { 'valueCurrency' => { 'amount' => amount }, **item_lines[1] }
         }
       }
@@ -164,6 +176,66 @@ RSpec.describe Ocr::ResponseParser do
   it 'provider parent内に別明細の商品名が現れても割引を別明細へ付け替えない' do
     result = described_class.new(
       response: item_discount_response(first_discount_interstitial: '検証品B')
+    ).call
+
+    expect(result.dig(:candidates, :items).map { |item| item[:discount_amount] }).to eq([ nil, 123, 150 ])
+  end
+
+  it 'provider Description componentが一意に示す明細だけへ割引を付け替える' do
+    result = described_class.new(
+      response: item_discount_response(
+        first_discount_interstitial: '検証品B',
+        first_discount_target_component_indexes: [ 0 ]
+      )
+    ).call
+
+    expect(result.dig(:candidates, :items).map { |item| item[:discount_amount] }).to eq([ nil, 246, 150 ])
+  end
+
+  it 'provider Description componentのspanが改変された場合は割引を付け替えない' do
+    response = item_discount_response(
+      first_discount_interstitial: '検証品B',
+      first_discount_target_component_indexes: [ 0 ]
+    )
+    description = response.dig(
+      'analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray', 0,
+      'valueObject', 'Description'
+    )
+    description.fetch('spans').last['offset'] += 1
+
+    result = described_class.new(response:).call
+
+    expect(result.dig(:candidates, :items).map { |item| item[:discount_amount] }).to eq([ nil, 123, 150 ])
+  end
+
+  it 'invalidな対象行の後にvalid Description componentが現れても割引を復活させない' do
+    result = described_class.new(
+      response: item_discount_response(
+        first_discount_interstitial: [ '検証品B', '検証品B' ],
+        first_discount_target_component_indexes: [ 1 ]
+      )
+    ).call
+
+    expect(result.dig(:candidates, :items).map { |item| item[:discount_amount] }).to eq([ nil, 123, 150 ])
+  end
+
+  it '同じdiscount block内の複数Description targetをfail-closedにする' do
+    result = described_class.new(
+      response: item_discount_response(
+        first_discount_interstitial: [ '検証品B', '検証K2品' ],
+        first_discount_target_component_indexes: [ 0, 1 ]
+      )
+    ).call
+
+    expect(result.dig(:candidates, :items).map { |item| item[:discount_amount] }).to eq([ nil, 123, 150 ])
+  end
+
+  it '対応明細がないDescription targetを現在のparentへ適用しない' do
+    result = described_class.new(
+      response: item_discount_response(
+        first_discount_interstitial: '未登録対象',
+        first_discount_target_component_indexes: [ 0 ]
+      )
     ).call
 
     expect(result.dig(:candidates, :items).map { |item| item[:discount_amount] }).to eq([ nil, 123, 150 ])

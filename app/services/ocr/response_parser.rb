@@ -3069,6 +3069,8 @@ class Ocr::ResponseParser
       waiting_discount = false
       current_rate = nil
       target_index = nil
+      target_evidence_seen = false
+      target_conflict = false
       pending_sources = []
 
       entries.each do |entry|
@@ -3079,6 +3081,8 @@ class Ocr::ResponseParser
           waiting_discount = true
           current_rate = nil
           target_index = index if purchase_indexes.include?(index)
+          target_evidence_seen = false
+          target_conflict = false
           pending_sources = []
         end
         next unless waiting_discount
@@ -3092,11 +3096,23 @@ class Ocr::ResponseParser
         if amount.nil?
           unless item_discount_keyword_line?(line) || extract_discount_rate_from_line(line)
             matches = labels.each_index.select { |label_index| labels[label_index].present? && discount_target_line_matches_label?(line, labels[label_index]) }
-            target_index = nil if matches.any? && matches != [ index ]
+            if matches.any? || entry[:description_component]
+              matched_target_index = if matches == [ index ]
+                index
+              elsif entry[:description_component] && matches.one?
+                matches.sole
+              end
+              target_conflict ||= target_evidence_seen || matched_target_index.nil?
+              target_evidence_seen = true
+              target_index = target_conflict ? nil : matched_target_index
+            end
           end
           next
         end
-        next if target_index.nil?
+        if target_conflict || target_index.nil?
+          waiting_discount = false
+          next
+        end
 
         detail = (details[target_index] ||= { amount: 0, rate: nil, original_line_total: nil, amount_lines: [], source_refs: [] })
         detail[:amount] += amount
@@ -3128,11 +3144,22 @@ class Ocr::ResponseParser
     mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
     return {} unless mapper && content.is_a?(String) && mapper.length(content)
 
-    parents = items.each_with_index.flat_map do |item, index|
+    parent_spans_by_index = items.map do |item|
       spans = discount_parent_spans(item, content:, mapper:)
       return {} unless spans && item["content"].is_a?(String)
       return {} unless spans.map { |start, finish| mapper.slice(content, offset: start, length: finish - start) }.join("\n") == item["content"]
 
+      spans
+    end
+    description_spans_by_index = items.each_with_index.map do |item, index|
+      structured_discount_description_spans(
+        item,
+        parent_spans: parent_spans_by_index.fetch(index),
+        content:,
+        mapper:
+      )
+    end
+    parents = parent_spans_by_index.each_with_index.flat_map do |spans, index|
       spans.map { |start, finish| [ start, finish, index ] }
     end.sort
     return {} if parents.each_cons(2).any? { |left, right| left[1] > right[0] }
@@ -3161,8 +3188,27 @@ class Ocr::ResponseParser
       parent = parents[parent_index]
       next unless span[1] <= parent[1]
 
-      (groups[parent[2]] ||= []) << { text: lines[index], line_index: index }
+      (groups[parent[2]] ||= []) << {
+        text: lines[index],
+        line_index: index,
+        description_component: description_spans_by_index.fetch(parent[2]).include?(span)
+      }
     end
+  end
+
+  def structured_discount_description_spans(item, parent_spans:, content:, mapper:)
+    return [] unless item.is_a?(Hash)
+
+    description = item.dig("valueObject", "Description")
+    return [] unless description.is_a?(Hash)
+    return [] unless description["content"] == description["valueString"]
+
+    ranges = exact_structured_authority_span_ranges(description, content:, mapper:)
+    return [] unless ranges&.all? do |start, finish|
+      parent_spans.any? { |parent_start, parent_finish| start >= parent_start && finish <= parent_finish }
+    end
+
+    ranges
   end
 
   def discount_source_refs(line, line_index)
