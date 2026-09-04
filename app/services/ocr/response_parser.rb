@@ -141,6 +141,17 @@ class Ocr::ResponseParser
       adjustment_candidates:,
       discount_count: discount_details_by_item_index.size
     )
+    structured_items_gross_promotion = promote_structured_items_gross_reference_pricing(
+      analyze_result:,
+      structured_items:,
+      candidates: reference_pricing_candidates,
+      retained_item_indexes:,
+      receipt_total: total_amount,
+      adjustment_candidates:,
+      discount_count: discount_details_by_item_index.size
+    )
+    reference_pricing_candidates = structured_items_gross_promotion.fetch(:candidates)
+    structured_items_gross_evidence = structured_items_gross_promotion[:evidence]
     reference_pricing_candidates = promote_single_item_gross_summary_reference_pricing(
       analyze_result:,
       candidates: reference_pricing_candidates,
@@ -197,6 +208,7 @@ class Ocr::ResponseParser
     if calculation_layout
       item_calculation_mode_candidates = calculation_layout.fetch(:candidates)
       reference_pricing_candidates = []
+      structured_items_gross_evidence = nil
       reference_pricing_blocks += calculation_layout.fetch(:blocks)
       authority_response = response_without_reference_pricing_block_fields(parsed_response, reference_pricing_blocks)
       authority_lines = lines_without_reference_pricing_blocks(normalized_lines, reference_pricing_blocks)
@@ -247,6 +259,7 @@ class Ocr::ResponseParser
         tax_detail_structural_metadata: tax_detail_result[:tax_detail_structural_metadata],
         adjustment_candidates: adjustment_candidates,
         reference_pricing_candidates: reference_pricing_candidates,
+        reference_pricing_structured_items_gross_evidence: structured_items_gross_evidence,
         reference_pricing_block_line_indexes: reference_pricing_block_line_indexes(reference_pricing_blocks),
         item_calculation_mode_candidates: item_calculation_mode_candidates,
         item_calculation_mode_source_truncated:
@@ -764,6 +777,58 @@ class Ocr::ResponseParser
     candidates
   end
 
+  def promote_structured_items_gross_reference_pricing(
+    analyze_result:,
+    structured_items:,
+    candidates:,
+    retained_item_indexes:,
+    receipt_total:,
+    adjustment_candidates:,
+    discount_count:
+  )
+    candidates = Array(candidates)
+    unchanged = { candidates:, evidence: nil }
+    return unchanged unless structured_items.is_a?(Array) && structured_items.size.between?(2, 20)
+
+    evidence = Ocr::ResponseParser::ReferencePricingStructuredItemsGrossEvidenceExtractor.call(
+      analyze_result:,
+      profile:,
+      receipt_total:
+    )
+    policy = Ocr::ResponseParser::ReferencePricingStructuredItemsGrossPolicy.call(
+      candidates:,
+      item_count: structured_items.size,
+      retained_item_indexes: Array(retained_item_indexes),
+      summary_gross_evidence: evidence,
+      adjustment_count: Array(adjustment_candidates).size,
+      discount_count:,
+      item_line_total_limit: ReceiptAmountService.receipt_item_line_total_max
+    )
+    return unchanged unless policy.eligible?
+
+    promoted_ids = policy.candidate_ids.to_set
+    promoted = candidates.map do |candidate|
+      next candidate unless promoted_ids.include?(candidate[:candidate_id])
+
+      candidate.deep_dup.merge(
+        validation_state: "valid",
+        rejection_reasons: [],
+        reference_price_tax_inclusion: policy.reference_price_tax_inclusion,
+        tax_inclusion_evidence: {
+          kind: policy.member_evidence_kind,
+          policy_contract_version: policy.contract_version,
+          item_index: candidate[:item_index]
+        }
+      )
+    end
+    {
+      candidates: promoted,
+      evidence: structured_items_gross_evidence(evidence, policy:)
+    }
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    unchanged
+  end
+
   def promote_single_item_gross_summary_reference_pricing(
     analyze_result:,
     candidates:,
@@ -925,6 +990,21 @@ class Ocr::ResponseParser
       tax_description: evidence.tax_description.deep_dup,
       tax_amount: evidence.tax_amount.deep_dup,
       document_tax_total: evidence.document_tax_total.deep_dup,
+      summary_total: evidence.summary_total.deep_dup
+    }
+  end
+
+  def structured_items_gross_evidence(evidence, policy:)
+    {
+      kind: evidence.kind,
+      string_index_type: evidence.string_index_type,
+      policy_contract_version: policy.contract_version,
+      candidate_members: policy.candidate_members.map(&:deep_dup),
+      item_parents: evidence.item_parents.map(&:deep_dup),
+      item_totals: evidence.item_totals.map(&:deep_dup),
+      tax_detail_parents: evidence.tax_detail_parents.map(&:deep_dup),
+      tax_descriptions: evidence.tax_descriptions.map(&:deep_dup),
+      tax_amounts: evidence.tax_amounts.map(&:deep_dup),
       summary_total: evidence.summary_total.deep_dup
     }
   end
