@@ -21,9 +21,11 @@ RSpec.describe 'reference pricing profile boundary' do
         app/services/ocr/response_parser/reference_pricing_candidate_extractor.rb
         app/services/ocr/response_parser/reference_pricing_item_layout_extractor.rb
         app/services/ocr/response_parser/reference_pricing_line_group_extractor.rb
+        app/services/ocr/response_parser/reference_pricing_shared_basis_external_tax_evidence_extractor.rb
         app/services/ocr/response_parser/reference_pricing_single_item_gross_summary_evidence_extractor.rb
         app/services/ocr/response_parser/reference_pricing_single_structured_item_gross_evidence_extractor.rb
         app/services/ocr/response_parser/reference_pricing_strict_summary_total_extractor.rb
+        app/services/ocr/response_parser/reference_pricing_structured_items_gross_evidence_extractor.rb
       ])
     end
   end

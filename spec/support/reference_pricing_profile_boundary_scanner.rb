@@ -28,7 +28,7 @@ module ReferencePricingProfileBoundary
     (?![A-Za-z_])
   }ix.freeze
   ALLOWED_SHARED_CURRENCY_TEXT = "円".freeze
-  PROVIDER_STRUCTURAL_TEXTS = %w[Total TotalPrice].freeze
+  PROVIDER_STRUCTURAL_TEXT_PATTERN = /\A(?:documents\[\d+\]\.fields\.)?(?:Subtotal|Total|TotalPrice)\z/.freeze
   JAPAN_PROFILE_CONSTANT = "ReceiptAnalysisProfiles::Japan".freeze
   JAPAN_PROFILE_CODE = "JPN".freeze
 
@@ -78,7 +78,7 @@ module ReferencePricingProfileBoundary
       return unless node.is_a?(Prism::StringNode) || node.is_a?(Prism::RegularExpressionNode)
 
       text = literal_text(node)
-      return if PROVIDER_STRUCTURAL_TEXTS.include?(text)
+      return if text.match?(PROVIDER_STRUCTURAL_TEXT_PATTERN)
 
       inspected = text.delete(ALLOWED_SHARED_CURRENCY_TEXT)
       return unless inspected.match?(JAPANESE_SCRIPT_PATTERN) ||

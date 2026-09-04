@@ -46,7 +46,8 @@ RSpec.describe ReferencePricingProfileBoundary::Scanner do
         # 小計はprofile側で所有する
         AMOUNT_PATTERN = /[0-9¥￥$€£]|円/
         GENERIC_UNICODE_PATTERN = /[\\p{L}\\p{N}\\p{Zs}\\p{P}\\p{Bidi_Control}]/
-        PROVIDER_FIELDS = %w[Total TotalPrice]
+        PROVIDER_FIELDS = %w[Subtotal Total TotalPrice]
+        PROVIDER_PATHS = %w[documents[0].fields.Subtotal documents[0].fields.Total]
       RUBY
     ) do |scanner|
       aggregate_failures do
