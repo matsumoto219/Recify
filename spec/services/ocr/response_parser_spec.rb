@@ -226,6 +226,30 @@ RSpec.describe Ocr::ResponseParser do
       end
     end
 
+    it 'Azure Itemのexact componentを同一明細の計算方式候補として分離する' do
+      fixture_response = JSON.parse(
+        Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read
+      )
+
+      result = described_class.new(response: fixture_response, provider: :fixture).call
+      candidates = result.dig(:candidates, :item_calculation_mode_candidates)
+
+      aggregate_failures do
+        expect(candidates.size).to eq(4)
+        expect(candidates).to all(include(
+          source_provider: 'azure_structured',
+          options: contain_exactly(
+            include(pricing_source_kind: 'count_unit_price'),
+            include(pricing_source_kind: 'explicit_line_total')
+          )
+        ))
+        expect(result.dig(:candidates, :items, 0, :ocr_item_identity)).to eq(
+          candidates.first[:item_identity]
+        )
+        expect(candidates.to_s).not_to include('ノート A5')
+      end
+    end
+
     it '匿名化した実レシート回帰fixtureで数量付き袋商品をadjustment候補にしない' do
       fixture_response = JSON.parse(
         Rails.root.join('spec/fixtures/ocr/item_owned_bag_quantity_receipt.json').read
@@ -1117,6 +1141,111 @@ RSpec.describe Ocr::ResponseParser do
           hash_including(rate: 0.1, net_amount: 994, amount: 90)
         )
       end
+    end
+
+    it '明示された百分率は1以下でもdecimal rateへ変換する' do
+      percentages = {
+        '0%' => '0',
+        '0.5%' => '0.005',
+        '1%' => '0.01',
+        '1.01%' => '0.0101',
+        '8%' => '0.08',
+        '10%' => '0.1',
+        '27%' => '0.27',
+        '96%' => '0.96',
+        '99%' => '0.99',
+        '100%' => '1',
+        '０．５％' => '0.005',
+        '１％' => '0.01'
+      }
+
+      percentages.each do |percentage, expected_rate|
+        response = raw_response.deep_dup
+        response['analyzeResult']['documents'].first['fields']['Items']['valueArray'].first['content'] = "商品A 税込#{percentage} 180円"
+
+        result = described_class.new(response: response, provider: :fixture).call
+
+        aggregate_failures(percentage) do
+          expect(result[:success]).to eq(true)
+          expect(result.dig(:candidates, :items).first[:tax_rate]).to eq(BigDecimal(expected_rate))
+        end
+      end
+    end
+
+    it '構造化fieldのdecimal rateを百分率として再変換しない' do
+      [ '0.01', '0.27', '1' ].each do |rate|
+        response = raw_response.deep_dup
+        item = response['analyzeResult']['documents'].first['fields']['Items']['valueArray'].first
+        item['valueObject']['TaxRate'] = { 'valueNumber' => BigDecimal(rate) }
+        item['content'] = '商品A 税込1% 180円'
+
+        result = described_class.new(response: response, provider: :fixture).call
+
+        expect(result.dig(:candidates, :items).first[:tax_rate]).to eq(BigDecimal(rate))
+      end
+    end
+
+    it '商品割合や値引率ではなく明細の税率表記だけを使う' do
+      contents = {
+        "果汁27%飲料\n税込1% 180円" => '0.01',
+        "明細値引27% -14円\n税込8%" => '0.08',
+        "税込8%\n明細値引27% -14円" => '0.08',
+        "商品A\n180円\n8%" => '0.08',
+        '果汁27%飲料' => nil,
+        '明細値引27% -14円' => nil,
+        "税込8%\n税込10%" => nil
+      }
+
+      contents.each do |content, rate|
+        response = raw_response.deep_dup
+        response['analyzeResult']['documents'].first['fields']['Items']['valueArray'].first['content'] = content
+
+        result = described_class.new(response: response, provider: :fixture).call
+
+        expect(result.dig(:candidates, :items).first[:tax_rate]).to eq(rate && BigDecimal(rate))
+      end
+    end
+
+    it '明細税率の語彙を注入profileから取得し旧語彙へfallbackしない' do
+      profile = ReceiptAnalysisProfiles.default.dup
+      allow(profile).to receive(:ocr_item_tax_rate_pattern).and_return(/課税記号:(?<rate>\d+)%/)
+
+      { '課税記号:27%' => '0.27', '税込27%' => nil }.each do |content, rate|
+        response = raw_response.deep_dup
+        response['analyzeResult']['documents'].first['fields']['Items']['valueArray'].first['content'] = content
+
+        result = described_class.new(response: response, provider: :fixture, profile: profile).call
+
+        expect(result.dig(:candidates, :items).first[:tax_rate]).to eq(rate && BigDecimal(rate))
+      end
+    end
+
+    it '構造化税詳細の欠損対象額を後続商品から補わない' do
+      response = raw_response.deep_dup
+      response['analyzeResult']['content'] = "27%対象計\n例示商品 単価1270円"
+      fields = response['analyzeResult']['documents'].first['fields']
+      fields['Total'] = { 'valueNumber' => 1270 }
+      fields['TotalTax'] = { 'valueNumber' => 270 }
+      fields['TaxDetails'] = {
+        'valueArray' => [
+          {
+            'valueObject' => {
+              'Rate' => { 'valueNumber' => 0.27 },
+              'Amount' => { 'valueNumber' => 270 }
+            }
+          },
+          {
+            'valueObject' => {
+              'Rate' => { 'valueNumber' => 0.1 },
+              'Amount' => { 'valueNumber' => 10 }
+            }
+          }
+        ]
+      }
+
+      result = described_class.new(response: response, provider: :fixture).call
+
+      expect(result.dig(:candidates, :tax_details).map { |detail| detail[:net_amount] }).to eq([ nil, nil ])
     end
 
     it '税率別対象額と税合計だけがOCR行にある内税レシートからTaxDetailsを復元する' do

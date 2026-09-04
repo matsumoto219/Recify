@@ -38,6 +38,7 @@ module Analysis
       return reject(:source_line_index_missing, review_required: true) if source_line_index.nil?
       return reject(:source_line_index_out_of_range, review_required: true) unless source_line_index.between?(0, lines.length - 1)
       return reject(:source_text_mismatch, review_required: true) unless source_text_matches_line?
+      return reject(:per_unit_discount_note, review_required: false) if per_unit_discount_note?
       decision = ownership_decision
       return reject_decision(decision) if decision.action == :reject_false_positive
       return reject(:amount_evidence_missing, review_required: true) unless amount_evidence_supported?
@@ -72,6 +73,10 @@ module Analysis
       normalized_source == normalized_line ||
         normalized_source.include?(normalized_line) ||
         normalized_line.include?(normalized_source)
+    end
+
+    def per_unit_discount_note?
+      source_line.match?(profile.analysis_per_unit_discount_note_pattern)
     end
 
     def amount_evidence_supported?

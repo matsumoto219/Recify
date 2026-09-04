@@ -5,6 +5,20 @@ module Analysis
     OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD = BigDecimal("0.75")
     PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
+    OCR_ITEM_IDENTITY_MAX_BYTES = 160
+    OCR_ITEM_LAYOUT_MAX_LINE_INDEX = 149
+    OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN = 10_000_000
+    OCR_ITEM_LAYOUT_IDENTITY_PATTERN = /
+      \Aazure_item_layout_item_p0_name_l(?<name_line_index>\d+)
+      _s(?<provider_span_start>\d+)_e(?<provider_span_end>\d+)
+      _ref_l(?<reference_line_index>\d+)
+      _qty_l(?<quantity_line_index>\d+)
+      _total_l(?<total_line_index>\d+)\z
+    /x.freeze
+    OCR_CALCULATION_LAYOUT_IDENTITY_PATTERN = /
+      \Aazure_calculation_layout_p0_name_l(?<name_line_index>0|[1-9]\d*)
+      _s(?<span_start>0|[1-9]\d*)_e(?<name_span_end>0|[1-9]\d*)_block_e(?<span_end>0|[1-9]\d*)\z
+    /x.freeze
 
     class << self
       def call(ocr_result:, ai_result: nil)
@@ -12,8 +26,8 @@ module Analysis
         candidates = normalize_candidates(normalized_ocr_result)
         lines = normalized_lines(normalized_ocr_result)
         case_preserved_lines = normalized_case_preserved_lines(normalized_ocr_result)
-        lines = mask_azure_line_group_lines(lines, candidates)
-        case_preserved_lines = mask_azure_line_group_lines(case_preserved_lines, candidates)
+        lines = mask_reference_pricing_block_lines(lines, candidates)
+        case_preserved_lines = mask_reference_pricing_block_lines(case_preserved_lines, candidates)
         normalized_ai_result = normalize_ai_result(ai_result)
         skipped_negative_items = []
         ai_receipt_attributes = normalized_ai_result[:receipt_attributes]
@@ -25,16 +39,22 @@ module Analysis
           ai_name_completion_enabled: normalized_ai_result.dig(:meta, :ai_name_completion_enabled),
           skipped_negative_items:
         )
+        payment_review_reasons = []
         receipt_payments_attributes = build_receipt_payments_attributes(
           candidates,
           lines,
-          receipt_total: receipt_attributes[:total_amount]
+          receipt_total: receipt_attributes[:total_amount],
+          review_reasons: payment_review_reasons
         )
-        receipt_tax_details_attributes = recover_receipt_tax_details_from_lines(
+        tax_detail_result = recover_receipt_tax_details_result_from_lines(
           build_receipt_tax_details_attributes(candidates),
           lines,
           receipt_attributes
         )
+        receipt_tax_details_attributes = tax_detail_result[:tax_details]
+        recovered_tax_detail_values = if tax_detail_result[:tax_detail_amount_basis] == "net"
+          tax_detail_source_values(receipt_tax_details_attributes)
+        end
         source_evidence_index = SourceEvidenceIndex.call(
           lines: lines,
           money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
@@ -50,7 +70,7 @@ module Analysis
           receipt_payments_attributes,
           receipt_tax_details_attributes,
           source_evidence_index,
-          excluded_line_indexes: azure_line_group_line_indexes(candidates),
+          excluded_line_indexes: reference_pricing_block_line_indexes(candidates),
           invalid_review_reasons: invalid_adjustment_review_reasons
         )
         ownership_result = ReceiptFactOwnershipResolver.call(
@@ -77,7 +97,8 @@ module Analysis
           receipt_payments_attributes,
           adjustments: receipt_adjustments_attributes,
           lines:,
-          receipt_total: receipt_attributes[:total_amount]
+          receipt_total: receipt_attributes[:total_amount],
+          review_reasons: payment_review_reasons
         )
         amount_hints = build_amount_hints(
           ai_receipt_attributes,
@@ -108,11 +129,19 @@ module Analysis
           tax_rate_correction: tax_rate_correction
         )
         receipt_adjustments_attributes = tax_allocation_result.adjustments
+        if normalized_tax_detail_basis_preserved?(
+          normalized_ocr_result,
+          candidates,
+          receipt_tax_details_attributes,
+          recovered_source_values: recovered_tax_detail_values
+        )
+          amount_hints[:tax_detail_amount_basis] = "net"
+        end
         invalid_adjustment_review_reasons = tax_allocation_result.review_reasons
         ownership_contract = OwnershipConsistencyGuard.contract_for(tax_allocation_result)
         review_reasons = (
           skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes) +
-          invalid_adjustment_review_reasons
+          invalid_adjustment_review_reasons + payment_review_reasons
         ).uniq
         corrections = build_params_corrections(
           purchased_at_fallback: ReceiptPurchasedAtResolver.fallback_snapshot(
@@ -279,6 +308,42 @@ module Analysis
         }
       end
 
+      def normalized_tax_detail_basis_preserved?(ocr_result, candidates, tax_details, recovered_source_values: nil)
+        return false unless candidates[:tax_detail_amount_basis] == "net" || recovered_source_values.present?
+
+        truncated = ocr_result[:truncated]
+        return false unless truncated.nil? || truncated.is_a?(Hash)
+        return false if truncated && (truncated[:tax_details] == true || truncated[:lines] == true)
+
+        source = Array(candidates[:tax_details])
+        candidate_counts = ocr_result[:candidate_counts]
+        return false unless candidate_counts.nil? || candidate_counts.is_a?(Hash)
+
+        counts = candidate_counts && candidate_counts[:tax_details]
+        if candidate_counts&.key?(:tax_details)
+          return false unless counts.is_a?(Hash)
+          return false unless counts[:actual_count] == source.size && counts[:snapshot_count] == source.size
+        end
+
+        source_values = recovered_source_values || tax_detail_source_values(source)
+        source_values.present? && source_values == tax_detail_source_values(tax_details)
+      end
+
+      def tax_detail_source_values(tax_details)
+        values = Array(tax_details).map do |detail|
+          return nil unless detail.is_a?(Hash)
+
+          detail = detail.with_indifferent_access
+          rate = normalize_rate(detail[:rate])
+          net = normalize_amount(detail[:net_amount])
+          tax = normalize_amount(detail[:amount])
+          return nil unless rate&.positive? && net&.positive? && tax && tax >= 0
+
+          [ rate, net, tax ]
+        end
+        values.sort
+      end
+
       def settlement_receipt_total_restored?(ai_receipt_attributes, candidates, lines, receipt_attributes)
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
         preferred_total = normalize_amount(ai_attrs[:total_amount]) || normalize_amount(candidates[:total_amount])
@@ -295,7 +360,7 @@ module Analysis
       def build_receipt_items_attributes(candidates, lines, ai_items, ai_name_completion_enabled: nil, skipped_negative_items: [])
         candidate_items = Array(candidates[:items])
         normalized_ai_items = normalize_items(ai_items)
-        applicable_ai_items = if candidate_items.empty? && azure_line_group_line_indexes(candidates).present?
+        applicable_ai_items = if candidate_items.empty? && reference_pricing_block_line_indexes(candidates).present?
           []
         else
           normalized_ai_items
@@ -309,7 +374,7 @@ module Analysis
               candidate_items
             end
           else
-            fallback_lines = lines_without_azure_line_group(lines, candidates)
+            fallback_lines = lines_without_reference_pricing_blocks(lines, candidates)
             fallback_items = build_items_from_lines(fallback_lines)
 
             if applicable_ai_items.present?
@@ -402,7 +467,8 @@ module Analysis
             normalized_item,
             tax_rate_confidence:,
             category_uncertain:,
-            quantity_fraction_invalid: quantity_fraction_invalid || quantity_source_uncertain
+            quantity_fraction_invalid: quantity_fraction_invalid || quantity_source_uncertain,
+            calculation_source_missing: price.nil? && original_line_total.nil? && line_total.nil?
           )
 
           {
@@ -438,29 +504,33 @@ module Analysis
             review_reasons: review_reasons,
             position_index: normalized_item[:position_index] || normalized_item[:index] || index + 1,
             confidence: normalize_confidence(normalized_item[:confidence]),
+            ocr_item_identity: normalize_ocr_item_identity(normalized_item[:ocr_item_identity]),
             **Analysis::SourceEvidenceAttributeExtractor.call(normalized_item)
           }
         end
       end
 
-      def lines_without_azure_line_group(lines, candidates)
-        excluded_indexes = azure_line_group_line_indexes(candidates)
+      def lines_without_reference_pricing_blocks(lines, candidates)
+        excluded_indexes = reference_pricing_block_line_indexes(candidates)
 
         Array(lines).each_with_index.filter_map do |line, index|
           line unless excluded_indexes.include?(index)
         end
       end
 
-      def mask_azure_line_group_lines(lines, candidates)
-        excluded_indexes = azure_line_group_line_indexes(candidates)
+      def mask_reference_pricing_block_lines(lines, candidates)
+        excluded_indexes = reference_pricing_block_line_indexes(candidates)
 
         Array(lines).each_with_index.map do |line, index|
           excluded_indexes.include?(index) ? "" : line
         end
       end
 
-      def azure_line_group_line_indexes(candidates)
-        Array(candidates[:reference_pricing_candidates]).filter_map do |candidate|
+      def reference_pricing_block_line_indexes(candidates)
+        explicit_indexes = Array(candidates[:reference_pricing_block_line_indexes]).select do |index|
+          index.is_a?(Integer) && index >= 0
+        end
+        line_group_indexes = Array(candidates[:reference_pricing_candidates]).filter_map do |candidate|
           normalized = candidate.respond_to?(:with_indifferent_access) ? candidate.with_indifferent_access : {}
           next unless normalized[:source_kind] == "azure_line_group"
 
@@ -469,7 +539,9 @@ module Analysis
           next unless reference_index.is_a?(Integer) && purchased_index == reference_index + 1
 
           [ reference_index, purchased_index ]
-        end.flatten.uniq
+        end.flatten
+
+        (explicit_indexes + line_group_indexes).uniq.sort
       end
 
       def build_receipt_adjustments_attributes(
@@ -538,7 +610,11 @@ module Analysis
             review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
           end
           explicit_tax_rate = normalize_rate(normalized[:tax_rate] || normalized[:tax_rate_hint])
-          inferred_tax_rate = infer_tax_rate_from_text(adjustment_text)
+          tax_context = lines_around(lines, source_line_index, before: 1, after: 1)
+          if adjustment_percentage_without_tax_evidence?(explicit_tax_rate, adjustment_text, tax_context)
+            explicit_tax_rate = nil
+          end
+          inferred_tax_rate = infer_tax_rate_from_text(Array(lines)[source_line_index])
           tax_rate = explicit_tax_rate || inferred_tax_rate
           tax_rate_source = :explicit if tax_rate
 
@@ -694,7 +770,7 @@ module Analysis
         end
       end
 
-      def build_receipt_payments_attributes(candidates, lines, receipt_total: nil)
+      def build_receipt_payments_attributes(candidates, lines, receipt_total: nil, review_reasons: [])
         total = normalize_amount(receipt_total || candidates[:total_amount])
         structured_payments = Array(candidates[:payments]).map do |payment|
           normalized_payment = payment.respond_to?(:deep_symbolize_keys) ? payment.deep_symbolize_keys : {}
@@ -709,11 +785,15 @@ module Analysis
         end
         return normalize_structured_payments_with_settlement(structured_payments, lines, total, tax_details: candidates[:tax_details]) if structured_payments.present?
 
+        payment_amount_max = ReceiptAmountService.receipt_payment_amount_max
         explicit_fallback_payments = fallback_payments_from_lines(
           lines,
           receipt_total: total,
-          fallback_method: candidates[:payment_method_text]
+          fallback_method: candidates[:payment_method_text],
+          payment_amount_max:,
+          review_reasons:
         )
+        return explicit_fallback_payments if review_reasons.present?
         return explicit_fallback_payments if payment_sum_matches_total?(explicit_fallback_payments, total)
 
         deposit_change_payment = cash_payment_from_deposit_change_lines(
@@ -725,11 +805,7 @@ module Analysis
         )
         return [ deposit_change_payment ] if deposit_change_payment.present?
 
-        fallback_payments_from_lines(
-          lines,
-          receipt_total: total,
-          fallback_method: candidates[:payment_method_text]
-        )
+        explicit_fallback_payments
       end
 
       def cash_payment_from_deposit_change_lines(lines, receipt_total, tax_details: [], allow_tax_detail_conflict: false)
@@ -845,8 +921,9 @@ module Analysis
         joined.match?(label_pattern)
       end
 
-      def fallback_payments_from_lines(lines, receipt_total: nil, fallback_method: nil)
+      def fallback_payments_from_lines(lines, receipt_total: nil, fallback_method: nil, payment_amount_max:, review_reasons: [])
         total = normalize_amount(receipt_total)&.to_i
+        zero_methods = zero_amount_payment_methods(lines)
         payments = Array(lines).each_with_index.filter_map do |line, index|
           point_payment = point_payment_from_payment_block(lines, index)
           next point_payment if point_payment.present?
@@ -856,11 +933,14 @@ module Analysis
           amount_info = fallback_payment_context_amount_with_source(lines, index, receipt_total: total)
           amount = amount_info&.fetch(:amount, nil)
           next unless amount&.positive?
+          next unless amount <= payment_amount_max
 
           method = cash_total_payment_line?(line) ? "cash" : fallback_payment_method_text(line)
-          method = nil if fallback_payment_amount_label_line?(line)
+          method = nil if fallback_payment_amount_label_line?(line) && !strong_fallback_payment_method?(method)
+          method_source = method.present? ? :explicit : :fallback
           method = fallback_method.presence if method.blank?
           next if method.blank?
+          next if method_source == :fallback && zero_methods.include?(payment_method_identity(method))
 
           {
             method: method,
@@ -868,13 +948,30 @@ module Analysis
             source_text: line.to_s.strip,
             source_line_index: index,
             source_index: index,
+            method_source: method_source,
             amount_source: amount_info[:source],
-            transaction_context: fallback_payment_transaction_context_line?(line)
+            transaction_context: fallback_payment_transaction_context_line?(line) || payment_block_context?(lines, index)
           }
         end
+        explicit_payments = payments.select do |payment|
+          payment[:method_source] != :fallback && reliable_total_match_payment_candidate?(payment)
+        end
+        payments = explicit_payments if explicit_payments.present?
         payments = deduplicate_fallback_payments(payments)
 
-        select_fallback_payments(payments, receipt_total: total)
+        select_fallback_payments(payments, receipt_total: total, review_reasons:)
+      end
+
+      def zero_amount_payment_methods(lines)
+        Array(lines).each_with_index.filter_map do |line, index|
+          next unless fallback_payment_context_line?(line)
+
+          method = payment_method_identity(fallback_payment_method_text(line))
+          next if method.blank?
+
+          amount_info = fallback_payment_context_amount_with_source(lines, index, receipt_total: nil)
+          method if amount_info&.fetch(:amount, nil) == 0
+        end.uniq
       end
 
       def point_payment_from_payment_block(lines, index)
@@ -1003,7 +1100,14 @@ module Analysis
         amount = fallback_payment_amount(neighbor_line, receipt_total: receipt_total)
         return nil if amount.blank?
 
-        source = fallback_payment_amount_label_line?(line) ? :amount_label_neighbor : :neighbor
+        source =
+          if fallback_payment_amount_label_line?(line)
+            :amount_label_neighbor
+          elsif explicit_money_amount_from_text(neighbor_line).present?
+            :neighbor
+          else
+            :bare_neighbor
+          end
         { amount: amount, source: source }
       end
 
@@ -1014,7 +1118,9 @@ module Analysis
       def cash_total_payment_amount(lines, index, receipt_total:)
         total = normalize_amount(receipt_total)&.to_i
         same_line_amount = fallback_payment_amount(Array(lines)[index], receipt_total: total)
+        return 0 if same_line_amount == 0
         return same_line_amount if cash_total_payment_amount_allowed?(same_line_amount, total)
+        return 0 if fallback_payment_amount(Array(lines)[index + 1], receipt_total: total) == 0
 
         nearby_total = nearby_receipt_total_amount(lines, index, total)
         return nearby_total if nearby_total.present?
@@ -1054,7 +1160,7 @@ module Analysis
         return nil if text.match?(/[▲△\-−]\s*[¥￥]?\s*\d/)
 
         matches = text.to_enum(:scan, profile.analysis_fallback_amount_candidate_pattern).map { Regexp.last_match.to_s }
-        amounts = matches.filter_map { |match| normalize_amount(match)&.to_i }.select(&:positive?)
+        amounts = matches.filter_map { |match| normalize_amount(match)&.to_i }.select { |amount| amount >= 0 }
         return nil if amounts.blank?
 
         total = normalize_amount(receipt_total)&.to_i
@@ -1110,7 +1216,7 @@ module Analysis
           text.match?(profile.analysis_fallback_payment_address_amount_noise_pattern)
       end
 
-      def select_fallback_payments(payments, receipt_total:)
+      def select_fallback_payments(payments, receipt_total:, review_reasons: [])
         candidates = Array(payments)
         total = normalize_amount(receipt_total)&.to_i
         exact_matches =
@@ -1121,6 +1227,10 @@ module Analysis
           else
             []
           end
+        if exact_matches.map { |payment| payment_method_identity(payment[:method]) }.uniq.size > 1
+          review_reasons << "payment_method_uncertain"
+          return []
+        end
 
         selected =
           if exact_matches.present?
@@ -1130,11 +1240,18 @@ module Analysis
                 candidates.all? { |payment| reliable_total_match_payment_candidate?(payment) }
             candidates
           elsif total&.positive?
-            candidates.select { |payment| payment[:transaction_context] || voucher_payment_text?(payment[:method]) }
+            candidates.select do |payment|
+              !bare_neighbor_payment_candidate?(payment) &&
+                (payment[:transaction_context] || voucher_payment_text?(payment[:method]))
+            end
           else
-            candidates
+            candidates.reject { |payment| bare_neighbor_payment_candidate?(payment) }
           end
-        selected.map { |payment| payment.except(:source_index, :transaction_context, :amount_source) }
+        selected.map { |payment| payment.except(:source_index, :transaction_context, :amount_source, :method_source) }
+      end
+
+      def bare_neighbor_payment_candidate?(payment)
+        payment[:amount_source] == :bare_neighbor
       end
 
       def reliable_total_match_payment_candidate?(payment)
@@ -1147,9 +1264,11 @@ module Analysis
       end
 
       def strong_fallback_payment_method?(method)
-        normalize_detected_payment_method(
-          Analysis::ReceiptFallbackPatterns.detect_payment_method(method)
-        ).present?
+        payment_method_identity(method).present?
+      end
+
+      def payment_method_identity(method)
+        normalize_detected_payment_method(Analysis::ReceiptFallbackPatterns.detect_payment_method(method))
       end
 
       def positive_amounts_from_text(text)
@@ -1196,16 +1315,16 @@ module Analysis
         end
       end
 
-      def recover_receipt_tax_details_from_lines(tax_details, lines, receipt_attributes)
+      def recover_receipt_tax_details_result_from_lines(tax_details, lines, receipt_attributes)
         tax_details = apply_tax_rate_target_labels_from_lines(tax_details, lines)
-        return tax_details if complete_multi_rate_tax_details?(tax_details)
+        return { tax_details: tax_details } if complete_multi_rate_tax_details?(tax_details)
 
         inferred_tax_details = tax_details_from_rate_targets(lines, receipt_attributes, tax_details)
         inferred_tax_details = tax_details_from_rate_summary_lines(lines, receipt_attributes, tax_details) if inferred_tax_details.blank?
         inferred_tax_details = tax_details_from_tax_section_pairs(lines, receipt_attributes) if inferred_tax_details.blank?
-        return tax_details if inferred_tax_details.blank?
+        return { tax_details: tax_details } if inferred_tax_details.blank?
 
-        inferred_tax_details
+        { tax_details: inferred_tax_details, tax_detail_amount_basis: "net" }
       end
 
       def apply_tax_rate_target_labels_from_lines(tax_details, lines)
@@ -1336,6 +1455,7 @@ module Analysis
 
       def tax_target_rate_candidates_from_line(line)
         text = line.to_s.unicode_normalize(:nfkc)
+        return [] unless text.match?(profile.analysis_tax_summary_line_pattern)
         return [] unless text.match?(profile.analysis_tax_target_marker_pattern)
         return [] if text.match?(profile.analysis_tax_amount_description_pattern)
 
@@ -1345,10 +1465,10 @@ module Analysis
       end
 
       def tax_rate_candidates_from_text_number(raw_rate)
-        candidates = [ normalize_rate(raw_rate) ].compact
+        candidates = [ normalize_rate(raw_rate, percentage: true) ].compact
         if raw_rate.to_s.include?(".")
           decimal_tail = raw_rate.to_s.split(".").last
-          candidates << normalize_rate(decimal_tail) if decimal_tail.match?(/\A(?:8|10)\z/)
+          candidates << normalize_rate(decimal_tail, percentage: true) if decimal_tail.match?(/\A(?:8|10)\z/)
         end
 
         candidates.select(&:positive?).uniq
@@ -1356,7 +1476,8 @@ module Analysis
 
       def tax_section_amount_entries(lines, first_rate_index)
         section = Array(lines)[first_rate_index..].to_a.take_while do |line|
-          !line.to_s.match?(profile.analysis_tax_total_line_pattern)
+          line.to_s.unicode_normalize(:nfkc).match?(profile.analysis_tax_summary_continuation_line_pattern) &&
+            !line.to_s.match?(profile.analysis_tax_total_line_pattern)
         end
         section.each_with_index.flat_map do |line, offset|
           positive_amounts_from_text(line).select { |amount| amount > 20 }.map do |amount|
@@ -1479,14 +1600,18 @@ module Analysis
 
       def tax_summary_rate_from_line(line)
         text = line.to_s.unicode_normalize(:nfkc)
+        return nil unless text.match?(profile.analysis_tax_summary_continuation_line_pattern)
         return nil if text.match?(profile.analysis_external_tax_description_pattern)
 
         match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
-        normalize_rate(match[1]) if match
+        normalize_rate(match[1], percentage: true) if match
       end
 
       def tax_summary_gross_amount(lines, index, rate, tax)
-        amounts = Array(lines)[index, 4].to_a.flat_map do |line|
+        summary_lines = Array(lines)[index, 4].to_a.take_while do |line|
+          line.to_s.unicode_normalize(:nfkc).match?(profile.analysis_tax_summary_continuation_line_pattern)
+        end
+        amounts = summary_lines.flat_map do |line|
           positive_amounts_from_text(line).select { |amount| amount > 20 }
         end
 
@@ -1505,7 +1630,10 @@ module Analysis
 
       def lines_window_until_next_tax_target(lines, index)
         Array(lines)[index, 4].to_a.take_while.with_index do |line, offset|
-          offset.zero? || tax_target_rate_from_line(line).blank?
+          offset.zero? || (
+            tax_target_rate_from_line(line).blank? &&
+              line.to_s.unicode_normalize(:nfkc).match?(profile.analysis_tax_summary_continuation_line_pattern)
+          )
         end
       end
 
@@ -2027,6 +2155,7 @@ module Analysis
           tax_rate_reason: name_item[:tax_rate_reason].presence || amount_item[:tax_rate_reason],
           position_index: amount_item[:position_index] || amount_item[:index] || name_item[:position_index] || name_item[:index],
           index: amount_item[:index] || amount_item[:position_index] || name_item[:index] || name_item[:position_index],
+          ocr_item_identity: nil,
           confidence: confidence,
           needs_review: review_reasons.present?,
           review_reasons: review_reasons
@@ -2189,10 +2318,26 @@ module Analysis
       end
 
       def infer_tax_rate_from_text(text)
-        match = text.to_s.unicode_normalize(:nfkc).match(profile.analysis_tax_rate_hint_pattern)
-        return nil unless match
+        source = text.to_s.unicode_normalize(:nfkc)
+        rates = source.to_enum(:scan, profile.ocr_item_tax_rate_pattern).filter_map do
+          match = Regexp.last_match
+          next if match[0].strip.match?(/\A[0-9]+(?:\.[0-9]+)?\s*%\z/)
 
-        BigDecimal(match[1]) / 100
+          normalize_rate(BigDecimal(match[:rate]) / 100)
+        end.uniq
+        rates.one? ? rates.first : nil
+      end
+
+      def adjustment_percentage_without_tax_evidence?(rate, text, context_lines)
+        return false if rate.nil?
+        return false if context_lines.any? { |line| infer_tax_rate_from_text(line) }
+        return false unless text.match?(profile.ocr_adjustment_discount_label_pattern) || text.match?(profile.ocr_adjustment_surcharge_label_pattern)
+
+        context_lines.any? do |line|
+          line.to_s.unicode_normalize(:nfkc).scan(/([0-9]+(?:\.[0-9]+)?)\s*%/).any? do |percentage|
+            BigDecimal(percentage.first) / 100 == rate
+          end
+        end
       end
 
       def non_taxable_item_text?(raw_text, item)
@@ -2217,6 +2362,52 @@ module Analysis
 
       def normalize_country_region(value)
         value.to_s.strip.upcase.presence
+      end
+
+      def normalize_ocr_item_identity(value)
+        identity = value.to_s
+        return nil if identity.bytesize > OCR_ITEM_IDENTITY_MAX_BYTES
+        return identity if identity.match?(/\Aazure_structured_item_i\d+_s\d+_e\d+\z/)
+
+        identity if valid_ocr_item_layout_identity?(identity) || valid_ocr_calculation_layout_identity?(identity)
+      end
+
+      def valid_ocr_calculation_layout_identity?(identity)
+        match = OCR_CALCULATION_LAYOUT_IDENTITY_PATTERN.match(identity)
+        return false if match.nil?
+
+        name_line_index = Integer(match[:name_line_index], 10)
+        span_start = Integer(match[:span_start], 10)
+        name_span_end = Integer(match[:name_span_end], 10)
+        span_end = Integer(match[:span_end], 10)
+
+        name_line_index.between?(0, OCR_ITEM_LAYOUT_MAX_LINE_INDEX) &&
+          span_start.between?(0, OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN) &&
+          span_end.between?(1, OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN) &&
+          span_start < name_span_end && name_span_end < span_end
+      rescue ArgumentError
+        false
+      end
+
+      def valid_ocr_item_layout_identity?(identity)
+        match = OCR_ITEM_LAYOUT_IDENTITY_PATTERN.match(identity)
+        return false if match.nil?
+
+        line_indexes = %i[
+          name_line_index
+          reference_line_index
+          quantity_line_index
+          total_line_index
+        ].map { |key| Integer(match[key], 10) }
+        span_start = Integer(match[:provider_span_start], 10)
+        span_end = Integer(match[:provider_span_end], 10)
+
+        line_indexes.all? { |index| index.between?(0, OCR_ITEM_LAYOUT_MAX_LINE_INDEX) } &&
+          span_start.between?(0, OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN) &&
+          span_end.between?(1, OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN) &&
+          span_end > span_start
+      rescue ArgumentError
+        false
       end
 
       def normalize_currency_code(value)
@@ -2286,6 +2477,7 @@ module Analysis
             original_line_total: candidate_item[:original_line_total],
             discount_amount: candidate_item[:discount_amount],
             discount_rate: candidate_item[:discount_rate],
+            ocr_item_identity: normalize_ocr_item_identity(candidate_item[:ocr_item_identity]),
             position_index: normalize_item_index(candidate_item[:position_index] || candidate_item["position_index"]) || candidate_index
           )
         end
@@ -2381,6 +2573,7 @@ module Analysis
       def final_item_needs_review(normalized_item, ai_items_present:, tax_rate:, tax_rate_confidence:, review_reasons:, category_uncertain:, quantity_fraction_invalid: false)
         return true if category_uncertain
         return true if quantity_fraction_invalid
+        return true if Array(review_reasons).include?("item_pricing_mode_uncertain")
         return true if tax_rate.blank? && tax_rate_confidence_low?(tax_rate_confidence)
 
         if tax_rate.present? && tax_rate_confidence_low?(tax_rate_confidence)
@@ -2395,10 +2588,11 @@ module Analysis
         end
       end
 
-      def item_review_reasons(normalized_item, tax_rate_confidence:, category_uncertain: false, quantity_fraction_invalid: false)
+      def item_review_reasons(normalized_item, tax_rate_confidence:, category_uncertain: false, quantity_fraction_invalid: false, calculation_source_missing: false)
         normalize_review_reasons(normalized_item[:review_reasons]).tap do |reasons|
           reasons << "item_category_uncertain" if category_uncertain
           reasons << "item_quantity_uncertain" if quantity_fraction_invalid
+          reasons << "item_pricing_mode_uncertain" if calculation_source_missing
           reasons << "item_tax_rate_uncertain" if tax_rate_confidence_low?(tax_rate_confidence)
           reasons.uniq!
         end
@@ -2540,10 +2734,13 @@ module Analysis
         detect_payment_method_from_payments(candidates[:payments])
       end
 
-      def reconcile_payment_method_with_payments(current_method, payments, adjustments: [], lines: [], receipt_total: nil)
+      def reconcile_payment_method_with_payments(current_method, payments, adjustments: [], lines: [], receipt_total: nil, review_reasons: [])
+        return nil if review_reasons.include?("payment_method_uncertain")
+
         current = normalize_detected_payment_method(current_method)
         voucher_payment_present = Array(payments).any? { |payment| voucher_payment_text?(payment[:method]) }
         detected_from_payments = detect_payment_method_from_payments(payments)
+        current = nil if detected_from_payments != current && zero_amount_payment_methods(lines).include?(current)
         if voucher_payment_present
           return "other" if cash_payments_are_settlement_difference?(payments, lines)
           return detected_from_payments if detected_from_payments.present?
@@ -2629,11 +2826,13 @@ module Analysis
         ReceiptAmountService.parse_amount_or_nil(value)
       end
 
-      def normalize_rate(value)
+      def normalize_rate(value, percentage: false)
         return nil if value.blank?
 
-        rate = value.is_a?(Numeric) ? value.to_d : value.to_s.delete("%").to_d
-        rate > 1 ? rate / 100 : rate
+        text = value.to_s.unicode_normalize(:nfkc)
+        percentage ||= text.include?("%")
+        rate = value.is_a?(Numeric) ? value.to_d : text.delete("%").to_d
+        percentage || rate > 1 ? rate / 100 : rate
       rescue ArgumentError
         nil
       end

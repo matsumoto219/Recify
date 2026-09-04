@@ -46,7 +46,8 @@ RSpec.describe ReferencePricingProfileBoundary::Scanner do
         # 小計はprofile側で所有する
         AMOUNT_PATTERN = /[0-9¥￥$€£]|円/
         GENERIC_UNICODE_PATTERN = /[\\p{L}\\p{N}\\p{Zs}\\p{P}\\p{Bidi_Control}]/
-        PROVIDER_FIELDS = %w[Total TotalPrice]
+        PROVIDER_FIELDS = %w[Subtotal Total TotalPrice]
+        PROVIDER_PATHS = %w[documents[0].fields.Subtotal documents[0].fields.Total]
       RUBY
     ) do |scanner|
       aggregate_failures do
@@ -70,6 +71,21 @@ RSpec.describe ReferencePricingProfileBoundary::Scanner do
     ) do |scanner|
       aggregate_failures do
         expect(scanner.issues).not_to be_empty
+        expect(scanner.violations).to be_empty
+      end
+    end
+  end
+
+  it "実行時に決まるprofile constant pathを直接profile参照へ誤帰属せず解析を継続する" do
+    with_scanner(
+      "app/services/ocr/response_parser/reference_pricing_candidate_extractor.rb" => <<~RUBY
+        profile_owner = Object
+        PROFILE_PATTERN = profile_owner::Japan::PATTERN
+        profile_owner::Registry.fetch("JPN")
+      RUBY
+    ) do |scanner|
+      aggregate_failures do
+        expect(scanner.issues).to be_empty
         expect(scanner.violations).to be_empty
       end
     end

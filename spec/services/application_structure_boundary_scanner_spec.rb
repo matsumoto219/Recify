@@ -84,6 +84,20 @@ RSpec.describe ApplicationStructureBoundary::Scanner do
     end
   end
 
+  it "実行時に決まるconstant pathをroot APIへ誤帰属せず解析を継続する" do
+    with_scanner(
+      files: {
+        "app/services/analysis.rb" => "module Analysis; end\n",
+        "app/controllers/reports_controller.rb" => "owner = Object\nowner::Unknown.call\n"
+      }
+    ) do |scanner|
+      aggregate_failures do
+        expect(scanner.analysis_issues).to be_empty
+        expect(scanner.external_methods_for("analysis.rb", "Analysis")).to be_empty
+      end
+    end
+  end
+
   it "ReceiptとReceiptAnalysisRunへの直接status writerをreceiver付きで検知する" do
     with_scanner(
       files: {

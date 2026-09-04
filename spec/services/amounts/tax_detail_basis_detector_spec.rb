@@ -1,6 +1,40 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::TaxDetailBasisDetector do
+  it '正規化済みnet対象額はgrossとも算術一致しても税抜として扱う' do
+    details = described_class.call([
+      { rate: BigDecimal('0.01'), net_amount: 108, amount: 1, description: '1%対象', tax_detail_amount_basis: 'net' }
+    ])
+
+    expect(details.first).to include(basis: :net, target_net_amount: 108, target_gross_amount: 109)
+  end
+
+  it '税込対象額から正規化したnetは税込丸めで検証しても所有を維持する' do
+    details = described_class.call([
+      { rate: BigDecimal('0.27'), net_amount: 86, amount: 22, description: '27%対象', tax_detail_amount_basis: 'net' }
+    ])
+
+    expect(details.first).to include(basis: :net, target_net_amount: 86, target_gross_amount: 108)
+  end
+
+  it 'net basisでも税額不一致や不完全な値から対象額を確定しない' do
+    details = described_class.call([
+      { rate: BigDecimal('0.01'), net_amount: 108, amount: 4, tax_detail_amount_basis: 'net' },
+      { rate: BigDecimal('0'), net_amount: 108, amount: 1, tax_detail_amount_basis: 'net' },
+      { rate: BigDecimal('0.01'), net_amount: 0, amount: 1, tax_detail_amount_basis: 'net' }
+    ])
+
+    expect(details.map { |detail| detail[:basis] }).to eq(%i[unknown unknown tax_only])
+  end
+
+  it '正規化済みnetの税額0円も再解釈せず保持する' do
+    details = described_class.call([
+      { rate: BigDecimal('0.01'), net_amount: 3, amount: 0, description: '1%対象', tax_detail_amount_basis: 'net' }
+    ])
+
+    expect(details.first).to include(basis: :net, target_net_amount: 3, target_gross_amount: 3)
+  end
+
   it '2019年サンプルコンビニの税抜小計と最終税率対象額を区別する' do
     details = described_class.call([
       { rate: BigDecimal('0.08'), net_amount: 270, amount: 21, description: '8%対象' },

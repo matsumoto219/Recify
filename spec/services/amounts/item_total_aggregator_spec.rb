@@ -181,6 +181,31 @@ RSpec.describe Amounts::ItemTotalAggregator do
       )
     end
 
+    it 'projected extensionへabsolute discountを1回だけ適用し未入力rateを推測しない' do
+      result = aggregate(
+        [
+          reference_item(
+            reference_price_amount: '149',
+            reference_quantity: '1',
+            reference_quantity_unit_code: 'liter',
+            quantity: '50.03',
+            quantity_unit_code: 'liter',
+            discount_amount: 150,
+            discount_rate: nil
+          )
+        ],
+        context: :analysis
+      )
+
+      expect(result).to include(total: 7_304)
+      expect(result[:items].first).to include(
+        original_line_total: 7_454,
+        discount_amount: 150,
+        discount_rate: nil,
+        line_total: 7_304
+      )
+    end
+
     it 'gross/net metadataをtax projectionせずformula結果と一緒に保持する' do
       items = %w[gross net].map do |tax_inclusion|
         reference_item(reference_price_tax_inclusion: tax_inclusion)

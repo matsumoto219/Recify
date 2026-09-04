@@ -6,7 +6,8 @@ RSpec.describe GeneratedReceipts::TextRenderer do
   def load_case(name)
     path = [
       GeneratedReceipts::CASES_DIR,
-      GeneratedReceipts::MEASUREMENT_CASES_DIR
+      GeneratedReceipts::MEASUREMENT_CASES_DIR,
+      GeneratedReceipts::CALCULATION_MODE_CASES_DIR
     ].map { |directory| File.join(directory, "#{name}.json") }
       .find { |candidate| File.file?(candidate) }
 
@@ -17,7 +18,8 @@ RSpec.describe GeneratedReceipts::TextRenderer do
     aggregate_failures do
       expect(GeneratedReceipts.legacy_case_paths.size).to eq(112)
       expect(GeneratedReceipts.measurement_case_paths.size).to eq(10)
-      expect(GeneratedReceipts.case_paths.size).to eq(122)
+      expect(GeneratedReceipts.calculation_mode_case_paths.size).to eq(43)
+      expect(GeneratedReceipts.case_paths.size).to eq(165)
     end
 
     GeneratedReceipts.case_paths.each do |path|
@@ -25,6 +27,18 @@ RSpec.describe GeneratedReceipts::TextRenderer do
       text_path = File.join(GeneratedReceipts::TEXT_DIR, "#{case_data.fetch('case_id')}.txt")
 
       expect(File.read(text_path)).to eq(described_class.call(case_data))
+    end
+  end
+
+  it "renders mixed calculation-mode source lines in item-index order" do
+    text = described_class.call(load_case("g143_calc_mixed_three_modes"))
+
+    aggregate_failures do
+      expect(text).to include("@150円 × 2個")
+      expect(text).to include("税込 398円/100g")
+      expect(text).to include("サンプル固定C 500円")
+      expect(text.index("@150円 × 2個")).to be < text.index("税込 398円/100g")
+      expect(text.index("税込 398円/100g")).to be < text.index("サンプル固定C 500円")
     end
   end
 

@@ -68,58 +68,91 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     Regexp::FIXEDENCODING
   ).freeze
   PURCHASED_QUANTITY_PATTERN = /(?<![0-9０-９])(?<quantity>#{DECIMAL_SOURCE})[ \t]*(?<unit>#{UNIT_SOURCE})/u
+  STRUCTURED_PARENTHETICAL_QUANTITY_PATTERN = /\A[ \t]*(?<quantity>#{DECIMAL_SOURCE})[ \t]*(?<unit>#{UNIT_SOURCE})(?<open>[（(])\z/u
   PRINTED_AMOUNT_PATTERN = /[¥￥]?[ \t]*(?<amount>#{DECIMAL_SOURCE})(?:[ \t]*円)?/u
   DECIMAL_TOKEN_PATTERN = /(?<![0-9０-９])(?<decimal>#{DECIMAL_SOURCE})(?![0-9０-９])/u
   UNIT_TOKEN_PATTERN = /#{UNIT_SOURCE}/u
   CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u0084\u0086-\u009F\u200B\uFEFF\p{Bidi_Control}]/.freeze
   LINE_BREAK_PATTERN = /[\n\r\u0085\u2028\u2029]/.freeze
 
-  def self.call(items:, profile:, projection: nil, allow_separated_tax_label: false)
-    new(items:, profile:, projection:, allow_separated_tax_label:).call
+  def self.call(
+    items:,
+    profile:,
+    content: nil,
+    string_index_type: "utf16CodeUnit",
+    projection: nil,
+    allow_separated_tax_label: false
+  )
+    new(
+      items:,
+      profile:,
+      content:,
+      string_index_type:,
+      projection:,
+      allow_separated_tax_label:
+    ).call
   end
 
-  def initialize(items:, profile:, projection: nil, allow_separated_tax_label: false)
+  def initialize(
+    items:,
+    profile:,
+    content: nil,
+    string_index_type: "utf16CodeUnit",
+    projection: nil,
+    allow_separated_tax_label: false
+  )
     @items = items
     @profile = profile
     @allow_separated_tax_label = allow_separated_tax_label
+    @mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: string_index_type)
+    @provider_content_supplied = !content.nil?
+    @provider_content = raw_mappable_text(
+      content,
+      max_bytes: Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
+    )&.freeze if @provider_content_supplied
     @projection = projection || ->(**attributes) {
       ReceiptAmountService.reference_item_extension_projection(**attributes)
     }
   end
 
   def call
+    return [] if mapper.nil?
+    return [] if provider_content_supplied && provider_content.nil?
     return [] unless items.is_a?(Array)
 
     bounded_items = items.first(MAX_ITEMS)
-    parent_spans = bounded_items.map { |item| item.is_a?(Hash) ? single_span(item) : nil }
+    parent_span_sets = bounded_items.map do |item|
+      item.is_a?(Hash) ? bounded_parent_spans(item) : nil
+    rescue EncodingError, TypeError, ArgumentError
+      nil
+    end
+    item_contexts = bounded_items.map.with_index do |item, item_index|
+      item.is_a?(Hash) ? build_item_context(item, spans: parent_span_sets[item_index]) : nil
+    rescue EncodingError, TypeError, ArgumentError
+      nil
+    end
     candidates = bounded_items.filter_map.with_index do |item, item_index|
-      extract_candidate(item, item_index)
+      extract_candidate(item, item_index, item_contexts[item_index])
     rescue EncodingError, TypeError, ArgumentError
       nil
     end
 
-    mark_item_identity_conflicts(candidates, parent_spans)
+    mark_item_identity_conflicts(candidates, parent_span_sets)
   end
 
   private
 
-  attr_reader :items, :profile, :projection, :allow_separated_tax_label
+  attr_reader :items, :mapper, :profile, :projection, :provider_content,
+    :provider_content_supplied, :allow_separated_tax_label
 
-  def extract_candidate(item, item_index)
-    return unless item.is_a?(Hash)
-
-    item_content = normalized_mappable_text(item["content"], max_bytes: MAX_ITEM_CONTENT_BYTES)
-    parent_span = single_span(item)
-    return if item_content.nil? || parent_span.nil?
-    return unless utf16_length(item_content) <= span_length(parent_span)
+  def extract_candidate(item, item_index, item_context)
+    return unless item.is_a?(Hash) && item_context
 
     value_object = item["valueObject"]
     value_object = {} unless value_object.is_a?(Hash)
     reference_matches, evidence_errors = reference_matches(
-      item,
       value_object,
-      item_content,
-      parent_span,
+      item_context,
       item_index
     )
     return if reference_matches.empty?
@@ -134,8 +167,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
 
     purchased_matches, purchased_evidence_errors = purchased_quantity_matches(
       value_object,
-      item_content,
-      parent_span,
+      item_context,
       item_index,
       reference_match
     )
@@ -156,12 +188,13 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       reasons << "incompatible_unit_dimension"
     end
 
-    printed_line_total = printed_line_total_component(value_object, parent_span, item_index)
+    printed_line_total = printed_line_total_component(value_object, item_context, item_index)
     reasons.concat(structured_value_conflict_reasons(
       value_object: value_object,
       reference_price: reference_price,
       purchased_quantity: purchased_quantity,
-      printed_line_total: printed_line_total
+      printed_line_total: printed_line_total,
+      parenthetical_count_unit_validated: reference_match[:parenthetical_count_unit_validated]
     ))
     reasons = normalize_reasons(reasons)
     corroboration = build_corroboration(
@@ -191,7 +224,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     }
   end
 
-  def reference_matches(item, value_object, item_content, parent_span, item_index)
+  def reference_matches(value_object, item_context, item_index)
     matches = []
     evidence_errors = []
     raw_match_budget = { remaining: MAX_REFERENCE_EXPRESSION_MATCHES, exceeded: false }
@@ -200,19 +233,19 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     field_match_kind = nil
 
     if price_field.is_a?(Hash) && content_supplied?(price_field["content"])
-      field_content = normalized_mappable_text(price_field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
-      field_span = single_span(price_field)
+      mapped_price = bounded_structured_field(price_field, item_context:)
 
-      if field_content.nil? || field_span.nil? || !span_within?(field_span, parent_span) ||
-          utf16_length(field_content) > span_length(field_span)
+      if mapped_price.nil?
         evidence_errors << "evidence_outside_item"
       else
+        field_content = mapped_price.fetch(:content)
+        field_span = mapped_price.fetch(:span)
         price_matches = scan_reference_expressions(
           field_content,
           base_offset: span_offset(field_span),
           source_field_path: "documents[0].fields.Items[#{item_index}].Price",
           item_index: item_index,
-          parent_span: parent_span,
+          item_context: item_context,
           priority: 0,
           raw_match_budget: raw_match_budget
         )
@@ -228,8 +261,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     if matches.empty?
       structured_match = structured_measurement_unit_price_match(
         value_object:,
-        item_content:,
-        parent_span:,
+        item_context:,
         item_index:
       )
       if structured_match
@@ -238,15 +270,17 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       end
     end
 
-    item_matches = scan_reference_expressions(
-      item_content,
-      base_offset: span_offset(parent_span),
-      source_field_path: "documents[0].fields.Items[#{item_index}]",
-      item_index: item_index,
-      parent_span: parent_span,
-      priority: 1,
-      raw_match_budget: raw_match_budget
-    )
+    item_matches = item_context.fetch(:segments).flat_map do |segment|
+      scan_reference_expressions(
+        segment.fetch(:content),
+        base_offset: span_offset(segment.fetch(:span)),
+        source_field_path: "documents[0].fields.Items[#{item_index}]",
+        item_index: item_index,
+        item_context: item_context,
+        priority: 1,
+        raw_match_budget: raw_match_budget
+      )
+    end
     if discount_price_span
       item_matches.reject! do |match|
         ranges_overlap?(
@@ -259,8 +293,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       item_matches.reject! { |match| match[:discount_context] }
     elsif field_match_kind.nil? && structured_measurement_context?(
       value_object,
-      item_content:,
-      parent_span:,
+      item_context:,
       item_index:
     )
       item_matches.reject! { |match| match[:discount_context] }
@@ -272,8 +305,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     if matches.empty?
       incomplete = scan_incomplete_reference_expression(
         price_field,
-        item_content: item_content,
-        parent_span: parent_span,
+        item_context: item_context,
         item_index: item_index
       )
       matches << incomplete if incomplete
@@ -282,11 +314,12 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     [ deduplicate_reference_matches(matches), evidence_errors ]
   end
 
-  def scan_incomplete_reference_expression(price_field, item_content:, parent_span:, item_index:)
-    field_content = price_field.is_a?(Hash) ?
-      normalized_mappable_text(price_field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES) : nil
-    field_span = price_field.is_a?(Hash) ? single_span(price_field) : nil
-    if field_content && !field_content.empty? && field_span && span_within?(field_span, parent_span)
+  def scan_incomplete_reference_expression(price_field, item_context:, item_index:)
+    mapped_price = price_field.is_a?(Hash) ?
+      bounded_structured_field(price_field, item_context:) : nil
+    if mapped_price
+      field_content = mapped_price.fetch(:content)
+      field_span = mapped_price.fetch(:span)
       match_data = field_content.match(INCOMPLETE_REFERENCE_PATTERN)
       return build_incomplete_reference_match(
         match_data,
@@ -298,17 +331,22 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       ) if match_data
     end
 
-    match_data = item_content.match(INCOMPLETE_REFERENCE_PATTERN)
-    return unless match_data
+    item_context.fetch(:segments).each do |segment|
+      segment_content = segment.fetch(:content)
+      match_data = segment_content.match(INCOMPLETE_REFERENCE_PATTERN)
+      next unless match_data
 
-    build_incomplete_reference_match(
-      match_data,
-      item_content,
-      base_offset: span_offset(parent_span),
-      source_field_path: "documents[0].fields.Items[#{item_index}]",
-      item_index: item_index,
-      priority: 1
-    )
+      return build_incomplete_reference_match(
+        match_data,
+        segment_content,
+        base_offset: span_offset(segment.fetch(:span)),
+        source_field_path: "documents[0].fields.Items[#{item_index}]",
+        item_index: item_index,
+        priority: 1
+      )
+    end
+
+    nil
   end
 
   def build_incomplete_reference_match(match_data, text, base_offset:, source_field_path:, item_index:, priority:)
@@ -357,7 +395,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     base_offset:,
     source_field_path:,
     item_index:,
-    parent_span:,
+    item_context:,
     priority:,
     raw_match_budget:
   )
@@ -378,15 +416,13 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         item_index:,
         priority:
       )
-      matches << match if range_within_parent?(match[:expression_start], match[:expression_end], parent_span)
+      matches << match if range_within_parent?(match[:expression_start], match[:expression_end], item_context)
     end
 
     matches
   end
 
-  def structured_measurement_unit_price_match(value_object:, item_content:, parent_span:, item_index:)
-    return unless utf16_length(item_content) == span_length(parent_span)
-
+  def structured_measurement_unit_price_match(value_object:, item_context:, item_index:)
     fields = %w[Price Quantity QuantityUnit TotalPrice].to_h do |field_name|
       [ field_name, value_object[field_name] ]
     end
@@ -394,45 +430,42 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
 
     price = structured_decimal_lexeme(
       fields.fetch("Price"),
-      item_content:,
-      parent_span:,
+      item_context:,
       item_index:,
       field_name: "Price"
     )
     purchased = structured_decimal_lexeme(
       fields.fetch("Quantity"),
-      item_content:,
-      parent_span:,
+      item_context:,
       item_index:,
       field_name: "Quantity"
     )
     printed_total = structured_decimal_lexeme(
       fields.fetch("TotalPrice"),
-      item_content:,
-      parent_span:,
+      item_context:,
       item_index:,
       field_name: "TotalPrice"
     )
-    unit = structured_measurement_unit_lexeme(
-      fields.fetch("QuantityUnit"),
-      item_content:,
-      parent_span:,
+    unit = structured_measurement_unit_for_quantity(
+      quantity_field: fields.fetch("Quantity"),
+      quantity_unit_field: fields.fetch("QuantityUnit"),
+      item_context:,
       item_index:
     )
     return if [ price, purchased, printed_total, unit ].any?(&:nil?)
     return if discount_adjustment_text?(price[:content])
     return if structured_quantity_conflicts_with_description?(
       value_object["Description"],
-      item_content:,
       purchased:,
       unit:,
       purchased_span: purchased[:field_span],
       unit_span: unit[:field_span],
-      parent_span:
+      item_context:
     )
     return unless structured_currency_value_matches?(fields.fetch("Price"), price[:amount])
     return unless structured_number_value_matches?(fields.fetch("Quantity"), purchased[:amount])
-    return unless structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code])
+    return unless unit[:parenthetical_count_unit_validated] ||
+      structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code])
     return unless structured_currency_value_matches?(fields.fetch("TotalPrice"), printed_total[:amount])
     return unless structured_formula_agrees?(price:, purchased:, unit:, printed_total:)
 
@@ -458,6 +491,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       source_text: price[:content],
       discount_context: false,
       structured_unit_price: true,
+      parenthetical_count_unit_validated: unit[:parenthetical_count_unit_validated] == true,
       structured_purchased_match: {
         quantity_text: purchased[:amount],
         unit_text: unit[:text],
@@ -467,9 +501,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     }
   end
 
-  def structured_measurement_context?(value_object, item_content:, parent_span:, item_index:)
-    return false unless utf16_length(item_content) == span_length(parent_span)
-
+  def structured_measurement_context?(value_object, item_context:, item_index:)
     fields = %w[Quantity QuantityUnit TotalPrice].to_h do |field_name|
       [ field_name, value_object[field_name] ]
     end
@@ -477,42 +509,123 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
 
     purchased = structured_decimal_lexeme(
       fields.fetch("Quantity"),
-      item_content:,
-      parent_span:,
+      item_context:,
       item_index:,
       field_name: "Quantity"
     )
     printed_total = structured_decimal_lexeme(
       fields.fetch("TotalPrice"),
-      item_content:,
-      parent_span:,
+      item_context:,
       item_index:,
       field_name: "TotalPrice"
     )
-    unit = structured_measurement_unit_lexeme(
-      fields.fetch("QuantityUnit"),
-      item_content:,
-      parent_span:,
+    unit = structured_measurement_unit_for_quantity(
+      quantity_field: fields.fetch("Quantity"),
+      quantity_unit_field: fields.fetch("QuantityUnit"),
+      item_context:,
       item_index:
     )
     return false if [ purchased, printed_total, unit ].any?(&:nil?)
     return false if structured_quantity_conflicts_with_description?(
       value_object["Description"],
-      item_content:,
       purchased:,
       unit:,
       purchased_span: purchased[:field_span],
       unit_span: unit[:field_span],
-      parent_span:
+      item_context:
     )
 
     structured_number_value_matches?(fields.fetch("Quantity"), purchased[:amount]) &&
-      structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code]) &&
+      (unit[:parenthetical_count_unit_validated] ||
+        structured_unit_value_matches?(fields.fetch("QuantityUnit"), unit[:unit_code])) &&
       structured_currency_value_matches?(fields.fetch("TotalPrice"), printed_total[:amount])
   end
 
-  def structured_decimal_lexeme(field, item_content:, parent_span:, item_index:, field_name:)
-    mapped_field = exact_structured_field(field, item_content:, parent_span:)
+  def structured_measurement_unit_for_quantity(quantity_field:, quantity_unit_field:, item_context:, item_index:)
+    mapped_quantity = exact_structured_field(quantity_field, item_context:)
+    return if mapped_quantity.nil?
+
+    quantity_content = mapped_quantity.fetch(:content)
+    return structured_measurement_unit_lexeme(quantity_unit_field, item_context:, item_index:) unless
+      quantity_content.end_with?("(", "（")
+
+    structured_parenthetical_quantity_unit_lexeme(
+      mapped_quantity:,
+      quantity_unit_field:,
+      item_context:,
+      item_index:
+    )
+  end
+
+  def structured_parenthetical_quantity_unit_lexeme(
+    mapped_quantity:,
+    quantity_unit_field:,
+    item_context:,
+    item_index:
+  )
+    match_data = mapped_quantity.fetch(:content).match(STRUCTURED_PARENTHETICAL_QUANTITY_PATTERN)
+    return if match_data.nil?
+
+    resolution = resolve_unit(match_data[:unit])
+    measurement_unit = resolution.known? ? ReceiptQuantityUnit.unit_for(resolution.code) : nil
+    return unless measurement_unit&.kind == :decimal
+    return unless measurement_unit.allows_pricing_role?(:purchased) &&
+      measurement_unit.allows_pricing_role?(:reference)
+
+    mapped_count_unit = exact_structured_field(quantity_unit_field, item_context:)
+    return if mapped_count_unit.nil?
+
+    count_resolution = resolve_unit(mapped_count_unit.fetch(:content))
+    count_unit = count_resolution.known? ? ReceiptQuantityUnit.unit_for(count_resolution.code) : nil
+    return unless count_unit&.kind == :countable
+    return unless structured_unit_value_matches?(quantity_unit_field, count_resolution.code)
+
+    quantity_span = mapped_quantity.fetch(:span)
+    count_span = mapped_count_unit.fetch(:span)
+    return unless span_offset(count_span) == span_end(quantity_span)
+
+    closing_parenthesis = match_data[:open] == "(" ? ")" : "）"
+    containing_segment = segment_containing_range(
+      item_context,
+      span_offset(quantity_span),
+      span_end(count_span) + 1
+    )
+    return if containing_segment.nil?
+
+    closing_slice = mapper.slice(
+      containing_segment.fetch(:content),
+      offset: span_end(count_span) - span_offset(containing_segment.fetch(:span)),
+      length: 1
+    )
+    return unless closing_slice == closing_parenthesis
+
+    unit_start = provider_offset(
+      mapped_quantity.fetch(:content),
+      span_offset(quantity_span),
+      match_data.begin(:unit)
+    )
+    unit_end = provider_offset(
+      mapped_quantity.fetch(:content),
+      span_offset(quantity_span),
+      match_data.end(:unit)
+    )
+
+    {
+      text: match_data[:unit],
+      unit_code: resolution.code,
+      field_span: { "offset" => unit_start, "length" => unit_end - unit_start },
+      evidence: evidence(
+        source_field_path: "documents[0].fields.Items[#{item_index}].Quantity",
+        item_index:,
+        start_offset: unit_start,
+        end_offset: unit_end
+      ),
+      parenthetical_count_unit_validated: true
+    }
+  end
+
+  def structured_decimal_lexeme(field, item_context:, item_index:, field_name:)
+    mapped_field = exact_structured_field(field, item_context:)
     return if mapped_field.nil?
 
     content = mapped_field.fetch(:content)
@@ -547,8 +660,8 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     )
   end
 
-  def structured_measurement_unit_lexeme(field, item_content:, parent_span:, item_index:)
-    mapped_field = exact_structured_field(field, item_content:, parent_span:)
+  def structured_measurement_unit_lexeme(field, item_context:, item_index:)
+    mapped_field = exact_structured_field(field, item_context:)
     return if mapped_field.nil?
 
     content = mapped_field.fetch(:content)
@@ -595,42 +708,57 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     false
   end
 
-  def exact_structured_field(field, item_content:, parent_span:)
+  def exact_structured_field(field, item_context:)
+    mapped_field = bounded_structured_field(field, item_context:)
+    return if mapped_field.nil?
+
+    content = mapped_field.fetch(:content)
+    span = mapped_field.fetch(:span)
+    return unless provider_length(content) == span_length(span)
+    return unless provider_slice_for_span(span, item_context) == content
+    return unless exact_top_level_content?(raw_mappable_text(field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES), span)
+
+    mapped_field
+  end
+
+  def bounded_structured_field(field, item_context:)
     content = normalized_mappable_text(field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
     span = single_span(field)
-    return if content.blank? || span.nil? || !span_within?(span, parent_span)
-    return unless utf16_length(content) == span_length(span)
-    return unless utf16_slice_for_span(item_content, span, parent_span) == content
+    return if content.blank? || span.nil? || !span_within?(span, item_context)
+    return unless provider_length(content) <= span_length(span)
+    return { content:, span: } unless provider_content_supplied || item_context.fetch(:spans).many?
+
+    return unless provider_length(content) == span_length(span)
+    return unless provider_slice_for_span(span, item_context) == content
+    return unless exact_top_level_content?(raw_mappable_text(field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES), span)
 
     { content:, span: }
   end
 
-  def utf16_slice_for_span(text, span, parent_span)
-    relative_offset = span_offset(span) - span_offset(parent_span)
+  def provider_slice_for_span(span, item_context)
+    segment = segment_containing_range(item_context, span_offset(span), span_end(span))
+    return if segment.nil?
+
+    relative_offset = span_offset(span) - span_offset(segment.fetch(:span))
     return if relative_offset.negative?
 
-    encoded = text.encode(Encoding::UTF_16LE)
-    bytes = encoded.byteslice(relative_offset * 2, span_length(span) * 2)
-    return unless bytes&.bytesize == span_length(span) * 2
-
-    bytes.force_encoding(Encoding::UTF_16LE).encode(Encoding::UTF_8)
+    mapper.slice(segment.fetch(:content), offset: relative_offset, length: span_length(span))
   rescue EncodingError, ArgumentError
     nil
   end
 
   def structured_quantity_conflicts_with_description?(
     description_field,
-    item_content:,
     purchased:,
     unit:,
     purchased_span:,
     unit_span:,
-    parent_span:
+    item_context:
   )
     return true if description_field.nil?
     return true unless description_field.is_a?(Hash)
 
-    description = exact_structured_field(description_field, item_content:, parent_span:)
+    description = exact_structured_field(description_field, item_context:)
     return true if description.nil?
 
     overlaps_description = [ purchased_span, unit_span ].any? do |quantity_span|
@@ -969,7 +1097,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     [ component, reasons ]
   end
 
-  def purchased_quantity_matches(value_object, item_content, parent_span, item_index, reference_match)
+  def purchased_quantity_matches(value_object, item_context, item_index, reference_match)
     if reference_match[:structured_purchased_match]
       return [ [ reference_match[:structured_purchased_match] ], [] ]
     end
@@ -980,19 +1108,19 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     quantity_field = value_object["Quantity"]
 
     if quantity_field.is_a?(Hash) && content_supplied?(quantity_field["content"])
-      quantity_content = normalized_mappable_text(quantity_field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
-      quantity_span = single_span(quantity_field)
+      mapped_quantity = bounded_structured_field(quantity_field, item_context:)
 
-      if quantity_content.nil? || quantity_span.nil? || !span_within?(quantity_span, parent_span) ||
-          utf16_length(quantity_content) > span_length(quantity_span)
+      if mapped_quantity.nil?
         evidence_errors << "evidence_outside_item"
       else
+        quantity_content = mapped_quantity.fetch(:content)
+        quantity_span = mapped_quantity.fetch(:span)
         structured_matches = scan_purchased_quantities(
           quantity_content,
           base_offset: span_offset(quantity_span),
           source_field_path: "documents[0].fields.Items[#{item_index}].Quantity",
           item_index:,
-          parent_span:,
+          item_context:,
           reference_end: reference_match[:expression_end],
           enforce_after_reference: false,
           priority: 0,
@@ -1000,33 +1128,100 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
         )
         if structured_matches.empty?
           numeric_only = quantity_content.match(/\A[ \t]*(?<quantity>#{DECIMAL_SOURCE})[ \t]*\z/u)
-          matches << structured_quantity_without_unit_match(
-            numeric_only,
-            quantity_span: quantity_span,
-            item_index: item_index
-          ) if numeric_only
+          if numeric_only
+            structured_match = separate_structured_quantity_match(
+              value_object,
+              item_context:,
+              item_index:,
+              reference_match:
+            ) || structured_quantity_without_unit_match(
+              numeric_only,
+              quantity_span: quantity_span,
+              item_index: item_index
+            )
+            matches << structured_match
+          end
         else
           matches.concat(structured_matches)
         end
       end
     end
 
-    matches.concat(scan_purchased_quantities(
-      item_content,
-      base_offset: span_offset(parent_span),
-      source_field_path: nil,
-      item_index:,
-      parent_span:,
-      reference_end: reference_match[:expression_end],
-      enforce_after_reference: true,
-      priority: 1,
-      value_object: value_object,
-      raw_match_budget: raw_match_budget
-    ))
+    item_context.fetch(:segments).each do |segment|
+      matches.concat(scan_purchased_quantities(
+        segment.fetch(:content),
+        base_offset: span_offset(segment.fetch(:span)),
+        source_field_path: nil,
+        item_index:,
+        item_context:,
+        reference_end: reference_match[:expression_end],
+        enforce_after_reference: true,
+        priority: 1,
+        value_object: value_object,
+        raw_match_budget: raw_match_budget
+      ))
+    end
 
     evidence_errors << "ambiguous_purchased_quantity" if raw_match_budget[:exceeded]
 
     [ deduplicate_purchased_matches(matches), evidence_errors ]
+  end
+
+  def separate_structured_quantity_match(value_object, item_context:, item_index:, reference_match:)
+    quantity_field = value_object["Quantity"]
+    unit_field = value_object["QuantityUnit"]
+    return unless quantity_field.is_a?(Hash) && unit_field.is_a?(Hash)
+
+    purchased = structured_decimal_lexeme(
+      quantity_field,
+      item_context:,
+      item_index:,
+      field_name: "Quantity"
+    )
+    unit = structured_measurement_unit_lexeme(
+      unit_field,
+      item_context:,
+      item_index:
+    )
+    return if purchased.nil? || unit.nil?
+    return unless provider_slice_for_span(unit[:field_span], item_context)&.strip == unit[:text]
+    return unless structured_number_value_matches?(quantity_field, purchased[:amount])
+    return unless structured_unit_value_matches?(unit_field, unit[:unit_code])
+    return if structured_quantity_conflicts_with_description?(
+      value_object["Description"],
+      purchased:,
+      unit:,
+      purchased_span: purchased[:field_span],
+      unit_span: unit[:field_span],
+      item_context:
+    )
+
+    quantity_start = purchased.dig(:evidence, :provider_span_start)
+    quantity_end = purchased.dig(:evidence, :provider_span_end)
+    unit_start = unit.dig(:evidence, :provider_span_start)
+    unit_end = unit.dig(:evidence, :provider_span_end)
+    return if unit_start < quantity_end
+    return if ranges_overlap?(
+      quantity_start, unit_end,
+      reference_match[:expression_start], reference_match[:expression_end]
+    )
+
+    containing_segment = segment_containing_range(item_context, quantity_start, unit_end)
+    return if containing_segment.nil?
+
+    gap = mapper.slice(
+      containing_segment.fetch(:content),
+      offset: quantity_end - span_offset(containing_segment.fetch(:span)),
+      length: unit_start - quantity_end
+    )
+    return unless gap&.match?(/\A[ \t]*\z/)
+
+    {
+      quantity_text: purchased[:amount],
+      unit_text: unit[:text],
+      evidence: purchased[:evidence],
+      priority: 0
+    }
   end
 
   def scan_purchased_quantities(
@@ -1034,7 +1229,7 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     base_offset:,
     source_field_path:,
     item_index:,
-    parent_span:,
+    item_context:,
     reference_end:,
     enforce_after_reference:,
     priority:,
@@ -1054,20 +1249,22 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       global_start = provider_offset(text, base_offset, match_data.begin(:quantity))
       global_end = provider_offset(text, base_offset, match_data.end(:unit))
       next if enforce_after_reference && global_start < reference_end
-      next unless range_within_parent?(global_start, global_end, parent_span)
+      next unless range_within_parent?(global_start, global_end, item_context)
       next if package_quantity_context?(text, match_data)
 
       path = source_field_path || component_field_path_for_range(
         value_object,
         global_start,
         global_end,
-        item_index
+        item_index,
+        item_context
       )
       next if path.nil?
       next if path.end_with?(".Description") && !quantity_only_component_span?(
         value_object["Description"],
         global_start,
-        global_end
+        global_end,
+        item_context
       )
       if enforce_after_reference && path == "documents[0].fields.Items[#{item_index}]"
         line_break_offsets ||= provider_line_break_offsets(text, base_offset)
@@ -1098,10 +1295,10 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
       after.match?(profile.ocr_reference_pricing_package_quantity_context_after_pattern)
   end
 
-  def quantity_only_component_span?(field, start_offset, end_offset)
+  def quantity_only_component_span?(field, start_offset, end_offset, item_context)
     return false unless field.is_a?(Hash)
 
-    spans = bounded_component_spans(field)
+    spans = bounded_component_spans(field, item_context:)
     return false unless spans&.many?
 
     spans.each_with_index.any? do |span, index|
@@ -1109,12 +1306,12 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     end
   end
 
-  def component_field_path_for_range(value_object, start_offset, end_offset, item_index)
+  def component_field_path_for_range(value_object, start_offset, end_offset, item_index, item_context)
     %w[Quantity Description QuantityUnit].each do |field_name|
       field = value_object[field_name]
       next unless field.is_a?(Hash)
 
-      spans = bounded_component_spans(field)
+      spans = bounded_component_spans(field, item_context:)
       return if spans.nil?
       return if field_name == "Description" && content_supplied?(field["content"]) && spans.empty?
       next unless spans.any? { |span| range_within_parent?(start_offset, end_offset, span) }
@@ -1125,30 +1322,38 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     "documents[0].fields.Items[#{item_index}]"
   end
 
-  def bounded_component_spans(field)
+  def bounded_component_spans(field, item_context:)
     spans = field["spans"]
     return [] if spans.nil?
     return unless spans.is_a?(Array) && spans.size <= MAX_COMPONENT_SPANS
 
     normalized = spans.map { |span| bounded_span(span) }
     return if normalized.any?(&:nil?)
+    return if normalized.any? { |span| !span_within?(span, item_context) }
 
     normalized
   end
 
   def provider_line_break_offsets(text, base_offset)
     offsets = []
-    provider_position = base_offset
+    byte_offset = 0
 
     text.each_char do |character|
-      offsets << provider_position if character.match?(LINE_BREAK_PATTERN)
-      provider_position += (character.ord > 0xFFFF ? 2 : 1)
+      if character.match?(LINE_BREAK_PATTERN)
+        span = mapper.span_for_bytes(text, byte_offset:, byte_length: 0)
+        return if span.nil?
+
+        offsets << base_offset + span.fetch(:offset)
+      end
+      byte_offset += character.bytesize
     end
 
     offsets
   end
 
   def line_break_between_provider_offsets?(line_break_offsets, start_offset, end_offset)
+    return true unless line_break_offsets.is_a?(Array)
+
     line_break_offset = line_break_offsets.bsearch { |offset| offset >= start_offset }
     !line_break_offset.nil? && line_break_offset < end_offset
   end
@@ -1237,14 +1442,15 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     end
   end
 
-  def printed_line_total_component(value_object, parent_span, item_index)
+  def printed_line_total_component(value_object, item_context, item_index)
     field = value_object["TotalPrice"]
     return unless field.is_a?(Hash)
 
-    content = normalized_mappable_text(field["content"], max_bytes: MAX_FIELD_CONTENT_BYTES)
-    span = single_span(field)
-    return if content.nil? || span.nil? || !span_within?(span, parent_span) ||
-      utf16_length(content) > span_length(span)
+    mapped_field = bounded_structured_field(field, item_context:)
+    return if mapped_field.nil?
+
+    content = mapped_field.fetch(:content)
+    span = mapped_field.fetch(:span)
 
     match_data = content.match(PRINTED_AMOUNT_PATTERN)
     return if match_data.nil?
@@ -1290,11 +1496,18 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     nil
   end
 
-  def structured_value_conflict_reasons(value_object:, reference_price:, purchased_quantity:, printed_line_total:)
+  def structured_value_conflict_reasons(
+    value_object:,
+    reference_price:,
+    purchased_quantity:,
+    printed_line_total:,
+    parenthetical_count_unit_validated: false
+  )
     conflicts = [
       structured_numeric_field_conflict?(value_object["Price"], reference_price&.dig(:amount)),
       structured_numeric_field_conflict?(value_object["Quantity"], purchased_quantity&.dig(:amount)),
-      structured_unit_field_conflict?(value_object["QuantityUnit"], purchased_quantity),
+      !parenthetical_count_unit_validated &&
+        structured_unit_field_conflict?(value_object["QuantityUnit"], purchased_quantity),
       structured_numeric_field_conflict?(value_object["TotalPrice"], printed_line_total&.dig(:amount))
     ]
 
@@ -1454,19 +1667,120 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def normalized_mappable_text(value, max_bytes:)
+    encoded = raw_mappable_text(value, max_bytes:)&.freeze
+    return if encoded.nil?
+
+    normalized = encoded.unicode_normalize(:nfkc).freeze
+    return unless normalized.length == encoded.length
+    return unless provider_length(normalized) == provider_length(encoded)
+
+    normalized
+  rescue EncodingError, ArgumentError
+    nil
+  end
+
+  def raw_mappable_text(value, max_bytes:)
     return unless value.is_a?(String)
     return if value.bytesize > max_bytes
     return unless value.valid_encoding?
     return if value.match?(CONTROL_CHARACTER_PATTERN)
 
-    encoded = value.encode(Encoding::UTF_8)
-    normalized = encoded.unicode_normalize(:nfkc)
-    return unless normalized.length == encoded.length
-    return unless utf16_length(normalized) == utf16_length(encoded)
-
-    normalized
+    value.encode(Encoding::UTF_8)
   rescue EncodingError, ArgumentError
     nil
+  end
+
+  def build_item_context(item, spans:)
+    raw_content = raw_mappable_text(item["content"], max_bytes: MAX_ITEM_CONTENT_BYTES)
+    content = normalized_mappable_text(item["content"], max_bytes: MAX_ITEM_CONTENT_BYTES)
+    return if raw_content.nil? || content.nil? || spans.nil?
+    return if spans.sum { |span| span_length(span) } > MAX_ITEM_CONTENT_BYTES
+
+    raw_segments = owned_raw_segments(raw_content, spans)
+    return if raw_segments.nil? || raw_segments.join("\n") != raw_content
+
+    segments = spans.zip(raw_segments).filter_map do |span, raw_segment|
+      normalized_segment = normalized_mappable_text(raw_segment, max_bytes: MAX_ITEM_CONTENT_BYTES)
+      next if normalized_segment.nil?
+
+      { span:, content: normalized_segment.freeze }.freeze
+    end
+    return unless segments.size == spans.size
+    return unless segments.map { |segment| segment.fetch(:content) }.join("\n") == content
+
+    {
+      spans: spans.freeze,
+      segments: segments.freeze
+    }.freeze
+  end
+
+  def owned_raw_segments(raw_content, spans)
+    if provider_content_supplied
+      segments = spans.map do |span|
+        mapper.slice(
+          provider_content,
+          offset: span_offset(span),
+          length: span_length(span)
+        )
+      end
+      return if segments.any?(&:nil?)
+
+      segments
+    elsif spans.one?
+      return unless provider_length(raw_content) <= span_length(spans.sole)
+
+      [ raw_content ]
+    else
+      segments = raw_content.split("\n", -1)
+      return unless segments.size == spans.size
+      return unless segments.zip(spans).all? do |segment, span|
+        provider_length(segment) == span_length(span)
+      end
+
+      segments
+    end
+  rescue EncodingError, ArgumentError
+    nil
+  end
+
+  def bounded_parent_spans(item)
+    spans = item["spans"]
+    return unless spans.is_a?(Array) && spans.size.between?(1, MAX_COMPONENT_SPANS)
+
+    normalized = spans.map { |span| bounded_span(span) }
+    return if normalized.any?(&:nil?)
+    return unless ordered_positive_nonoverlapping_spans?(normalized)
+
+    normalized
+  end
+
+  def ordered_positive_nonoverlapping_spans?(spans)
+    return false unless spans.all? { |span| span_length(span).positive? }
+
+    spans.each_cons(2).all? do |left, right|
+      span_offset(left) < span_offset(right) && span_end(left) <= span_offset(right)
+    end
+  end
+
+  def segment_containing_range(item_context, start_offset, end_offset)
+    return unless start_offset.is_a?(Integer) && end_offset.is_a?(Integer)
+    return if end_offset < start_offset
+
+    item_context.fetch(:segments).find do |segment|
+      span = segment.fetch(:span)
+      start_offset >= span_offset(span) && end_offset <= span_end(span)
+    end
+  end
+
+  def exact_top_level_content?(raw_content, span)
+    return false if raw_content.nil?
+    return true unless provider_content_supplied
+
+    mapper.slice(
+      provider_content,
+      offset: span_offset(span),
+      length: span_length(span)
+    ) == raw_content
   end
 
   def content_supplied?(value)
@@ -1497,12 +1811,11 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     span
   end
 
-  def mark_item_identity_conflicts(candidates, parent_spans)
-    overlap_index = build_parent_span_overlap_index(parent_spans)
+  def mark_item_identity_conflicts(candidates, parent_span_sets)
+    overlap_index = build_parent_span_overlap_index(parent_span_sets)
     conflicting_indexes = candidates.each_with_object({}) do |candidate, indexes|
       item_index = candidate[:item_index]
-      parent_span = parent_spans[item_index]
-      next unless parent_span
+      next unless parent_span_sets[item_index]
 
       conflict = candidate_evidence_ranges(candidate).any? do |start_offset, end_offset|
         parent_span_overlap_with_other_item?(
@@ -1528,15 +1841,17 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     end
   end
 
-  def build_parent_span_overlap_index(parent_spans)
-    entries = parent_spans.filter_map.with_index do |span, item_index|
-      next unless span
+  def build_parent_span_overlap_index(parent_span_sets)
+    entries = parent_span_sets.each_with_index.flat_map do |spans, item_index|
+      next [] unless spans
 
-      {
-        start_offset: span_offset(span),
-        end_offset: span_end(span),
-        item_index: item_index
-      }
+      spans.map do |span|
+        {
+          start_offset: span_offset(span),
+          end_offset: span_end(span),
+          item_index: item_index
+        }
+      end
     end.sort_by { |entry| [ entry[:start_offset], entry[:end_offset], entry[:item_index] ] }
 
     starts = []
@@ -1606,10 +1921,14 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
     range_within_parent?(span_offset(inner), span_end(inner), outer)
   end
 
-  def range_within_parent?(start_offset, end_offset, parent_span)
-    start_offset >= span_offset(parent_span) &&
-      end_offset >= start_offset &&
-      end_offset <= span_end(parent_span)
+  def range_within_parent?(start_offset, end_offset, parent)
+    return false unless end_offset >= start_offset
+
+    if parent.is_a?(Hash) && parent.key?(:segments)
+      segment_containing_range(parent, start_offset, end_offset).present?
+    else
+      start_offset >= span_offset(parent) && end_offset <= span_end(parent)
+    end
   end
 
   def ranges_overlap?(left_start, left_end, right_start, right_end)
@@ -1627,11 +1946,15 @@ class Ocr::ResponseParser::ReferencePricingCandidateExtractor
   end
 
   def provider_offset(text, base_offset, character_index)
-    base_offset + utf16_length(text[0...character_index].to_s)
+    byte_offset = text[0...character_index].to_s.bytesize
+    span = mapper.span_for_bytes(text, byte_offset:, byte_length: 0)
+    return if span.nil?
+
+    base_offset + span.fetch(:offset)
   end
 
-  def utf16_length(text)
-    text.encode(Encoding::UTF_16LE).bytesize / 2
+  def provider_length(text)
+    mapper.length(text)
   end
 
   def normalize_reasons(reasons)

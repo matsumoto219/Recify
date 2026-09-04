@@ -506,7 +506,6 @@ module Receipts::Processing::Runs
         "resource" => safe_error_metadata_text(metadata[:resource]),
         "field" => safe_error_metadata_text(metadata[:field]),
         "limit" => safe_error_metadata_integer(metadata[:limit]),
-        "actual_value" => safe_error_metadata_integer(metadata[:actual_value]),
         "actual_count" => safe_error_metadata_integer(metadata[:actual_count]),
         "snapshot_count" => safe_error_metadata_integer(metadata[:snapshot_count]),
         "index" => safe_error_metadata_integer(metadata[:index]),

@@ -12,6 +12,7 @@ module Analysis
       source_index
       amount_source
       transaction_context
+      discount_source_refs
     ].freeze
 
     class << self
@@ -33,6 +34,7 @@ module Analysis
       resolve_cross_owner_conflicts!
       deduplicate_same_source_facts!
       aggregate_voucher_payments!
+      mark_unbound_adjustments_for_review!
 
       OwnershipResult.new(
         items: attributes_for(:item),
@@ -246,6 +248,18 @@ module Analysis
     def active_facts(origin = nil)
       facts.select do |fact|
         fact.action == :persist && (origin.nil? || fact.origin == origin)
+      end
+    end
+
+    def mark_unbound_adjustments_for_review!
+      active_facts(:adjustment).each do |fact|
+        attributes = fact.attributes.with_indifferent_access
+        next unless attributes[:source_line_index].present?
+        next if strong_source_identities(fact).any?
+
+        fact.review_reasons = Array(fact.review_reasons) | [ ADJUSTMENT_UNCERTAIN_REVIEW_REASON ]
+        fact.attributes = attributes.merge(needs_review: true, review_reasons: fact.review_reasons)
+        review_reasons << ADJUSTMENT_UNCERTAIN_REVIEW_REASON
       end
     end
 

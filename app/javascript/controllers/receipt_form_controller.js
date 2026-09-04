@@ -1228,6 +1228,11 @@ export default class extends Controller {
 
       // 表示更新（PCツールチップ / スマホ小計など、同一行内の複数表示に対応）
       lineTotalDisplays.forEach((lineTotalDisplay) => {
+        if (!itemAmountSourcePresent) {
+          this.renderUnavailableAmount(lineTotalDisplay)
+          return
+        }
+
         const withLabel = Boolean(lineTotalDisplay.closest('[data-receipt-form-target="lineTotalTooltip"]'))
         this.animateLineTotal(lineTotalDisplay, projectedLineTotal, { withLabel })
       })
@@ -1311,11 +1316,11 @@ export default class extends Controller {
       this.renderUnavailablePreview()
       return
     } else {
-      total = Math.floor(total)
-      subtotalSum = Math.floor(subtotalSum)
-      taxSum = Math.floor(taxSum)
+      total = total === null ? null : Math.floor(total)
+      subtotalSum = subtotalSum === null ? null : Math.floor(subtotalSum)
+      taxSum = taxSum === null ? null : Math.floor(taxSum)
     }
-    const finalPaymentTotal = rawPurchaseTotal + paymentAdjustmentTotal
+    const finalPaymentTotal = rawPurchaseTotal === null ? null : rawPurchaseTotal + paymentAdjustmentTotal
     this.lastFinalPaymentTotal = finalPaymentTotal
 
     // 合計更新（存在する場合のみ）
@@ -1401,9 +1406,9 @@ export default class extends Controller {
     }
 
     const amounts = {
-      subtotal: this.hasSubtotalAmountTarget ? this.currentAmountValue(this.subtotalAmountTarget) : 0,
-      tax: this.hasTaxAmountTarget ? this.currentAmountValue(this.taxAmountTarget) : 0,
-      total: this.hasTotalAmountTarget ? this.currentAmountValue(this.totalAmountTarget) : 0,
+      subtotal: this.hasSubtotalAmountTarget ? this.currentAmountValue(this.subtotalAmountTarget, null) : null,
+      tax: this.hasTaxAmountTarget ? this.currentAmountValue(this.taxAmountTarget, null) : null,
+      total: this.hasTotalAmountTarget ? this.currentAmountValue(this.totalAmountTarget, null) : null,
       taxRateSummary: this.hasTaxRateSummaryTarget ? this.taxRateSummaryTarget.textContent : null
     }
     this.initialReceiptAmounts = amounts
@@ -1411,7 +1416,15 @@ export default class extends Controller {
   }
 
   validReceiptAmounts (amounts) {
-    return amounts && [amounts.subtotal, amounts.tax, amounts.total].every(Number.isFinite)
+    if (!amounts || typeof amounts !== 'object' || Array.isArray(amounts)) return false
+
+    return [
+      [amounts.subtotal, this.receiptTotalAmountMaxValue],
+      [amounts.tax, this.receiptTaxAmountMaxValue],
+      [amounts.total, this.receiptTotalAmountMaxValue]
+    ].every(([amount, maximum]) => (
+      amount === null || (Number.isFinite(amount) && amount >= 0 && amount <= maximum)
+    ))
   }
 
   preserveInitialReceiptAmountsForPreview ({ hasItemAmountSource }) {
@@ -1665,8 +1678,9 @@ export default class extends Controller {
 
   syncPaymentReconciliationSummary (paymentAmountSum, finalPaymentTotal) {
     const hasPaymentRows = this.visiblePaymentRows().length > 0
-    const paymentDifference = paymentAmountSum - finalPaymentTotal
-    const mismatch = hasPaymentRows && paymentDifference !== 0
+    const finalPaymentTotalAvailable = Number.isFinite(finalPaymentTotal)
+    const paymentDifference = finalPaymentTotalAvailable ? paymentAmountSum - finalPaymentTotal : null
+    const mismatch = hasPaymentRows && finalPaymentTotalAvailable && paymentDifference !== 0
     const syncableMismatch = mismatch && finalPaymentTotal >= 0
 
     if (this.hasPaymentAmountSumTarget) {
@@ -1678,9 +1692,13 @@ export default class extends Controller {
     }
 
     if (this.hasPaymentDifferenceAmountTarget) {
-      this.paymentDifferenceAmountTarget.textContent = this.formatPaymentDifference(paymentDifference)
-      this.paymentDifferenceAmountTarget.title = this.paymentDifferenceAmountTarget.textContent.trim()
-      this.syncAmountDisplayState(this.paymentDifferenceAmountTarget, paymentDifference)
+      if (finalPaymentTotalAvailable) {
+        this.paymentDifferenceAmountTarget.textContent = this.formatPaymentDifference(paymentDifference)
+        this.paymentDifferenceAmountTarget.title = this.paymentDifferenceAmountTarget.textContent.trim()
+        this.syncAmountDisplayState(this.paymentDifferenceAmountTarget, paymentDifference)
+      } else {
+        this.renderUnavailableAmount(this.paymentDifferenceAmountTarget)
+      }
     }
 
     this.paymentMismatchWarningTargets.forEach((warning) => warning.classList.toggle('hidden', !mismatch))
@@ -1723,7 +1741,7 @@ export default class extends Controller {
     if (rows.length === 0) return
 
     const finalPaymentTotal = this.currentFinalPaymentTotal()
-    if (finalPaymentTotal < 0) return
+    if (!Number.isFinite(finalPaymentTotal) || finalPaymentTotal < 0) return
 
     const currentPaymentSum = this.paymentAmountSum()
     const delta = finalPaymentTotal - currentPaymentSum
@@ -1749,12 +1767,13 @@ export default class extends Controller {
   }
 
   currentFinalPaymentTotal () {
+    if (this.lastFinalPaymentTotal === null) return null
     if (Number.isFinite(this.lastFinalPaymentTotal)) return this.lastFinalPaymentTotal
-    if (this.hasFinalPaymentAmountTarget) return this.currentAmountValue(this.finalPaymentAmountTarget)
-    if (this.hasPaymentReconciliationFinalAmountTarget) return this.currentAmountValue(this.paymentReconciliationFinalAmountTarget)
-    if (this.hasTotalAmountTarget) return this.currentAmountValue(this.totalAmountTarget)
+    if (this.hasFinalPaymentAmountTarget) return this.currentAmountValue(this.finalPaymentAmountTarget, null)
+    if (this.hasPaymentReconciliationFinalAmountTarget) return this.currentAmountValue(this.paymentReconciliationFinalAmountTarget, null)
+    if (this.hasTotalAmountTarget) return this.currentAmountValue(this.totalAmountTarget, null)
 
-    return 0
+    return null
   }
 
   animateLineTotal (target, nextValue, { withLabel = false } = {}) {
@@ -2335,6 +2354,11 @@ export default class extends Controller {
   }
 
   animateAmount (target, nextValue) {
+    if (!Number.isFinite(nextValue)) {
+      this.renderUnavailableAmount(target)
+      return
+    }
+
     const duration = 300
     const startValue = this.currentAmountValue(target)
     const endValue = Math.floor(nextValue)
@@ -2378,7 +2402,7 @@ export default class extends Controller {
     target.amountAnimationFrame = requestAnimationFrame(tick)
   }
 
-  currentAmountValue (target) {
+  currentAmountValue (target, fallback = 0) {
     if (Number.isFinite(target.amountDisplayValue)) {
       return target.amountDisplayValue
     }
@@ -2388,10 +2412,11 @@ export default class extends Controller {
     if (!Number.isNaN(textValue)) return textValue
 
     if (target.dataset.amountValue) {
-      return parseInt(target.dataset.amountValue, 10) || 0
+      const storedValue = parseInt(target.dataset.amountValue, 10)
+      if (!Number.isNaN(storedValue)) return storedValue
     }
 
-    return 0
+    return fallback
   }
 
   shouldRenderAmountImmediately (target, requestedAt) {

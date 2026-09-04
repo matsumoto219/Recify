@@ -3,23 +3,20 @@ require 'rails_helper'
 RSpec.describe Analysis::AdjustmentEvidenceValidator do
   let(:profile) { ReceiptAnalysisProfiles.default }
   let(:lines) { [ '商品A 100円', '10%対象 91円 税 9円', '現金 100円', 'クーポン -10円' ] }
-  let(:evidence_index) do
-    Analysis::SourceEvidenceIndex.call(
-      lines: lines,
-      money_pattern: /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?/,
-      profile: profile
-    )
-  end
   let(:items) { [ { raw_text: '商品A 100円', line_total: 100 } ] }
   let(:payments) { [ { method: 'cash', amount: 100 } ] }
   let(:tax_details) { [ { description: '10%対象', net_amount: 91, amount: 9, rate: 0.1 } ] }
 
-  def validate(proposal, source: 'ai')
+  def validate(proposal, source: 'ai', source_lines: lines, profile: self.profile)
     described_class.call(
       proposal: proposal,
       source: source,
-      lines: lines,
-      evidence_index: evidence_index,
+      lines: source_lines,
+      evidence_index: Analysis::SourceEvidenceIndex.call(
+        lines: source_lines,
+        money_pattern: /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?/,
+        profile: profile
+      ),
       items: items,
       payments: payments,
       tax_details: tax_details,
@@ -70,5 +67,106 @@ RSpec.describe Analysis::AdjustmentEvidenceValidator do
     )
 
     expect(result).to be_accepted
+  end
+
+  it '単位当たりの販促注記はOCR source lineを根拠にreviewなしでrejectする' do
+    aggregate_failures do
+      expect(validate(
+        {
+          kind: 'receipt_discount',
+          label: '値引',
+          amount: 3,
+          sign: 'discount',
+          source_text: '会員値引 3円/L引',
+          source_line_index: 0
+        },
+        source_lines: [ '会員値引 3円/L引' ]
+      )).to have_attributes(
+        status: :rejected,
+        reason: :per_unit_discount_note,
+        review_required: false
+      )
+      expect(validate(
+        {
+          kind: 'receipt_discount',
+          amount: 3,
+          sign: 'discount',
+          source_text: '3円/L引き',
+          source_line_index: 0
+        },
+        source_lines: [ '3円/L引き' ]
+      )).to have_attributes(
+        status: :rejected,
+        reason: :per_unit_discount_note,
+        review_required: false
+      )
+    end
+  end
+
+  it 'AI labelではなくOCR source lineだけで単位当たり注記を判定する' do
+    absolute_discount = validate(
+      {
+        kind: 'receipt_discount',
+        label: '会員値引 3円/L引',
+        amount: 3,
+        sign: 'discount',
+        source_text: '値引 3円',
+        source_line_index: 0
+      },
+      source_lines: [ '値引 3円' ]
+    )
+    ordinary_unit_price = validate(
+      {
+        kind: 'receipt_discount',
+        amount: 160,
+        sign: 'discount',
+        source_text: '単価 160円/L',
+        source_line_index: 0
+      },
+      source_lines: [ '単価 160円/L' ]
+    )
+
+    aggregate_failures do
+      expect(absolute_discount).to be_accepted
+      expect(ordinary_unit_price).to have_attributes(
+        status: :rejected,
+        reason: :discount_ownership_uncertain,
+        review_required: true
+      )
+    end
+  end
+
+  it 'injected profileのpatternを使い日本語表現をshared validatorへhardcodeしない' do
+    allow(profile).to receive(:analysis_per_unit_discount_note_pattern).and_return(/\AUNIT_PROMO\z/)
+
+    injected_match = validate(
+      {
+        kind: 'receipt_discount',
+        amount: 3,
+        sign: 'discount',
+        source_text: 'UNIT_PROMO',
+        source_line_index: 0
+      },
+      source_lines: [ 'UNIT_PROMO' ]
+    )
+    japanese_non_match = validate(
+      {
+        kind: 'receipt_discount',
+        amount: 3,
+        sign: 'discount',
+        source_text: '会員値引 3円/L引',
+        source_line_index: 0
+      },
+      source_lines: [ '会員値引 3円/L引' ]
+    )
+
+    aggregate_failures do
+      expect(injected_match).to have_attributes(
+        status: :rejected,
+        reason: :per_unit_discount_note,
+        review_required: false
+      )
+      expect(japanese_non_match).to be_accepted
+    end
   end
 end

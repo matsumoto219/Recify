@@ -1,0 +1,79 @@
+{
+  "case_id": "g168_calc_adjacent_items_mild",
+  "category": "calculation_mode",
+  "intent": "Mild degradation does not permit adjacent explicit evidence to contaminate a count-priced item.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル隣接用品H", "@240円 × 2個", "480円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "240",
+        "printed_line_total": 480
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["サンプル隣接固定I 350円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "fallback",
+        "printed_line_total": 350
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル隣接レイアウト店",
+    "store_address": "サンプル県サンプル市計算町2-3",
+    "purchased_at": "2026-08-23T09:25:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル隣接用品H",
+        "unit_price": 240,
+        "quantity": "2",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 480,
+        "line_total": 480,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "サンプル隣接固定I",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 350,
+        "line_total": 350,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 755, "tax": 75, "gross": 830, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 755,
+    "tax": 75,
+    "total": 830,
+    "payments": [{"method": "cash", "label": "現金", "amount": 830}],
+    "payment_sum": 830,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": true, "profile": "mild"},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

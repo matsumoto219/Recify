@@ -1,0 +1,79 @@
+{
+  "case_id": "g145_calc_explicit_one_vs_fallback",
+  "category": "calculation_mode",
+  "intent": "An explicit quantity of one establishes count pricing while a fallback quantity of one leaves a strong printed total as explicit authority.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示清掃用品", "@275円 × 1袋", "275円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "bag",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "275",
+        "printed_line_total": 275
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["例示固定用品 425円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "fallback",
+        "printed_line_total": 425
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空境界商店",
+    "store_address": "架空県例示市境界町2-2",
+    "purchased_at": "2026-08-21T09:05:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示清掃用品",
+        "unit_price": 275,
+        "quantity": "1",
+        "quantity_unit_code": "bag",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 275,
+        "line_total": 275,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示固定用品",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 425,
+        "line_total": 425,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 637, "tax": 63, "gross": 700, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 637,
+    "tax": 63,
+    "total": 700,
+    "payments": [{"method": "cash", "label": "現金", "amount": 700}],
+    "payment_sum": 700,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

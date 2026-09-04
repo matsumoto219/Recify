@@ -167,7 +167,7 @@ ja:
       pricing_modes:
         count_unit_price: 単価 × 数量
         reference_quantity_price: 基準価格から計算
-        explicit_line_total: 明細金額を直接入力
+        explicit_line_total: 明細金額を使用
       pricing_summaries:
         count_unit_price: "%{price}円 × %{quantity}%{unit}"
         count_unit_price_unset: 単価と数量
@@ -192,7 +192,7 @@ ja:
         net: 保存済みの税抜基準を維持して計算します。
       explicit_line_total: 明細金額
       explicit_line_total_before_discount: 割引前明細金額
-      explicit_line_total_help: レシートに印字された明細金額を入力します。
+      explicit_line_total_help: 印字または入力された明細金額を計算の基準にします。
       explicit_line_total_discount_help: 入力値に明細割引を1回適用し、割引後の小計を表示します。
       reference_calculated_amount: 計算金額
       pricing_source_summary_aria: 金額の根拠

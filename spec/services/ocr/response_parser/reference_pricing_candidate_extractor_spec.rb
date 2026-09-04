@@ -17,6 +17,56 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingCandidateExtractor do
     response.dig('analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray')
   end
 
+  def owned_span_fixture(segments, gaps: nil)
+    gaps ||= Array.new(segments.length - 1, "\n")
+    document = +''
+    spans = []
+
+    segments.each_with_index do |segment, index|
+      document << gaps.fetch(index - 1) if index.positive?
+      spans << { 'offset' => document.length, 'length' => segment.length }
+      document << segment
+    end
+
+    {
+      document:,
+      segments:,
+      spans:,
+      item: {
+        'content' => segments.join("\n"),
+        'spans' => spans,
+        'valueObject' => {}
+      }
+    }
+  end
+
+  def field_from_owned_segment(fixture, segment_index, content, **structured_value)
+    segment = fixture.fetch(:segments).fetch(segment_index)
+    local_offset = segment.index(content)
+    raise "missing field content" if local_offset.nil?
+
+    span = fixture.fetch(:spans).fetch(segment_index)
+    {
+      'content' => content,
+      'spans' => [
+        {
+          'offset' => span.fetch('offset') + local_offset,
+          'length' => content.length
+        }
+      ]
+    }.merge(structured_value.transform_keys(&:to_s))
+  end
+
+  def extract_with_provider_content(items, content)
+    described_class.call(
+      items:,
+      profile: ReceiptAnalysisProfiles.fetch('JPN'),
+      content:,
+      string_index_type: 'utf16CodeUnit',
+      projection: ReceiptAmountService.method(:reference_item_extension_projection)
+    )
+  end
+
   describe '.call' do
     context 'with the weighted-units fixture' do
       let(:items) { fixture_items('weighted_units_receipt') }
@@ -524,6 +574,414 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingCandidateExtractor do
 
       it 'keeps both independently evidenced candidates valid' do
         expect(extract).to all(include(validation_state: 'valid', rejection_reasons: []))
+      end
+    end
+
+    context 'when one Azure item owns multiple non-contiguous provider spans' do
+      let(:price_segment) { '税込 ¥498/100g' }
+      let(:quantity_segment) { '342g' }
+      let(:total_segment) { '¥1,703' }
+
+      def complete_multi_span_fixture(extra_segments: [])
+        segments = extra_segments + [ price_segment, quantity_segment, total_segment ]
+        fixture = owned_span_fixture(
+          segments,
+          gaps: Array.new(segments.length - 1) { |index| "\n所有外#{index}\n" }
+        )
+        price_index = extra_segments.length
+        item = fixture.fetch(:item)
+        item['valueObject'] = {
+          'Price' => field_from_owned_segment(fixture, price_index, price_segment),
+          'Quantity' => field_from_owned_segment(
+            fixture,
+            price_index + 1,
+            quantity_segment,
+            valueNumber: 342
+          ),
+          'TotalPrice' => field_from_owned_segment(
+            fixture,
+            price_index + 2,
+            total_segment,
+            valueCurrency: { 'amount' => 1_703, 'currencyCode' => 'JPY' }
+          )
+        }
+        fixture
+      end
+
+      it 'keeps the existing exact single-span path valid' do
+        fixture = owned_span_fixture([ "#{price_segment} #{quantity_segment} #{total_segment}" ])
+
+        expect(extract_with_provider_content([ fixture.fetch(:item) ], fixture.fetch(:document)).sole)
+          .to include(validation_state: 'valid', rejection_reasons: [])
+      end
+
+      it 'extracts exact evidence from two ordered owned spans' do
+        fixture = owned_span_fixture(
+          [ price_segment, "#{quantity_segment} #{total_segment}" ],
+          gaps: [ "\n所有外の金額 ¥9,999\n" ]
+        )
+
+        candidate = extract_with_provider_content([ fixture.fetch(:item) ], fixture.fetch(:document)).sole
+
+        expect(candidate).to include(validation_state: 'valid', rejection_reasons: [])
+      end
+
+      it 'extracts exact structured evidence from three ordered owned spans' do
+        fixture = complete_multi_span_fixture
+
+        candidate = extract_with_provider_content([ fixture.fetch(:item) ], fixture.fetch(:document)).sole
+
+        aggregate_failures do
+          expect(candidate).to include(validation_state: 'valid', rejection_reasons: [])
+          expect(candidate.dig(:reference_price, :evidence, :provider_span_start))
+            .to eq(fixture.fetch(:spans).fetch(0).fetch('offset') + 4)
+          expect(candidate.dig(:purchased_quantity, :evidence, :provider_span_start))
+            .to eq(fixture.fetch(:spans).fetch(1).fetch('offset'))
+          expect(candidate.dig(:printed_line_total, :evidence, :provider_span_start))
+            .to eq(fixture.fetch(:spans).fetch(2).fetch('offset') + 1)
+        end
+      end
+
+      it 'keeps a structured per-unit measurement candidate when only its parent has two spans' do
+        fixture = owned_span_fixture(
+          [ '商品 ¥1,200 3.50 L ¥4,200', '補助情報' ],
+          gaps: [ "\n所有外\n" ]
+        )
+        item = fixture.fetch(:item)
+        item['valueObject'] = {
+          'Description' => field_from_owned_segment(fixture, 0, '商品'),
+          'Price' => field_from_owned_segment(
+            fixture,
+            0,
+            '¥1,200',
+            valueCurrency: { 'amount' => 1_200, 'currencyCode' => 'JPY' }
+          ),
+          'Quantity' => field_from_owned_segment(fixture, 0, '3.50', valueNumber: 3.5),
+          'QuantityUnit' => field_from_owned_segment(fixture, 0, 'L', valueString: 'L'),
+          'TotalPrice' => field_from_owned_segment(
+            fixture,
+            0,
+            '¥4,200',
+            valueCurrency: { 'amount' => 4_200, 'currencyCode' => 'JPY' }
+          )
+        }
+
+        candidate = extract_with_provider_content([ item ], fixture.fetch(:document)).sole
+
+        aggregate_failures do
+          expect(candidate).to include(
+            validation_state: 'ambiguous',
+            rejection_reasons: [ 'ambiguous_tax_inclusion' ]
+          )
+          expect(candidate[:reference_quantity]).to include(amount: '1', unit_code: 'liter')
+          expect(candidate[:purchased_quantity]).to include(amount: '3.5', unit_code: 'liter')
+        end
+      end
+
+      context 'when Azure reports a measured Quantity with a parenthetical count QuantityUnit' do
+        def parenthetical_quantity_fixture(
+          description_content: '商品',
+          quantity_content: '3.50L(',
+          quantity_value: 3.5,
+          quantity_unit_content: '個',
+          quantity_unit_value: '個',
+          closing_parenthesis: ')',
+          separator: ''
+        )
+          segment = "#{description_content} #{quantity_content}#{separator}#{quantity_unit_content}#{closing_parenthesis} ¥1,200 ¥4,200"
+          fixture = owned_span_fixture([ segment ])
+          item = fixture.fetch(:item)
+          item['valueObject'] = {
+            'Description' => field_from_owned_segment(fixture, 0, description_content),
+            'Price' => field_from_owned_segment(
+              fixture,
+              0,
+              '¥1,200',
+              valueCurrency: { 'amount' => 1_200, 'currencyCode' => 'JPY' }
+            ),
+            'Quantity' => field_from_owned_segment(
+              fixture,
+              0,
+              quantity_content,
+              valueNumber: quantity_value
+            ),
+            'QuantityUnit' => field_from_owned_segment(
+              fixture,
+              0,
+              quantity_unit_content,
+              valueString: quantity_unit_value
+            ),
+            'TotalPrice' => field_from_owned_segment(
+              fixture,
+              0,
+              '¥4,200',
+              valueCurrency: { 'amount' => 4_200, 'currencyCode' => 'JPY' }
+            )
+          }
+          fixture
+        end
+
+        it 'uses the unique measurement unit inside exact Quantity content without rewriting QuantityUnit' do
+          fixture = parenthetical_quantity_fixture
+
+          candidate = extract_with_provider_content(
+            [ fixture.fetch(:item) ],
+            fixture.fetch(:document)
+          ).sole
+
+          aggregate_failures do
+            expect(candidate).to include(
+              validation_state: 'ambiguous',
+              rejection_reasons: [ 'ambiguous_tax_inclusion' ]
+            )
+            expect(candidate[:reference_quantity]).to include(
+              amount: '1',
+              unit_code: 'liter',
+              unit_status: 'known',
+              origin: 'implicit_per_unit'
+            )
+            expect(candidate.dig(:reference_quantity, :evidence)).to include(
+              source_field_path: 'documents[0].fields.Items[0].Quantity'
+            )
+            expect(candidate[:purchased_quantity]).to include(
+              amount: '3.5',
+              unit_code: 'liter',
+              unit_status: 'known'
+            )
+            expect(fixture.fetch(:item).dig('valueObject', 'QuantityUnit')).to include(
+              'content' => '個',
+              'valueString' => '個'
+            )
+          end
+        end
+
+        it 'produces the same exact source when corrected QuantityUnit evidence points to the inline unit' do
+          provider_fixture = parenthetical_quantity_fixture
+          corrected_fixture = parenthetical_quantity_fixture(
+            quantity_content: '3.50',
+            quantity_unit_content: 'L',
+            quantity_unit_value: 'L',
+            closing_parenthesis: '(個)'
+          )
+
+          candidates = [ provider_fixture, corrected_fixture ].map do |fixture|
+            extract_with_provider_content(
+              [ fixture.fetch(:item) ],
+              fixture.fetch(:document)
+            ).sole
+          end
+
+          exact_sources = candidates.map do |candidate|
+            {
+              reference_price: candidate.dig(:reference_price, :amount),
+              reference_quantity: candidate.dig(:reference_quantity, :amount),
+              reference_unit: candidate.dig(:reference_quantity, :unit_code),
+              purchased_quantity: candidate.dig(:purchased_quantity, :amount),
+              purchased_unit: candidate.dig(:purchased_quantity, :unit_code),
+              printed_line_total: candidate.dig(:printed_line_total, :amount)
+            }
+          end
+
+          expect(exact_sources.uniq).to contain_exactly(
+            reference_price: '1200',
+            reference_quantity: '1',
+            reference_unit: 'liter',
+            purchased_quantity: '3.5',
+            purchased_unit: 'liter',
+            printed_line_total: '4200'
+          )
+        end
+
+        it 'rejects malformed topology, incompatible units, package context, and value conflicts' do
+          unowned_gap = owned_span_fixture(
+            [ '商品 3.50L(', '個) ¥1,200 ¥4,200' ],
+            gaps: [ "\n所有外\n" ]
+          )
+          unowned_gap.fetch(:item)['valueObject'] = {
+            'Description' => field_from_owned_segment(unowned_gap, 0, '商品'),
+            'Price' => field_from_owned_segment(
+              unowned_gap,
+              1,
+              '¥1,200',
+              valueCurrency: { 'amount' => 1_200, 'currencyCode' => 'JPY' }
+            ),
+            'Quantity' => field_from_owned_segment(unowned_gap, 0, '3.50L(', valueNumber: 3.5),
+            'QuantityUnit' => field_from_owned_segment(
+              unowned_gap,
+              1,
+              '個',
+              valueString: '個'
+            ),
+            'TotalPrice' => field_from_owned_segment(
+              unowned_gap,
+              1,
+              '¥4,200',
+              valueCurrency: { 'amount' => 4_200, 'currencyCode' => 'JPY' }
+            )
+          }
+          malformed = [
+            parenthetical_quantity_fixture(closing_parenthesis: ''),
+            parenthetical_quantity_fixture(separator: "\n"),
+            unowned_gap,
+            parenthetical_quantity_fixture(quantity_unit_content: 'kg', quantity_unit_value: 'kg'),
+            parenthetical_quantity_fixture(quantity_content: '3.50Lkg('),
+            parenthetical_quantity_fixture(quantity_content: '3.50XYZ('),
+            parenthetical_quantity_fixture(quantity_content: '3.50個('),
+            parenthetical_quantity_fixture(quantity_content: '約3.50L('),
+            parenthetical_quantity_fixture(quantity_content: '3.00-3.50L('),
+            parenthetical_quantity_fixture(quantity_content: '2x3.50L('),
+            parenthetical_quantity_fixture(quantity_content: 'gross 3.50L('),
+            parenthetical_quantity_fixture(quantity_content: '3.50L入り('),
+            parenthetical_quantity_fixture(quantity_value: 4),
+            parenthetical_quantity_fixture(description_content: '商品 3.50L入り'),
+            parenthetical_quantity_fixture.tap do |fixture|
+              fixture.fetch(:item).dig('valueObject', 'TotalPrice', 'valueCurrency')['amount'] = 4_201
+            end
+          ]
+
+          malformed.each do |fixture|
+            expect(extract_with_provider_content(
+              [ fixture.fetch(:item) ],
+              fixture.fetch(:document)
+            )).to eq([])
+          end
+        end
+      end
+
+      it 'accepts the bounded maximum of sixteen ordered owned spans' do
+        fixture = complete_multi_span_fixture(extra_segments: Array.new(13, '商品'))
+
+        expect(extract_with_provider_content([ fixture.fetch(:item) ], fixture.fetch(:document)).sole)
+          .to include(validation_state: 'valid', rejection_reasons: [])
+      end
+
+      it 'does not scan a reference expression in a gap between owned spans' do
+        fixture = owned_span_fixture(
+          [ '商品', quantity_segment ],
+          gaps: [ "\n税込 ¥498/100g\n" ]
+        )
+
+        expect(extract_with_provider_content([ fixture.fetch(:item) ], fixture.fetch(:document))).to eq([])
+      end
+
+      it 'does not scan a purchased quantity in a gap between owned spans' do
+        fixture = owned_span_fixture(
+          [ price_segment, total_segment ],
+          gaps: [ "\n342g\n" ]
+        )
+
+        expect(extract_with_provider_content([ fixture.fetch(:item) ], fixture.fetch(:document)).sole)
+          .to include(
+            validation_state: 'missing',
+            rejection_reasons: include('missing_purchased_quantity', 'missing_purchased_unit'),
+            purchased_quantity: nil
+          )
+      end
+
+      it 'does not use a TotalPrice component whose span is in a gap' do
+        fixture = owned_span_fixture(
+          [ price_segment, quantity_segment ],
+          gaps: [ "\n¥1,703\n" ]
+        )
+        gap_offset = fixture.fetch(:document).index(total_segment)
+        fixture.fetch(:item)['valueObject']['TotalPrice'] = {
+          'content' => total_segment,
+          'spans' => [ { 'offset' => gap_offset, 'length' => total_segment.length } ]
+        }
+
+        expect(extract_with_provider_content([ fixture.fetch(:item) ], fixture.fetch(:document)).sole)
+          .to include(printed_line_total: nil, corroboration: nil)
+      end
+
+      it 'does not combine a Quantity component with a QuantityUnit component in a gap' do
+        fixture = owned_span_fixture(
+          [ price_segment, '342' ],
+          gaps: [ "\ng\n" ]
+        )
+        item = fixture.fetch(:item)
+        item['valueObject'] = {
+          'Quantity' => field_from_owned_segment(fixture, 1, '342', valueNumber: 342),
+          'QuantityUnit' => {
+            'content' => 'g',
+            'valueString' => 'g',
+            'spans' => [ { 'offset' => fixture.fetch(:document).index("\ng\n") + 1, 'length' => 1 } ]
+          }
+        }
+
+        expect(extract_with_provider_content([ item ], fixture.fetch(:document)).sole)
+          .to include(
+            validation_state: 'ambiguous',
+            rejection_reasons: include('missing_purchased_unit', 'ambiguous_reference_expression'),
+            purchased_quantity: include(unit_status: 'blank')
+          )
+      end
+
+      it 'rejects a child component spanning an unowned gap' do
+        fixture = owned_span_fixture(
+          [ '税込 ¥498', '100g 342g' ],
+          gaps: [ "\n所有外\n" ]
+        )
+        first_span = fixture.fetch(:spans).first
+        fixture.fetch(:item)['valueObject']['Price'] = {
+          'content' => '¥498/100g',
+          'spans' => [
+            {
+              'offset' => first_span.fetch('offset') + 3,
+              'length' => fixture.fetch(:spans).last.fetch('offset') + 4 - first_span.fetch('offset') - 3
+            }
+          ]
+        }
+
+        expect(extract_with_provider_content([ fixture.fetch(:item) ], fixture.fetch(:document))).to eq([])
+      end
+
+      it 'fails closed for unordered, duplicate, overlapping, zero-length, overflow, and seventeen spans' do
+        fixture = complete_multi_span_fixture
+        spans = fixture.fetch(:spans)
+        malformed_sets = [
+          [ spans.fetch(1), spans.fetch(0), spans.fetch(2) ],
+          [ spans.fetch(0), spans.fetch(0), spans.fetch(2) ],
+          [ spans.fetch(0), { 'offset' => spans.fetch(0).fetch('offset') + 1, 'length' => 8 }, spans.fetch(2) ],
+          [ { 'offset' => spans.fetch(0).fetch('offset'), 'length' => 0 } ],
+          [ { 'offset' => -1, 'length' => 1 } ],
+          [ { 'offset' => 0, 'length' => -1 } ],
+          [ { 'offset' => described_class::MAX_PROVIDER_SPAN_VALUE, 'length' => 1 } ],
+          Array.new(17) { |index| { 'offset' => index * 2, 'length' => 1 } }
+        ]
+
+        malformed_sets.each do |malformed_spans|
+          malformed = fixture.fetch(:item).deep_dup
+          malformed['spans'] = malformed_spans
+
+          expect(extract_with_provider_content([ malformed ], fixture.fetch(:document))).to eq([])
+        end
+      end
+
+      it 'fails closed when item content is not the newline join of its owned document segments' do
+        fixture = complete_multi_span_fixture
+        fixture.fetch(:item)['content'] = [ price_segment, total_segment, quantity_segment ].join("\n")
+
+        expect(extract_with_provider_content([ fixture.fetch(:item) ], fixture.fetch(:document))).to eq([])
+      end
+
+      it 'marks evidence ambiguous when another item overlaps one actual owned span' do
+        fixture = complete_multi_span_fixture
+        quantity_span = fixture.fetch(:spans).fetch(1)
+        overlapping_item = {
+          'content' => quantity_segment,
+          'spans' => [ quantity_span ],
+          'valueObject' => {}
+        }
+
+        candidate = extract_with_provider_content(
+          [ fixture.fetch(:item), overlapping_item ],
+          fixture.fetch(:document)
+        ).find { |entry| entry[:item_index].zero? }
+
+        expect(candidate).to include(
+          validation_state: 'ambiguous',
+          rejection_reasons: include('ambiguous_reference_expression')
+        )
       end
     end
 

@@ -42,6 +42,8 @@ class ReceiptAmountService
   class InvalidItemSourceError < ArgumentError; end
 
   MAX_NUMERIC_SOURCE_BYTES = 512
+  COUNT_ITEM_PRICE_ABSOLUTE_MAX = BigDecimal("999999999999")
+  COUNT_ITEM_QUANTITY_ABSOLUTE_MAX = BigDecimal("9999")
   ITEM_NUMERIC_SOURCE_ATTRIBUTES = %i[
     price
     quantity
@@ -56,6 +58,8 @@ class ReceiptAmountService
     amount_persisted_line_total
   ].freeze
   private_constant :MAX_NUMERIC_SOURCE_BYTES
+  private_constant :COUNT_ITEM_PRICE_ABSOLUTE_MAX
+  private_constant :COUNT_ITEM_QUANTITY_ABSOLUTE_MAX
   private_constant :ITEM_NUMERIC_SOURCE_ATTRIBUTES
 
   INVALID_ITEM_SOURCE_ERRORS = [
@@ -173,7 +177,9 @@ class ReceiptAmountService
     reference_quantity:,
     reference_unit_code:,
     purchased_quantity:,
-    purchased_unit_code:
+    purchased_unit_code:,
+    discount_amount: nil,
+    discount_rate: nil
   )
     exact_price = Amounts::ExactBoundedDecimal.call(
       reference_price_amount,
@@ -210,9 +216,135 @@ class ReceiptAmountService
       reference_price_tax_inclusion: :gross
     )
 
+    unless discount_amount.nil? && discount_rate.nil?
+      unless discount_rate.nil?
+        raise Amounts::ReferenceItemExtension::InvalidSourceError,
+          "reference projection requires an exact absolute discount"
+      end
+
+      discount_projection = item_discount_projection(
+        original_line_total: result.projected_amount,
+        discount_amount: discount_amount
+      )
+      return discount_projection.merge(exact_amount: result.exact_amount).freeze
+    end
+
     {
       exact_amount: result.exact_amount,
       projected_amount: result.projected_amount
+    }.freeze
+  rescue *INVALID_ITEM_SOURCE_ERRORS
+    raise InvalidItemSourceError, "Invalid item pricing source"
+  end
+
+  def self.count_item_extension_projection(price_amount:, purchased_quantity:, purchased_unit_code:, discount_amount: nil, discount_rate: nil)
+    exact_price = Amounts::ExactBoundedDecimal.call(
+      price_amount,
+      minimum: 0,
+      maximum: COUNT_ITEM_PRICE_ABSOLUTE_MAX.to_r,
+      maximum_scale: 0,
+      minimum_inclusive: true
+    )
+    exact_quantity = Amounts::ExactBoundedDecimal.call(
+      purchased_quantity,
+      minimum: 0,
+      maximum: COUNT_ITEM_QUANTITY_ABSOLUTE_MAX.to_r,
+      maximum_scale: 0,
+      minimum_inclusive: false
+    )
+    unless exact_price && exact_quantity
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "count projection requires bounded exact integer sources"
+    end
+
+    item = {
+      pricing_source_kind: "count_unit_price",
+      price: exact_price.to_i,
+      quantity: exact_quantity.to_i,
+      quantity_unit_code: purchased_unit_code
+    }
+    exact_amount = exact_price * exact_quantity
+    projected_item = Amounts::ItemTotalAggregator.new(items: [ item ], context: :analysis).call.dig(:items, 0)
+    projected_amount = projected_item[:original_line_total]
+    unless projected_amount.is_a?(Integer) && projected_amount == exact_amount
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "count projection must preserve the exact integer extension"
+    end
+
+    unless discount_amount.nil? && discount_rate.nil?
+      discount_projection = item_discount_projection(
+        original_line_total: projected_amount,
+        discount_amount: discount_amount,
+        discount_rate: discount_rate
+      )
+      return discount_projection.merge(exact_amount: exact_amount).freeze
+    end
+
+    {
+      exact_amount: exact_amount,
+      projected_amount: projected_amount
+    }.freeze
+  rescue *INVALID_ITEM_SOURCE_ERRORS
+    raise InvalidItemSourceError, "Invalid item pricing source"
+  end
+
+  def self.item_discount_projection(original_line_total:, discount_amount:, discount_rate: nil)
+    exact_original = Amounts::ExactBoundedDecimal.call(
+      original_line_total,
+      minimum: 0,
+      maximum: COUNT_ITEM_PRICE_ABSOLUTE_MAX.to_r,
+      maximum_scale: 0,
+      minimum_inclusive: true
+    )
+    exact_discount = Amounts::ExactBoundedDecimal.call(
+      discount_amount,
+      minimum: 0,
+      maximum: exact_original || 0,
+      maximum_scale: 0,
+      minimum_inclusive: true
+    )
+    unless exact_original && exact_discount
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "item discount requires bounded exact integer sources"
+    end
+
+    item = {
+      pricing_source_kind: "explicit_line_total",
+      line_total: exact_original.to_i,
+      original_line_total: exact_original.to_i
+    }
+    if discount_rate.nil?
+      item[:discount_amount] = exact_discount.to_i
+    else
+      exact_rate = Amounts::ExactBoundedDecimal.call(
+        discount_rate,
+        minimum: 0,
+        maximum: 1,
+        maximum_scale: 3,
+        minimum_inclusive: false
+      )
+      unless exact_rate && exact_rate < 1
+        raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+          "item discount requires a bounded exact rate"
+      end
+
+      item[:discount_rate] = BigDecimal(exact_rate.numerator.to_s) / exact_rate.denominator
+    end
+
+    projected_item = Amounts::ItemTotalAggregator.new(
+      items: [ item ],
+      context: :analysis,
+      discount_rounding_mode: :round
+    ).call.dig(:items, 0)
+    unless projected_item[:original_line_total] == exact_original.to_i && projected_item[:discount_amount] == exact_discount.to_i
+      raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
+        "item discount must match the exact projection"
+    end
+
+    {
+      original_line_total: projected_item[:original_line_total],
+      projected_amount: projected_item[:line_total],
+      discount_amount: projected_item[:discount_amount]
     }.freeze
   rescue *INVALID_ITEM_SOURCE_ERRORS
     raise InvalidItemSourceError, "Invalid item pricing source"
@@ -1187,12 +1319,14 @@ class ReceiptAmountService
   end
 
   def normalize_tax_detail(t)
-    {
+    normalized = {
       amount: to_i_or_nil(fetch_value(t, :amount)),
       rate: fetch_value(t, :rate),
       net_amount: to_i_or_nil(fetch_value(t, :net_amount)),
       description: fetch_value(t, :description)
     }
+    normalized[:tax_detail_amount_basis] = "net" if @receipt[:tax_detail_amount_basis].to_s == "net"
+    normalized
   end
 
   def fetch_value(obj, key, default = nil)

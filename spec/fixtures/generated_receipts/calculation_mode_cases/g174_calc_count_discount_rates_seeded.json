@@ -1,0 +1,137 @@
+{
+  "case_id": "g174_calc_count_discount_rates_seeded",
+  "category": "calculation_mode",
+  "intent": "Item-local percentage discounts of 1%,27%,96%,60% are applied once. Both printed percentage and independently calculated discount amount are explicit. Fixed before render: required rates 1%,27%; LCG32 seed 20260830 draws 96%,75%,31%,60% from 1..99 except 1,8,10,27. Synthetic, not statutory rates.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示割引一 (税込1%)", "単価 @257円", "数量 3個", "明細値引 1% -8円", "明細計 763円"],
+        "purchased_quantity": "3",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "257",
+        "printed_line_total": 763,
+        "discount_rate": "0.01",
+        "discount_amount": 8
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["例示割引二 (税込27%)", "単価 @419円", "数量 2本", "明細値引 27% -226円", "明細計 612円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "piece",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "419",
+        "printed_line_total": 612,
+        "discount_rate": "0.27",
+        "discount_amount": 226
+      },
+      {
+        "item_index": 2,
+        "printed_lines": ["例示割引三 (税込75%)", "単価 @173円", "数量 5袋", "明細値引 96% -830円", "明細計 35円"],
+        "purchased_quantity": "5",
+        "purchased_unit": "bag",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "173",
+        "printed_line_total": 35,
+        "discount_rate": "0.96",
+        "discount_amount": 830
+      },
+      {
+        "item_index": 3,
+        "printed_lines": ["例示割引四 (税込31%)", "単価 @293円", "数量 3箱", "明細値引 60% -527円", "明細計 352円"],
+        "purchased_quantity": "3",
+        "purchased_unit": "box",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "293",
+        "printed_line_total": 352,
+        "discount_rate": "0.6",
+        "discount_amount": 527
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空計数検証店",
+    "store_address": "架空県例示市検証町1-1",
+    "purchased_at": "2026-08-01T09:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": null,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示割引一",
+        "unit_price": 257,
+        "quantity": "3",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 771,
+        "line_total": 763,
+        "tax_rate": 0.01,
+        "discount_amount": 8,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示割引二",
+        "unit_price": 419,
+        "quantity": "2",
+        "quantity_unit_code": "piece",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 838,
+        "line_total": 612,
+        "tax_rate": 0.27,
+        "discount_amount": 226,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示割引三",
+        "unit_price": 173,
+        "quantity": "5",
+        "quantity_unit_code": "bag",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 865,
+        "line_total": 35,
+        "tax_rate": 0.75,
+        "discount_amount": 830,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示割引四",
+        "unit_price": 293,
+        "quantity": "3",
+        "quantity_unit_code": "box",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 879,
+        "line_total": 352,
+        "tax_rate": 0.31,
+        "discount_amount": 527,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [
+      {"rate": 0.01, "net": 756, "tax": 7, "gross": 763, "basis": "gross", "label": "1%対象計"},
+      {"rate": 0.27, "net": 482, "tax": 130, "gross": 612, "basis": "gross", "label": "27%対象計"},
+      {"rate": 0.31, "net": 269, "tax": 83, "gross": 352, "basis": "gross", "label": "31%対象計"},
+      {"rate": 0.75, "net": 20, "tax": 15, "gross": 35, "basis": "gross", "label": "75%対象計"}
+    ],
+    "subtotal": 1527,
+    "tax": 235,
+    "total": 1762,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1762}],
+    "payment_sum": 1762,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "80mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "item_review_states"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

@@ -1,0 +1,389 @@
+{
+  "status": "succeeded",
+  "analyzeResult": {
+    "apiVersion": "2024-11-30",
+    "modelId": "prebuilt-receipt",
+    "stringIndexType": "textElements",
+    "content": "架空表形式店\n番号 100g当り(円) 重量(?) 金額(円)\n外税\n8.00%\n例示素材B\n00000002\n298円\n199g\n593円\n小計\n593円\n593円\n外税\n8.00%\n47円\n合計\n640円",
+    "pages": [
+      {
+        "pageNumber": 1,
+        "width": 320,
+        "height": 510,
+        "unit": "pixel",
+        "words": [
+          {
+            "content": "架空表形式店",
+            "polygon": [20, 20, 80, 20, 80, 36, 20, 36],
+            "confidence": 0.99,
+            "span": { "offset": 0, "length": 6 }
+          },
+          {
+            "content": "番号",
+            "polygon": [20, 42, 40, 42, 40, 58, 20, 58],
+            "confidence": 0.99,
+            "span": { "offset": 7, "length": 2 }
+          },
+          {
+            "content": "100g当り(円)",
+            "polygon": [70, 42, 160, 42, 160, 58, 70, 58],
+            "confidence": 0.99,
+            "span": { "offset": 10, "length": 9 }
+          },
+          {
+            "content": "重量(?)",
+            "polygon": [170, 42, 220, 42, 220, 58, 170, 58],
+            "confidence": 0.99,
+            "span": { "offset": 20, "length": 5 }
+          },
+          {
+            "content": "金額(円)",
+            "polygon": [240, 42, 290, 42, 290, 58, 240, 58],
+            "confidence": 0.99,
+            "span": { "offset": 26, "length": 5 }
+          },
+          {
+            "content": "外税",
+            "polygon": [20, 64, 40, 64, 40, 80, 20, 80],
+            "confidence": 0.99,
+            "span": { "offset": 32, "length": 2 }
+          },
+          {
+            "content": "8.00%",
+            "polygon": [20, 86, 70, 86, 70, 102, 20, 102],
+            "confidence": 0.99,
+            "span": { "offset": 35, "length": 5 }
+          },
+          {
+            "content": "例示素材B",
+            "polygon": [20, 108, 70, 108, 70, 124, 20, 124],
+            "confidence": 0.99,
+            "span": { "offset": 41, "length": 5 }
+          },
+          {
+            "content": "00000002",
+            "polygon": [20, 130, 100, 130, 100, 146, 20, 146],
+            "confidence": 0.99,
+            "span": { "offset": 47, "length": 8 }
+          },
+          {
+            "content": "298円",
+            "polygon": [70, 152, 110, 152, 110, 168, 70, 168],
+            "confidence": 0.99,
+            "span": { "offset": 56, "length": 4 }
+          },
+          {
+            "content": "199g",
+            "polygon": [170, 152, 210, 152, 210, 168, 170, 168],
+            "confidence": 0.99,
+            "span": { "offset": 61, "length": 4 }
+          },
+          {
+            "content": "593円",
+            "polygon": [240, 152, 280, 152, 280, 168, 240, 168],
+            "confidence": 0.99,
+            "span": { "offset": 66, "length": 4 }
+          },
+          {
+            "content": "小計",
+            "polygon": [20, 218, 40, 218, 40, 234, 20, 234],
+            "confidence": 0.99,
+            "span": { "offset": 71, "length": 2 }
+          },
+          {
+            "content": "593円",
+            "polygon": [20, 240, 60, 240, 60, 256, 20, 256],
+            "confidence": 0.99,
+            "span": { "offset": 74, "length": 4 }
+          },
+          {
+            "content": "593円",
+            "polygon": [20, 262, 60, 262, 60, 278, 20, 278],
+            "confidence": 0.99,
+            "span": { "offset": 79, "length": 4 }
+          },
+          {
+            "content": "外税",
+            "polygon": [20, 284, 40, 284, 40, 300, 20, 300],
+            "confidence": 0.99,
+            "span": { "offset": 84, "length": 2 }
+          },
+          {
+            "content": "8.00%",
+            "polygon": [20, 306, 70, 306, 70, 322, 20, 322],
+            "confidence": 0.99,
+            "span": { "offset": 87, "length": 5 }
+          },
+          {
+            "content": "47円",
+            "polygon": [20, 328, 50, 328, 50, 344, 20, 344],
+            "confidence": 0.99,
+            "span": { "offset": 93, "length": 3 }
+          },
+          {
+            "content": "合計",
+            "polygon": [20, 372, 40, 372, 40, 388, 20, 388],
+            "confidence": 0.99,
+            "span": { "offset": 97, "length": 2 }
+          },
+          {
+            "content": "640円",
+            "polygon": [240, 372, 280, 372, 280, 388, 240, 388],
+            "confidence": 0.99,
+            "span": { "offset": 100, "length": 4 }
+          }
+        ],
+        "lines": [
+          {
+            "content": "架空表形式店",
+            "polygon": [20, 20, 80, 20, 80, 36, 20, 36],
+            "spans": [{ "offset": 0, "length": 6 }]
+          },
+          {
+            "content": "番号 100g当り(円) 重量(?) 金額(円)",
+            "polygon": [20, 42, 300, 42, 300, 58, 20, 58],
+            "spans": [{ "offset": 7, "length": 24 }]
+          },
+          {
+            "content": "外税",
+            "polygon": [20, 64, 50, 64, 50, 80, 20, 80],
+            "spans": [{ "offset": 32, "length": 2 }]
+          },
+          {
+            "content": "8.00%",
+            "polygon": [20, 86, 70, 86, 70, 102, 20, 102],
+            "spans": [{ "offset": 35, "length": 5 }]
+          },
+          {
+            "content": "例示素材B",
+            "polygon": [20, 108, 70, 108, 70, 124, 20, 124],
+            "spans": [{ "offset": 41, "length": 5 }]
+          },
+          {
+            "content": "00000002",
+            "polygon": [20, 130, 100, 130, 100, 146, 20, 146],
+            "spans": [{ "offset": 47, "length": 8 }]
+          },
+          {
+            "content": "298円",
+            "polygon": [70, 152, 110, 152, 110, 168, 70, 168],
+            "spans": [{ "offset": 56, "length": 4 }]
+          },
+          {
+            "content": "199g",
+            "polygon": [170, 152, 210, 152, 210, 168, 170, 168],
+            "spans": [{ "offset": 61, "length": 4 }]
+          },
+          {
+            "content": "593円",
+            "polygon": [240, 152, 280, 152, 280, 168, 240, 168],
+            "spans": [{ "offset": 66, "length": 4 }]
+          },
+          {
+            "content": "小計",
+            "polygon": [20, 218, 50, 218, 50, 234, 20, 234],
+            "spans": [{ "offset": 71, "length": 2 }]
+          },
+          {
+            "content": "593円",
+            "polygon": [20, 240, 60, 240, 60, 256, 20, 256],
+            "spans": [{ "offset": 74, "length": 4 }]
+          },
+          {
+            "content": "593円",
+            "polygon": [20, 262, 60, 262, 60, 278, 20, 278],
+            "spans": [{ "offset": 79, "length": 4 }]
+          },
+          {
+            "content": "外税",
+            "polygon": [20, 284, 50, 284, 50, 300, 20, 300],
+            "spans": [{ "offset": 84, "length": 2 }]
+          },
+          {
+            "content": "8.00%",
+            "polygon": [20, 306, 70, 306, 70, 322, 20, 322],
+            "spans": [{ "offset": 87, "length": 5 }]
+          },
+          {
+            "content": "47円",
+            "polygon": [20, 328, 50, 328, 50, 344, 20, 344],
+            "spans": [{ "offset": 93, "length": 3 }]
+          },
+          {
+            "content": "合計",
+            "polygon": [20, 372, 80, 372, 80, 388, 20, 388],
+            "spans": [{ "offset": 97, "length": 2 }]
+          },
+          {
+            "content": "640円",
+            "polygon": [240, 372, 300, 372, 300, 388, 240, 388],
+            "spans": [{ "offset": 100, "length": 4 }]
+          }
+        ]
+      }
+    ],
+    "documents": [
+      {
+        "docType": "receipt.retailMeal",
+        "fields": {
+          "Items": {
+            "type": "array",
+            "valueArray": [
+              {
+                "content": "例示素材B\n00000002\n298円\n199g\n593円",
+                "spans": [{ "offset": 41, "length": 29 }],
+                "valueObject": {
+                  "Description": {
+                    "content": "例示素材B",
+                    "valueString": "例示素材B",
+                    "spans": [{ "offset": 41, "length": 5 }]
+                  },
+                  "TotalPrice": {
+                    "content": "593円",
+                    "valueCurrency": {
+                      "amount": 593,
+                      "currencyCode": "JPY"
+                    },
+                    "spans": [{ "offset": 66, "length": 4 }]
+                  },
+                  "Price": {
+                    "content": "298円",
+                    "valueCurrency": {
+                      "amount": 298,
+                      "currencyCode": "JPY"
+                    },
+                    "spans": [{ "offset": 56, "length": 4 }]
+                  },
+                  "Quantity": {
+                    "content": "199g",
+                    "valueNumber": 199,
+                    "spans": [{ "offset": 61, "length": 4 }]
+                  },
+                  "QuantityUnit": {
+                    "content": "199g",
+                    "valueString": "g",
+                    "spans": [{ "offset": 61, "length": 4 }]
+                  },
+                  "ProductCode": {
+                    "content": "00000002",
+                    "valueString": "00000002",
+                    "spans": [{ "offset": 47, "length": 8 }]
+                  }
+                }
+              }
+            ]
+          },
+          "Subtotal": {
+            "content": "593円",
+            "boundingRegions": [
+              {
+                "pageNumber": 1,
+                "polygon": [20, 240, 60, 240, 60, 256, 20, 256]
+              }
+            ],
+            "spans": [{ "offset": 74, "length": 4 }],
+            "valueCurrency": {
+              "amount": 593,
+              "currencyCode": "JPY"
+            }
+          },
+          "TaxDetails": {
+            "type": "array",
+            "valueArray": [
+              {
+                "content": "593円\n外税\n8.00%\n47円",
+                "boundingRegions": [
+                  {
+                    "pageNumber": 1,
+                    "polygon": [10, 250, 320, 250, 320, 390, 10, 390]
+                  }
+                ],
+                "spans": [{ "offset": 79, "length": 17 }],
+                "valueObject": {
+                  "Description": {
+                    "content": "外税",
+                    "boundingRegions": [
+                      {
+                        "pageNumber": 1,
+                        "polygon": [20, 284, 50, 284, 50, 300, 20, 300]
+                      }
+                    ],
+                    "spans": [{ "offset": 84, "length": 2 }],
+                    "valueString": "外税"
+                  },
+                  "Rate": {
+                    "content": "8.00%",
+                    "boundingRegions": [
+                      {
+                        "pageNumber": 1,
+                        "polygon": [20, 306, 70, 306, 70, 322, 20, 322]
+                      }
+                    ],
+                    "spans": [{ "offset": 87, "length": 5 }],
+                    "valueNumber": 0.08
+                  },
+                  "NetAmount": {
+                    "content": "593円",
+                    "boundingRegions": [
+                      {
+                        "pageNumber": 1,
+                        "polygon": [20, 262, 60, 262, 60, 278, 20, 278]
+                      }
+                    ],
+                    "spans": [{ "offset": 79, "length": 4 }],
+                    "valueCurrency": {
+                      "amount": 593,
+                      "currencyCode": "JPY"
+                    }
+                  },
+                  "Amount": {
+                    "content": "47円",
+                    "boundingRegions": [
+                      {
+                        "pageNumber": 1,
+                        "polygon": [20, 328, 50, 328, 50, 344, 20, 344]
+                      }
+                    ],
+                    "spans": [{ "offset": 93, "length": 3 }],
+                    "valueCurrency": {
+                      "amount": 47,
+                      "currencyCode": "JPY"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "TotalTax": {
+            "content": "47円",
+            "boundingRegions": [
+              {
+                "pageNumber": 1,
+                "polygon": [20, 328, 50, 328, 50, 344, 20, 344]
+              }
+            ],
+            "spans": [{ "offset": 93, "length": 3 }],
+            "valueCurrency": {
+              "amount": 47,
+              "currencyCode": "JPY"
+            }
+          },
+          "Total": {
+            "content": "640円",
+            "boundingRegions": [
+              {
+                "pageNumber": 1,
+                "polygon": [240, 372, 300, 372, 300, 388, 240, 388]
+              }
+            ],
+            "spans": [{ "offset": 100, "length": 4 }],
+            "valueCurrency": {
+              "amount": 640,
+              "currencyCode": "JPY"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

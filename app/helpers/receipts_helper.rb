@@ -33,6 +33,7 @@ module ReceiptsHelper
     "item_name_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
     "item_category_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
     "item_quantity_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
+    "item_pricing_mode_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
     "item_tax_rate_uncertain" => RECEIPT_REVIEW_TARGET_ITEMS,
     "items_missing" => RECEIPT_REVIEW_TARGET_ITEMS,
     "item_total_mismatch" => RECEIPT_REVIEW_TARGET_ITEMS,

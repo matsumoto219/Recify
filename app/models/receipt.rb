@@ -399,8 +399,9 @@ class Receipt < ApplicationRecord
       else
         {
           "receipt_tax_basis" => "total_includes_tax",
-          "item_amount_basis" => "line_total_as_recorded"
-        }
+          "item_amount_basis" => "line_total_as_recorded",
+          "tax_detail_amount_basis" => semantics["tax_detail_amount_basis"] == "net" ? "net" : nil
+        }.compact
       end
     else
       {}

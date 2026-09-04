@@ -8,6 +8,26 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         snapshot.dig(:adoption_proposals, :reference_pricing),
         ocr_snapshot: snapshot
       )
+      tax_details = Receipts::Processing::Contracts::ReferencePricingTaxDetailStructuralEvidenceSet.from_snapshot(
+        snapshot.dig(:adoption_proposals, :reference_pricing_tax_details),
+        ocr_snapshot: snapshot
+      )
+      structured_items_gross =
+        Receipts::Processing::Contracts::ReferencePricingStructuredItemsGrossEvidenceSet.from_snapshot(
+          snapshot.dig(:adoption_proposals, :reference_pricing_structured_items_gross),
+          ocr_snapshot: snapshot
+        )
+      item_calculation_modes = Receipts::Processing::Contracts::ItemCalculationModeProposalSet.from_snapshot(
+        snapshot.dig(:adoption_proposals, :item_calculation_modes),
+        ocr_snapshot: snapshot
+      )
+      adoption_proposals = {}
+      adoption_proposals["reference_pricing"] = proposal if proposal
+      adoption_proposals["reference_pricing_tax_details"] = tax_details if tax_details
+      if structured_items_gross
+        adoption_proposals["reference_pricing_structured_items_gross"] = structured_items_gross
+      end
+      adoption_proposals["item_calculation_modes"] = item_calculation_modes if item_calculation_modes.present?
 
       {
         schema_version: snapshot[:schema_version] ==
@@ -16,12 +36,12 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         success: snapshot[:success] == true,
         lines: Array(snapshot[:lines]).map(&:to_s),
         case_preserved_lines: Array(snapshot[:case_preserved_lines]).map(&:to_s),
-        candidates: normalized_hash(snapshot[:candidates]).to_h,
+        candidates: rehydrate_ocr_candidates(snapshot),
         candidate_counts: normalized_hash(snapshot[:candidate_counts]).to_h,
         error_code: snapshot[:error_code].presence,
         meta: normalized_hash(snapshot[:meta]).to_h,
         truncated: rehydrate_ocr_truncation(snapshot[:truncated]),
-        adoption_proposals: proposal ? { "reference_pricing" => proposal } : nil
+        adoption_proposals: adoption_proposals.presence
       }.compact
     end
 
@@ -51,11 +71,24 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
 
     private
 
+    def rehydrate_ocr_candidates(snapshot)
+      candidates = normalized_hash(snapshot[:candidates]).dup
+      basis = candidates.delete(:tax_detail_amount_basis)
+      counts = normalized_hash(normalized_hash(snapshot[:candidate_counts])[:tax_details])
+      count = Array(candidates[:tax_details]).size
+      if basis == "net" && count.positive? &&
+          normalized_hash(snapshot[:truncated])[:tax_details] != true &&
+          counts[:actual_count] == count && counts[:snapshot_count] == count
+        candidates[:tax_detail_amount_basis] = "net"
+      end
+      candidates.to_h
+    end
+
     def rehydrate_ocr_truncation(value)
       normalized = normalized_hash(value)
       %w[
         lines case_preserved_lines items payments tax_details adjustment_candidates
-        reference_pricing_candidates
+        reference_pricing_candidates item_calculation_mode_candidates
       ].each_with_object({}) do |key, snapshot|
         snapshot[key] = normalized[key] == true if normalized.key?(key)
       end

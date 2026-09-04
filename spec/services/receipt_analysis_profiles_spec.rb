@@ -126,6 +126,59 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile analysis per-unit discount notes' do
+    it '単位当たりの販促注記をabsolute adjustmentや通常単価と区別する' do
+      pattern = described_class.fetch('JPN').analysis_per_unit_discount_note_pattern
+
+      aggregate_failures do
+        expect('会員値引 3円/L引').to match(pattern)
+        expect('特典値引：3円／L').to match(pattern)
+        expect('3円/L引き').to match(pattern)
+        expect('単価 160円/L').not_to match(pattern)
+        expect('税込 160円/L').not_to match(pattern)
+        expect('値引後 160円/L').not_to match(pattern)
+        expect('3円/L').not_to match(pattern)
+        expect('値引 3円').not_to match(pattern)
+        expect('クーポン -100円').not_to match(pattern)
+      end
+    end
+  end
+
+  describe 'JPN profile OCR per-unit discount notes' do
+    it '個数商品の単品値引注記とレシート全体値引をprofile側で区別する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect('(単品 -75)').to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('(1コ-75)').to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('(2個 -150円)').to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('2コ×単-75').to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('2コ×単75').not_to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('2L×単-75').not_to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('明細値引 -150円').not_to match(profile.ocr_item_discount_per_unit_note_pattern)
+        expect('小計値引 -150円').to match(profile.ocr_receipt_level_discount_line_pattern)
+        expect('subtotal discount -150').to match(profile.ocr_receipt_level_discount_line_pattern)
+        expect('明細値引 -150円').not_to match(profile.ocr_receipt_level_discount_line_pattern)
+      end
+    end
+
+    it 'standaloneの@付き単位当たり販促注記だけを許可する' do
+      pattern = described_class.fetch('JPN').ocr_reference_pricing_item_layout_per_unit_discount_note_pattern
+
+      aggregate_failures do
+        expect('会員値引 3円/L引').to match(pattern)
+        expect('@3円/L引').to match(pattern)
+        expect('＠３円／Ｌ引き').to match(pattern)
+        expect('@3円/100L引').to match(pattern)
+        expect('3円/L引').not_to match(pattern)
+        expect('@3円/L').not_to match(pattern)
+        expect('@-3円/L引').not_to match(pattern)
+        expect('@3%/L引').not_to match(pattern)
+        expect('クーポン @3円/L引').not_to match(pattern)
+      end
+    end
+  end
+
   describe 'JPN profile analysis cash tendered payment labels' do
     it 'Amount Engine用の現金預かりラベルをprofile側で定義する' do
       pattern = described_class.fetch('JPN').analysis_cash_tendered_payment_pattern
@@ -252,6 +305,90 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile OCR single structured item inner-tax descriptions' do
+    it '単一明細の税込根拠へ利用できるexactな内税descriptionだけを定義する' do
+      pattern = described_class.fetch('JPN').ocr_reference_pricing_single_structured_item_inner_tax_description_pattern
+
+      aggregate_failures do
+        expect('内税').to match(pattern)
+        expect('内消費税').to match(pattern)
+        expect('内消費税等').to match(pattern)
+        expect('消費税').not_to match(pattern)
+        expect('外税').not_to match(pattern)
+        expect('内税対象').not_to match(pattern)
+      end
+    end
+  end
+
+  describe 'JPN profile OCR shared-basis external-tax descriptions' do
+    it '共有基準表のnet authorityへ利用できるexactな外税descriptionだけを定義する' do
+      pattern = described_class.fetch('JPN').ocr_reference_pricing_shared_basis_external_tax_description_pattern
+
+      aggregate_failures do
+        expect('外税').to match(pattern)
+        expect('税別').to match(pattern)
+        expect('税抜').to match(pattern)
+        expect('内税').not_to match(pattern)
+        expect('消費税').not_to match(pattern)
+        expect('外税対象').not_to match(pattern)
+      end
+    end
+  end
+
+  describe 'JPN profile item tax-rate evidence' do
+    it '税ラベルに結合した率と独立した税率行を商品割合や割引率と区別する' do
+      pattern = described_class.fetch('JPN').ocr_item_tax_rate_pattern
+
+      aggregate_failures do
+        expect('例示商品 (税込27%)').to match(pattern)
+        expect('税率: 1%').to match(pattern)
+        expect('税抜 0.5%').to match(pattern)
+        expect('8%').to match(pattern)
+        expect('果汁27%飲料').not_to match(pattern)
+        expect('明細値引27% -14円').not_to match(pattern)
+        expect('27%増量').not_to match(pattern)
+        expect('単価 127円').not_to match(pattern)
+      end
+    end
+  end
+
+  describe 'JPN profile analysis tax-summary ownership' do
+    it '商品行の税込表記や基準価格を税率別集計行へ昇格しない' do
+      pattern = described_class.fetch('JPN').analysis_tax_summary_line_pattern
+
+      aggregate_failures do
+        expect('(10%対象').to match(pattern)
+        expect('1%対象計 101円').to match(pattern)
+        expect('小 計 (税抜8%)').to match(pattern)
+        expect('(10%税込対象額').to match(pattern)
+        expect('外税 8%対象額').to match(pattern)
+        expect('例示商品(税込27%)').not_to match(pattern)
+        expect('税込27% 100円/100g').not_to match(pattern)
+        expect('税込27%').not_to match(pattern)
+        expect('商品27%対象').not_to match(pattern)
+        expect('値引27% -14円').not_to match(pattern)
+      end
+    end
+
+    it '税集計の継続行に商品・数量・支払の文字列を許容しない' do
+      pattern = described_class.fetch('JPN').analysis_tax_summary_continuation_line_pattern
+
+      aggregate_failures do
+        expect('').to match(pattern)
+        expect('¥1270)').to match(pattern)
+        expect('(内消費税等').to match(pattern)
+        expect('¥1,391内消費税').to match(pattern)
+        expect('軽 8%').to match(pattern)
+        expect('税込額 1270円').to match(pattern)
+        expect('例示商品1270円').not_to match(pattern)
+        expect('単価1270円').not_to match(pattern)
+        expect('数量1270個').not_to match(pattern)
+        expect('現金1270円').not_to match(pattern)
+        expect('税込27% 1270円/100g').not_to match(pattern)
+      end
+    end
+  end
+
   describe 'JPN profile post-discount reference pricing labels' do
     it '値引額と値引適用後の明示basisを区別する' do
       pattern = described_class.fetch('JPN').ocr_post_discount_price_basis_pattern
@@ -267,8 +404,11 @@ RSpec.describe ReceiptAnalysisProfiles do
   end
 
   describe 'JPN profile strict receipt summary labels' do
-    it 'receipt summaryだけを認識し小計やtax-labelled itemを除外する' do
-      pattern = described_class.fetch('JPN').ocr_strict_receipt_summary_total_line_pattern
+    it 'same-lineとlabel-onlyのreceipt summaryを区別し小計やtax-labelled itemを除外する' do
+      profile = described_class.fetch('JPN')
+      pattern = profile.ocr_strict_receipt_summary_total_line_pattern
+      label_pattern = profile.ocr_strict_receipt_summary_total_label_line_pattern
+      amount_pattern = profile.ocr_strict_receipt_summary_total_amount_line_pattern
 
       aggregate_failures do
         expect('合計 300円').to match(pattern)
@@ -278,6 +418,27 @@ RSpec.describe ReceiptAnalysisProfiles do
         expect('小計 300円').not_to match(pattern)
         expect('税込 300円').not_to match(pattern)
         expect('通常明細 300円').not_to match(pattern)
+        expect('合計').to match(label_pattern)
+        expect('TOTAL:').to match(label_pattern)
+        expect('買上合計 1点').to match(label_pattern)
+        expect('買上合計 ３点').to match(label_pattern)
+        expect('合計(税込)').to match(label_pattern)
+        expect('総合計（内税）').to match(label_pattern)
+        expect('合計 300円').not_to match(label_pattern)
+        expect('小計').not_to match(label_pattern)
+        expect('買上合計 0点').not_to match(label_pattern)
+        expect('買上合計 -1点').not_to match(label_pattern)
+        expect('買上合計 1.5点').not_to match(label_pattern)
+        expect('買上合計 1個').not_to match(label_pattern)
+        expect('合計(税抜)').not_to match(label_pattern)
+        expect('合計(外税)').not_to match(label_pattern)
+        expect('合計(税計算済)').not_to match(label_pattern)
+        expect('合計(税込').not_to match(label_pattern)
+        expect('合計（税込)').not_to match(label_pattern)
+        expect('合計(税込）').not_to match(label_pattern)
+        expect('¥300').to match(amount_pattern)
+        expect('300円').to match(amount_pattern)
+        expect('支払 300円').not_to match(amount_pattern)
       end
     end
   end
@@ -294,6 +455,184 @@ RSpec.describe ReceiptAnalysisProfiles do
         expect('約1L').to match(profile.ocr_reference_pricing_line_group_package_or_uncertain_pattern)
         expect('gross weight 1kg').to match(profile.ocr_reference_pricing_line_group_package_or_uncertain_pattern)
         expect('検証品A01').not_to match(profile.ocr_reference_pricing_line_group_package_or_uncertain_pattern)
+      end
+    end
+
+    it 'owns explicit count quantity line vocabulary' do
+      pattern = profile.ocr_item_calculation_count_quantity_line_pattern
+
+      aggregate_failures do
+        expect('数量 3枚'.match(pattern).named_captures).to eq('label' => '数量', 'quantity' => '3', 'unit' => '枚')
+        expect('数量 3'.match(pattern).named_captures).to eq('label' => '数量', 'quantity' => '3', 'unit' => nil)
+        expect('２セット'.match(pattern).named_captures).to eq('label' => nil, 'quantity' => '２', 'unit' => 'セット')
+        expect('数量 約3枚').not_to match(pattern)
+        expect('数量 2〜3枚').not_to match(pattern)
+        expect('数量 3枚入り').to match(pattern)
+      end
+    end
+
+    it 'owns item calculation package-quantity vocabulary' do
+      aggregate_failures do
+        expect('検証商品 10個入').to match(profile.ocr_item_calculation_package_quantity_pattern)
+        expect('検証商品 2箱パック').to match(profile.ocr_item_calculation_package_quantity_pattern)
+        expect('検証商品 2個').not_to match(profile.ocr_item_calculation_package_quantity_pattern)
+        expect('検証商品 500ml入り').to match(profile.ocr_item_calculation_package_capacity_pattern)
+        expect('検証商品 2袋 x 100g').to match(profile.ocr_item_calculation_package_capacity_pattern)
+        expect('検証商品 2個').not_to match(profile.ocr_item_calculation_package_capacity_pattern)
+        expect('検証商品 約2個').to match(profile.ocr_item_calculation_count_uncertain_pattern)
+        expect('検証商品 2〜3個').to match(profile.ocr_item_calculation_count_uncertain_pattern)
+        expect('検証商品 2個で300円').to match(profile.ocr_item_calculation_count_uncertain_pattern)
+        expect('検証商品 2個').not_to match(profile.ocr_item_calculation_count_uncertain_pattern)
+        expect('*120').to match(profile.ocr_item_calculation_tax_marker_prefix_pattern)
+        expect('＊120').to match(profile.ocr_item_calculation_tax_marker_prefix_pattern)
+        expect('120').not_to match(profile.ocr_item_calculation_tax_marker_prefix_pattern)
+        expect('120※').to match(profile.ocr_item_calculation_tax_marker_suffix_pattern)
+        expect('120').not_to match(profile.ocr_item_calculation_tax_marker_suffix_pattern)
+        expect('120※備考').not_to match(profile.ocr_item_calculation_tax_marker_suffix_pattern)
+      end
+    end
+
+    it 'owns bounded fragment name prefixes without inferring tax authority' do
+      pattern = profile.ocr_item_calculation_fragment_name_prefix_pattern
+
+      aggregate_failures do
+        expect('外0 ').to match(pattern)
+        expect('外1 ').to match(pattern)
+        expect('外8 ').to match(pattern)
+        expect('外27 ').to match(pattern)
+        expect('外99 ').to match(pattern)
+        expect('外８ ').to match(pattern)
+        expect('外100 ').not_to match(pattern)
+        expect('外8').not_to match(pattern)
+        expect('外8 追加 ').not_to match(pattern)
+        expect('外8 外8 ').not_to match(pattern)
+        expect("外8\n").not_to match(pattern)
+        expect('検証商品 ').not_to match(pattern)
+        expect('合計 ').not_to match(pattern)
+      end
+    end
+
+    it 'owns complete count expressions without treating package or reference units as count semantics' do
+      pattern = profile.ocr_item_calculation_count_expression_pattern
+
+      aggregate_failures do
+        expect('@123×2個'.match(pattern).named_captures).to eq('price' => '123', 'quantity' => '2', 'unit' => '個', 'separator' => '×')
+        expect('(2個 × 単123)'.match(pattern).named_captures).to eq('price' => '123', 'quantity' => '2', 'unit' => '個', 'separator' => '×')
+        expect('＠１２３×２').to match(pattern)
+        expect('(2個 × 単123').not_to match(pattern)
+        expect('2袋 × 100g').not_to match(pattern)
+        expect('123円/100g').not_to match(pattern)
+      end
+    end
+
+    it 'owns complete same-line item discount vocabulary and numeric captures' do
+      pattern = profile.ocr_item_calculation_discount_line_pattern
+
+      aggregate_failures do
+        expect('明細値引 27% -14円'.match(pattern).named_captures).to eq('rate' => '27', 'amount' => '14')
+        expect('値引 １％ －０円'.match(pattern).named_captures).to eq('rate' => '１', 'amount' => '０')
+        expect('discount 27% -¥14').to match(pattern)
+        expect('クーポン値引 27% -14円').not_to match(pattern)
+        expect('明細値引 27% -14円/L').not_to match(pattern)
+        expect('明細値引 27% -14USD').not_to match(pattern)
+        expect('明細値引 27% -14.5円').not_to match(pattern)
+        expect('明細値引 27% 27% -14円').not_to match(pattern)
+      end
+    end
+
+    it 'owns contiguous item discount label, rate and absolute amount lines' do
+      aggregate_failures do
+        expect('操作割引07').to match(profile.ocr_item_calculation_discount_label_line_pattern)
+        expect('商品割引 27%'.match(profile.ocr_item_calculation_discount_label_line_pattern)[:rate]).to eq('27')
+        expect('27%'.match(profile.ocr_item_calculation_discount_rate_line_pattern)[:rate]).to eq('27')
+        expect('-123円'.match(profile.ocr_item_calculation_discount_amount_line_pattern)[:amount]).to eq('123')
+        expect('商品30%').not_to match(profile.ocr_item_calculation_discount_label_line_pattern)
+        expect('30%対象').not_to match(profile.ocr_item_calculation_discount_rate_line_pattern)
+        expect('123円').not_to match(profile.ocr_item_calculation_discount_amount_line_pattern)
+        expect('-123円/L').not_to match(profile.ocr_item_calculation_discount_amount_line_pattern)
+      end
+    end
+
+    it 'owns the fixed calculation layout labels and item-local tax suffix' do
+      aggregate_failures do
+        expect('単価 @193円'.match(profile.ocr_item_calculation_layout_price_line_pattern).named_captures).to eq('amount' => '193')
+        expect('通常単価 @193円').not_to match(profile.ocr_item_calculation_layout_price_line_pattern)
+        expect('税込 317円/100g'.match(profile.ocr_item_calculation_layout_reference_line_pattern).named_captures).to eq(
+          'tax' => '税込',
+          'amount' => '317',
+          'quantity' => '100',
+          'unit' => 'g'
+        )
+        expect('税込 317円/g').not_to match(profile.ocr_item_calculation_layout_reference_line_pattern)
+        expect('検証商品(税込0.5%)'.match(profile.ocr_item_calculation_layout_name_tax_pattern).named_captures).to eq(
+          'name' => '検証商品',
+          'tax' => '税込',
+          'rate' => '0.5'
+        )
+        expect('検証商品(税込1%)(税込27%)').not_to match(profile.ocr_item_calculation_layout_name_tax_pattern)
+      end
+    end
+
+    it 'owns complete split count labels and the exact yen value line' do
+      aggregate_failures do
+        expect('単価').to match(profile.ocr_item_calculation_layout_price_label_line_pattern)
+        expect('数量').to match(profile.ocr_item_calculation_layout_quantity_label_line_pattern)
+        expect('商品単価').not_to match(profile.ocr_item_calculation_layout_price_label_line_pattern)
+        expect('数量不明').not_to match(profile.ocr_item_calculation_layout_quantity_label_line_pattern)
+        expect('193円'.match(profile.ocr_item_calculation_layout_price_value_line_pattern).named_captures).to eq('amount' => '193', 'currency' => '円')
+        expect('明細計 193円').not_to match(profile.ocr_item_calculation_layout_price_value_line_pattern)
+        expect('193USD').not_to match(profile.ocr_item_calculation_layout_price_value_line_pattern)
+      end
+    end
+
+    it 'owns the strong item-total label without treating receipt summaries as item totals' do
+      pattern = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern
+
+      aggregate_failures do
+        expect('明細計 1,703円').to match(pattern)
+        expect('明細計：￥１，７０３').to match(pattern)
+        expect('明細計 0円').to match(pattern)
+        expect('明細計').not_to match(pattern)
+        expect('明細小計 1,703円').not_to match(pattern)
+        expect('小計 1,703円').not_to match(pattern)
+        expect('合計 1,703円').not_to match(pattern)
+        expect('お支払 1,703円').not_to match(pattern)
+      end
+    end
+
+    it 'owns an exact shared reference-basis table header without trusting the purchased-unit heading' do
+      pattern = profile.ocr_reference_pricing_item_layout_shared_basis_header_pattern
+      match = pattern.match('番号 100g当り(円) 重量(?) 金額(円)')
+      malformed_unit_heading = pattern.match('No. 500mlあたり【円】数量【9】 お値段【円】')
+
+      aggregate_failures do
+        expect(match.named_captures).to include(
+          'reference_basis' => '100g',
+          'reference_quantity' => '100',
+          'reference_unit' => 'g'
+        )
+        expect(malformed_unit_heading.named_captures).to include(
+          'reference_basis' => '500ml',
+          'reference_quantity' => '500',
+          'reference_unit' => 'ml'
+        )
+        expect(malformed_unit_heading.names).not_to include('purchased_unit')
+        expect('番号 100g/1kg当り(円) 重量(g) 金額(円)').not_to match(pattern)
+        expect('番号 100g当り(円) 金額(円) 重量(g)').not_to match(pattern)
+        expect('番号 重量(g) 金額(円)').not_to match(pattern)
+      end
+    end
+
+    it 'owns the bounded shared-basis header context allowlist' do
+      pattern = profile.ocr_reference_pricing_item_layout_shared_basis_context_line_pattern
+
+      aggregate_failures do
+        expect('外税').to match(pattern)
+        expect('8.00%').to match(pattern)
+        expect('opaque/context').not_to match(pattern)
+        expect('100g/1kg').not_to match(pattern)
+        expect('12345').not_to match(pattern)
+        expect('---').not_to match(pattern)
       end
     end
 

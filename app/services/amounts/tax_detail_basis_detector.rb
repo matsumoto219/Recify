@@ -53,6 +53,11 @@ module Amounts
       return :intermediate if intermediate_detail?(tax_detail)
       return :tax_only if net_amount <= 0 && tax_amount.positive?
       return :unknown unless rate.positive? && net_amount.positive?
+      if tax_detail[:tax_detail_amount_basis] == "net" && tax_amount >= 0
+        matches = tax_from_net_matches?(net_amount, rate, tax_amount) ||
+          tax_from_gross_matches?(net_amount + tax_amount, rate, tax_amount)
+        return matches ? :net : :unknown
+      end
       return zero_tax_basis(description, net_amount, rate) if tax_amount.zero?
       return :unknown unless tax_amount.positive?
       return :net if description.match?(profile.amount_tax_detail_net_pattern)
@@ -214,7 +219,8 @@ module Amounts
         amount: Amounts::NumberParser.parse_amount(normalized[:amount]),
         rate: normalize_rate(normalized[:rate]),
         net_amount: Amounts::NumberParser.parse_amount(normalized[:net_amount]),
-        description: normalized[:description]
+        description: normalized[:description],
+        tax_detail_amount_basis: normalized[:tax_detail_amount_basis].to_s
       }
     end
 

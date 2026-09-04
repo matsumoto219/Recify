@@ -222,6 +222,7 @@ RSpec.describe ReceiptsHelper, type: :helper do
       aggregate_failures do
         expect(helper.review_reason_target('store_name_missing')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_BASIC_INFO)
         expect(helper.review_reason_target('item_category_uncertain')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
+        expect(helper.review_reason_target('item_pricing_mode_uncertain')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEMS)
         expect(helper.review_reason_target('adjustment_uncertain')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS)
         expect(helper.review_reason_target('purchase_adjustment_tax_allocation_uncertain')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_ADJUSTMENTS)
         expect(helper.review_reason_target('payment_amount_mismatch')).to eq(ReceiptsHelper::RECEIPT_REVIEW_TARGET_PAYMENTS)
@@ -261,6 +262,7 @@ RSpec.describe ReceiptsHelper, type: :helper do
 
       aggregate_failures do
         expect(helper.review_reason_target_path('item_name_uncertain', item: item)).to eq("##{item_target}")
+        expect(helper.review_reason_target_path('item_pricing_mode_uncertain', item: item)).to eq("##{item_target}")
         expect(helper.review_reason_target_path('tax_detail_mismatch', item: item)).to eq("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY}")
       end
     end

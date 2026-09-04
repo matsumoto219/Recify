@@ -483,6 +483,36 @@ RSpec.describe ReceiptFormPresenter do
       end
     end
 
+    it '計算方式reasonを持つreview対象Itemだけ計算方式selectを強調する' do
+      receipt = build(:receipt)
+      reviewed_item = ReceiptItem.new(
+        receipt: receipt,
+        pricing_source_kind: 'explicit_line_total',
+        original_line_total: 100,
+        line_total: 100,
+        needs_review: true,
+        review_reasons: [ 'item_pricing_mode_uncertain' ]
+      )
+      warning_only_item = reviewed_item.dup.tap { |item| item.needs_review = false }
+      unrelated_item = reviewed_item.dup.tap do |item|
+        item.review_reasons = [ 'item_name_uncertain' ]
+      end
+
+      reviewed_row = described_class.new(receipt: receipt).item_row(reviewed_item, new_record: false)
+      warning_only_row = described_class.new(receipt: receipt).item_row(warning_only_item, new_record: false)
+      unrelated_row = described_class.new(receipt: receipt).item_row(unrelated_item, new_record: false)
+
+      aggregate_failures do
+        expect(reviewed_row.pricing_source_review?).to be(true)
+        expect(reviewed_row.pricing_source_kind_highlight_variant).to eq(:error)
+        expect(reviewed_row.row_class).to include('receipt-form-item-details-open')
+        expect(warning_only_row.pricing_source_review?).to be(false)
+        expect(warning_only_row.pricing_source_kind_highlight_variant).to be_nil
+        expect(unrelated_row.pricing_source_review?).to be(false)
+        expect(unrelated_row.pricing_source_kind_highlight_variant).to be_nil
+      end
+    end
+
     it '保存済みoriginalが0の場合はline totalをsource baselineとして渡し、422ではsubmitted sourceを優先する' do
       receipt = create(:receipt)
       item = receipt.receipt_items.create!(

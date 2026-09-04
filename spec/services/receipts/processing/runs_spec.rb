@@ -49,6 +49,14 @@ RSpec.describe Receipts::Processing::Runs do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  def attach_receipt_image(receipt)
+    receipt.image.attach(
+      io: File.open(Rails.root.join('spec/fixtures/files/receipt_sample.jpg')),
+      filename: 'receipt_sample.jpg',
+      content_type: 'image/jpeg'
+    )
+  end
+
   let(:receipt) { create(:receipt) }
 
   around do |example|
@@ -537,12 +545,71 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
+    it 'structured Itemの計算方式proposalもretry snapshotへexactにコピーする' do
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+        ocr_fixture('single_tax_receipt')
+      )
+      parent_run = create(
+        :receipt_analysis_run,
+        :succeeded,
+        receipt:,
+        ocr_result_snapshot: snapshot
+      )
+      retry_run = create(
+        :receipt_analysis_run,
+        receipt:,
+        parent_run: parent_run,
+        attempt_number: 2
+      )
+
+      described_class.copy_retry_snapshots(retry_run, parent_run:, include_ocr: true)
+
+      expect(retry_run.reload.ocr_result_snapshot.dig(
+        'adoption_proposals',
+        'item_calculation_modes'
+      )).to eq(snapshot.dig('adoption_proposals', 'item_calculation_modes'))
+    end
+
+    it '上限超過した計算方式candidateの診断countをretry snapshotへ維持する' do
+      snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+        'schema_version' => Receipts::Processing::Runs::SnapshotBuilder::OCR_RESULT_SCHEMA_VERSION,
+        'success' => true,
+        'candidates' => { 'items' => [] },
+        'candidate_counts' => {
+          'items' => { 'actual_count' => 0, 'snapshot_count' => 0 },
+          'item_calculation_mode_candidates' => { 'actual_count' => 101, 'snapshot_count' => 0 }
+        },
+        'truncated' => { 'items' => false, 'item_calculation_mode_candidates' => true }
+      )
+      parent_run = create(:receipt_analysis_run, :succeeded, receipt:, ocr_result_snapshot: snapshot)
+      retry_run = create(
+        :receipt_analysis_run,
+        receipt:,
+        parent_run: parent_run,
+        attempt_number: 2
+      )
+
+      described_class.copy_retry_snapshots(retry_run, parent_run:, include_ocr: true)
+
+      aggregate_failures do
+        expect(retry_run.reload.ocr_result_snapshot.dig(
+          'candidate_counts',
+          'item_calculation_mode_candidates'
+        )).to eq('actual_count' => 101, 'snapshot_count' => 0)
+        expect(retry_run.ocr_result_snapshot.dig(
+          'truncated',
+          'item_calculation_mode_candidates'
+        )).to be(true)
+      end
+    end
+
     it 'run開始gateをOCR proposal生成時に同じrun identityへbindする' do
       setting = create(
         :system_setting,
         key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
         value: SystemSettings.stored_value(true)
       )
+      attach_receipt_image(receipt)
       run = described_class.start(receipt:, source: 'upload').run
       start_gate = run.metadata.fetch('reference_pricing_auto_adoption_gate')
       described_class.record_ocr_snapshot(
@@ -574,6 +641,7 @@ RSpec.describe Receipts::Processing::Runs do
         key: SystemSettings::REFERENCE_PRICING_AUTO_ADOPTION_KEY,
         value: SystemSettings.stored_value(true)
       )
+      attach_receipt_image(receipt)
       parent_run = described_class.start(receipt:, source: 'upload').run
       described_class.record_ocr_snapshot(
         parent_run,
@@ -1440,6 +1508,7 @@ RSpec.describe Receipts::Processing::Runs do
         error_code: 'ai_api_error',
         error_message: 'x' * 600,
         error_metadata: {
+          actual_value: 987_654_321,
           provider_detail: {
             service: 'ai',
             provider: 'openai',
@@ -1475,6 +1544,8 @@ RSpec.describe Receipts::Processing::Runs do
         )
         expect(deep_json(failed_run.metadata)).not_to include('sk-secret-token')
         expect(deep_json(failed_run.metadata)).not_to include('RAW ERROR MUST NOT BE STORED')
+        expect(deep_json(failed_run.metadata)).not_to include('987654321')
+        expect(failed_run.metadata.fetch('error_metadata')).not_to have_key('actual_value')
         expect(superseded_run.reload.status).to eq('superseded')
         expect(canceled_run.reload.status).to eq('canceled')
       end

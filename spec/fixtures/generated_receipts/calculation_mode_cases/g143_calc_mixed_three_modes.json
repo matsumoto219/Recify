@@ -1,0 +1,108 @@
+{
+  "case_id": "g143_calc_mixed_three_modes",
+  "category": "calculation_mode",
+  "intent": "One receipt independently preserves count, gross reference, and explicit pricing authorities.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル消耗品A", "@150円 × 2個", "300円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "150",
+        "printed_line_total": 300
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["サンプル量売B", "税込 398円/100g", "計量 250g", "995円"],
+        "purchased_quantity": "250",
+        "purchased_unit": "gram",
+        "purchased_quantity_origin": "explicit",
+        "reference_price_amount": "398",
+        "reference_quantity": "100",
+        "reference_unit": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 995
+      },
+      {
+        "item_index": 2,
+        "printed_lines": ["サンプル固定C 500円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "fallback",
+        "printed_line_total": 500
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算方式店",
+    "store_address": "サンプル県サンプル市計算町1-1",
+    "purchased_at": "2026-08-20T10:15:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル消耗品A",
+        "unit_price": 150,
+        "quantity": "2",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 300,
+        "line_total": 300,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "サンプル量売B",
+        "unit_price": null,
+        "quantity": "250",
+        "quantity_unit_code": "gram",
+        "pricing_source_kind": "reference_quantity_price",
+        "reference_price_amount": "398",
+        "reference_quantity": "100",
+        "reference_quantity_unit_code": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "original_line_total": 995,
+        "line_total": 995,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "サンプル固定C",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 500,
+        "line_total": 500,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 1632, "tax": 163, "gross": 1795, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 1632,
+    "tax": 163,
+    "total": 1795,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1795}],
+    "payment_sum": 1795,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

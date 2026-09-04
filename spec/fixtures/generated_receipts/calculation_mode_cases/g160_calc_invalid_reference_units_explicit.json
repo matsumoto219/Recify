@@ -1,0 +1,95 @@
+{
+  "case_id": "g160_calc_invalid_reference_units_explicit",
+  "category": "calculation_mode",
+  "intent": "Dimension-mismatched and unsupported reference units cannot become formula authority, while their strong item totals remain confirmed explicit authorities.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル単位境界E", "税込 200円/100ml", "計量 300g", "620円"],
+        "purchased_quantity": "300",
+        "purchased_unit": "gram",
+        "purchased_quantity_origin": "explicit",
+        "reference_price_amount": "200",
+        "reference_quantity": "100",
+        "reference_unit": "milliliter",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 620
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["サンプル単位境界F", "税込 450円/1束", "数量 2束", "900円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "formula_conflicts": ["unsupported_unit"],
+        "reference_price_amount": "450",
+        "reference_quantity": "1",
+        "reference_unit": "bundle",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 900
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算境界店",
+    "store_address": "サンプル県サンプル市境界町2-2",
+    "purchased_at": "2026-08-20T11:40:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル単位境界E",
+        "unit_price": null,
+        "quantity": "300",
+        "quantity_unit_code": "gram",
+        "pricing_source_kind": "explicit_line_total",
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 620,
+        "line_total": 620,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "サンプル単位境界F",
+        "unit_price": null,
+        "quantity": "2",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "reference_price_amount": null,
+        "reference_quantity": null,
+        "reference_quantity_unit_code": null,
+        "reference_price_tax_inclusion": null,
+        "original_line_total": 900,
+        "line_total": 900,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": true,
+        "review_reasons": ["item_quantity_uncertain"]
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 1382, "tax": 138, "gross": 1520, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 1382,
+    "tax": 138,
+    "total": 1520,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1520}],
+    "payment_sum": 1520,
+    "payment_method": "cash",
+    "status": "review_needed",
+    "review_reasons": ["item_quantity_uncertain"]
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "item_review_states"], "allow_review_reasons": ["item_quantity_uncertain"], "allow_item_name_minor_diff": false}
+}

@@ -34,7 +34,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::LimitValidator
 
     raise Receipts::Processing::AnalysisError.new(
       "analysis_value_invalid",
-      "#{violation.fetch(:resource)}_amount_limit_exceeded field=#{violation.fetch(:field)} actual=#{violation.fetch(:actual_value)} limit=#{violation.fetch(:limit)}",
+      "#{violation.fetch(:resource)}_amount_limit_exceeded field=#{violation.fetch(:field)} limit=#{violation.fetch(:limit)}",
       metadata: amount_limit_exceeded_metadata(violation)
     )
   end
@@ -201,7 +201,6 @@ class Receipts::Processing::Pipeline::FinalizeStep::LimitValidator
       resource: violation.fetch(:resource),
       field: violation.fetch(:field),
       limit: violation.fetch(:limit),
-      actual_value: violation.fetch(:actual_value),
       index: violation[:index]
     }.compact
   end

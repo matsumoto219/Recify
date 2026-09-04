@@ -1839,7 +1839,6 @@ RSpec.describe Receipts::Processing::Pipeline do
           'resource' => 'receipt_items',
           'field' => 'line_total',
           'limit' => 500,
-          'actual_value' => 501,
           'index' => 0
         )
         expect(receipt.reload.status).to eq('failed')
@@ -1881,8 +1880,7 @@ RSpec.describe Receipts::Processing::Pipeline do
           'error' => 'analysis_value_invalid',
           'resource' => 'receipt',
           'field' => 'total_amount',
-          'limit' => 500,
-          'actual_value' => 501
+          'limit' => 500
         )
         expect(receipt.reload.status).to eq('failed')
         expect(receipt.receipt_items).to be_empty

@@ -96,6 +96,48 @@ RSpec.describe GeneratedReceipts::MeasurementContract do
     end
   end
 
+  it "shares bounded discount projection with count fixtures without production arithmetic" do
+    aggregate_failures do
+      { "floor" => 13, "round" => 14, "ceil" => 14 }.each do |rounding, amount|
+        expect(
+          described_class.project_discount(
+            source_item: { "discount_rate" => "0.27" },
+            projected_amount: 50,
+            rounding: rounding
+          )
+        ).to eq(amount)
+      end
+      expect(
+        described_class.project_discount(
+          source_item: { "discount_amount" => 50 },
+          projected_amount: 50,
+          rounding: "round"
+        )
+      ).to eq(50)
+      expect(
+        described_class.project_discount(
+          source_item: { "discount_amount" => 51 },
+          projected_amount: 50,
+          rounding: "round"
+        )
+      ).to be_nil
+      expect(
+        described_class.project_discount(
+          source_item: {},
+          projected_amount: described_class::MAX_LINE_TOTAL + 1,
+          rounding: "round"
+        )
+      ).to be_nil
+      expect(
+        described_class.project_discount(
+          source_item: {},
+          projected_amount: 50,
+          rounding: "unknown"
+        )
+      ).to be_nil
+    end
+  end
+
   it "independently identifies which item-end rounding modes match a printed total" do
     aggregate_failures do
       expect(

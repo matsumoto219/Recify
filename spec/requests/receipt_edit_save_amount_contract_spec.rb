@@ -297,6 +297,50 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       end
     end
 
+    it '金額確定行と混在する金額欠損行は通常保存しても0円や確認済みへ変えない' do
+      receipt = create_completed_receipt(
+        status: 'review_needed',
+        subtotal_amount: 100,
+        tax_amount: 0,
+        total_amount: 100,
+        tax_rate: 0,
+        review_reasons: [ 'ocr_low_confidence' ]
+      )
+      known = create_item(receipt, price: 50, quantity: 2, tax_rate: 0, original_line_total: 100, pricing_source_kind: 'count_unit_price')
+      zero = create_item(receipt, price: nil, tax_rate: 0, line_total: 0, original_line_total: 0, pricing_source_kind: 'explicit_line_total')
+      missing = create_item(
+        receipt,
+        price: nil,
+        quantity: 2,
+        tax_rate: 0,
+        line_total: nil,
+        original_line_total: nil,
+        needs_review: true,
+        review_reasons: [ 'item_pricing_mode_uncertain' ]
+      )
+
+      patch_receipt(receipt, memo: '金額を変えない更新')
+      receipt.reload
+      patch_receipt(
+        receipt,
+        receipt_items_attributes: {
+          '0' => item_attributes(known, pricing_source_kind: 'count_unit_price', original_line_total: '100'),
+          '1' => item_attributes(zero, pricing_source_kind: 'explicit_line_total', original_line_total: '0'),
+          '2' => item_attributes(missing, pricing_source_kind: '', price: '', original_line_total: '', line_total: '')
+        }
+      )
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(missing.reload).to have_attributes(pricing_source_kind: nil, price: nil, original_line_total: nil, line_total: nil, needs_review: true)
+        expect(missing.review_reasons).to eq([ 'item_pricing_mode_uncertain' ])
+        expect(known.reload).to have_attributes(pricing_source_kind: 'count_unit_price', price: 50, original_line_total: 100, line_total: 100)
+        expect(zero.reload).to have_attributes(pricing_source_kind: 'explicit_line_total', original_line_total: 0, line_total: 0)
+        expect(receipt.reload).to have_attributes(total_amount: 100, status: 'review_needed')
+        expect(receipt.review_reasons).to include('ocr_low_confidence')
+      end
+    end
+
     it '不完全な既存税内訳があっても未確定金額と確認理由を維持する' do
       receipt = create(
         :receipt,

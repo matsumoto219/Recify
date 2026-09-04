@@ -141,6 +141,7 @@ module Analysis
       end
 
       def item_discount_owned?
+        return false if items.any? { |item| normalized_hash(item).key?(:discount_source_refs) }
         return false unless item_discount_amounts.include?(amount)
 
         context = lines_around(before: 4, after: 4)

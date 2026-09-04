@@ -85,10 +85,10 @@
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
   <% payment_adjustment_summary = receipt_payment_adjustment_summary(receipt) %>
-  <% payment_reconciliation_final_total = payment_adjustment_summary&.final_payment_total || total_amount_value.to_i %>
+  <% payment_reconciliation_final_total = payment_adjustment_summary&.final_payment_total || total_amount_value %>
   <% payment_amount_sum_value = visible_receipt_payments.sum { |payment| payment.amount.to_i } %>
-  <% payment_difference_value = payment_amount_sum_value - payment_reconciliation_final_total.to_i %>
-  <% payment_mismatch_visible = visible_receipt_payments.any? && payment_difference_value != 0 %>
+  <% payment_difference_value = payment_reconciliation_final_total.nil? ? nil : payment_amount_sum_value - payment_reconciliation_final_total %>
+  <% payment_mismatch_visible = visible_receipt_payments.any? && payment_difference_value.present? && payment_difference_value != 0 %>
 
   <%
     tax_rate_summary = receipt_tax_rate_summary(receipt, items: visible_receipt_items)
@@ -408,7 +408,7 @@
                 </div>
                 <div class="min-w-0 overflow-hidden">
                   <p class="truncate text-xs font-bold uppercase tracking-wider token-text-muted"><%= t("receipts.payment_fields.payment_difference") %></p>
-                  <% payment_difference_display = payment_difference_value.zero? ? receipt_detail_amount_display(0) : receipt_signed_amount_display(payment_difference_value) %>
+                  <% payment_difference_display = payment_difference_value&.zero? ? receipt_detail_amount_display(0) : receipt_signed_amount_display(payment_difference_value) %>
                   <p class="block max-w-full truncate font-bold token-text-base"
                      title="<%= payment_difference_display %>"
                      data-receipt-form-target="paymentDifferenceAmount"

@@ -18,13 +18,32 @@ class Receipts::Processing::ReferencePricingAutoAdoptionFence
     operation_not_committed
   ].freeze
 
-  Result = Data.define(:enabled, :reason, :candidate_identity, :destination_identity) do
-    def initialize(enabled:, reason:, candidate_identity: nil, destination_identity: nil)
+  Result = Data.define(
+    :enabled,
+    :reason,
+    :binding_kind,
+    :candidate_identity,
+    :destination_identity,
+    :selected_proposal_identity,
+    :proposal_checksum
+  ) do
+    def initialize(
+      enabled:,
+      reason:,
+      binding_kind: nil,
+      candidate_identity: nil,
+      destination_identity: nil,
+      selected_proposal_identity: nil,
+      proposal_checksum: nil
+    )
       super(
         enabled: enabled == true,
         reason: reason.to_s.dup.freeze,
+        binding_kind: binding_kind&.dup&.freeze,
         candidate_identity: candidate_identity&.dup&.freeze,
-        destination_identity: destination_identity&.dup&.freeze
+        destination_identity: destination_identity&.dup&.freeze,
+        selected_proposal_identity: selected_proposal_identity&.dup&.freeze,
+        proposal_checksum: proposal_checksum&.dup&.freeze
       )
     end
 
@@ -50,8 +69,11 @@ class Receipts::Processing::ReferencePricingAutoAdoptionFence
       if result&.enabled? && !serialized.operation_committed?
         return result(
           "operation_not_committed",
+          binding_kind: result.binding_kind,
           candidate_identity: result.candidate_identity,
-          destination_identity: result.destination_identity
+          destination_identity: result.destination_identity,
+          selected_proposal_identity: result.selected_proposal_identity,
+          proposal_checksum: result.proposal_checksum
         )
       end
 
@@ -112,8 +134,12 @@ class Receipts::Processing::ReferencePricingAutoAdoptionFence
 
       binding = gate.fetch("proposal_binding")
       identities = {
+        binding_kind: binding["binding_kind"] ||
+          Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot::LINE_GROUP_BINDING_KIND,
         candidate_identity: binding["candidate_identity"],
-        destination_identity: binding["destination_identity"]
+        destination_identity: binding["destination_identity"],
+        selected_proposal_identity: binding["selected_proposal_identity"],
+        proposal_checksum: binding["proposal_checksum"]
       }
       return result("start_gate_disabled", **identities) unless gate["setting_enabled"]
       return result("current_setting_disabled", **identities) unless current_entry.current_value == true
@@ -122,7 +148,11 @@ class Receipts::Processing::ReferencePricingAutoAdoptionFence
           Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.setting_generation_for(
           current_entry
         )
-      return result("proposal_binding_mismatch", **identities) unless proposal_binding_matches?(locked_run, binding:)
+      return result("proposal_binding_mismatch", **identities) unless proposal_binding_matches?(
+        locked_run,
+        gate:,
+        binding:
+      )
 
       claim_state = claim_state_for(locked_run, proposal_checksum: binding["proposal_checksum"])
       return result(claim_state, **identities) unless claim_state == "unclaimed"
@@ -132,16 +162,14 @@ class Receipts::Processing::ReferencePricingAutoAdoptionFence
       result("gate_snapshot_invalid")
     end
 
-    def proposal_binding_matches?(run, binding:)
-      ocr_snapshot = run.ocr_result_snapshot.to_h
-      proposal = Receipts::Processing::Contracts::ReferencePricingAdoptionProposal.from_snapshot(
-        ocr_snapshot.dig("adoption_proposals", "reference_pricing"),
-        ocr_snapshot:
+    def proposal_binding_matches?(run, gate:, binding:)
+      expected = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.proposal_binding_for(
+        ocr_snapshot: run.ocr_result_snapshot.to_h,
+        receipt_lock_version: binding["receipt_lock_version"],
+        schema_version: gate["schema_version"]
       )
-      proposal &&
-        proposal["candidate_id"] == binding["candidate_identity"] &&
-        proposal.dig("destination", "identity") == binding["destination_identity"] &&
-        proposal["integrity_checksum"] == binding["proposal_checksum"]
+
+      expected == binding
     end
 
     def claim_state_for(run, proposal_checksum:)
@@ -167,9 +195,25 @@ class Receipts::Processing::ReferencePricingAutoAdoptionFence
       run.update!(metadata:)
     end
 
-    def result(reason, enabled: false, candidate_identity: nil, destination_identity: nil)
+    def result(
+      reason,
+      enabled: false,
+      binding_kind: nil,
+      candidate_identity: nil,
+      destination_identity: nil,
+      selected_proposal_identity: nil,
+      proposal_checksum: nil
+    )
       bounded_reason = REASONS.include?(reason) ? reason : "gate_snapshot_invalid"
-      Result.new(enabled:, reason: bounded_reason, candidate_identity:, destination_identity:)
+      Result.new(
+        enabled:,
+        reason: bounded_reason,
+        binding_kind:,
+        candidate_identity:,
+        destination_identity:,
+        selected_proposal_identity:,
+        proposal_checksum:
+      )
     end
   end
 end

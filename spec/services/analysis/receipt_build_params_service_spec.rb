@@ -284,6 +284,181 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       expect(params.fetch(:receipt_adjustments_attributes)).to eq([])
     end
 
+    it 'Azure item-layout block内の値をfallback明細やadjustmentとして重複保存しない' do
+      ocr_result[:lines] = [
+        '架空量売店',
+        '例示量売品',
+        '値引後 税込 160円/L',
+        '会員値引 3円/L引',
+        '給油量 20.74L',
+        '金額 3,318円',
+        '合計 3,318円'
+      ]
+      ocr_result[:case_preserved_lines] = ocr_result[:lines].dup
+      ocr_result[:candidates][:reference_pricing_block_line_indexes] = [ 1, 2, 3, 4, 5 ]
+      ocr_result[:candidates][:items] = [
+        {
+          raw_text: '例示量売品',
+          price: '160',
+          quantity: '20.74',
+          quantity_unit_code: 'liter',
+          line_total: 3318,
+          original_line_total: 3318,
+          ocr_item_identity: 'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l4_total_l5'
+        }
+      ]
+      ocr_result[:candidates][:adjustment_candidates] = [
+        {
+          source_text: ocr_result[:lines][3],
+          source_line_index: 3,
+          amount: 3,
+          sign_hint: 'discount',
+          confidence: 0.99,
+          candidate_reason: 'label_same_line_amount',
+          needs_review: false
+        }
+      ]
+      ai_result = {
+        receipt_adjustments_attributes: [
+          {
+            source_text: ocr_result[:lines][3],
+            source_line_index: 3,
+            kind: 'receipt_discount',
+            sign: 'decrease',
+            amount: 3,
+            confidence: 0.99,
+            needs_review: false
+          }
+        ]
+      }
+
+      params = described_class.call(ocr_result:, ai_result:)
+
+      aggregate_failures do
+        expect(params.fetch(:receipt_items_attributes)).to contain_exactly(
+          include(
+            raw_text: '例示量売品',
+            line_total: 3318,
+            ocr_item_identity: 'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l4_total_l5'
+          )
+        )
+        expect(params.fetch(:receipt_adjustments_attributes)).to eq([])
+      end
+    end
+
+    it '単位当たりの販促注記をreference block外でもreceipt adjustmentにしない' do
+      ocr_result[:lines] = [
+        '例示量売品',
+        '会員値引 3円/L引',
+        '合計 1,280円'
+      ]
+      ocr_result[:candidates][:adjustment_candidates] = [
+        {
+          source_text: ocr_result[:lines][1],
+          source_line_index: 1,
+          amount: 3,
+          sign_hint: 'discount',
+          confidence: 0.99,
+          candidate_reason: 'label_same_line_amount',
+          needs_review: false
+        }
+      ]
+      ai_result = {
+        receipt_adjustments_attributes: [
+          {
+            kind: 'receipt_discount',
+            label: '値引',
+            amount: 3,
+            sign: 'discount',
+            source_text: ocr_result[:lines][1],
+            source_line_index: 1,
+            confidence: 0.99,
+            needs_review: false
+          }
+        ]
+      }
+
+      params = described_class.call(ocr_result:, ai_result:)
+
+      aggregate_failures do
+        expect(params.fetch(:receipt_adjustments_attributes)).to eq([])
+        expect(Array(params.dig(:receipt_attributes, :review_reasons))).not_to include('adjustment_uncertain')
+      end
+    end
+
+    it 'Azure item-layout identityはlineとspanの境界内だけ保持する' do
+      identities = [
+        'azure_item_layout_item_p0_name_l149_s0_e10000000_ref_l149_qty_l149_total_l149',
+        'azure_item_layout_item_p1_name_l1_s6_e12_ref_l2_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l150_s6_e12_ref_l2_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l1_s6_e12_ref_l150_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l150_total_l5',
+        'azure_item_layout_item_p0_name_l1_s6_e12_ref_l2_qty_l4_total_l150',
+        'azure_item_layout_item_p0_name_l1_s12_e6_ref_l2_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l1_s0_e0_ref_l2_qty_l4_total_l5',
+        'azure_item_layout_item_p0_name_l1_s0_e10000001_ref_l2_qty_l4_total_l5',
+        "azure_item_layout_item_#{'x' * 161}"
+      ]
+
+      normalized = identities.map do |identity|
+        result = described_class.call(
+          ocr_result: {
+            candidates: {
+              items: [
+                {
+                  raw_text: '例示量売品',
+                  line_total: 3318,
+                  original_line_total: 3318,
+                  ocr_item_identity: identity
+                }
+              ]
+            }
+          },
+          ai_result: nil
+        )
+
+        result.fetch(:receipt_items_attributes).sole[:ocr_item_identity]
+      end
+
+      expect(normalized).to eq([ identities.first, *Array.new(identities.size - 1) ])
+    end
+
+    it 'ambiguousな複数item-layout blockをAIやraw lineから明細へ復活させない' do
+      ocr_result[:lines] = [
+        '架空量売店',
+        '例示量売品A',
+        '税込 498円/100g',
+        '計量 342g',
+        '1,703円',
+        '例示量売品B',
+        '税込 120円/500ml',
+        '計量 1.5L',
+        '360円',
+        '合計 2,063円'
+      ]
+      ocr_result[:case_preserved_lines] = ocr_result[:lines].dup
+      ocr_result[:candidates][:items] = []
+      ocr_result[:candidates][:reference_pricing_candidates] = []
+      ocr_result[:candidates][:reference_pricing_block_line_indexes] = (1..8).to_a
+      ai_result = {
+        receipt_items_attributes: [
+          {
+            index: 0,
+            suggested_name: '推測明細',
+            price: 1703,
+            quantity: 1,
+            quantity_unit_code: 'each',
+            line_total: 1703,
+            needs_review: false
+          }
+        ]
+      }
+
+      params = described_class.call(ocr_result:, ai_result:)
+
+      expect(params.fetch(:receipt_items_attributes)).to eq([])
+    end
+
     it 'Azure Itemsとline-group候補が併存する場合はItemsのindexに対応するAI補完を維持する' do
       ocr_result[:candidates][:reference_pricing_candidates] = [
         {
@@ -398,6 +573,22 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           original_line_total: 1_136,
           line_total: 1_136
         )
+      end
+
+      it 'structured itemのopaque identityをFinalize前まで保持する' do
+        snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
+          ocr_fixture('single_tax_receipt')
+        )
+        rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+        item = described_class.call(ocr_result: rehydrated, ai_result: nil)
+          .fetch(:receipt_items_attributes).first
+
+        aggregate_failures do
+          expect(item[:ocr_item_identity]).to eq('azure_structured_item_i0_s99_e118')
+          expect(item[:ocr_item_identity]).not_to include('ノート A5')
+          expect(item).not_to have_key(:item_calculation_mode_candidates)
+        end
       end
 
       it 'OCR TotalPriceとreference basisがないmeasurementをpriceとquantityだけでformula化しない' do
@@ -815,6 +1006,97 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           aggregate_failures(noise_line) do
             expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
             expect(params[:receipt_payments_attributes]).to eq([])
+          end
+        end
+      end
+
+      it '支払行の次にある裸の識別番号をreceipt total不一致のpayment amountとして扱わない' do
+        [ '123', '1234567890123', '１２３４５６７８９０１２３' ].each do |identifier|
+          ocr_result[:candidates][:payment_method_text] = 'iD'
+          ocr_result[:candidates][:payments] = []
+          ocr_result[:candidates][:total_amount] = 500
+          ocr_result[:lines] = [
+            '合計 ¥500',
+            'iD支払',
+            identifier
+          ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          aggregate_failures(identifier) do
+            expect(params[:receipt_attributes][:payment_method]).to eq('e_money')
+            expect(params[:receipt_payments_attributes]).to eq([])
+          end
+        end
+      end
+
+      it '支払行の次にある裸の金額はreceipt totalと完全一致する場合だけ補完する' do
+        ocr_result[:candidates][:payment_method_text] = 'iD'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 500
+        ocr_result[:lines] = [
+          '合計 ¥500',
+          'iD支払',
+          '500'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_payments_attributes]).to contain_exactly(
+          include(method: 'iD支払', amount: 500)
+        )
+      end
+
+      it 'receipt totalがない場合は支払行の次にある裸の数字を補完しない' do
+        ocr_result[:candidates][:payment_method_text] = 'iD'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = nil
+        ocr_result[:lines] = [
+          'iD支払',
+          '500'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_payments_attributes]).to eq([])
+      end
+
+      it '複数支払行の裸の金額は合計がreceipt totalと完全一致する場合だけ補完する' do
+        ocr_result[:candidates][:payment_method_text] = 'PayPay'
+        ocr_result[:candidates][:payments] = []
+        ocr_result[:candidates][:total_amount] = 500
+        ocr_result[:lines] = [
+          '合計 ¥500',
+          'PayPay支払',
+          '300',
+          'iD支払',
+          '200'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_payments_attributes]).to contain_exactly(
+          include(method: 'PayPay支払', amount: 300),
+          include(method: 'iD支払', amount: 200)
+        )
+      end
+
+      it 'fallback payment amountを保存上限内に限定する' do
+        create(:system_setting, key: 'limits.receipt_payment_amount_max', value: SystemSettings.stored_value(500))
+
+        [
+          { amount: 500, expected: [ include(method: 'iD', amount: 500) ] },
+          { amount: 501, expected: [] }
+        ].each do |example|
+          ocr_result[:candidates][:payment_method_text] = 'iD'
+          ocr_result[:candidates][:payments] = []
+          ocr_result[:candidates][:total_amount] = example[:amount]
+          ocr_result[:lines] = [ "合計 ¥#{example[:amount]}", "iD #{example[:amount]}" ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          aggregate_failures(example[:amount]) do
+            expect(params[:receipt_payments_attributes]).to match_array(example[:expected])
           end
         end
       end
@@ -3817,6 +4099,96 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(params[:receipt_items_attributes].first[:price]).to eq(180)
           expect(params[:receipt_payments_attributes].first[:amount]).to eq(1280)
           expect(params[:receipt_tax_details_attributes].first[:net_amount]).to eq(800)
+        end
+      end
+
+      it '明示百分率の文字列をreceiptとitemとtax detailで同じdecimal rateへ変換する' do
+        percentages = {
+          '0%' => '0',
+          '0.5%' => '0.005',
+          '1%' => '0.01',
+          '1.01%' => '0.0101',
+          '27%' => '0.27',
+          '96%' => '0.96',
+          '99%' => '0.99',
+          '100%' => '1',
+          '０．５％' => '0.005',
+          '１％' => '0.01'
+        }
+
+        percentages.each do |percentage, expected_rate|
+          input = ocr_result.deep_dup
+          input[:candidates][:tax_rate] = percentage
+          input[:candidates][:items].first[:tax_rate] = percentage
+          input[:candidates][:tax_details].first[:rate] = percentage
+
+          params = described_class.call(ocr_result: input, ai_result: nil)
+
+          aggregate_failures(percentage) do
+            expect(params[:receipt_attributes][:tax_rate]).to eq(BigDecimal(expected_rate))
+            expect(params[:receipt_items_attributes].first[:tax_rate]).to eq(BigDecimal(expected_rate))
+            expect(params[:receipt_tax_details_attributes].first[:rate]).to eq(BigDecimal(expected_rate))
+          end
+        end
+      end
+
+      it 'percent記号のないdecimal rateの互換入力を維持する' do
+        [ BigDecimal('0.01'), BigDecimal('0.27'), BigDecimal('1'), '0.01', '0.27', '1' ].each do |rate|
+          input = ocr_result.deep_dup
+          input[:candidates][:tax_rate] = rate
+          input[:candidates][:items].first[:tax_rate] = rate
+          input[:candidates][:tax_details].first[:rate] = rate
+
+          params = described_class.call(ocr_result: input, ai_result: nil)
+
+          aggregate_failures(rate) do
+            expect(params[:receipt_attributes][:tax_rate]).to eq(BigDecimal(rate.to_s))
+            expect(params[:receipt_items_attributes].first[:tax_rate]).to eq(BigDecimal(rate.to_s))
+            expect(params[:receipt_tax_details_attributes].first[:rate]).to eq(BigDecimal(rate.to_s))
+          end
+        end
+      end
+
+      it '1%の対象行を同じdecimal rateの構造化税詳細へ対応させる' do
+        input = ocr_result.deep_dup
+        input[:candidates][:tax_details] = [ { description: 'Tax', rate: BigDecimal('0.01'), net_amount: 10_000, amount: 100 } ]
+        input[:lines] = [ '1%対象 10,100円', '内消費税 100円' ]
+
+        params = described_class.call(ocr_result: input, ai_result: nil)
+
+        expect(params[:receipt_tax_details_attributes]).to include(
+          include(description: '1%対象', rate: BigDecimal('0.01'), net_amount: 10_000, amount: 100)
+        )
+      end
+
+      it '小数百分率のsummary行と構造化decimal rateを照合する' do
+        { '1%' => [ '0.01', 10_100, 10_000 ], '0.5%' => [ '0.005', 20_100, 20_000 ] }.each do |percentage, values|
+          rate, gross, net = values
+          input = ocr_result.deep_dup
+          input[:candidates][:total_amount] = gross
+          input[:candidates][:tax_amount] = 100
+          input[:candidates][:tax_details] = [ { description: '内消費税', rate: BigDecimal(rate), amount: 100 } ]
+          input[:lines] = [ "税率#{percentage}", "税込額 #{gross}円" ]
+
+          params = described_class.call(ocr_result: input, ai_result: nil)
+
+          expect(params[:receipt_tax_details_attributes]).to include(
+            include(rate: BigDecimal(rate), net_amount: net, amount: 100)
+          )
+        end
+      end
+
+      it '税対象額の欠損を後続商品の金額から復元しない' do
+        [ '27%対象計', '税率27%' ].each do |label|
+          input = ocr_result.deep_dup
+          input[:candidates][:total_amount] = 1270
+          input[:candidates][:tax_amount] = 270
+          input[:candidates][:tax_details] = [ { rate: BigDecimal('0.27'), amount: 270 } ]
+          input[:lines] = [ label, '例示商品 単価1270円', '1270円' ]
+
+          params = described_class.call(ocr_result: input, ai_result: nil)
+
+          expect(params[:receipt_tax_details_attributes].first[:net_amount]).to be_nil
         end
       end
 

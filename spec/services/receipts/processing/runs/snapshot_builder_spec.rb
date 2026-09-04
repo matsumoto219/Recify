@@ -9,6 +9,471 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  def structured_count_ocr_result
+    raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
+  def structured_count_without_totals_ocr_result
+    raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
+    raw_json.dig('analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray').each do |item|
+      item.fetch('valueObject').delete('TotalPrice')
+    end
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
+  def structured_reference_ocr_result
+    raw_json = JSON.parse(
+      Rails.root.join('spec/fixtures/ocr/ocr_azure_item_calculation_reference_gross_anonymized.json').read
+    )
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
+  def item_layout_ocr_result
+    candidate_prefix = 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4'
+    item_identity = 'azure_item_layout_item_p0_name_l1_s16_e22_ref_l2_qty_l3_total_l4'
+    evidence = lambda do |line_index, span_start, span_end|
+      {
+        source_provider: 'azure_item_layout',
+        source_field_path: "pages[0].lines[#{line_index}]",
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: 'textElements',
+        provider_span_start: span_start,
+        provider_span_end: span_end
+      }
+    end
+
+    {
+      success: true,
+      lines: [ '架空店', '例示品', '税込 498円/100g', '計量 342g', '1,703円', '合計 1,703円' ],
+      case_preserved_lines: [ '架空店', '例示品', '税込 498円/100g', '計量 342g', '1,703円', '合計 1,703円' ],
+      candidates: {
+        total_amount: 1703,
+        reference_pricing_block_line_indexes: [ 1, 2, 3, 4 ],
+        items: [
+          {
+            raw_text: '例示品',
+            price: '498',
+            quantity: '342',
+            quantity_unit_code: 'gram',
+            quantity_unit_status: 'known',
+            line_total: 1703,
+            original_line_total: 1703,
+            ocr_item_identity: item_identity
+          }
+        ],
+        reference_pricing_candidates: [
+          {
+            candidate_id: "#{candidate_prefix}_reference_pricing",
+            source_kind: 'azure_item_layout',
+            item_index: 0,
+            item_identity: item_identity,
+            destination_kind: 'azure_layout_item',
+            page_index: 0,
+            name_line_index: 1,
+            reference_line_index: 2,
+            reference_line_provider_span_start: 26,
+            reference_line_provider_span_end: 40,
+            purchased_quantity_line_indexes: [ 3 ],
+            printed_total_line_index: 4,
+            owned_line_indexes: [ 1, 2, 3, 4 ],
+            provider_model_id: 'prebuilt-receipt',
+            provider_api_version: '2024-11-30',
+            string_index_type: 'textElements',
+            validation_contract_version: 'azure_item_layout_v1',
+            block_provider_span_start: 16,
+            block_provider_span_end: 66,
+            validation_state: 'valid',
+            rejection_reasons: [],
+            reference_price: { amount: '498', evidence: evidence.call(2, 29, 32) },
+            reference_quantity: {
+              amount: '100',
+              unit_code: 'gram',
+              unit_status: 'known',
+              origin: 'explicit',
+              evidence: evidence.call(2, 34, 38)
+            },
+            purchased_quantity: {
+              amount: '342',
+              unit_code: 'gram',
+              unit_status: 'known',
+              evidence: evidence.call(3, 43, 47)
+            },
+            reference_price_tax_inclusion: 'gross',
+            tax_inclusion_evidence: evidence.call(2, 26, 28),
+            printed_line_total: { amount: '1703', evidence: evidence.call(4, 49, 55) },
+            corroboration: {
+              exact_amount: { numerator: '42579', denominator: '25' },
+              projected_amount: 1703,
+              printed_line_total: '1703',
+              rounding_matches: %w[floor half_up]
+            }
+          }
+        ],
+        item_calculation_mode_candidates: [
+          {
+            candidate_id: "#{candidate_prefix}_item_calculation_mode",
+            item_identity: item_identity,
+            item_index: 0,
+            source_provider: 'azure_item_layout',
+            destination_kind: 'azure_layout_item',
+            provider_model_id: 'prebuilt-receipt',
+            provider_api_version: '2024-11-30',
+            string_index_type: 'textElements',
+            source_field_path: 'pages[0].lines[1]',
+            provider_span_start: 16,
+            provider_span_end: 66,
+            destination_evidence: evidence.call(1, 16, 22),
+            printed_line_total: {
+              amount: '1703',
+              evidence: evidence.call(4, 49, 55)
+            },
+            conflicts: [],
+            options: [
+              {
+                proposal_id: "#{candidate_prefix}_explicit_line_total",
+                pricing_source_kind: 'explicit_line_total',
+                source: { line_total_amount: '1703' },
+                evidence: {
+                  line_total: evidence.call(4, 49, 55)
+                }
+              }
+            ]
+          }
+        ],
+        payments: [],
+        tax_details: [],
+        adjustment_candidates: [],
+        review_reasons: []
+      },
+      meta: {
+        provider: 'azure_document_intelligence',
+        model_id: 'prebuilt-receipt'
+      }
+    }
+  end
+
+  def shared_basis_diagnostic_ocr_result
+    result = item_layout_ocr_result.deep_dup
+    item_identity = 'azure_structured_item_i0_s16_e55'
+    candidate = result.dig(:candidates, :reference_pricing_candidates).sole
+    mode_candidate = result.dig(:candidates, :item_calculation_mode_candidates).sole
+    header_evidence = candidate.dig(:reference_quantity, :evidence).merge(
+      source_field_path: 'pages[0].lines[0]',
+      line_index: 0,
+      provider_span_start: 0,
+      provider_span_end: 4
+    )
+
+    result.dig(:candidates, :items, 0)[:ocr_item_identity] = item_identity
+    candidate.merge!(
+      item_identity: item_identity,
+      destination_kind: 'azure_structured_item',
+      structured_item_index: 0,
+      validation_contract_version: 'azure_item_layout_shared_basis_v1',
+      block_provider_span_start: 16,
+      block_provider_span_end: 55,
+      owned_line_indexes: [ 0, 1, 2, 3, 4 ],
+      validation_state: 'ambiguous',
+      rejection_reasons: [ 'ambiguous_tax_inclusion' ],
+      reference_price_tax_inclusion: 'unknown',
+      tax_inclusion_evidence: nil
+    )
+    candidate.dig(:reference_quantity)[:evidence] = header_evidence
+    mode_candidate.replace(
+      candidate_id: 'azure_items_0_item_calculation_mode',
+      item_identity: item_identity,
+      item_index: 0,
+      source_provider: 'azure_structured',
+      provider_model_id: 'prebuilt-receipt',
+      provider_api_version: '2024-11-30',
+      string_index_type: 'textElements',
+      source_field_path: 'documents[0].fields.Items[0]',
+      provider_span_start: 16,
+      provider_span_end: 55,
+      destination_evidence: {
+        source_field_path: 'documents[0].fields.Items[0].Description',
+        provider_span_start: 16,
+        provider_span_end: 22
+      },
+      printed_line_total: {
+        amount: '1703',
+        evidence: {
+          source_field_path: 'documents[0].fields.Items[0].TotalPrice',
+          provider_span_start: 49,
+          provider_span_end: 55
+        }
+      },
+      conflicts: [],
+      options: [
+        {
+          proposal_id: 'azure_items_0_explicit_line_total',
+          pricing_source_kind: 'explicit_line_total',
+          source: { line_total_amount: '1703' },
+          evidence: {
+            line_total: {
+              source_field_path: 'documents[0].fields.Items[0].TotalPrice',
+              provider_span_start: 49,
+              provider_span_end: 55
+            }
+          }
+        }
+      ]
+    )
+    result
+  end
+
+  def shared_basis_external_tax_ocr_result
+    result = shared_basis_diagnostic_ocr_result
+    candidate = result.dig(:candidates, :reference_pricing_candidates).sole
+    summary_lines = [ '小計 1,703円', '外税', '10%', '1,703円 154円', '合計 1,857円' ]
+    result[:lines].concat(summary_lines)
+    result[:case_preserved_lines].concat(summary_lines)
+    amount_evidence = lambda do |path, line_index, span, amount|
+      {
+        source_provider: 'azure_structured',
+        source_field_path: path,
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: 'textElements',
+        provider_span_start: span.begin,
+        provider_span_end: span.end,
+        amount: amount
+      }
+    end
+    tax_detail_evidence = lambda do |path, line_index, span|
+      {
+        source_provider: 'azure_structured',
+        source_field_path: path,
+        tax_detail_index: 0,
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: 'textElements',
+        provider_span_start: span.begin,
+        provider_span_end: span.end
+      }
+    end
+
+    result.dig(:candidates).merge!(
+      subtotal_amount: 1703,
+      tax_amount: 154,
+      total_amount: 1857,
+      tax_details: [ { description: '外税', rate: 0.1, net_amount: 1703, amount: 154 } ],
+      tax_detail_structural_metadata: {
+        source_provider: 'azure_structured',
+        provider_model_id: 'prebuilt-receipt',
+        provider_api_version: '2024-11-30',
+        string_index_type: 'textElements',
+        tax_details: [
+          {
+            tax_detail_index: 0,
+            parent: {
+              source_provider: 'azure_structured',
+              source_field_path: 'documents[0].fields.TaxDetails[0]',
+              tax_detail_index: 0,
+              provider_spans: [
+                { provider_span_start: 70, provider_span_end: 75 },
+                { provider_span_start: 80, provider_span_end: 88 }
+              ]
+            },
+            tax_inclusion_evidence: tax_detail_evidence.call(
+              'documents[0].fields.TaxDetails[0].Description', 7, 70...72
+            ).merge(kind: 'external_tax', tax_inclusion: 'net'),
+            rate: tax_detail_evidence.call(
+              'documents[0].fields.TaxDetails[0].Rate', 8, 73...75
+            ).merge(rate: '0.1'),
+            net_amount: tax_detail_evidence.call(
+              'documents[0].fields.TaxDetails[0].NetAmount', 9, 80...84
+            ).merge(amount: 1703),
+            tax_amount: tax_detail_evidence.call(
+              'documents[0].fields.TaxDetails[0].Amount', 9, 85...88
+            ).merge(amount: 154)
+          }
+        ]
+      }
+    )
+    candidate.merge!(
+      validation_state: 'valid',
+      rejection_reasons: [],
+      reference_price_tax_inclusion: 'net',
+      tax_inclusion_evidence: {
+        kind: 'shared_basis_external_tax_summary',
+        string_index_type: 'textElements',
+        policy_contract_version: 'reference_pricing_shared_basis_external_tax_policy_v1',
+        tax_detail_index: 0,
+        subtotal: amount_evidence.call('documents[0].fields.Subtotal', 6, 60...64, 1703),
+        document_tax_total: amount_evidence.call('documents[0].fields.TotalTax', 9, 85...88, 154),
+        summary_total: amount_evidence.call('documents[0].fields.Total', 10, 90...94, 1857)
+      }
+    )
+    result.dig(:candidates, :item_calculation_mode_candidates).sole[:conflicts] = [ 'reference_expression' ]
+    result
+  end
+
+  def move_shared_basis_row_indexes!(result, name_line_index:)
+    candidate = result.dig(:candidates, :reference_pricing_candidates).sole
+    reference_line_index = name_line_index + 1
+    quantity_line_index = name_line_index + 2
+    total_line_index = name_line_index + 3
+    candidate.merge!(
+      candidate_id: "azure_item_layout_p0_name_l#{name_line_index}_ref_l#{reference_line_index}_" \
+        "qty_l#{quantity_line_index}_total_l#{total_line_index}_reference_pricing",
+      name_line_index: name_line_index,
+      reference_line_index: reference_line_index,
+      purchased_quantity_line_indexes: [ quantity_line_index ],
+      printed_total_line_index: total_line_index,
+      owned_line_indexes: [ 0, *(name_line_index..total_line_index) ]
+    )
+    {
+      reference_price: reference_line_index,
+      purchased_quantity: quantity_line_index,
+      printed_line_total: total_line_index
+    }.each do |component, line_index|
+      candidate.dig(component, :evidence).merge!(
+        source_field_path: "pages[0].lines[#{line_index}]",
+        line_index: line_index
+      )
+    end
+  end
+
+  def single_item_gross_summary_ocr_result
+    result = item_layout_ocr_result.deep_dup
+    result[:lines] << '10%対象 1,549円 内税154円'
+    result[:case_preserved_lines] << '10%対象 1,549円 内税154円'
+    result.dig(:candidates).merge!(total_amount: 1703, tax_amount: 154)
+
+    item_identity = 'azure_structured_item_i0_s16_e38'
+    result.dig(:candidates, :items, 0)[:ocr_item_identity] = item_identity
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+    reference.merge!(
+      item_identity: item_identity,
+      destination_kind: 'azure_structured_item',
+      structured_item_index: 0,
+      reference_price_tax_inclusion: 'gross',
+      validation_state: 'valid',
+      rejection_reasons: [],
+      tax_inclusion_evidence: {
+        kind: 'single_item_receipt_gross_summary',
+        string_index_type: 'textElements',
+        policy_contract_version: 'reference_pricing_single_item_gross_summary_policy_v1',
+        summary_total: {
+          source_provider: 'azure_item_layout',
+          source_field_path: 'pages[0].lines[5]',
+          page_index: 0,
+          line_index: 5,
+          string_index_type: 'textElements',
+          provider_span_start: 70,
+          provider_span_end: 80,
+          amount: 1703
+        },
+        gross_tax_target: {
+          source_provider: 'azure_item_layout',
+          source_field_path: 'pages[0].lines[6]',
+          page_index: 0,
+          line_index: 6,
+          string_index_type: 'textElements',
+          provider_span_start: 82,
+          provider_span_end: 105,
+          rate: '0.1',
+          net_amount: 1549,
+          tax_amount: 154,
+          gross_amount: 1703
+        }
+      }
+    )
+    result.dig(:candidates, :item_calculation_mode_candidates).sole.merge!(
+      item_identity: item_identity,
+      destination_kind: 'azure_structured_item',
+      owned_line_indexes: [ 1, 2, 3, 4 ]
+    )
+    result
+  end
+
+  def single_structured_item_inner_tax_ocr_result
+    result = structured_reference_ocr_result.deep_dup
+    result[:lines].concat([ '内消費税等', '154円', '合計', '1,703円' ])
+    result[:case_preserved_lines].concat([ '内消費税等', '154円', '合計', '1,703円' ])
+    result.dig(:candidates).merge!(total_amount: 1703, tax_amount: 154)
+
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+    reference.merge!(
+      reference_price_tax_inclusion: 'gross',
+      validation_state: 'valid',
+      rejection_reasons: [],
+      tax_inclusion_evidence: {
+        kind: 'single_item_receipt_inner_tax_summary',
+        string_index_type: 'utf16CodeUnit',
+        policy_contract_version: 'reference_pricing_single_structured_item_gross_policy_v1',
+        item_parent: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.Items[0]',
+          item_index: 0,
+          provider_span_start: 0,
+          provider_span_end: 28
+        },
+        tax_detail_parent: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TaxDetails[0]',
+          tax_detail_index: 0,
+          provider_span_start: 30,
+          provider_span_end: 42
+        },
+        tax_description: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TaxDetails[0].Description',
+          tax_detail_index: 0,
+          page_index: 0,
+          line_index: 4,
+          string_index_type: 'utf16CodeUnit',
+          provider_span_start: 30,
+          provider_span_end: 35
+        },
+        tax_amount: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TaxDetails[0].Amount',
+          tax_detail_index: 0,
+          page_index: 0,
+          line_index: 5,
+          string_index_type: 'utf16CodeUnit',
+          provider_span_start: 36,
+          provider_span_end: 39,
+          amount: 154
+        },
+        document_tax_total: {
+          source_provider: 'azure_structured',
+          source_field_path: 'documents[0].fields.TotalTax',
+          page_index: 0,
+          line_index: 5,
+          string_index_type: 'utf16CodeUnit',
+          provider_span_start: 36,
+          provider_span_end: 39,
+          amount: 154
+        },
+        summary_total: {
+          source_provider: 'azure_document_total',
+          source_field_path: 'pages[0].lines[7]',
+          page_index: 0,
+          line_index: 7,
+          string_index_type: 'utf16CodeUnit',
+          provider_span_start: 44,
+          provider_span_end: 49,
+          amount: 1703
+        }
+      }
+    )
+    result
+  end
+
+  def discount_heavy_ocr_result
+    raw_json = JSON.parse(Rails.root.join('spec/fixtures/ocr/discount_heavy_receipt.json').read)
+
+    Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
+  end
+
   it 'invalid categoryを保存せず未分類の確認状態だけをsnapshotへ残す' do
     snapshot = described_class.ai_normalized_result_snapshot(
       success: true,
@@ -508,6 +973,703 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
         'polygon',
         'provider_raw_response'
       )
+    end
+  end
+
+  it 'structured Itemの計算方式候補をraw textと分離したtyped proposalへ保存する' do
+    snapshot = described_class.ocr_result_snapshot(structured_count_ocr_result)
+    proposals = snapshot.dig('adoption_proposals', 'item_calculation_modes')
+
+    aggregate_failures do
+      expect(proposals.size).to eq(4)
+      expect(proposals).to all(include(
+        'schema_version' => 'item_calculation_mode_proposal_set_v1',
+        'source_provider' => 'azure_structured',
+        'integrity_checksum' => match(/\A[0-9a-f]{64}\z/)
+      ))
+      expect(snapshot.dig('candidates', 'items', 0, 'ocr_item_identity')).to eq(
+        proposals.first['item_identity']
+      )
+      expect(snapshot.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 4,
+        'snapshot_count' => 4
+      )
+      expect(proposals.to_json).not_to include('ノート A5', 'raw_text', 'provider_raw_response')
+    end
+  end
+
+  it 'structured Item proposalをretry用snapshotへexactに再sanitizeする' do
+    initial = described_class.ocr_result_snapshot(structured_count_ocr_result)
+    copied = described_class.ocr_result_snapshot(initial)
+
+    aggregate_failures do
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(
+        initial.dig('adoption_proposals', 'item_calculation_modes')
+      )
+      expect(copied.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 4,
+        'snapshot_count' => 4
+      )
+      expect(copied.dig('truncated', 'item_calculation_mode_candidates')).to be(false)
+    end
+  end
+
+  it '印字明細合計なしのcount proposalをJSON round-tripとretry再sanitizeで維持する' do
+    initial = described_class.ocr_result_snapshot(structured_count_without_totals_ocr_result)
+    stored = initial.dig('adoption_proposals', 'item_calculation_modes')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(copied)
+
+    aggregate_failures do
+      expect(stored).to be_present
+      expect(stored).to all(satisfy do |proposal|
+        proposal.fetch('options').pluck('pricing_source_kind') == [ 'count_unit_price' ] &&
+          !proposal.key?('printed_line_total')
+      end)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(stored)
+      expect(rehydrated.dig(:adoption_proposals, 'item_calculation_modes')).to eq(stored)
+    end
+  end
+
+  it 'structured reference proposalをJSON round-tripとretry再sanitizeでexactに維持する' do
+    initial = described_class.ocr_result_snapshot(structured_reference_ocr_result)
+    stored = initial.dig('adoption_proposals', 'item_calculation_modes')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(copied)
+
+    aggregate_failures do
+      expect(stored.sole.fetch('options').pluck('pricing_source_kind')).to eq(
+        %w[reference_quantity_price explicit_line_total]
+      )
+      expect(JSON.generate(stored.sole).bytesize).to be <= 4096
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(stored)
+      expect(rehydrated.dig(:adoption_proposals, 'item_calculation_modes')).to eq(stored)
+      expect(stored.to_json).not_to include('raw_text', 'provider_raw_response', 'polygon')
+    end
+  end
+
+  it 'layout明細のbounded構造とexplicit-only proposalをsnapshotへ保存する' do
+    snapshot = described_class.ocr_result_snapshot(item_layout_ocr_result)
+    candidate = snapshot.dig('candidates', 'reference_pricing_candidates').sole
+    proposal = snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+
+    aggregate_failures do
+      expect(snapshot.dig('candidates', 'reference_pricing_block_line_indexes')).to eq([ 1, 2, 3, 4 ])
+      expect(snapshot.dig('candidates', 'items', 0, 'ocr_item_identity')).to start_with(
+        'azure_item_layout_item_'
+      )
+      expect(candidate).to include(
+        'candidate_id' => 'azure_item_layout_p0_name_l1_ref_l2_qty_l3_total_l4_reference_pricing',
+        'source_kind' => 'azure_item_layout',
+        'item_index' => 0,
+        'page_index' => 0,
+        'name_line_index' => 1,
+        'reference_line_index' => 2,
+        'reference_line_provider_span_start' => 26,
+        'reference_line_provider_span_end' => 40,
+        'purchased_quantity_line_indexes' => [ 3 ],
+        'printed_total_line_index' => 4,
+        'owned_line_indexes' => [ 1, 2, 3, 4 ],
+        'validation_state' => 'valid'
+      )
+      expect(candidate.dig('reference_price', 'amount')).to eq('498')
+      expect(candidate.dig('reference_price', 'evidence')).to include(
+        'source_provider' => 'azure_item_layout',
+        'source_field_path' => 'pages[0].lines[2]',
+        'provider_span_start' => 29,
+        'provider_span_end' => 32,
+        'string_index_type' => 'textElements'
+      )
+      expect(proposal).to include(
+        'source_provider' => 'azure_item_layout',
+        'item_identity' => 'azure_item_layout_item_p0_name_l1_s16_e22_ref_l2_qty_l3_total_l4'
+      )
+      expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
+      expect(snapshot.dig('adoption_proposals', 'reference_pricing')).to be_nil
+      expect(snapshot.to_json).not_to include('polygon', 'word_content', 'provider_raw_response')
+    end
+  end
+
+  it 'shared basis header候補を専用contractで保存し計算方式はexplicit-onlyに維持する' do
+    result = shared_basis_diagnostic_ocr_result
+    initial = described_class.ocr_result_snapshot(result)
+    candidate = initial.dig('candidates', 'reference_pricing_candidates').sole
+    proposals = initial.dig('adoption_proposals', 'item_calculation_modes')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+
+    aggregate_failures do
+      expect(candidate).to include(
+        'validation_contract_version' => 'azure_item_layout_shared_basis_v1',
+        'destination_kind' => 'azure_structured_item',
+        'structured_item_index' => 0,
+        'owned_line_indexes' => [ 0, 1, 2, 3, 4 ],
+        'validation_state' => 'ambiguous',
+        'rejection_reasons' => [ 'ambiguous_tax_inclusion' ],
+        'reference_price_tax_inclusion' => 'unknown'
+      )
+      expect(candidate.dig('reference_quantity', 'evidence')).to include(
+        'source_field_path' => 'pages[0].lines[0]',
+        'line_index' => 0,
+        'provider_span_start' => 0,
+        'provider_span_end' => 4
+      )
+      expect(proposals.sole.fetch('options').pluck('pricing_source_kind')).to eq([ 'explicit_line_total' ])
+      expect(proposals.sum do |proposal|
+        proposal.fetch('options').count { |option| option['pricing_source_kind'] == 'reference_quantity_price' }
+      end).to eq(0)
+      expect(initial.dig('adoption_proposals', 'reference_pricing')).to be_nil
+      expect(copied.dig('candidates', 'reference_pricing_candidates').sole).to eq(candidate)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(proposals)
+    end
+  end
+
+  it 'shared basisとexternal-taxのexact構造証拠をnet reference proposalへ結合してretryする' do
+    initial = described_class.ocr_result_snapshot(shared_basis_external_tax_ocr_result)
+    reference = initial.dig('candidates', 'reference_pricing_candidates').sole
+    tax_details = initial.dig('adoption_proposals', 'reference_pricing_tax_details')
+    proposal = initial.dig('adoption_proposals', 'item_calculation_modes').sole
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(copied)
+
+    aggregate_failures do
+      expect(reference).to include(
+        'validation_state' => 'valid',
+        'reference_price_tax_inclusion' => 'net'
+      )
+      expect(tax_details).to include(
+        'schema_version' => 'reference_pricing_tax_detail_structural_evidence_set_v1',
+        'integrity_checksum' => match(/\A[0-9a-f]{64}\z/)
+      )
+      expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+        reference_quantity_price
+        explicit_line_total
+      ])
+      expect(proposal.dig('options', 0, 'source')).to eq(
+        'reference_price_amount' => '498',
+        'reference_quantity' => '100',
+        'reference_quantity_unit_code' => 'gram',
+        'reference_quantity_origin' => 'explicit',
+        'purchased_quantity' => '342',
+        'purchased_quantity_unit_code' => 'gram',
+        'reference_price_tax_inclusion' => 'net'
+      )
+      expect(proposal.dig('options', 0, 'evidence', 'tax_inclusion')).to eq(
+        reference.fetch('tax_inclusion_evidence')
+      )
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(proposal)
+      expect(rehydrated.dig(:adoption_proposals, 'item_calculation_modes').sole).to eq(proposal)
+      expect([ reference.fetch('tax_inclusion_evidence'), tax_details, proposal ].to_json).not_to include(
+        'raw_text',
+        'product_name',
+        'store_name',
+        'polygon'
+      )
+    end
+  end
+
+  it 'shared basis external-taxの構造metadataが生成時に欠損・不一致ならexplicitだけを維持する' do
+    missing = shared_basis_external_tax_ocr_result
+    missing.dig(:candidates).delete(:tax_detail_structural_metadata)
+    mismatched = shared_basis_external_tax_ocr_result
+    mismatched.dig(
+      :candidates,
+      :tax_detail_structural_metadata,
+      :tax_details,
+      0,
+      :tax_amount
+    )[:amount] = 153
+
+    snapshots = [ missing, mismatched ].map { |result| described_class.ocr_result_snapshot(result) }
+
+    aggregate_failures do
+      snapshots.each do |snapshot|
+        expect(snapshot.dig('adoption_proposals', 'reference_pricing_tax_details')).to be_nil
+        expect(snapshot.dig('candidates', 'reference_pricing_candidates').sole).to include(
+          'validation_state' => 'valid',
+          'reference_price_tax_inclusion' => 'net'
+        )
+        expect(snapshot.dig('adoption_proposals', 'item_calculation_modes').sole.fetch('options'))
+          .to contain_exactly(include('pricing_source_kind' => 'explicit_line_total'))
+      end
+    end
+  end
+
+  it '保存済みshared basis external-taxのTaxDetail sibling欠損・改変時はproposal全体を復元しない' do
+    initial = described_class.ocr_result_snapshot(shared_basis_external_tax_ocr_result)
+    missing = initial.deep_dup
+    missing.dig('adoption_proposals').delete('reference_pricing_tax_details')
+    mutated = initial.deep_dup
+    mutated.dig(
+      'adoption_proposals',
+      'reference_pricing_tax_details',
+      'tax_details',
+      0,
+      'tax_amount'
+    )['amount'] = 153
+
+    missing_copy = described_class.ocr_result_snapshot(missing)
+    mutated_copy = described_class.ocr_result_snapshot(mutated)
+
+    aggregate_failures do
+      expect(missing_copy.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+      expect(mutated_copy.dig('adoption_proposals', 'reference_pricing_tax_details')).to be_nil
+      expect(mutated_copy.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+      expect(missing_copy.dig('candidates', 'tax_details').sole).to include('amount' => 154)
+      expect(mutated_copy.dig('candidates', 'tax_details').sole).to include('amount' => 154)
+    end
+  end
+
+  it 'shared basis header候補のidentity・header evidence・row ownership改変を候補ごと破棄する' do
+    mutations = {
+      unknown_contract: ->(candidate) { candidate[:validation_contract_version] = 'unknown_v1' },
+      wrong_identity: ->(candidate) { candidate[:item_identity] = 'azure_structured_item_i1_s16_e55' },
+      wrong_candidate_tuple: ->(candidate) {
+        candidate[:candidate_id] = 'azure_item_layout_p0_name_l1_ref_l3_qty_l4_total_l5_reference_pricing'
+      },
+      wrong_header_path: ->(candidate) {
+        candidate.dig(:reference_quantity, :evidence)[:source_field_path] = 'pages[0].lines[1]'
+      },
+      header_after_name: ->(candidate) {
+        candidate.dig(:reference_quantity, :evidence).merge!(
+          source_field_path: 'pages[0].lines[5]',
+          line_index: 5,
+          provider_span_start: 56,
+          provider_span_end: 60
+        )
+        candidate[:owned_line_indexes] = [ 1, 2, 3, 4, 5 ]
+      },
+      header_inside_parent: ->(candidate) {
+        candidate.dig(:reference_quantity, :evidence).merge!(
+          provider_span_start: 17,
+          provider_span_end: 20
+        )
+      },
+      missing_header_ownership: ->(candidate) { candidate[:owned_line_indexes] = [ 1, 2, 3, 4 ] },
+      noncontiguous_row: ->(candidate) { candidate[:owned_line_indexes] = [ 0, 1, 2, 4 ] },
+      extra_owned_line: ->(candidate) { candidate[:owned_line_indexes] = [ 0, 1, 2, 3, 4, 5 ] },
+      reference_outside_parent: ->(candidate) {
+        candidate.dig(:reference_price, :evidence).merge!(provider_span_start: 2, provider_span_end: 5)
+      },
+      dimension_mismatch: ->(candidate) {
+        candidate.dig(:purchased_quantity)[:unit_code] = 'milliliter'
+      },
+      premature_valid_state: ->(candidate) {
+        candidate.merge!(validation_state: 'valid', rejection_reasons: [])
+      }
+    }
+
+    snapshots = mutations.transform_values do |mutation|
+      result = shared_basis_diagnostic_ocr_result
+      mutation.call(result.dig(:candidates, :reference_pricing_candidates).sole)
+      described_class.ocr_result_snapshot(result)
+    end
+
+    aggregate_failures do
+      snapshots.each do |name, snapshot|
+        expect(snapshot.dig('candidates', 'reference_pricing_candidates')).to eq([]), name.to_s
+      end
+    end
+  end
+
+  it 'shared basis headerと最初のrowの間を最大3 context lineに制限する' do
+    maximum = shared_basis_diagnostic_ocr_result
+    move_shared_basis_row_indexes!(maximum, name_line_index: 4)
+    overflow = shared_basis_diagnostic_ocr_result
+    move_shared_basis_row_indexes!(overflow, name_line_index: 5)
+
+    maximum_snapshot = described_class.ocr_result_snapshot(maximum)
+    overflow_snapshot = described_class.ocr_result_snapshot(overflow)
+
+    aggregate_failures do
+      expect(maximum_snapshot.dig('candidates', 'reference_pricing_candidates').size).to eq(1)
+      expect(overflow_snapshot.dig('candidates', 'reference_pricing_candidates')).to eq([])
+    end
+  end
+
+  it 'single-item gross summaryをitem block外のbounded evidenceとしてexactに保存する' do
+    result = single_item_gross_summary_ocr_result
+    snapshot = described_class.ocr_result_snapshot(result)
+    candidate = snapshot.dig('candidates', 'reference_pricing_candidates').sole
+    proposal = snapshot.dig('adoption_proposals', 'item_calculation_modes').sole
+    tax_evidence = candidate.fetch('tax_inclusion_evidence')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(snapshot)))
+
+    aggregate_failures do
+      expect(candidate).to include(
+        'item_identity' => 'azure_structured_item_i0_s16_e38',
+        'destination_kind' => 'azure_structured_item',
+        'structured_item_index' => 0,
+        'reference_price_tax_inclusion' => 'gross'
+      )
+      expect(tax_evidence).to eq(
+        'kind' => 'single_item_receipt_gross_summary',
+        'string_index_type' => 'textElements',
+        'policy_contract_version' => 'reference_pricing_single_item_gross_summary_policy_v1',
+        'summary_total' => {
+          'source_provider' => 'azure_item_layout',
+          'source_field_path' => 'pages[0].lines[5]',
+          'page_index' => 0,
+          'line_index' => 5,
+          'string_index_type' => 'textElements',
+          'provider_span_start' => 70,
+          'provider_span_end' => 80,
+          'amount' => 1703
+        },
+        'gross_tax_target' => {
+          'source_provider' => 'azure_item_layout',
+          'source_field_path' => 'pages[0].lines[6]',
+          'page_index' => 0,
+          'line_index' => 6,
+          'string_index_type' => 'textElements',
+          'provider_span_start' => 82,
+          'provider_span_end' => 105,
+          'rate' => '0.1',
+          'net_amount' => 1549,
+          'tax_amount' => 154,
+          'gross_amount' => 1703
+        }
+      )
+      expect(proposal).to include(
+        'source_provider' => 'azure_item_layout',
+        'destination_kind' => 'azure_structured_item',
+        'item_identity' => 'azure_structured_item_i0_s16_e38'
+      )
+      expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+        reference_quantity_price
+        explicit_line_total
+      ])
+      expect(proposal.dig('options', 0, 'evidence', 'tax_inclusion')).to eq(tax_evidence)
+      expect(copied.dig('candidates', 'reference_pricing_candidates').sole).to eq(candidate)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(proposal)
+      expect([ tax_evidence, proposal ].to_json).not_to include(
+        'raw_text',
+        'product_name',
+        'store_name',
+        'polygon'
+      )
+    end
+  end
+
+  it 'native Itemの内税根拠をbounded proposalへ保存しretryでexactに再検証する' do
+    initial = described_class.ocr_result_snapshot(single_structured_item_inner_tax_ocr_result)
+    candidate = initial.dig('candidates', 'reference_pricing_candidates').sole
+    proposal = initial.dig('adoption_proposals', 'item_calculation_modes').sole
+    tax_evidence = candidate.fetch('tax_inclusion_evidence')
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(copied)
+
+    aggregate_failures do
+      expect(tax_evidence).to include(
+        'kind' => 'single_item_receipt_inner_tax_summary',
+        'policy_contract_version' => 'reference_pricing_single_structured_item_gross_policy_v1'
+      )
+      expect(tax_evidence.fetch('item_parent')).to include(
+        'source_field_path' => 'documents[0].fields.Items[0]',
+        'item_index' => 0
+      )
+      expect(tax_evidence.fetch('tax_detail_parent')).to include(
+        'source_field_path' => 'documents[0].fields.TaxDetails[0]',
+        'tax_detail_index' => 0
+      )
+      expect(tax_evidence.dig('tax_amount', 'amount')).to eq(154)
+      expect(tax_evidence.dig('document_tax_total', 'amount')).to eq(154)
+      expect(tax_evidence.dig('summary_total', 'amount')).to eq(1703)
+      expect(proposal.fetch('options').pluck('pricing_source_kind')).to eq(%w[
+        reference_quantity_price
+        explicit_line_total
+      ])
+      expect(proposal.dig('options', 0, 'evidence', 'tax_inclusion')).to eq(tax_evidence)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes').sole).to eq(proposal)
+      expect(rehydrated.dig(:adoption_proposals, 'item_calculation_modes').sole).to eq(proposal)
+      expect([ tax_evidence, proposal ].to_json).not_to include(
+        'raw_text',
+        'product_name',
+        'store_name',
+        'polygon'
+      )
+    end
+  end
+
+  it 'Quantity内のimplicit per-unit単位evidenceをbounded candidate snapshotへ保存しretryで再検証する' do
+    result = single_structured_item_inner_tax_ocr_result
+    reference = result.dig(:candidates, :reference_pricing_candidates).sole
+    reference[:reference_price][:amount] = '1703'
+    reference[:reference_quantity].merge!(
+      amount: '1',
+      origin: 'implicit_per_unit',
+      evidence: reference[:reference_quantity][:evidence].merge(
+        source_field_path: 'documents[0].fields.Items[0].Quantity'
+      )
+    )
+    reference[:purchased_quantity][:amount] = '1'
+    reference[:corroboration] = {
+      exact_amount: { numerator: '1703', denominator: '1' },
+      projected_amount: 1703,
+      printed_line_total: '1703',
+      rounding_matches: %w[floor half_up ceil]
+    }
+
+    initial = described_class.ocr_result_snapshot(result)
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    stored = initial.dig('candidates', 'reference_pricing_candidates').sole
+
+    aggregate_failures do
+      expect(stored.dig('reference_quantity', 'evidence', 'source_field_path')).to eq(
+        'documents[0].fields.Items[0].Quantity'
+      )
+      expect(stored.dig('tax_inclusion_evidence', 'kind')).to eq(
+        'single_item_receipt_inner_tax_summary'
+      )
+      expect(copied.dig('candidates', 'reference_pricing_candidates').sole).to eq(stored)
+      expect(stored.to_json).not_to include('raw_text', 'provider_raw_response', 'valueString')
+    end
+  end
+
+  it 'native Item内税根拠のunknown field・partial overlap・amount不一致を部分保存しない' do
+    unknown = single_structured_item_inner_tax_ocr_result
+    unknown.dig(
+      :candidates, :reference_pricing_candidates, 0, :tax_inclusion_evidence
+    )[:raw_text] = '保存禁止'
+    partial_overlap = single_structured_item_inner_tax_ocr_result
+    partial_overlap.dig(
+      :candidates, :reference_pricing_candidates, 0, :tax_inclusion_evidence, :document_tax_total
+    ).merge!(provider_span_start: 37, provider_span_end: 40)
+    mismatched = single_structured_item_inner_tax_ocr_result
+    mismatched.dig(
+      :candidates, :reference_pricing_candidates, 0, :tax_inclusion_evidence, :summary_total
+    )[:amount] = 1702
+
+    [ unknown, partial_overlap, mismatched ].each do |result|
+      snapshot = described_class.ocr_result_snapshot(result)
+
+      aggregate_failures do
+        expect(snapshot.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+        expect(snapshot.dig('candidates', 'reference_pricing_candidates').to_json).not_to include(
+          '保存禁止',
+          'raw_text'
+        )
+      end
+    end
+  end
+
+  it 'single-item gross summaryのunknown・block overlap・amount不一致をproposalへ部分保存しない' do
+    unknown = single_item_gross_summary_ocr_result
+    unknown.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :summary_total
+    )[:raw_text] = '保存禁止'
+    overlapping = single_item_gross_summary_ocr_result
+    overlapping.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :summary_total
+    ).merge!(provider_span_start: 50, provider_span_end: 60)
+    mismatched = single_item_gross_summary_ocr_result
+    mismatched.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :gross_tax_target
+    )[:gross_amount] = 1702
+    line_over_bound = single_item_gross_summary_ocr_result
+    line_over_bound.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :summary_total
+    ).merge!(source_field_path: 'pages[0].lines[150]', line_index: 150)
+    overprecision_rate = single_item_gross_summary_ocr_result
+    target = overprecision_rate.dig(
+      :candidates,
+      :reference_pricing_candidates,
+      0,
+      :tax_inclusion_evidence,
+      :gross_tax_target
+    )
+    target.merge!(rate: '0.1234567', net_amount: 1516, tax_amount: 187)
+    overprecision_rate.dig(:candidates)[:tax_amount] = 187
+    structured_parent_overlap = single_item_gross_summary_ocr_result
+    expanded_identity = 'azure_structured_item_i0_s16_e80'
+    structured_parent_overlap.dig(:candidates, :items, 0)[:ocr_item_identity] = expanded_identity
+    structured_parent_overlap.dig(:candidates, :reference_pricing_candidates, 0)[:item_identity] = expanded_identity
+    structured_parent_overlap.dig(:candidates, :item_calculation_mode_candidates, 0)[:item_identity] = expanded_identity
+    missing_line_span = single_item_gross_summary_ocr_result
+    missing_line_span.dig(:candidates, :reference_pricing_candidates, 0)
+      .delete(:reference_line_provider_span_start)
+
+    aggregate_failures do
+      [
+        unknown,
+        overlapping,
+        mismatched,
+        line_over_bound,
+        overprecision_rate,
+        structured_parent_overlap,
+        missing_line_span
+      ].each do |result|
+        snapshot = described_class.ocr_result_snapshot(result)
+        expect(snapshot.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+        expect(snapshot.dig('candidates', 'reference_pricing_candidates').to_json)
+          .not_to include('保存禁止', 'raw_text')
+      end
+    end
+  end
+
+  it 'layout explicit proposalをJSON round-tripでexactに維持し不正なblock indexをfail-closedにする' do
+    initial = described_class.ocr_result_snapshot(item_layout_ocr_result)
+    copied = described_class.ocr_result_snapshot(JSON.parse(JSON.generate(initial)))
+    malformed = item_layout_ocr_result.deep_dup
+    malformed[:candidates][:reference_pricing_block_line_indexes] = [ -1, 2, 3, 151 ]
+    malformed_snapshot = described_class.ocr_result_snapshot(malformed)
+
+    aggregate_failures do
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to eq(
+        initial.dig('adoption_proposals', 'item_calculation_modes')
+      )
+      expect(copied.dig('candidates', 'reference_pricing_candidates')).to eq(
+        initial.dig('candidates', 'reference_pricing_candidates')
+      )
+      expect(malformed_snapshot.dig('candidates', 'reference_pricing_block_line_indexes')).to eq([])
+    end
+  end
+
+  it 'adjustment-only provider Itemをdestinationから除外し通常Itemのproposalを維持する' do
+    result = discount_heavy_ocr_result
+    snapshot = described_class.ocr_result_snapshot(result)
+
+    aggregate_failures do
+      expect(result.dig(:candidates, :item_calculation_mode_candidates).map do |candidate|
+        candidate[:item_index]
+      end).to eq([ 0, 1, 2 ])
+      expect(snapshot.dig('adoption_proposals', 'item_calculation_modes').map do |proposal|
+        proposal['item_index']
+      end).to eq([ 0, 1, 2 ])
+      expect(result.dig(:candidates, :adjustment_candidates)).to be_present
+    end
+  end
+
+  it 'source item truncationを隠さずproposal全体をfail closedに除外する' do
+    result = structured_count_ocr_result.deep_dup
+    result[:candidates][:item_calculation_mode_source_truncated] = true
+
+    snapshot = described_class.ocr_result_snapshot(result)
+
+    aggregate_failures do
+      expect(snapshot.dig('truncated', 'item_calculation_mode_candidates')).to be(true)
+      expect(snapshot.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+      expect(snapshot.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 4,
+        'snapshot_count' => 0
+      )
+    end
+
+    copied = described_class.ocr_result_snapshot(snapshot)
+    aggregate_failures do
+      expect(copied.dig('truncated', 'item_calculation_mode_candidates')).to be(true)
+      expect(copied.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 4,
+        'snapshot_count' => 0
+      )
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+    end
+  end
+
+  it '上限超過のactual candidate countをretry再sanitizeでも維持する' do
+    initial = {
+      'schema_version' => described_class::OCR_RESULT_SCHEMA_VERSION,
+      'success' => true,
+      'candidates' => { 'items' => [] },
+      'candidate_counts' => {
+        'items' => { 'actual_count' => 0, 'snapshot_count' => 0 },
+        'item_calculation_mode_candidates' => { 'actual_count' => 101, 'snapshot_count' => 0 }
+      },
+      'truncated' => { 'items' => false, 'item_calculation_mode_candidates' => true }
+    }
+
+    copied = described_class.ocr_result_snapshot(initial)
+
+    aggregate_failures do
+      expect(copied.dig('candidate_counts', 'item_calculation_mode_candidates')).to eq(
+        'actual_count' => 101,
+        'snapshot_count' => 0
+      )
+      expect(copied.dig('truncated', 'item_calculation_mode_candidates')).to be(true)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+    end
+  end
+
+  it 'reference candidateの上限超過countとtruncationをretry再sanitizeでも維持する' do
+    initial = {
+      'schema_version' => described_class::OCR_RESULT_SCHEMA_VERSION,
+      'success' => true,
+      'candidates' => {
+        'items' => [],
+        'reference_pricing_candidates' => Array.new(100) do |index|
+          { 'candidate_id' => "azure_items_#{index}_reference_pricing" }
+        end
+      },
+      'candidate_counts' => {
+        'items' => { 'actual_count' => 0, 'snapshot_count' => 0 },
+        'reference_pricing_candidates' => { 'actual_count' => 101, 'snapshot_count' => 100 },
+        'item_calculation_mode_candidates' => { 'actual_count' => 0, 'snapshot_count' => 0 }
+      },
+      'truncated' => {
+        'items' => false,
+        'reference_pricing_candidates' => true,
+        'item_calculation_mode_candidates' => false
+      }
+    }
+
+    copied = described_class.ocr_result_snapshot(initial)
+
+    aggregate_failures do
+      expect(copied.dig('candidate_counts', 'reference_pricing_candidates')).to eq(
+        'actual_count' => 101,
+        'snapshot_count' => 100
+      )
+      expect(copied.dig('truncated', 'reference_pricing_candidates')).to be(true)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
+    end
+  end
+
+  it 'stored metadataが未truncateを主張してもreference candidate配列の上限超過を隠さない' do
+    initial = {
+      'schema_version' => described_class::OCR_RESULT_SCHEMA_VERSION,
+      'success' => true,
+      'candidates' => {
+        'items' => [],
+        'reference_pricing_candidates' => Array.new(101) do |index|
+          { 'candidate_id' => "azure_items_#{index}_reference_pricing" }
+        end
+      },
+      'candidate_counts' => {
+        'items' => { 'actual_count' => 0, 'snapshot_count' => 0 },
+        'reference_pricing_candidates' => { 'actual_count' => 100, 'snapshot_count' => 100 },
+        'item_calculation_mode_candidates' => { 'actual_count' => 0, 'snapshot_count' => 0 }
+      },
+      'truncated' => {
+        'items' => false,
+        'reference_pricing_candidates' => false,
+        'item_calculation_mode_candidates' => false
+      }
+    }
+
+    copied = described_class.ocr_result_snapshot(initial)
+
+    aggregate_failures do
+      expect(copied.dig('candidate_counts', 'reference_pricing_candidates')).to eq(
+        'actual_count' => 0,
+        'snapshot_count' => 0
+      )
+      expect(copied.dig('truncated', 'reference_pricing_candidates')).to be(true)
+      expect(copied.dig('adoption_proposals', 'item_calculation_modes')).to be_nil
     end
   end
 

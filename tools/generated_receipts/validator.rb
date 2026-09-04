@@ -70,6 +70,7 @@ module GeneratedReceipts
       line_total
       tax_rate
       discount_amount
+      discount_rate
       tax_inclusion
       quantity_unit_code
       pricing_source_kind
@@ -78,6 +79,8 @@ module GeneratedReceipts
       reference_quantity_unit_code
       reference_price_tax_inclusion
       original_line_total
+      needs_review
+      review_reasons
     ].freeze
     ITEM_REQUIRED_KEYS = %w[
       name
@@ -86,6 +89,13 @@ module GeneratedReceipts
       line_total
       tax_rate
       discount_amount
+    ].freeze
+    ITEM_REVIEW_REASONS = %w[
+      item_name_uncertain
+      item_category_uncertain
+      item_quantity_uncertain
+      item_tax_rate_uncertain
+      item_pricing_mode_uncertain
     ].freeze
     ADJUSTMENT_KEYS = %w[
       kind
@@ -127,12 +137,16 @@ module GeneratedReceipts
       simulated_ai_item_tax_rate
       expected_item_tax_rate_after_save
     ].freeze
-    SOURCE_KEYS = %w[context items].freeze
+    SOURCE_KEYS = %w[context count_tax_semantics items].freeze
+    SOURCE_REQUIRED_KEYS = %w[context items].freeze
     SOURCE_ITEM_KEYS = %w[
       item_index
       printed_lines
       purchased_quantity
       purchased_unit
+      purchased_quantity_origin
+      count_unit_price_amount
+      formula_conflicts
       reference_price_amount
       reference_quantity
       reference_unit
@@ -167,7 +181,17 @@ module GeneratedReceipts
       rounding_matches
     ].freeze
     REFERENCE_CANDIDATE_REQUIRED_KEYS = %w[item_index validation_state rejection_reasons].freeze
-    CATEGORIES = %w[normal payment discount_adjustment tax_rounding ocr_anomaly non_receipt conflict measurement].freeze
+    CATEGORIES = %w[
+      normal
+      payment
+      discount_adjustment
+      tax_rounding
+      ocr_anomaly
+      non_receipt
+      conflict
+      measurement
+      calculation_mode
+    ].freeze
     RECEIPT_KINDS = %w[receipt non_receipt].freeze
     SOURCE_CONTEXTS = %w[analysis manual edit_save].freeze
     REFERENCE_CANDIDATE_STATES = %w[valid missing ambiguous unsupported none].freeze
@@ -193,6 +217,7 @@ module GeneratedReceipts
       insufficient_component_evidence
     ].freeze
     PRICING_SOURCE_KINDS = %w[count_unit_price reference_quantity_price explicit_line_total].freeze
+    CANONICAL_QUANTITY_UNIT_CODES = CalculationModeContract::CANONICAL_UNIT_CODES
     AMOUNT_BASES = %w[tax_included tax_excluded mixed].freeze
     TAX_INCLUSIONS = %w[gross net].freeze
     ADJUSTMENT_EFFECTS = %w[purchase payment].freeze
@@ -220,6 +245,7 @@ module GeneratedReceipts
     CASE_ID_PATTERN = /\Ag\d{3}_[a-z0-9_]+\z/.freeze
     ARTIFACT_EXTENSION_PATTERN = /\A[a-z0-9]+\z/.freeze
     EXACT_DECIMAL_PATTERN = /\A(?:0|[1-9]\d*)(?:\.\d+)?\z/.freeze
+    EXACT_RATE_PATTERN = /\A(?:0(?:\.\d{1,6})?|1(?:\.0{1,6})?)\z/.freeze
     EXACT_INTEGER_PATTERN = /\A(?:0|[1-9]\d*)\z/.freeze
     CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F-\u009F]/.freeze
     FIXTURE_TEXT_CONTROL_PATTERN = /[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F-\u009F]/.freeze
@@ -293,7 +319,11 @@ module GeneratedReceipts
         end
 
         resolved = File.realpath(candidate)
-        approved = [ GeneratedReceipts::CASES_DIR, GeneratedReceipts::MEASUREMENT_CASES_DIR ].any? do |root|
+        approved = [
+          GeneratedReceipts::CASES_DIR,
+          GeneratedReceipts::MEASUREMENT_CASES_DIR,
+          GeneratedReceipts::CALCULATION_MODE_CASES_DIR
+        ].any? do |root|
           path_within_root?(resolved, File.realpath(root))
         end
         raise FixtureLoadError, FIXTURE_LOAD_ERROR_MESSAGE unless approved
@@ -398,10 +428,21 @@ module GeneratedReceipts
         validate_optional_integer("expected.items[#{index}].line_total", item["line_total"])
         validate_optional_number("expected.items[#{index}].tax_rate", item["tax_rate"])
         validate_optional_integer("expected.items[#{index}].discount_amount", item["discount_amount"])
+        validate_bounded_rate_token("expected.items[#{index}].discount_rate", item["discount_rate"])
         validate_bounded_token("expected.items[#{index}].quantity_unit_code", item["quantity_unit_code"])
+        validate_optional_inclusion(
+          "expected.items[#{index}].quantity_unit_code",
+          item["quantity_unit_code"],
+          CANONICAL_QUANTITY_UNIT_CODES
+        )
         validate_bounded_token(
           "expected.items[#{index}].reference_quantity_unit_code",
           item["reference_quantity_unit_code"]
+        )
+        validate_optional_inclusion(
+          "expected.items[#{index}].reference_quantity_unit_code",
+          item["reference_quantity_unit_code"],
+          CANONICAL_QUANTITY_UNIT_CODES
         )
         validate_optional_integer(
           "expected.items[#{index}].original_line_total",
@@ -418,6 +459,20 @@ module GeneratedReceipts
           item["reference_quantity"],
           allow_numeric: true
         )
+        validate_optional_boolean("expected.items[#{index}].needs_review", item["needs_review"])
+        if item.key?("review_reasons")
+          validate_array(
+            "expected.items[#{index}].review_reasons",
+            item["review_reasons"]
+          ) do |reason, reason_index|
+            validate_inclusion(
+              "expected.items[#{index}].review_reasons[#{reason_index}]",
+              reason,
+              ITEM_REVIEW_REASONS
+            )
+          end
+          validate_unique_array("expected.items[#{index}].review_reasons", item["review_reasons"])
+        end
       end
       validate_measurement_projections
       validate_reference_pricing_candidates
@@ -468,14 +523,21 @@ module GeneratedReceipts
     def validate_source
       source = case_data["source"]
       if source.nil?
-        add_error("source", "is required for Measurement cases") if case_data["category"] == "measurement"
+        if measurement_case? || calculation_mode_case?
+          add_error("source", "is required for #{case_data['category']} cases")
+        end
         return
       end
 
-      validate_hash("source", source, required: SOURCE_KEYS, allowed: SOURCE_KEYS)
+      validate_hash("source", source, required: SOURCE_REQUIRED_KEYS, allowed: SOURCE_KEYS)
       return unless source.is_a?(Hash)
 
       validate_inclusion("source.context", source["context"], SOURCE_CONTEXTS)
+      validate_optional_inclusion(
+        "source.count_tax_semantics",
+        source["count_tax_semantics"],
+        CalculationModeContract::COUNT_TAX_SEMANTICS
+      )
       validate_array("source.items", source["items"]) do |item, index|
         validate_hash(
           "source.items[#{index}]",
@@ -498,6 +560,33 @@ module GeneratedReceipts
           item["purchased_quantity"]
         )
         validate_bounded_token("source.items[#{index}].purchased_unit", item["purchased_unit"])
+        validate_optional_inclusion(
+          "source.items[#{index}].purchased_quantity_origin",
+          item["purchased_quantity_origin"],
+          CalculationModeContract::PURCHASED_QUANTITY_ORIGINS
+        )
+        validate_bounded_integer_token(
+          "source.items[#{index}].count_unit_price_amount",
+          item["count_unit_price_amount"],
+          maximum: MeasurementContract::MAX_LINE_TOTAL
+        )
+        if item.key?("formula_conflicts")
+          validate_array(
+            "source.items[#{index}].formula_conflicts",
+            item["formula_conflicts"],
+            maximum: CalculationModeContract::FORMULA_CONFLICTS.size
+          ) do |conflict, conflict_index|
+            validate_inclusion(
+              "source.items[#{index}].formula_conflicts[#{conflict_index}]",
+              conflict,
+              CalculationModeContract::FORMULA_CONFLICTS
+            )
+          end
+          validate_unique_array(
+            "source.items[#{index}].formula_conflicts",
+            item["formula_conflicts"]
+          )
+        end
         validate_bounded_decimal_token(
           "source.items[#{index}].reference_price_amount",
           item["reference_price_amount"]
@@ -527,12 +616,14 @@ module GeneratedReceipts
           TAX_INCLUSIONS + [ "unknown" ]
         )
       end
-      add_error("category", "must be measurement when source is present") unless case_data["category"] == "measurement"
+      unless measurement_case? || calculation_mode_case?
+        add_error("category", "must be measurement or calculation_mode when source is present")
+      end
     end
 
     def validate_measurement_projections
       value = expected["measurement_projections"]
-      return if value.nil? && case_data["source"].nil?
+      return if value.nil? && !measurement_case?
 
       validate_array("expected.measurement_projections", value) do |projection, index|
         validate_hash(
@@ -583,7 +674,7 @@ module GeneratedReceipts
 
     def validate_reference_pricing_candidates
       value = expected["reference_pricing_candidates"]
-      return if value.nil? && case_data["source"].nil?
+      return if value.nil? && !measurement_case?
 
       validate_array("expected.reference_pricing_candidates", value) do |candidate, index|
         validate_hash(
@@ -761,7 +852,9 @@ module GeneratedReceipts
     end
 
     def validate_amounts
-      if case_data["source"]
+      if calculation_mode_case?
+        validate_calculation_mode_contract
+      elsif case_data["source"]
         validate_measurement_contract
       else
         validate_item_line_totals
@@ -771,6 +864,14 @@ module GeneratedReceipts
       validate_receipt_totals
       validate_payments
       validate_receipt_tax_rate
+    end
+
+    def validate_calculation_mode_contract
+      CalculationModeContract.validate(case_data).each do |error|
+        break if errors.size >= MAX_ERRORS
+
+        errors << error
+      end
     end
 
     def validate_item_line_totals
@@ -1239,14 +1340,24 @@ module GeneratedReceipts
         groups[rate_key]["tax"] += amount(detail["tax"])
         groups[rate_key]["gross"] += amount(detail["gross"])
       end
+      unresolved_rates = unresolved_calculation_mode_tax_rates
 
       expected_groups.each do |rate, values|
         actual = actual_groups[rate] || { "net" => 0, "tax" => 0, "gross" => 0 }
         %w[net tax gross].each do |key|
-          add_error("expected.tax_details[rate=#{rate}].#{key}", "must equal computed #{values[key]}") unless actual[key] == values[key]
+          if unresolved_rates.include?(rate)
+            unless actual[key] >= values[key]
+              add_error(
+                "expected.tax_details[rate=#{rate}].#{key}",
+                "must be at least computed #{values[key]}"
+              )
+            end
+          elsif actual[key] != values[key]
+            add_error("expected.tax_details[rate=#{rate}].#{key}", "must equal computed #{values[key]}")
+          end
         end
       end
-      extra_rates = actual_groups.keys - expected_groups.keys
+      extra_rates = actual_groups.keys - expected_groups.keys - unresolved_rates
       extra_rates.each { |rate| add_error("expected.tax_details", "has unexpected rate #{rate}") }
     end
 
@@ -1300,6 +1411,8 @@ module GeneratedReceipts
       bases = Hash.new { |hash, key| hash[key] = { "net_base" => 0, "gross_base" => 0 } }
 
       expected["items"].each do |item|
+        next if unresolved_calculation_mode_item?(item)
+
         rate = rate_key(item["tax_rate"])
         inclusion = item["tax_inclusion"] || default_tax_inclusion
         bases[rate]["#{inclusion}_base"] += amount(item["line_total"])
@@ -1330,6 +1443,14 @@ module GeneratedReceipts
       case_data["receipt_kind"] == "receipt"
     end
 
+    def measurement_case?
+      case_data["category"] == "measurement"
+    end
+
+    def calculation_mode_case?
+      case_data["category"] == "calculation_mode"
+    end
+
     def expected_required_keys
       receipt_case? ? EXPECTED_REQUIRED_KEYS : NON_RECEIPT_EXPECTED_REQUIRED_KEYS
     end
@@ -1356,12 +1477,26 @@ module GeneratedReceipts
     end
 
     def zero_tax_purchase_total
-      item_total = expected["items"].select { |item| decimal(item["tax_rate"]).zero? }.sum { |item| amount(item["line_total"]) }
+      item_total = expected["items"].reject { |item| unresolved_calculation_mode_item?(item) }
+        .select { |item| decimal(item["tax_rate"]).zero? }
+        .sum { |item| amount(item["line_total"]) }
       purchase_adjustment_total = expected["receipt_adjustments"].select do |adjustment|
         adjustment["effect"] == "purchase" && decimal(adjustment["tax_rate"]).zero?
       end.sum { |adjustment| signed_amount(adjustment) }
 
       item_total + purchase_adjustment_total
+    end
+
+    def unresolved_calculation_mode_tax_rates
+      return [] unless calculation_mode_case?
+
+      expected["items"].filter_map do |item|
+        rate_key(item["tax_rate"]) if unresolved_calculation_mode_item?(item)
+      end.uniq
+    end
+
+    def unresolved_calculation_mode_item?(item)
+      calculation_mode_case? && item["pricing_source_kind"].nil? && item["line_total"].nil?
     end
 
     def zero_tax_detail_omitted?
@@ -1552,6 +1687,15 @@ module GeneratedReceipts
       return if token && token.match?(EXACT_DECIMAL_PATTERN)
 
       add_error(path, "must be an exact decimal within the approved bounds")
+    end
+
+    def validate_bounded_rate_token(path, value)
+      return if value.nil?
+
+      token = bounded_exact_token(value, allow_numeric: false)
+      return if token && token.match?(EXACT_RATE_PATTERN)
+
+      add_error(path, "must be an exact rate between zero and one with at most six decimal places")
     end
 
     def validate_bounded_integer_token(path, value, maximum: nil)

@@ -1,0 +1,2181 @@
+require 'rails_helper'
+
+RSpec.describe Ocr::ResponseParser::ItemCalculationModeCandidateExtractor do
+  subject(:extract) do
+    described_class.call(
+      analyze_result: analyze_result_for(items),
+      profile: ReceiptAnalysisProfiles.fetch('JPN'),
+      reference_pricing_candidates: reference_pricing_candidates
+    )
+  end
+
+  let(:reference_pricing_candidates) { [] }
+
+  def fixture_items(name)
+    fixture_analyze_result(name).dig('documents', 0, 'fields', 'Items', 'valueArray')
+  end
+
+  def fixture_analyze_result(name)
+    response = JSON.parse(Rails.root.join("spec/fixtures/ocr/#{name}.json").read)
+
+    response.fetch('analyzeResult')
+  end
+
+  def exact_item(
+    price: 100,
+    quantity: 2,
+    unit: '個',
+    total: 200,
+    currency: 'JPY',
+    price_content: nil,
+    total_content: nil,
+    quantity_content: nil,
+    quantity_prefix: '',
+    price_symbol: nil,
+    total_symbol: nil,
+    content: nil,
+    offset: 100,
+    description: '検証商品',
+    string_index_type: 'utf16CodeUnit'
+  )
+    total_content ||= total.to_s
+    quantity_content ||= quantity.to_s
+    price_content ||= price.to_s
+    content ||= [ description, total_content, "#{quantity_prefix}#{quantity_content}#{unit}", price_content ].join("\n")
+    total_offset = offset + provider_length(description, string_index_type) + 1
+    quantity_offset = total_offset + provider_length(total_content, string_index_type) + 1 +
+      provider_length(quantity_prefix, string_index_type)
+    unit_offset = quantity_offset + provider_length(quantity_content, string_index_type)
+    price_offset = unit_offset + provider_length(unit, string_index_type) + 1
+
+    {
+      'content' => content,
+      'spans' => [ { 'offset' => offset, 'length' => provider_length(content, string_index_type) } ],
+      'valueObject' => {
+        'Description' => {
+          'valueString' => description,
+          'content' => description,
+          'spans' => [ { 'offset' => offset, 'length' => provider_length(description, string_index_type) } ]
+        },
+        'TotalPrice' => currency_field(total, total_content, total_offset, currency:, symbol: total_symbol),
+        'Quantity' => {
+          'valueNumber' => quantity,
+          'content' => quantity_content,
+          'spans' => [ { 'offset' => quantity_offset, 'length' => provider_length(quantity_content, string_index_type) } ]
+        },
+        'QuantityUnit' => {
+          'valueString' => unit,
+          'content' => unit,
+          'spans' => [ { 'offset' => unit_offset, 'length' => provider_length(unit, string_index_type) } ]
+        },
+        'Price' => currency_field(price, price_content, price_offset, currency:, symbol: price_symbol)
+      }
+    }
+  end
+
+  def provider_length(value, index_type)
+    Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: index_type).length(value)
+  end
+
+  def count_expression_item(
+    expression,
+    price_content:,
+    quantity_content: nil,
+    unit: nil,
+    price: 123,
+    quantity: 2,
+    total: 246,
+    total_content: nil,
+    string_index_type: 'utf16CodeUnit'
+  )
+    item = exact_item(price:, quantity:, total:, total_content:, string_index_type:)
+    item['content'] = [ '検証商品', total_content || total.to_s, expression ].join("\n")
+    item['spans'].sole['length'] = provider_length(item['content'], string_index_type)
+    fields = item.fetch('valueObject')
+    fields['Price']['content'] = price_content
+    { 'Quantity' => quantity_content, 'QuantityUnit' => unit }.each do |key, value|
+      if value
+        fields[key]['content'] = value
+        fields[key]['valueString'] = value if key == 'QuantityUnit'
+      else
+        fields.delete(key)
+      end
+    end
+    fields.each do |key, field|
+      relative_offset = if %w[Quantity QuantityUnit].include?(key)
+        field_offset = if key == 'Quantity' && expression.lstrip.start_with?('@', '＠')
+          expression.rindex(field['content'])
+        else
+          expression.index(field['content'])
+        end
+        item['content'].length - expression.length + field_offset
+      else
+        item['content'].rindex(field['content'])
+      end
+      prefix = item['content'][0...relative_offset]
+      field['spans'] = [ { 'offset' => 100 + provider_length(prefix, string_index_type), 'length' => provider_length(field['content'], string_index_type) } ]
+    end
+
+    item
+  end
+
+  def analyze_result_for(
+    items,
+    model_id: described_class::SUPPORTED_MODEL_ID,
+    api_version: described_class::SUPPORTED_API_VERSION,
+    string_index_type: 'utf16CodeUnit',
+    content: nil
+  )
+    content ||= items.sort_by { |item| item.dig('spans', 0, 'offset').to_i }.each_with_object(+'') do |item, value|
+      offset = item.dig('spans', 0, 'offset')
+      next unless offset.is_a?(Integer) && offset >= value.length
+
+      value << (' ' * (offset - value.length))
+      value << item['content'].to_s
+    end
+
+    {
+      'modelId' => model_id,
+      'apiVersion' => api_version,
+      'stringIndexType' => string_index_type,
+      'content' => content,
+      'documents' => [
+        { 'fields' => { 'Items' => { 'valueArray' => items } } }
+      ]
+    }
+  end
+
+  def append_item_content!(item, suffix)
+    item['content'] = "#{item.fetch('content')}\n#{suffix}"
+    item.fetch('spans').sole['length'] = item.fetch('content').length
+  end
+
+  def move_field_span_to_last_occurrence!(item, field_name, string_index_type: 'utf16CodeUnit')
+    content = item.fetch('content')
+    field = item.dig('valueObject', field_name)
+    field_content = field.fetch('content')
+    relative_offset = content.rindex(field_content)
+    prefix = content[0...relative_offset]
+    field.fetch('spans').sole['offset'] = item.fetch('spans').sole.fetch('offset') +
+      provider_length(prefix, string_index_type)
+  end
+
+  def currency_field(amount, content, offset, currency: 'JPY', symbol: nil)
+    {
+      'valueCurrency' => {
+        'amount' => amount,
+        'currencyCode' => currency,
+        'currencySymbol' => symbol
+      }.compact,
+      'content' => content,
+      'spans' => [ { 'offset' => offset, 'length' => content.length } ]
+    }
+  end
+
+  def modes(candidate)
+    candidate.fetch(:options).map { |option| option.fetch(:pricing_source_kind) }
+  end
+
+  def discounted_item_evidence(description: '検証商品', string_index_type: 'utf16CodeUnit')
+    item = exact_item(price: 50, quantity: 1, total: 36, description:, string_index_type:)
+    lines = [ description, '50', '1個', '明細値引 27% -14円', '36' ]
+    item['content'] = lines.join("\n")
+    item['spans'].sole['length'] = provider_length(item['content'], string_index_type)
+    line_offsets = lines.each_with_object([ 100 ]) { |line, offsets| offsets << offsets.last + provider_length(line, string_index_type) + 1 }
+    item['valueObject']['Price']['spans'].sole['offset'] = line_offsets[1]
+    item['valueObject']['Quantity']['spans'].sole['offset'] = line_offsets[2]
+    item['valueObject']['QuantityUnit']['spans'].sole['offset'] = line_offsets[2] + 1
+    item['valueObject']['TotalPrice']['spans'].sole['offset'] = line_offsets[4]
+    path = 'documents[0].fields.Items[0]'
+    evidence = { rate: '27', amount: '14' }.to_h do |key, token|
+      start_value = line_offsets[3] + lines[3].index(token)
+      [ key, { source_field_path: path, provider_span_start: start_value, provider_span_end: start_value + token.length } ]
+    end
+
+    [ item, { amount: '14', rate: '0.27', printed_total_stage: 'after_item_discount', evidence: evidence } ]
+  end
+
+  def absolute_reference_discount_evidence
+    item = exact_item(price: 149, quantity: 50.03, unit: 'L', total: 7454)
+    item['content'] = "#{item.fetch('content')}\n値引 -150円"
+    item.fetch('spans').sole['length'] = item.fetch('content').length
+    token_start = item.fetch('spans').sole.fetch('offset') + item.fetch('content').rindex('-150円')
+    discount = {
+      amount: '150',
+      printed_total_stage: 'before_item_discount',
+      evidence: {
+        amount: {
+          source_field_path: 'documents[0].fields.Items[0]',
+          provider_span_start: token_start,
+          provider_span_end: token_start + '-150円'.length
+        }
+      }
+    }
+
+    [ item, discount ]
+  end
+
+  def discontiguous_item_evidence(description: '検証商品(税込1%)', split_description: false, string_index_type: 'utf16CodeUnit')
+    item, discount = discounted_item_evidence(description:, string_index_type:)
+    source_lines = item.fetch('content').lines(chomp: true)
+    prefix = source_lines.first(4).join("\n")
+    raw_content = "#{prefix}\n明細計 #{source_lines.last}"
+    total = item.dig('valueObject', 'TotalPrice')
+    total['spans'].sole['offset'] += '明細計 '.length
+    item['spans'] = [
+      { 'offset' => 100, 'length' => provider_length(prefix, string_index_type) },
+      total.fetch('spans').sole.deep_dup
+    ]
+    if split_description
+      name = description.split('(').first
+      suffix_offset = name.length + 2
+      suffix = description[suffix_offset..]
+      field_content = "#{name}\n#{suffix}"
+      item['valueObject']['Description'] = {
+        'valueString' => field_content,
+        'content' => field_content,
+        'spans' => [
+          { 'offset' => 100, 'length' => provider_length(name, string_index_type) },
+          { 'offset' => 100 + provider_length(description[0...suffix_offset], string_index_type), 'length' => provider_length(suffix, string_index_type) }
+        ]
+      }
+    end
+
+    [ item, discount, "#{' ' * 100}#{raw_content}" ]
+  end
+
+  def exclude_parent_span!(item, excluded_span, content, string_index_type: 'utf16CodeUnit')
+    start_value = excluded_span.fetch('offset')
+    end_value = start_value + excluded_span.fetch('length')
+    item['spans'] = item.fetch('spans').flat_map do |span|
+      span_start = span.fetch('offset')
+      span_end = span_start + span.fetch('length')
+      next [ span ] unless span_start <= start_value && end_value <= span_end
+
+      [
+        { 'offset' => span_start, 'length' => start_value - span_start },
+        { 'offset' => end_value, 'length' => span_end - end_value }
+      ].reject { |component| component.fetch('length').zero? }
+    end
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: string_index_type)
+    item['content'] = item.fetch('spans').map do |span|
+      mapper.slice(content, offset: span.fetch('offset'), length: span.fetch('length'))
+    end.join("\n")
+  end
+
+  def valid_native_reference_candidate(
+    item_index: 0,
+    reference_quantity: '1',
+    reference_unit: 'liter',
+    tax_inclusion: 'gross',
+    projected_amount: 3318
+  )
+    {
+      candidate_id: "azure_items_#{item_index}_reference_pricing",
+      item_index: item_index,
+      validation_state: 'valid',
+      rejection_reasons: [],
+      reference_price: {
+        amount: '160',
+        evidence: {
+          source_field_path: "documents[0].fields.Items[#{item_index}].Price"
+        }
+      },
+      reference_quantity: {
+        amount: reference_quantity,
+        unit_code: reference_unit,
+        origin: 'implicit_per_unit',
+        evidence: {
+          source_field_path: "documents[0].fields.Items[#{item_index}].QuantityUnit"
+        }
+      },
+      purchased_quantity: {
+        amount: '20.74',
+        unit_code: reference_unit,
+        evidence: {
+          source_field_path: "documents[0].fields.Items[#{item_index}].Quantity"
+        }
+      },
+      reference_price_tax_inclusion: tax_inclusion,
+      tax_inclusion_evidence: {
+        kind: 'single_item_receipt_inner_tax_summary'
+      },
+      printed_line_total: {
+        amount: projected_amount.to_s,
+        evidence: {
+          source_field_path: "documents[0].fields.Items[#{item_index}].TotalPrice"
+        }
+      },
+      corroboration: {
+        projected_amount: projected_amount,
+        printed_line_total: projected_amount.to_s,
+        rounding_matches: %w[floor half_up]
+      }
+    }
+  end
+
+  describe '.call' do
+    context 'with provider-split count expressions' do
+      it 'links a marked Price multiplier to the immediately following exact Quantity line' do
+        %w[utf16CodeUnit textElements].each do |string_index_type|
+          [ [ '@341x', '2' ], [ '＠３４１×', '２' ] ].each do |price_line, quantity_line|
+            item = count_expression_item(
+              "#{price_line}\n#{quantity_line}",
+              price_content: price_line,
+              quantity_content: quantity_line,
+              price: 341,
+              quantity: 2,
+              total: 682,
+              string_index_type:
+            )
+            original = item.deep_dup
+            result = described_class.call(
+              analyze_result: analyze_result_for([ item ], string_index_type:),
+              profile: ReceiptAnalysisProfiles.fetch('JPN')
+            )
+            option = result.sole.fetch(:options).first
+
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(option[:source]).to eq(price_amount: '341', quantity: '2', quantity_unit_code: 'each')
+            expect(option.dig(:evidence, :price, :source_field_path)).to eq('documents[0].fields.Items[0].Price')
+            expect(option.dig(:evidence, :quantity, :source_field_path)).to eq('documents[0].fields.Items[0].Quantity')
+            expect(option.dig(:evidence, :quantity_unit, :source_field_path)).to eq('documents[0].fields.Items[0]')
+            unit_span = option.fetch(:evidence).fetch(:quantity_unit)
+            mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: string_index_type)
+            expect(mapper.slice(
+              analyze_result_for([ item ], string_index_type:).fetch('content'),
+              offset: unit_span.fetch(:provider_span_start),
+              length: unit_span.fetch(:provider_span_end) - unit_span.fetch(:provider_span_start)
+            )).to eq(price_line.last)
+            expect(item).to eq(original)
+          end
+        end
+      end
+
+      it 'accepts only positive integer Quantity boundaries after a marked Price multiplier' do
+        [ [ 1, true ], [ 9_999, true ], [ 0, false ], [ 10_000, false ] ].each do |quantity, expected|
+          item = count_expression_item(
+            "@341x\n#{quantity}",
+            price_content: '@341x',
+            quantity_content: quantity.to_s,
+            price: 341,
+            quantity:,
+            total: 682
+          )
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.any? { |candidate| modes(candidate).include?('count_unit_price') }).to eq(expected)
+        end
+      end
+
+      it 'rejects incomplete, competing, separated, package, approximate, range and non-count forms' do
+        [
+          [ "@341x\n別明細\n2", '2', 2, nil ],
+          [ "@341x\n\n2", '2', 2, nil ],
+          [ "@341x\n2\n@341x", '2', 2, nil ],
+          [ "@341x\n約2", '約2', 2, nil ],
+          [ "@341x\n2〜3", '2', 2, nil ],
+          [ "@341x\n2個入り", '2', 2, nil ],
+          [ "@341x\n2.5", '2.5', 2.5, nil ],
+          [ "@341x\n2g", '2', 2, 'g' ],
+          [ "@341x extra\n2", '2', 2, nil ]
+        ].each do |expression, quantity_content, quantity, unit|
+          item = count_expression_item(
+            expression,
+            price_content: expression.lines.first.chomp,
+            quantity_content:,
+            price: 341,
+            quantity:,
+            unit:,
+            total: 682
+          )
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'requires exact structured fields and preserves reference and discount conflicts' do
+        mutations = [
+          ->(item) { item['valueObject']['Price']['valueCurrency']['amount'] = 342 },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencyCode'] = 'USD' },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencySymbol'] = '$' },
+          ->(item) { item['valueObject']['Price']['spans'].sole['offset'] += 1 },
+          ->(item) { item['valueObject'].delete('Price') },
+          ->(item) { item['valueObject']['Quantity']['valueNumber'] = 3 },
+          ->(item) { item['valueObject']['Quantity']['spans'].sole['offset'] += 1 },
+          ->(item) { item['valueObject'].delete('Quantity') },
+          ->(item) { item['valueObject']['QuantityUnit'] = {} }
+        ]
+
+        mutations.each do |mutate|
+          item = count_expression_item("@341x\n2", price_content: '@341x', quantity_content: '2', price: 341, quantity: 2, total: 682)
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+
+        item = count_expression_item("@341x\n2", price_content: '@341x', quantity_content: '2', price: 341, quantity: 2, total: 682)
+        [
+          { reference_pricing_candidates: [ { item_index: 0 } ] },
+          { discount_item_indexes: [ 0 ] }
+        ].each do |conflicts|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            **conflicts
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'uses exact numeric subspans when Price includes the multiplication separator' do
+        item = count_expression_item('@123× 2', price_content: '@123×', quantity_content: '2')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+        option = result.sole.fetch(:options).first
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(option[:source]).to eq(price_amount: '123', quantity: '2', quantity_unit_code: 'each')
+        expect(option.dig(:evidence, :price)).to eq(
+          source_field_path: 'documents[0].fields.Items[0].Price',
+          provider_span_start: item.dig('valueObject', 'Price', 'spans', 0, 'offset') + 1,
+          provider_span_end: item.dig('valueObject', 'Price', 'spans', 0, 'offset') + 4
+        )
+        expect(option.dig(:evidence, :quantity_unit, :source_field_path)).to eq('documents[0].fields.Items[0]')
+      end
+
+      it 'requires the complete parenthesized expression when individual fields include parentheses' do
+        item = count_expression_item('(2個 × 単123)', price_content: '123)', quantity_content: '(2', unit: '個')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole.dig(:options, 0, :source)).to eq(price_amount: '123', quantity: '2', quantity_unit_code: 'each')
+      end
+
+      it 'uses the real Price field path when its expression contains the omitted Quantity' do
+        item = count_expression_item('@123×2個', price_content: '@123×2', unit: '個')
+        original = item.deep_dup
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole.dig(:options, 0, :source, :quantity)).to eq('2')
+        expect(result.sole.dig(:options, 0, :evidence, :quantity, :source_field_path)).to eq('documents[0].fields.Items[0].Price')
+        expect(item).to eq(original)
+      end
+
+      it 'recognizes an explicit unitless quantity only with a same-item unit-price marker' do
+        [ 1, 2 ].each do |quantity|
+          item = count_expression_item("@123\n #{quantity} ", price_content: '@123', quantity_content: quantity.to_s, quantity:)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+          expect(result.sole.dig(:options, 0, :source)).to eq(price_amount: '123', quantity: quantity.to_s, quantity_unit_code: 'each')
+        end
+      end
+
+      it 'links an explicit quantity multiplier to the immediately following whole Price field' do
+        %w[utf16CodeUnit textElements].each do |string_index_type|
+          [ [ '2 x', '2', '360 ¥' ], [ '２ ×', '２', '３６０ ￥' ] ].each do |quantity_line, quantity_content, price_content|
+            item = count_expression_item(
+              "#{quantity_line}\n#{price_content}",
+              price_content:,
+              quantity_content:,
+              price: 360,
+              total: 720,
+              string_index_type:
+            )
+            item['valueObject']['Price']['valueCurrency']['currencySymbol'] = '¥'
+            original = item.deep_dup
+            result = described_class.call(
+              analyze_result: analyze_result_for([ item ], string_index_type:),
+              profile: ReceiptAnalysisProfiles.fetch('JPN')
+            )
+            option = result.sole.fetch(:options).first
+
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(option[:source]).to eq(price_amount: '360', quantity: '2', quantity_unit_code: 'each')
+            expect(option.dig(:evidence, :quantity, :source_field_path)).to eq('documents[0].fields.Items[0].Quantity')
+            expect(option.dig(:evidence, :quantity_unit, :source_field_path)).to eq('documents[0].fields.Items[0]')
+            unit_span = option.fetch(:evidence).fetch(:quantity_unit)
+            mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: string_index_type)
+            expect(mapper.slice(
+              analyze_result_for([ item ], string_index_type:).fetch('content'),
+              offset: unit_span.fetch(:provider_span_start),
+              length: unit_span.fetch(:provider_span_end) - unit_span.fetch(:provider_span_start)
+            )).to eq(quantity_line.last)
+            expect(item).to eq(original)
+          end
+        end
+      end
+
+      it 'does not require a printed total to recognize the complete split count expression' do
+        item = count_expression_item("2 x\n360 ¥", price_content: '360 ¥', quantity_content: '2', price: 360, total: 720)
+        item['valueObject'].delete('TotalPrice')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq([ 'count_unit_price' ])
+        expect(result.sole.dig(:options, 0, :source)).to eq(price_amount: '360', quantity: '2', quantity_unit_code: 'each')
+      end
+
+      it 'rejects non-count, incomplete, competing and separated quantity multiplier lines' do
+        [
+          [ "2g x\n360 ¥", '2', 2 ],
+          [ "2杯 x\n360 ¥", '2', 2 ],
+          [ "2個入り x\n360 ¥", '2', 2 ],
+          [ "約2 x\n360 ¥", '2', 2 ],
+          [ "2〜3 x\n360 ¥", '2', 2 ],
+          [ "2.5 x\n360 ¥", '2.5', 2.5 ],
+          [ "2 x\n3 x\n360 ¥", '2', 2 ],
+          [ "2 x\n別明細\n360 ¥", '2', 2 ],
+          [ "2 x\n\n360 ¥", '2', 2 ]
+        ].each do |expression, quantity_content, quantity|
+          item = count_expression_item(expression, price_content: '360 ¥', quantity_content:, price: 360, quantity:, total: 720)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'requires exact Price and Quantity fields and rejects conflicting declared units or currencies' do
+        [
+          ->(item) { item['valueObject']['Price']['valueCurrency']['amount'] = 361 },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencyCode'] = 'USD' },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencySymbol'] = '$' },
+          ->(item) { item['valueObject']['Price']['spans'].sole['offset'] += 1 },
+          ->(item) { item['valueObject']['Quantity']['valueNumber'] = 3 },
+          ->(item) { item['valueObject']['Quantity']['spans'].sole['offset'] += 1 },
+          ->(item) { item['valueObject'].delete('Quantity') },
+          ->(item) { item['valueObject']['QuantityUnit'] = {} }
+        ].each do |mutate|
+          item = count_expression_item("2 x\n360 ¥", price_content: '360 ¥', quantity_content: '2', price: 360, total: 720)
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not turn a split reference or discount conflict into a count formula' do
+        item = count_expression_item("2 x\n360 ¥", price_content: '360 ¥', quantity_content: '2', price: 360, total: 720)
+        [
+          { reference_pricing_candidates: [ { item_index: 0 } ] },
+          { discount_item_indexes: [ 0 ] }
+        ].each do |conflicts|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            **conflicts
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not join separated parent fragments across an unowned intervening line' do
+        item = count_expression_item("2 x\n別明細\n360 ¥", price_content: '360 ¥', quantity_content: '2', price: 360, total: 720)
+        content = analyze_result_for([ item ]).fetch('content')
+        gap = "\n別明細\n"
+        exclude_parent_span!(item, { 'offset' => content.index(gap), 'length' => gap.length }, content)
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'rejects partial, signed and conflicting currency content instead of finding a numeric substring' do
+        [ '360 ¥ extra', '-360 ¥', '¥360 $', '360 ¥/100g', '360 ¥ 10%', '360 ¥ 360 ¥' ].each do |price_content|
+          item = count_expression_item("2 x\n#{price_content}", price_content:, quantity_content: '2', price: 360, total: 720)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'preserves both supported indexes for fullwidth numeric subspans' do
+        %w[utf16CodeUnit textElements].each do |string_index_type|
+          item = count_expression_item('＠１２３×２個', price_content: '＠１２３×２', unit: '個', string_index_type:)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], string_index_type:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.sole.dig(:options, 0, :source)).to eq(price_amount: '123', quantity: '2', quantity_unit_code: 'each')
+        end
+      end
+
+      it 'rejects incomplete, multiple, package, fractional and unsupported-unit expressions' do
+        [
+          [ '(2個 × 単123', '123', '(2', '個' ],
+          [ "@123×2個\n@123×2個", '@123×2', '2', '個' ],
+          [ '@123×2個入り', '@123×2', '2', '個' ],
+          [ '@123×2g', '@123×2', '2', 'g' ],
+          [ '@123×2杯', '@123×2', '2', '杯' ],
+          [ '@123×2.5個', '@123×2.5', '2.5', '個' ]
+        ].each do |expression, price_content, quantity_content, unit|
+          item = count_expression_item(expression, price_content:, quantity_content:, unit:)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not replace conflicting structured fields or borrow a component outside its provider field' do
+        [
+          ->(item) { item['valueObject']['Price']['valueCurrency']['amount'] = 124 },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencyCode'] = 'USD' },
+          ->(item) { item['valueObject']['Price']['valueCurrency']['currencySymbol'] = '$' },
+          ->(item) { item['valueObject']['Quantity']['valueNumber'] = 3 },
+          ->(item) { item['valueObject']['Quantity']['spans'].sole['offset'] -= 1 },
+          ->(item) { item['valueObject']['QuantityUnit'] = {} },
+          lambda do |item|
+            item['valueObject']['Price']['content'] = '@123'
+            item['valueObject']['Price']['spans'].sole['length'] = 4
+            item['valueObject'].delete('Quantity')
+          end
+        ].each do |mutate|
+          item = count_expression_item('@123×2', price_content: '@123×', quantity_content: '2')
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'keeps zero price and exact bounds separate from missing or out-of-bound count sources' do
+        [
+          [ 0, 2, true ],
+          [ 123, 1, true ],
+          [ 123, 9_999, true ],
+          [ 999_999_999_999, 1, true ],
+          [ 123, 0, false ],
+          [ 123, 10_000, false ],
+          [ 1_000_000_000_000, 1, false ]
+        ].each do |price, quantity, expected|
+          item = count_expression_item("@#{price}×#{quantity}", price_content: "@#{price}×#{quantity}", price:, quantity:)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.any? { |candidate| modes(candidate).include?('count_unit_price') }).to eq(expected)
+        end
+      end
+
+      it 'rejects oversized and control-bearing expressions without accepting a partial token' do
+        [ "@#{'1' * 513}×2", "@123×2\u0000" ].each do |expression|
+          item = count_expression_item(expression, price_content: expression)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.flat_map { |candidate| modes(candidate) }).not_to include('count_unit_price')
+        end
+      end
+
+      it 'does not infer one or count semantics from bare columns without the unit-price marker' do
+        [
+          count_expression_item("123\n2", price_content: '123', quantity_content: '2'),
+          count_expression_item('@123', price_content: '@123')
+        ].each do |item|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'retains explicit zero and positive totals with a profile-owned trailing tax marker' do
+        [ 0, 246 ].each do |total|
+          item = exact_item(total:, total_content: "#{total}※")
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.sole.dig(:printed_line_total, :amount)).to eq(total.to_s)
+          expect(modes(result.sole)).to include('explicit_line_total')
+        end
+      end
+
+      it 'uses injected expression and trailing-marker vocabulary without a Japanese fallback' do
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_item_calculation_count_expression_pattern).and_return(/\A\((?<quantity>\d+)(?<unit>個) (?<separator>×) RATE(?<price>\d+)\)\z/)
+        allow(profile).to receive(:ocr_item_calculation_tax_marker_suffix_pattern).and_return(/!\z/)
+        item = count_expression_item('(2個 × RATE123)', price_content: '123)', quantity_content: '(2', unit: '個', total_content: '246!')
+        result = described_class.call(analyze_result: analyze_result_for([ item ]), profile:)
+        japanese = count_expression_item('(2個 × 単123)', price_content: '123)', quantity_content: '(2', unit: '個', total_content: '246※')
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(described_class.call(analyze_result: analyze_result_for([ japanese ]), profile:)).to eq([])
+      end
+    end
+
+    context 'with discontiguous same-item evidence' do
+      it 'uses actual owned segments for discount proof and keeps only the envelope as item identity' do
+        item, discount, content = discontiguous_item_evidence
+        original = item.deep_dup
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole[:options].first[:discount]).to eq(discount)
+        expect(result.sole[:provider_span_start]).to eq(100)
+        expect(result.sole[:provider_span_end]).to eq(content.length)
+        expect(item).to eq(original)
+      end
+
+      it 'keeps an exact quantity-line unit when the provider omits QuantityUnit' do
+        item, discount, content = discontiguous_item_evidence
+        item['valueObject'].delete('QuantityUnit')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole[:options].first.dig(:source, :quantity_unit_code)).to eq('each')
+        expect(result.sole[:options].first.dig(:evidence, :quantity_unit, :source_field_path)).to eq('documents[0].fields.Items[0]')
+      end
+
+      it 'accepts only a same-line product fragment followed by a known tax suffix' do
+        %w[utf16CodeUnit textElements].each do |string_index_type|
+          item, discount, content = discontiguous_item_evidence(
+            description: "Cafe\u0301😀(税込１%)",
+            split_description: true,
+            string_index_type:
+          )
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:, string_index_type:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+          expect(result.sole[:destination_evidence]).to eq(
+            source_field_path: 'documents[0].fields.Items[0].Description',
+            provider_span_start: 100,
+            provider_span_end: 100 + provider_length("Cafe\u0301😀", string_index_type)
+          )
+          expect(result.sole).not_to have_key(:exclusion_span)
+        end
+      end
+
+      it 'accepts a split tax suffix inside a continuous parent without changing the destination text' do
+        item, discount, content = discontiguous_item_evidence(split_description: true)
+        item['content'] = content[100..]
+        item['spans'] = [ { 'offset' => 100, 'length' => item.fetch('content').length } ]
+        original_description = item.dig('valueObject', 'Description').deep_dup
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(item.dig('valueObject', 'Description')).to eq(original_description)
+      end
+
+      it 'uses the injected profile for the independent tax suffix instead of fixed tax vocabulary' do
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_item_tax_rate_pattern).and_return(/levy(?<rate>\d+)%/)
+        results = [ '検証商品(levy1%)', '検証商品(税込1%)' ].map do |description|
+          item, discount, content = discontiguous_item_evidence(description:, split_description: true)
+          described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile:,
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+        end
+
+        expect(modes(results.first.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(results.last).to eq([])
+      end
+
+      it 'rejects wrapped names, unknown suffixes and mismatched Description content' do
+        [
+          ->(item) { item['valueObject']['Description']['valueString'] = '別商品' },
+          lambda do |item|
+            field = item['valueObject']['Description']
+            field['spans'][1] = item.dig('valueObject', 'Price', 'spans').sole.deep_dup
+            field['content'] = "検証商品\n50"
+            field['valueString'] = field['content']
+          end
+        ].each do |mutate|
+          item, discount, content = discontiguous_item_evidence(split_description: true)
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+          expect(result).to eq([])
+        end
+
+        item, discount, content = discontiguous_item_evidence(description: '検証商品(別商品)', split_description: true)
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+        expect(result).to eq([])
+      end
+
+      it 'does not borrow Price, Quantity, QuantityUnit or discount digits from a parent gap' do
+        %w[Price Quantity QuantityUnit discount].each do |field_name|
+          item, discount, content = discontiguous_item_evidence
+          excluded_span = if field_name == 'discount'
+            evidence = discount.fetch(:evidence).fetch(:amount)
+            { 'offset' => evidence.fetch(:provider_span_start), 'length' => evidence.fetch(:provider_span_end) - evidence.fetch(:provider_span_start) }
+          else
+            item.dig('valueObject', field_name, 'spans').sole
+          end
+          exclude_parent_span!(item, excluded_span, content)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not invent an explicit or discounted count source when TotalPrice is unowned' do
+        item, discount, content = discontiguous_item_evidence
+        exclude_parent_span!(item, item.dig('valueObject', 'TotalPrice', 'spans').sole, content)
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ], content:),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(result).to eq([])
+      end
+
+      it 'does not reuse tax-suffix digits excluded from the destination anchor as a money source' do
+        %w[Price TotalPrice].each do |field_name|
+          item, discount, content = discontiguous_item_evidence(split_description: true)
+          item['valueObject'][field_name] = currency_field(1, '1', content.index('1%'))
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expected = field_name == 'Price' ? [ 'explicit_line_total' ] : []
+          expect(result.flat_map { |candidate| modes(candidate) }).to eq(expected)
+        end
+      end
+
+      it 'rejects unordered, duplicate, overflowing, oversized or text-inexact parent spans' do
+        mutations = [
+          ->(item) { item['spans'].reverse! },
+          ->(item) { item['spans'] << item['spans'].last.deep_dup },
+          ->(item) { item['spans'][0]['length'] = described_class::MAX_PROVIDER_SPAN_VALUE },
+          ->(item) { item['spans'] = Array.new(17) { |index| { 'offset' => 100 + index * 2, 'length' => 1 } } },
+          ->(item) { item['content'] = item['content'].sub('50', '51') }
+        ]
+
+        mutations.each do |mutate|
+          item, discount, content = discontiguous_item_evidence
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], content:),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(result).to eq([])
+        end
+      end
+    end
+
+    context 'with validated same-item discount evidence' do
+      it 'retains an exact absolute discount after the same reference Item before-discount TotalPrice' do
+        item, discount = absolute_reference_discount_evidence
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: [ valid_native_reference_candidate(projected_amount: 7454) ],
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        aggregate_failures do
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+          expect(result.sole[:conflicts]).to eq(%w[discount reference_expression])
+          expect(result.sole[:options].sole[:discount]).to eq(discount)
+          expect(result.sole[:options].sole[:discount]).not_to have_key(:rate)
+        end
+      end
+
+      it 'rejects an absolute reference discount without exactly one signed token owned by the same Item' do
+        mutations = [
+          ->(discount) { discount[:rate] = '0.02' },
+          ->(discount) { discount[:printed_total_stage] = 'after_item_discount' },
+          ->(discount) { discount[:amount] = '151' },
+          ->(discount) { discount[:evidence][:amount][:source_field_path] = 'documents[0].fields.Items[1]' },
+          ->(discount) { discount[:evidence][:amount][:provider_span_start] += 1 },
+          ->(discount) { discount[:evidence][:amount][:provider_span_end] -= 1 }
+        ]
+
+        mutations.each do |mutate|
+          item, discount = absolute_reference_discount_evidence
+          mutate.call(discount)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: [ valid_native_reference_candidate(projected_amount: 7454) ],
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(result.sole[:options].sole).not_to have_key(:discount)
+        end
+      end
+
+      it 'preserves same-item absolute discount evidence when another Item also has a discount' do
+        item, discount = absolute_reference_discount_evidence
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: [ valid_native_reference_candidate(projected_amount: 7454) ],
+          discount_item_indexes: [ 0, 1 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(result.sole[:options].sole[:discount]).to eq(discount)
+      end
+
+      it 'retains a before-discount printed total and its exact discount on an explicit option' do
+        item, discount = discounted_item_evidence
+        item['content'] = "検証商品\n50\n明細値引 27% -14円"
+        item['spans'].sole['length'] = item['content'].length
+        item['valueObject'].except!('Price', 'Quantity', 'QuantityUnit')
+        total = item['valueObject']['TotalPrice']
+        total['valueCurrency']['amount'] = 50
+        total['content'] = '50'
+        total['spans'].sole['offset'] = 105
+        discount[:printed_total_stage] = 'before_item_discount'
+        discount[:evidence].each_value do |component|
+          component[:provider_span_start] -= 3
+          component[:provider_span_end] -= 3
+        end
+
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        expect(result.sole[:options].sole[:discount]).to eq(discount)
+        expect(result.sole[:options].sole[:source]).to eq(line_total_amount: '50')
+      end
+
+      it 'retains the discount conflict and carries complete proof only on the count option' do
+        item, discount = discounted_item_evidence
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+
+        expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(result.sole[:conflicts]).to eq([ 'discount' ])
+        expect(result.sole[:options].first[:discount]).to eq(discount)
+        expect(result.sole[:options].last).not_to have_key(:discount)
+      end
+
+      it 'rejects missing, unknown, foreign, overlapping and inconsistent discount proof' do
+        mutations = [
+          ->(discount) { discount.delete(:amount) },
+          ->(discount) { discount[:unexpected] = true },
+          ->(discount) { discount[:rate] = '0' },
+          ->(discount) { discount[:rate] = '1' },
+          ->(discount) { discount[:rate] = '0.2701' },
+          ->(discount) { discount[:rate] = '0.28' },
+          ->(discount) { discount[:amount] = '13' },
+          ->(discount) { discount[:amount] = '1000000000000' },
+          ->(discount) { discount[:printed_total_stage] = 'before_item_discount' },
+          ->(discount) { discount[:evidence][:amount][:source_field_path] = 'documents[0].fields.Items[1]' },
+          ->(discount) { discount[:evidence][:amount][:provider_span_start] = 0 },
+          ->(discount) { discount[:evidence][:amount] = discount[:evidence][:rate] },
+          ->(discount) { discount[:evidence][:amount][:unexpected] = true }
+        ]
+
+        mutations.each do |mutate|
+          item, discount = discounted_item_evidence
+          mutate.call(discount)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'does not let discount proof bypass package, reference or incomplete count evidence' do
+        mutations = [
+          ->(item) { append_item_content!(item, '500ml入り') },
+          ->(item) { item['valueObject'].delete('Quantity') },
+          ->(item) { item['valueObject'].delete('TotalPrice') }
+        ]
+
+        mutations.each do |mutate|
+          item, discount = discounted_item_evidence
+          mutate.call(item)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            discount_item_indexes: [ 0 ],
+            discount_evidence_by_item_index: { 0 => discount }
+          )
+
+          expect(result.flat_map { |candidate| modes(candidate) }).not_to include('count_unit_price')
+        end
+
+        item, discount = discounted_item_evidence
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: [ { item_index: 0 } ],
+          discount_item_indexes: [ 0 ],
+          discount_evidence_by_item_index: { 0 => discount }
+        )
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+    end
+
+    context 'with exact Azure structured item evidence' do
+      let(:items) { fixture_items('single_tax_receipt') }
+
+      subject(:extract) do
+        described_class.call(
+          analyze_result: fixture_analyze_result('single_tax_receipt'),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: reference_pricing_candidates
+        )
+      end
+
+      it 'creates count and explicit options from the same item parent without raw product text' do
+        expect(extract.size).to eq(4)
+        expect(extract).to all(include(source_provider: 'azure_structured'))
+        expect(extract.map { |candidate| modes(candidate) }).to all(
+          eq(%w[count_unit_price explicit_line_total])
+        )
+
+        first = extract.first
+        aggregate_failures do
+          expect(first[:candidate_id]).to eq('azure_items_0_item_calculation_mode')
+          expect(first[:item_identity]).to eq('azure_structured_item_i0_s99_e118')
+          expect(first[:item_index]).to eq(0)
+          expect(first[:source_field_path]).to eq('documents[0].fields.Items[0]')
+          expect(first[:printed_line_total]).to include(amount: '220')
+          expect(first.dig(:options, 0, :source)).to eq(
+            price_amount: '220',
+            quantity: '1',
+            quantity_unit_code: 'item'
+          )
+          expect(first.dig(:options, 1, :source)).to eq(line_total_amount: '220')
+          expect(first.to_s).not_to include('ノート A5')
+        end
+      end
+
+      it 'preserves exact component paths and provider spans' do
+        count = extract.first.fetch(:options).first
+
+        expect(count[:evidence]).to eq(
+          price: {
+            source_field_path: 'documents[0].fields.Items[0].Price',
+            provider_span_start: 114,
+            provider_span_end: 118
+          },
+          quantity: {
+            source_field_path: 'documents[0].fields.Items[0].Quantity',
+            provider_span_start: 111,
+            provider_span_end: 112
+          },
+          quantity_unit: {
+            source_field_path: 'documents[0].fields.Items[0].QuantityUnit',
+            provider_span_start: 112,
+            provider_span_end: 113
+          }
+        )
+      end
+    end
+
+    context 'with existing anonymous fixtures' do
+      it 'finds only the two exact multi-count items in the long receipt' do
+        candidates = described_class.call(
+          analyze_result: fixture_analyze_result('long_receipt'),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+
+        expect(candidates.count { |candidate| modes(candidate).include?('count_unit_price') }).to eq(2)
+        expect(candidates.filter_map do |candidate|
+          candidate[:item_index] if modes(candidate).include?('count_unit_price')
+        end).to eq([ 8, 12 ])
+      end
+
+      it 'does not reinterpret product-name capacity as purchased quantity' do
+        candidates = described_class.call(
+          analyze_result: fixture_analyze_result('unusual_units_receipt'),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+
+        expect(candidates).to all(satisfy do |candidate|
+          modes(candidate) == [ 'explicit_line_total' ]
+        end)
+      end
+
+      it 'keeps a one-span item TotalPrice with the profile-owned tax marker' do
+        candidates = described_class.call(
+          analyze_result: fixture_analyze_result('tax_detail_item_conflict_receipt'),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+
+        expect(candidates.find { |candidate| candidate[:item_index] == 0 }).to include(
+          options: [ include(
+            pricing_source_kind: 'explicit_line_total',
+            source: { line_total_amount: '120' }
+          ) ]
+        )
+      end
+    end
+
+    context 'when QuantityUnit is absent but the same item has exact quantity-line evidence' do
+      it 'preserves each supported count unit without inventing a QuantityUnit field path' do
+        {
+          '個' => 'each',
+          '点' => 'item',
+          '本' => 'piece',
+          '袋' => 'bag',
+          '枚' => 'sheet',
+          '台' => 'unit',
+          '箱' => 'box',
+          'セット' => 'set'
+        }.each do |token, unit_code|
+          item = exact_item(unit: token, quantity_prefix: '数量 ')
+          unit_span = item.fetch('valueObject').delete('QuantityUnit').fetch('spans').sole
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          aggregate_failures token do
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(result.sole.dig(:options, 0, :source, :quantity_unit_code)).to eq(unit_code)
+            expect(result.sole.dig(:options, 0, :evidence, :quantity_unit)).to eq(
+              source_field_path: 'documents[0].fields.Items[0]',
+              provider_span_start: unit_span.fetch('offset'),
+              provider_span_end: unit_span.fetch('offset') + unit_span.fetch('length')
+            )
+          end
+        end
+      end
+
+      it 'uses the explicit quantity label as each evidence when no unit is printed' do
+        item = exact_item(quantity: 3, total: 300, unit: '', quantity_prefix: ' 数量： ')
+        item.fetch('valueObject').delete('QuantityUnit')
+        quantity_start = item.dig('valueObject', 'Quantity', 'spans', 0, 'offset')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        aggregate_failures do
+          expect(result.sole.dig(:options, 0, :source)).to eq(
+            price_amount: '100',
+            quantity: '3',
+            quantity_unit_code: 'each'
+          )
+          expect(result.sole.dig(:options, 0, :evidence, :quantity_unit)).to eq(
+            source_field_path: 'documents[0].fields.Items[0]',
+            provider_span_start: quantity_start - 4,
+            provider_span_end: quantity_start - 2
+          )
+        end
+      end
+
+      it 'preserves a complete count source without a printed item total' do
+        item = exact_item(unit: '枚', quantity_prefix: '数量 ')
+        item.fetch('valueObject').delete('QuantityUnit')
+        item.fetch('valueObject').delete('TotalPrice')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq([ 'count_unit_price' ])
+      end
+
+      it 'does not replace an existing malformed or unknown QuantityUnit field' do
+        [ {}, { 'valueString' => '杯' }, { 'content' => '枚' } ].each do |field|
+          item = exact_item(unit: '枚', quantity_prefix: '数量 ')
+          item.fetch('valueObject')['QuantityUnit'] = field
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'rejects bare numbers, measurement units, unknown units, and fractional quantities' do
+        [
+          { unit: '' },
+          { unit: 'g', quantity_prefix: '数量 ' },
+          { unit: '杯', quantity_prefix: '数量 ' },
+          { unit: '個', quantity: 1.5, quantity_prefix: '数量 ' }
+        ].each do |attributes|
+          item = exact_item(**attributes)
+          item.fetch('valueObject').delete('QuantityUnit')
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'requires one quantity line whose numeric span exactly matches the Quantity field' do
+        duplicate = exact_item(unit: '枚', quantity_prefix: '数量 ')
+        append_item_content!(duplicate, '数量 2枚')
+        mismatched = exact_item(unit: '枚', quantity_prefix: '数量 ')
+        mismatched.dig('valueObject', 'Quantity', 'spans').sole['offset'] += 1
+        missing = exact_item(unit: '枚', quantity_prefix: '数量 ')
+        missing.fetch('valueObject').delete('Quantity')
+
+        [ duplicate, mismatched, missing ].each do |item|
+          item.fetch('valueObject').delete('QuantityUnit')
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'maps fallback spans through both supported indexes without normalizing their positions' do
+        %w[utf16CodeUnit textElements].each do |index_type|
+          item = exact_item(
+            description: "Cafe\u0301😀",
+            quantity_content: '２',
+            unit: '枚',
+            quantity_prefix: ' 数量： ',
+            string_index_type: index_type
+          )
+          unit_span = item.fetch('valueObject').delete('QuantityUnit').fetch('spans').sole
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], string_index_type: index_type),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(result.sole.dig(:options, 0, :evidence, :quantity_unit)).to include(
+            provider_span_start: unit_span.fetch('offset'),
+            provider_span_end: unit_span.fetch('offset') + unit_span.fetch('length')
+          )
+        end
+      end
+
+      it 'uses the injected quantity-line pattern instead of hardcoded labels' do
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_item_calculation_count_quantity_line_pattern)
+          .and_return(/\A(?<label>COUNT) (?<quantity>\d+)(?<unit>\p{L}+)?\z/)
+
+        results = [ 'COUNT ', '数量 ' ].map do |prefix|
+          item = exact_item(unit: '', quantity_prefix: prefix)
+          item.fetch('valueObject').delete('QuantityUnit')
+          described_class.call(analyze_result: analyze_result_for([ item ]), profile:)
+        end
+
+        expect(results.map { |result| modes(result.sole) }).to eq([
+          %w[count_unit_price explicit_line_total],
+          [ 'explicit_line_total' ]
+        ])
+      end
+    end
+
+    context 'when formula evidence is incomplete or unsafe' do
+      let(:items) { [ exact_item ] }
+
+      it 'does not use a missing Quantity as an implicit quantity of one' do
+        items.first['valueObject'].delete('Quantity')
+
+        expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'does not use an unknown unit as count authority' do
+        items.first['valueObject']['QuantityUnit'].merge!(
+          'valueString' => '杯',
+          'content' => '杯'
+        )
+
+        expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'rejects contradictory printed currency evidence for Price and TotalPrice independently' do
+        foreign_price = exact_item(price_content: '$100', price_symbol: '$')
+        foreign_total = exact_item(total_content: '$200', total_symbol: '$')
+
+        price_result = described_class.call(
+          analyze_result: analyze_result_for([ foreign_price ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+        total_result = described_class.call(
+          analyze_result: analyze_result_for([ foreign_total ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        aggregate_failures do
+          expect(modes(price_result.sole)).to eq([ 'explicit_line_total' ])
+          expect(modes(total_result.sole)).to eq([ 'count_unit_price' ])
+        end
+      end
+
+      it 'accepts absent and canonical JPY currency markers' do
+        [ [ '¥100', '¥' ], [ '￥100', '￥' ], [ '100円', '円' ], [ 'JPY 100', nil ] ].each do |content, symbol|
+          item = exact_item(price_content: content, price_symbol: symbol)
+
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          expect(modes(result.sole)).to include('count_unit_price')
+        end
+      end
+
+      it 'rejects signed or accounting-style Price, TotalPrice, and Quantity lexemes independently' do
+        [ '-100', '−100', '▲100', '(100)', '+100' ].each do |signed_price|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ exact_item(price_content: signed_price) ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+
+        [ '-200', '−200', '▲200', '(200)', '+200' ].each do |signed_total|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ exact_item(total_content: signed_total) ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+          expect(modes(result.sole)).to eq([ 'count_unit_price' ])
+        end
+
+        [ '-2', '−2', '▲2', '(2)', '+2' ].each do |signed_quantity|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ exact_item(quantity_content: signed_quantity) ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'rejects malformed raw provider numeric types before typed proposal construction' do
+        [ '100', BigDecimal('100'), true, {}, [] ].each do |malformed|
+          malformed_price = exact_item
+          malformed_price.dig('valueObject', 'Price', 'valueCurrency')['amount'] = malformed
+          malformed_total = exact_item
+          malformed_total.dig('valueObject', 'TotalPrice', 'valueCurrency')['amount'] = malformed
+          malformed_quantity = exact_item
+          malformed_quantity.dig('valueObject', 'Quantity')['valueNumber'] = malformed
+
+          price_result = described_class.call(
+            analyze_result: analyze_result_for([ malformed_price ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+          total_result = described_class.call(
+            analyze_result: analyze_result_for([ malformed_total ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+          quantity_result = described_class.call(
+            analyze_result: analyze_result_for([ malformed_quantity ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          aggregate_failures do
+            expect(modes(price_result.sole)).to eq([ 'explicit_line_total' ])
+            expect(modes(total_result.sole)).to eq([ 'count_unit_price' ])
+            expect(modes(quantity_result.sole)).to eq([ 'explicit_line_total' ])
+          end
+        end
+      end
+
+      it 'does not reinterpret a reference price expression as a count unit price' do
+        reference_pricing_candidates << { item_index: 0 }
+
+        expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'keeps a destination carrier for a valid structured reference without TotalPrice' do
+        items.first.fetch('valueObject').delete('TotalPrice')
+        reference_pricing_candidates << {
+          item_index: 0,
+          validation_state: 'valid',
+          rejection_reasons: []
+        }
+
+        aggregate_failures do
+          expect(extract.sole[:item_identity]).to eq('azure_structured_item_i0_s100_e115')
+          expect(extract.sole[:options]).to be_empty
+          expect(extract.sole[:conflicts]).to eq([ 'reference_expression' ])
+        end
+      end
+
+      it 'does not treat an exact per-unit promotion block as an applied item discount' do
+        items.replace([
+          exact_item(price: 160, quantity: 20.74, unit: 'L', total: 3318, price_content: '@160')
+        ])
+        append_item_content!(items.first, "値引情報L\n@160\n@3円/L引")
+        move_field_span_to_last_occurrence!(items.first, 'Price')
+        reference_pricing_candidates << valid_native_reference_candidate
+
+        expect(extract.sole[:conflicts]).to eq([ 'reference_expression' ])
+      end
+
+      it 'keeps real, malformed, and mismatched discounts as conflicts' do
+        cases = [
+          [ "値引情報L\n@160\n@3円/100L引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/ml引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L引", [ 0 ], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L引", [], valid_native_reference_candidate(tax_inclusion: 'net') ],
+          [ "値引情報L\n@160\n@3円/L引", [], valid_native_reference_candidate(projected_amount: 3317) ],
+          [ "値引情報L\n@160\n@3円/L引", [], valid_native_reference_candidate.merge(
+            validation_state: 'ambiguous',
+            rejection_reasons: [ 'ambiguous_tax_inclusion' ]
+          ) ],
+          [ "値引情報L\n\n@160\n@3円/L引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L引\n@4円/L引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@3円/L引\n割引対象 100円", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n@-3円/L引", [], valid_native_reference_candidate ],
+          [ "値引情報L\n@160\n3%引", [], valid_native_reference_candidate ]
+        ]
+
+        results = cases.map do |suffix, discount_item_indexes, reference_candidate|
+          item = exact_item(
+            price: 160,
+            quantity: 20.74,
+            unit: 'L',
+            total: 3318,
+            price_content: '@160'
+          )
+          append_item_content!(item, suffix)
+          move_field_span_to_last_occurrence!(item, 'Price')
+          described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: [ reference_candidate ],
+            discount_item_indexes: discount_item_indexes
+          )
+        end
+
+        expect(results.map { |result| result.sole[:conflicts] }).to all(
+          include('discount')
+        )
+      end
+
+      it 'does not bind a duplicate price string outside the provider Price span' do
+        items.replace([
+          exact_item(price: 160, quantity: 20.74, unit: 'L', total: 3318, price_content: '@160')
+        ])
+        append_item_content!(items.first, "値引情報L\n@160\n@3円/L引")
+        reference_pricing_candidates << valid_native_reference_candidate
+
+        expect(extract.sole[:conflicts]).to include('discount')
+      end
+
+      it 'does not exempt a per-unit promotion block in a multi-item receipt' do
+        first_item = exact_item(
+          price: 160,
+          quantity: 20.74,
+          unit: 'L',
+          total: 3318,
+          price_content: '@160'
+        )
+        append_item_content!(first_item, "値引情報L\n@160\n@3円/L引")
+        move_field_span_to_last_occurrence!(first_item, 'Price')
+        items.replace([ first_item, exact_item(offset: 500) ])
+        reference_pricing_candidates << valid_native_reference_candidate
+
+        expect(extract.first[:conflicts]).to include('discount')
+      end
+
+      it 'uses the injected per-unit promotion pattern' do
+        item = exact_item(
+          price: 160,
+          quantity: 20.74,
+          unit: 'L',
+          total: 3318,
+          price_content: '@160'
+        )
+        append_item_content!(item, "値引情報L\n@160\n@3円/L引")
+        move_field_span_to_last_occurrence!(item, 'Price')
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_reference_pricing_item_layout_per_unit_discount_note_pattern)
+          .and_return(/\A(?!)/)
+
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: profile,
+          reference_pricing_candidates: [ valid_native_reference_candidate ]
+        )
+
+        expect(result.sole[:conflicts]).to include('discount')
+      end
+
+      it 'uses the injected discount-conflict pattern inside the promotion block' do
+        item = exact_item(
+          price: 160,
+          quantity: 20.74,
+          unit: 'L',
+          total: 3318,
+          price_content: '@160'
+        )
+        append_item_content!(item, "値引情報L\n@160\n@3円/L引")
+        move_field_span_to_last_occurrence!(item, 'Price')
+        profile = ReceiptAnalysisProfiles.fetch('JPN')
+        allow(profile).to receive(:ocr_reference_pricing_line_group_discount_conflict_pattern)
+          .and_return(/@3/)
+
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: profile,
+          reference_pricing_candidates: [ valid_native_reference_candidate ]
+        )
+
+        expect(result.sole[:conflicts]).to include('discount')
+      end
+
+      it 'does not create an empty carrier for an ambiguous structured reference' do
+        items.first.fetch('valueObject').delete('TotalPrice')
+        reference_pricing_candidates << {
+          item_index: 0,
+          validation_state: 'ambiguous',
+          rejection_reasons: [ 'tax_basis_unknown' ]
+        }
+
+        expect(extract).to be_empty
+      end
+
+      it 'does not adopt a package-content quantity as purchased quantity' do
+        append_item_content!(items.first, '10個入')
+
+        expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'keeps independently printed purchase sources when package notation belongs only to Description' do
+        [ '検証品500ml入り', '検証品10個入' ].each do |description|
+          item = exact_item(description: description, price: 223, quantity: 2, unit: '本', total: 446)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          aggregate_failures description do
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(result.sole[:conflicts]).to eq([])
+            expect(result.sole.dig(:options, 0, :source)).to eq(
+              price_amount: '223',
+              quantity: '2',
+              quantity_unit_code: 'piece'
+            )
+          end
+        end
+      end
+
+      it 'preserves package diagnostics when the separate count source is missing or invalid' do
+        missing_price = exact_item(description: '検証品500ml入り')
+        missing_price.fetch('valueObject').delete('Price')
+        invalid_price = exact_item(description: '検証品500ml入り')
+        invalid_price.dig('valueObject', 'Price', 'valueCurrency')['amount'] = 101
+        invalid_quantity = exact_item(description: '検証品500ml入り', quantity: 0)
+        unknown_unit = exact_item(description: '検証品500ml入り', unit: '杯')
+
+        [ missing_price, invalid_price, invalid_quantity, unknown_unit ].each do |item|
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          aggregate_failures do
+            expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+            expect(result.sole[:conflicts]).to include('package')
+          end
+        end
+      end
+
+      it 'rejects package notation crossing the exact Description boundary' do
+        item = exact_item(description: '検証品500ml入り')
+        description = item.dig('valueObject', 'Description')
+        description.merge!('valueString' => '検証品500', 'content' => '検証品500')
+        description.fetch('spans').sole['length'] = '検証品500'.length
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        aggregate_failures do
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+          expect(result.sole[:conflicts]).to include('package')
+        end
+      end
+
+      it 'does not reuse package count spans from Description as purchase sources' do
+        item = exact_item(description: '検証品10個入')
+        description = item.dig('valueObject', 'Description')
+        quantity_start = description.dig('spans', 0, 'offset') + description.fetch('content').index('10')
+        item.dig('valueObject', 'Quantity').merge!(
+          'valueNumber' => 10,
+          'content' => '10',
+          'spans' => [ { 'offset' => quantity_start, 'length' => 2 } ]
+        )
+        item.dig('valueObject', 'QuantityUnit').merge!(
+          'valueString' => '個',
+          'content' => '個',
+          'spans' => [ { 'offset' => quantity_start + 2, 'length' => 1 } ]
+        )
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        aggregate_failures do
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+          expect(result.sole[:conflicts]).to include('package')
+        end
+      end
+
+      it 'keeps full-width package normalization separate from provider index boundaries' do
+        %w[utf16CodeUnit textElements].each do |index_type|
+          item = exact_item(description: "Cafe\u0301😀検証品５００ｍｌ入り", string_index_type: index_type)
+          quantity_span = item.dig('valueObject', 'Quantity', 'spans').sole
+          result = described_class.call(
+            analyze_result: analyze_result_for([ item ], string_index_type: index_type),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+
+          aggregate_failures index_type do
+            expect(modes(result.sole)).to eq(%w[count_unit_price explicit_line_total])
+            expect(result.sole.dig(:options, 0, :evidence, :quantity)).to include(
+              provider_span_start: quantity_span.fetch('offset'),
+              provider_span_end: quantity_span.fetch('offset') + quantity_span.fetch('length')
+            )
+          end
+        end
+      end
+
+      it 'rejects mass-capacity and nested package expressions' do
+        %w[500ml入り].each do |suffix|
+          packaged_item = exact_item
+          append_item_content!(packaged_item, suffix)
+          result = described_class.call(
+            analyze_result: analyze_result_for([ packaged_item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: []
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+
+        packaged_item = exact_item
+        append_item_content!(packaged_item, '2袋 x 100g')
+        result = described_class.call(
+          analyze_result: analyze_result_for([ packaged_item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'rejects approximate and ranged count semantics' do
+        [ '約2個', '2〜3個', '2個前後' ].each do |uncertain_quantity|
+          uncertain_item = exact_item
+          append_item_content!(uncertain_item, uncertain_quantity)
+
+          result = described_class.call(
+            analyze_result: analyze_result_for([ uncertain_item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: []
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+          expect(result.sole[:conflicts]).to include('count_semantics')
+        end
+      end
+
+      it 'rejects multi-buy and promotion semantics' do
+        [ '2個で300円', 'まとめ買い' ].each do |multi_buy|
+          promoted_item = exact_item
+          append_item_content!(promoted_item, multi_buy)
+
+          result = described_class.call(
+            analyze_result: analyze_result_for([ promoted_item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: []
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+          expect(result.sole[:conflicts]).to include('count_semantics')
+        end
+      end
+
+      it 'normalizes full-width conflict notation without changing provider spans' do
+        [ '２袋Ｘ１００ｇ', '２個－３個', 'ＤＩＳＣＯＵＮＴ' ].each do |full_width_conflict|
+          conflicted_item = exact_item
+          append_item_content!(conflicted_item, full_width_conflict)
+
+          result = described_class.call(
+            analyze_result: analyze_result_for([ conflicted_item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: []
+          )
+
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'uses the injected profile package pattern instead of shared hardcoded vocabulary' do
+        injected_profile = Class.new do
+          define_method(:resolve_quantity_unit) do |value|
+            ReceiptAnalysisProfiles.fetch('JPN').resolve_quantity_unit(value)
+          end
+
+          define_method(:ocr_item_discount_keyword_pattern) { /NEVER_DISCOUNT/ }
+          define_method(:ocr_item_calculation_package_quantity_pattern) { /BUNDLE_MARKER/ }
+          define_method(:ocr_item_calculation_package_capacity_pattern) { /NEVER_CAPACITY/ }
+          define_method(:ocr_item_calculation_count_uncertain_pattern) { /NEVER_COUNT_UNCERTAIN/ }
+          define_method(:ocr_item_calculation_tax_marker_prefix_pattern) { /\A(?!)/ }
+          define_method(:ocr_item_calculation_tax_marker_suffix_pattern) { /(?!)/ }
+        end.new
+        append_item_content!(items.first, 'BUNDLE_MARKER')
+
+        result = described_class.call(
+          analyze_result: analyze_result_for(items),
+          profile: injected_profile,
+          reference_pricing_candidates: []
+        )
+
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'does not create count authority from a discounted item block' do
+        append_item_content!(items.first, '値引')
+
+        expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'uses the existing adjacent-discount association as a count conflict' do
+        result = described_class.call(
+          analyze_result: analyze_result_for(items),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: [],
+          discount_item_indexes: [ 0 ]
+        )
+
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'does not reuse description/package spans as purchased quantity evidence' do
+        item = exact_item(description: '詰合せ商品 5箱')
+        description = item.dig('valueObject', 'Description')
+        quantity_offset = description.dig('spans', 0, 'offset') + description.fetch('content').index('5')
+        item.dig('valueObject', 'Quantity').merge!(
+          'valueNumber' => 5,
+          'content' => '5',
+          'spans' => [ { 'offset' => quantity_offset, 'length' => 1 } ]
+        )
+        item.dig('valueObject', 'QuantityUnit').merge!(
+          'valueString' => '箱',
+          'content' => '箱',
+          'spans' => [ { 'offset' => quantity_offset + 1, 'length' => 1 } ]
+        )
+
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'keeps both exact options when their amounts disagree for the decision layer to resolve' do
+        items.replace([ exact_item(total: 201) ])
+
+        expect(modes(extract.sole)).to eq(%w[count_unit_price explicit_line_total])
+        expect(extract.sole.dig(:printed_line_total, :amount)).to eq('201')
+      end
+    end
+
+    context 'at numeric and evidence boundaries' do
+      let(:items) { [ exact_item ] }
+
+      it 'keeps an explicitly printed zero total distinct from a missing total' do
+        items.replace([ exact_item(total: 0) ])
+
+        explicit = extract.sole.fetch(:options).find do |option|
+          option[:pricing_source_kind] == 'explicit_line_total'
+        end
+
+        expect(explicit[:source]).to eq(line_total_amount: '0')
+      end
+
+      it 'rejects fractional quantities for countable units' do
+        quantity = items.first.dig('valueObject', 'Quantity')
+        quantity.merge!('valueNumber' => 1.5, 'content' => '1.5')
+
+        expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'rejects fractional JPY at the Price and TotalPrice integer boundary independently' do
+        fractional_price = described_class.call(
+          analyze_result: analyze_result_for([ exact_item(price: 100.5) ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+        fractional_total = described_class.call(
+          analyze_result: analyze_result_for([ exact_item(total: 200.5) ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        aggregate_failures do
+          expect(modes(fractional_price.sole)).to eq([ 'explicit_line_total' ])
+          expect(modes(fractional_total.sole)).to eq([ 'count_unit_price' ])
+        end
+      end
+
+      it 'accepts the maximum persisted quantity and rejects the first value above it' do
+        items.replace([ exact_item(quantity: 9999) ])
+        maximum_result = described_class.call(
+          analyze_result: analyze_result_for(items),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+        expect(modes(maximum_result.sole)).to include('count_unit_price')
+
+        items.replace([ exact_item(quantity: 10_000) ])
+        above_maximum_result = described_class.call(
+          analyze_result: analyze_result_for(items),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+        expect(modes(above_maximum_result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'rejects a non-JPY money component' do
+        items.first['valueObject']['Price'] = currency_field(100, '100', 114, currency: 'USD')
+        items.first['valueObject']['TotalPrice'] = currency_field(200, '200', 105, currency: 'USD')
+
+        expect(extract).to eq([])
+      end
+
+      it 'rejects child evidence outside its item parent' do
+        items.first.dig('valueObject', 'Price', 'spans', 0)['offset'] = 10_000
+
+        expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'fails closed when item parent spans overlap' do
+        items << exact_item(offset: 110)
+
+        expect(extract).to eq([])
+      end
+
+      it 'rejects every item overlapped by a containing parent span' do
+        extractor = described_class.new(
+          analyze_result: {},
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: [],
+          discount_item_indexes: []
+        )
+
+        expect(extractor.send(
+          :overlapping_parent_indexes,
+          [ 100...200, 110...134, 150...174 ]
+        )).to eq(Set[0, 1, 2])
+      end
+
+      it 'accepts the maximum amount and rejects the first value above it' do
+        maximum = described_class::MAX_AMOUNT.to_i
+        items.replace([ exact_item(price: maximum, total: maximum) ])
+        expect(modes(extract.sole)).to eq(%w[count_unit_price explicit_line_total])
+
+        above_maximum = maximum + 1
+        items.replace([ exact_item(price: above_maximum, total: above_maximum) ])
+
+        above_maximum_result = described_class.call(
+          analyze_result: analyze_result_for(items),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+        expect(above_maximum_result).to eq([])
+      end
+
+      it 'rejects zero or negative purchased quantities' do
+        items.replace([ exact_item(quantity: 0) ])
+        zero_result = described_class.call(
+          analyze_result: analyze_result_for(items),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+        expect(modes(zero_result.sole)).to eq([ 'explicit_line_total' ])
+
+        items.replace([ exact_item(quantity: -1) ])
+        negative_result = described_class.call(
+          analyze_result: analyze_result_for(items),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+        expect(modes(negative_result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'rejects multiple or overflowing component spans without raising' do
+        price = items.first.dig('valueObject', 'Price')
+        price['spans'] << price.fetch('spans').sole.deep_dup
+        expect(modes(extract.sole)).to eq([ 'explicit_line_total' ])
+
+        price['spans'] = [ { 'offset' => described_class::MAX_PROVIDER_SPAN_VALUE, 'length' => 1 } ]
+        overflow_result = described_class.call(
+          analyze_result: analyze_result_for(items),
+          profile: ReceiptAnalysisProfiles.fetch('JPN'),
+          reference_pricing_candidates: []
+        )
+        expect(modes(overflow_result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'rejects string and floating-point provider span types' do
+        %w[offset length].each do |key|
+          malformed = exact_item
+          malformed.dig('valueObject', 'Price', 'spans', 0)[key] = '1'
+          result = described_class.call(
+            analyze_result: analyze_result_for([ malformed ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: []
+          )
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+
+          malformed = exact_item
+          malformed.dig('valueObject', 'Price', 'spans', 0)[key] = 1.0
+          result = described_class.call(
+            analyze_result: analyze_result_for([ malformed ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: []
+          )
+          expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+        end
+      end
+
+      it 'fails closed at the 99, 100, and 101 item source boundary' do
+        results = [ 99, 100, 101 ].map do |count|
+          bounded_items = count.times.map { |index| exact_item(offset: index * 32) }
+          described_class.call(
+            analyze_result: analyze_result_for(bounded_items),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: []
+          )
+        end
+
+        expect(results.map(&:size)).to eq([ 99, 100, 0 ])
+      end
+
+      it 'accepts 4095 and 4096 byte item content and rejects 4097 bytes' do
+        results = [ 4_095, 4_096, 4_097 ].map do |bytes|
+          item = exact_item
+          padding = bytes - item.fetch('content').bytesize - 1
+          append_item_content!(item, 'a' * padding)
+          described_class.call(
+            analyze_result: analyze_result_for([ item ]),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: []
+          )
+        end
+
+        expect(results.first(2).map(&:size)).to eq([ 1, 1 ])
+        expect(results.last).to eq([])
+      end
+
+      it 'rejects invalid encoding, controls, and oversized structured strings without raising' do
+        invalid_encoding = analyze_result_for(items)
+        invalid_encoding['content'] = "\xFF".b
+        controlled = exact_item
+        append_item_content!(controlled, "unsafe\u202E")
+        oversized_unit = exact_item
+        oversized_unit.dig('valueObject', 'QuantityUnit')['valueString'] = 'a' * 513
+        oversized_currency = exact_item
+        oversized_currency.dig('valueObject', 'Price', 'valueCurrency')['currencyCode'] = 'J' * 9
+        oversized_currency.dig('valueObject', 'TotalPrice', 'valueCurrency')['currencyCode'] = 'J' * 9
+
+        expect do
+          aggregate_failures do
+            expect(described_class.call(
+              analyze_result: invalid_encoding,
+              profile: ReceiptAnalysisProfiles.fetch('JPN')
+            )).to eq([])
+            expect(described_class.call(
+              analyze_result: analyze_result_for([ controlled ]),
+              profile: ReceiptAnalysisProfiles.fetch('JPN')
+            )).to eq([])
+            expect(modes(described_class.call(
+              analyze_result: analyze_result_for([ oversized_unit ]),
+              profile: ReceiptAnalysisProfiles.fetch('JPN')
+            ).sole)).to eq([ 'explicit_line_total' ])
+            expect(described_class.call(
+              analyze_result: analyze_result_for([ oversized_currency ]),
+              profile: ReceiptAnalysisProfiles.fetch('JPN')
+            )).to eq([])
+          end
+        end.not_to raise_error
+      end
+
+      it 'requires the supported Azure model, API version, and index type' do
+        unsupported = [
+          analyze_result_for(items, model_id: 'custom-receipt'),
+          analyze_result_for(items, api_version: '2099-01-01'),
+          analyze_result_for(items, string_index_type: 'utf8Byte')
+        ]
+
+        expect(unsupported.map do |analyze_result|
+          described_class.call(
+            analyze_result: analyze_result,
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+        end).to eq([ [], [], [] ])
+      end
+
+      it 'maps utf16CodeUnit and textElements spans exactly across emoji and combining text' do
+        results = %w[utf16CodeUnit textElements].map do |index_type|
+          item = exact_item(
+            description: "Cafe\u0301😀",
+            string_index_type: index_type
+          )
+          described_class.call(
+            analyze_result: analyze_result_for(
+              [ item ],
+              string_index_type: index_type
+            ),
+            profile: ReceiptAnalysisProfiles.fetch('JPN')
+          )
+        end
+
+        expect(results.map { |result| modes(result.sole) }).to all(
+          eq(%w[count_unit_price explicit_line_total])
+        )
+      end
+
+      it 'rejects a component whose span does not match the global provider content' do
+        analyze_result = analyze_result_for(items)
+        price = analyze_result.dig('documents', 0, 'fields', 'Items', 'valueArray', 0, 'valueObject', 'Price')
+        price['content'] = '999'
+        price.dig('valueCurrency')['amount'] = 999
+
+        result = described_class.call(
+          analyze_result: analyze_result,
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'does not treat one provider token as both Price and TotalPrice authority' do
+        item = exact_item(price: 200, total: 200)
+        item.dig('valueObject')['TotalPrice'] = item.dig('valueObject', 'Price').deep_dup
+
+        result = described_class.call(
+          analyze_result: analyze_result_for([ item ]),
+          profile: ReceiptAnalysisProfiles.fetch('JPN')
+        )
+
+        expect(modes(result.sole)).to eq([ 'explicit_line_total' ])
+      end
+
+      it 'ignores malformed and oversized collections without raising' do
+        malformed = [ nil, 'item', {}, { 'spans' => [ { 'offset' => -1, 'length' => 2 } ] } ]
+
+        expect do
+          result = described_class.call(
+            analyze_result: analyze_result_for(
+              malformed + Array.new(150) { exact_item },
+              content: ''
+            ),
+            profile: ReceiptAnalysisProfiles.fetch('JPN'),
+            reference_pricing_candidates: []
+          )
+          expect(result.size).to be <= described_class::MAX_ITEMS
+        end.not_to raise_error
+      end
+    end
+  end
+end

@@ -6213,6 +6213,37 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    [ nil, 0 ].each do |total_amount|
+      it "編集フォームは合計#{total_amount.inspect}を区別して支払照合を表示する" do
+        target_receipt = create(
+          :receipt,
+          :review_needed,
+          :with_image,
+          user: user,
+          total_amount: total_amount,
+          subtotal_amount: total_amount,
+          tax_amount: total_amount
+        )
+        target_receipt.receipt_payments.create!(method: '現金', amount: 123)
+
+        get edit_receipt_path(target_receipt)
+
+        document = Nokogiri::HTML(response.body)
+        final_amount = document.at_css('[data-receipt-form-target="paymentReconciliationFinalAmount"]')
+        difference = document.at_css('[data-receipt-form-target="paymentDifferenceAmount"]')
+        warning = document.at_css('[data-receipt-form-target="paymentMismatchWarning"]')
+
+        aggregate_failures do
+          expect(response).to have_http_status(:success)
+          expect(document.at_css('[data-receipt-form-target="paymentAmountSum"]').text.strip).to eq('¥123')
+          expect(final_amount.text.strip).to eq(total_amount.nil? ? I18n.t('receipts.common.not_available') : '¥0')
+          expect(final_amount['data-amount-value']).to eq(total_amount.to_s)
+          expect(difference.text.strip).to eq(total_amount.nil? ? I18n.t('receipts.common.not_available') : '+¥123')
+          expect(warning['class'].include?('hidden')).to eq(total_amount.nil?)
+        end
+      end
+    end
+
     it '編集フォームは支払合計が不足している時に警告と実支払額同期ボタンを表示する' do
       receipt.update!(total_amount: 1_000, subtotal_amount: 910, tax_amount: 90)
       receipt.receipt_items.create!(

@@ -9,10 +9,13 @@ class Ocr::ResponseParser
   MAX_REFERENCE_PRICING_TOTAL_LINES = 150
   MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES = 512
   MAX_REFERENCE_PRICING_TOTAL_AMOUNT = 999_999_999_999
+  MAX_REFERENCE_PRICING_PAGE_DIMENSION = 10_000
   MAX_REFERENCE_PRICING_AUTHORITY_FIELD_NODES = 512
   MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS = 100
   MAX_REFERENCE_PRICING_AUTHORITY_HASH_ENTRIES = 100
   MAX_REFERENCE_PRICING_AUTHORITY_FIELDS = 100
+  MAX_REFERENCE_PRICING_AUTHORITY_SPANS = 16
+  MAX_ITEM_DISCOUNT_SOURCE_REFS = 16
   REFERENCE_PRICING_AUTHORITY_VALUE_KEYS = %w[
     content
     valueAddress
@@ -53,16 +56,33 @@ class Ocr::ResponseParser
     normalized_raw_text = normalize_text(raw_text)
     normalized_lines = normalized_lines(parsed_response)
     case_preserved_lines = case_preserved_lines(parsed_response)
+    analyze_result = extract_analyze_result(parsed_response)
+    structured_items = extract_fields(parsed_response).dig("Items", "valueArray")
     structured_reference_pricing_candidates = Ocr::ResponseParser::ReferencePricingCandidateExtractor.call(
-      items: extract_fields(parsed_response).dig("Items", "valueArray"),
+      items: structured_items,
+      profile: profile,
+      content: analyze_result["content"],
+      string_index_type: analyze_result["stringIndexType"],
+      projection: ->(**attributes) {
+        ReceiptAmountService.reference_item_extension_projection(**attributes)
+      }
+    )
+    item_layout_descriptors = Ocr::ResponseParser::ReferencePricingItemLayoutExtractor.call(
+      analyze_result: analyze_result,
       profile: profile,
       projection: ->(**attributes) {
         ReceiptAmountService.reference_item_extension_projection(**attributes)
       }
     )
-    line_group_reference_pricing_candidates = if structured_reference_pricing_candidates.empty?
+    item_layout_resolution = resolve_reference_pricing_item_layout(
+      structured_items:,
+      structured_candidates: structured_reference_pricing_candidates,
+      descriptors: item_layout_descriptors
+    )
+    structured_or_layout_reference_pricing_candidates = item_layout_resolution.fetch(:candidates)
+    line_group_reference_pricing_candidates = if structured_reference_pricing_candidates.empty? && item_layout_descriptors.empty?
       Ocr::ResponseParser::ReferencePricingLineGroupExtractor.call(
-        analyze_result: extract_analyze_result(parsed_response),
+        analyze_result: analyze_result,
         profile: profile,
         projection: ->(**attributes) {
           ReceiptAmountService.reference_item_extension_projection(**attributes)
@@ -71,19 +91,142 @@ class Ocr::ResponseParser
     else
       []
     end
-    reference_pricing_candidates = if structured_reference_pricing_candidates.any?
-      structured_reference_pricing_candidates
+    reference_pricing_candidates = if structured_or_layout_reference_pricing_candidates.any?
+      structured_or_layout_reference_pricing_candidates
     else
       line_group_reference_pricing_candidates
     end
-    authority_response = response_without_reference_pricing_line_group_fields(
+    reference_pricing_blocks = item_layout_descriptors + line_group_reference_pricing_candidates
+    authority_response = response_without_reference_pricing_block_fields(
       parsed_response,
-      reference_pricing_candidates
+      reference_pricing_blocks
     )
-    authority_lines = lines_without_reference_pricing_line_groups(
+    authority_lines = lines_without_reference_pricing_blocks(
       normalized_lines,
-      reference_pricing_candidates
+      reference_pricing_blocks
     )
+    retained_item_indexes = retained_structured_item_indexes(structured_items)
+    retained_item_indexes |= item_layout_resolution.fetch(:replacement_item_indexes)
+    discount_details_by_item_index = if structured_items.is_a?(Array) && structured_items.all?(Hash)
+      extract_discount_details_by_item_index(structured_items, authority_lines)
+    else
+      {}
+    end
+    total_amount = extract_total_amount(
+      authority_response,
+      authority_lines,
+      reference_pricing_candidates:
+    )
+    subtotal_amount = extract_subtotal_amount(
+      authority_response,
+      authority_lines,
+      reference_pricing_candidates:
+    )
+    tax_detail_result = extract_tax_detail_result(authority_response, authority_lines)
+    tax_details = tax_detail_result[:tax_details]
+    tax_amount = extract_tax_amount(authority_response, authority_lines, tax_details:)
+    adjustment_candidates = extract_adjustment_candidates(authority_response, authority_lines)
+    adjustment_candidates = reject_exact_external_tax_detail_adjustments(
+      adjustment_candidates,
+      tax_detail_structural_metadata: tax_detail_result[:tax_detail_structural_result]
+    )
+    reference_pricing_candidates = promote_single_structured_item_gross_reference_pricing(
+      analyze_result:,
+      structured_items:,
+      candidates: reference_pricing_candidates,
+      retained_item_indexes:,
+      receipt_total: total_amount,
+      receipt_tax: tax_amount,
+      tax_details:,
+      adjustment_candidates:,
+      discount_count: discount_details_by_item_index.size,
+      discount_evidence: discount_details_by_item_index.dig(0, :calculation_mode_discount)
+    )
+    structured_items_gross_promotion = promote_structured_items_gross_reference_pricing(
+      analyze_result:,
+      structured_items:,
+      candidates: reference_pricing_candidates,
+      retained_item_indexes:,
+      receipt_total: total_amount,
+      adjustment_candidates:,
+      discount_count: discount_details_by_item_index.size
+    )
+    reference_pricing_candidates = structured_items_gross_promotion.fetch(:candidates)
+    structured_items_gross_evidence = structured_items_gross_promotion[:evidence]
+    reference_pricing_candidates = promote_single_item_gross_summary_reference_pricing(
+      analyze_result:,
+      candidates: reference_pricing_candidates,
+      accepted_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+      retained_item_indexes:,
+      receipt_total: total_amount,
+      receipt_tax: tax_amount,
+      tax_details:,
+      adjustment_candidates:,
+      discount_count: discount_details_by_item_index.size
+    )
+    reference_pricing_candidates = promote_shared_basis_external_tax_reference_pricing(
+      analyze_result:,
+      candidates: reference_pricing_candidates,
+      accepted_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+      retained_item_indexes:,
+      receipt_subtotal: subtotal_amount,
+      receipt_total: total_amount,
+      receipt_tax: tax_amount,
+      tax_detail_structural_metadata: tax_detail_result[:tax_detail_structural_result],
+      adjustment_candidates:,
+      discount_count: discount_details_by_item_index.size
+    )
+    item_calculation_mode_candidates = Ocr::ResponseParser::ItemCalculationModeCandidateExtractor.call(
+      analyze_result: analyze_result,
+      profile: profile,
+      reference_pricing_candidates: reference_pricing_candidates,
+      discount_item_indexes: discount_details_by_item_index.keys,
+      discount_evidence_by_item_index: discount_details_by_item_index.filter_map do |index, detail|
+        [ index, detail[:calculation_mode_discount] ] if detail[:calculation_mode_discount]
+      end.to_h,
+      destination_item_indexes: retained_item_indexes,
+      item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+      reference_conflict_item_indexes: item_layout_resolution.fetch(:conflict_item_indexes)
+    )
+    calculation_layout = calculation_layout_fallback(
+      analyze_result:,
+      candidates: item_calculation_mode_candidates,
+      reference_candidates: reference_pricing_candidates
+    )
+    calculation_fragments = if calculation_layout
+      []
+    else
+      calculation_layout_fragments(
+        analyze_result:,
+        parsed_response:,
+        candidates: item_calculation_mode_candidates,
+        reference_candidates: reference_pricing_candidates,
+        item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+        discount_item_indexes: discount_details_by_item_index.keys,
+        retained_item_indexes:
+      )
+    end
+    if calculation_layout
+      item_calculation_mode_candidates = calculation_layout.fetch(:candidates)
+      reference_pricing_candidates = []
+      structured_items_gross_evidence = nil
+      reference_pricing_blocks += calculation_layout.fetch(:blocks)
+      authority_response = response_without_reference_pricing_block_fields(parsed_response, reference_pricing_blocks)
+      authority_lines = lines_without_reference_pricing_blocks(normalized_lines, reference_pricing_blocks)
+      total_amount = extract_total_amount(authority_response, authority_lines)
+      subtotal_amount = extract_subtotal_amount(authority_response, authority_lines)
+      tax_detail_result = extract_tax_detail_result(authority_response, authority_lines)
+      tax_details = tax_detail_result[:tax_details]
+      tax_amount = extract_tax_amount(authority_response, authority_lines, tax_details:)
+      adjustment_candidates = extract_adjustment_candidates(authority_response, authority_lines)
+      adjustment_candidates = reject_exact_external_tax_detail_adjustments(
+        adjustment_candidates,
+        tax_detail_structural_metadata: tax_detail_result[:tax_detail_structural_result]
+      )
+    elsif calculation_fragments.any?
+      item_calculation_mode_candidates += calculation_fragments.map { |entry| entry.fetch(:candidate) }
+      item_calculation_mode_candidates.sort_by! { |candidate| candidate.fetch(:item_index) }
+    end
     authority_raw_text = authority_lines.reject(&:blank?).join("\n")
 
     {
@@ -101,17 +244,9 @@ class Ocr::ResponseParser
           lines: authority_lines,
           profile: profile
         ),
-        total_amount: extract_total_amount(
-          authority_response,
-          authority_lines,
-          reference_pricing_candidates:
-        ),
-        subtotal_amount: extract_subtotal_amount(
-          authority_response,
-          authority_lines,
-          reference_pricing_candidates:
-        ),
-        tax_amount: extract_tax_amount(authority_response, authority_lines),
+        total_amount: total_amount,
+        subtotal_amount: subtotal_amount,
+        tax_amount: tax_amount,
         tax_rate: extract_tax_rate(authority_response),
         payment_method_text: extract_payment_method_text(authority_response, authority_raw_text, authority_lines),
         payment_candidates: extract_payment_candidates(authority_response),
@@ -120,10 +255,26 @@ class Ocr::ResponseParser
         country_region: extract_country_region(authority_response),
         receipt_type: extract_receipt_type(authority_response),
         payments: extract_payments(authority_response),                                                             # NOTE: Payments[] は仕様上保存対象だが未取得ケースが多く、現在はfallbackがメイン
-        tax_details: extract_tax_details(authority_response, authority_lines),
-        adjustment_candidates: extract_adjustment_candidates(authority_response, authority_lines),
+        tax_details: tax_details,
+        tax_detail_amount_basis: tax_detail_result[:tax_detail_amount_basis],
+        tax_detail_structural_metadata: tax_detail_result[:tax_detail_structural_metadata],
+        adjustment_candidates: adjustment_candidates,
         reference_pricing_candidates: reference_pricing_candidates,
-        items: extract_items(authority_response, authority_lines),
+        reference_pricing_structured_items_gross_evidence: structured_items_gross_evidence,
+        reference_pricing_block_line_indexes: reference_pricing_block_line_indexes(reference_pricing_blocks),
+        item_calculation_mode_candidates: item_calculation_mode_candidates,
+        item_calculation_mode_source_truncated:
+          structured_items.is_a?(Array) &&
+            structured_items.size > Ocr::ResponseParser::ItemCalculationModeCandidateExtractor::MAX_ITEMS,
+        items: calculation_layout&.fetch(:items) || extract_items(
+          authority_response,
+          authority_lines,
+          reference_pricing_candidates: reference_pricing_candidates,
+          item_calculation_mode_candidates: item_calculation_mode_candidates,
+          retained_item_indexes: retained_item_indexes,
+          item_layout_descriptors: item_layout_resolution.fetch(:accepted_descriptors),
+          item_calculation_mode_fragments: calculation_fragments
+        ),
         review_reasons: extract_review_reasons(authority_response),
         confidence_summary: extract_confidence_summary(authority_response)
       },
@@ -516,18 +667,666 @@ class Ocr::ResponseParser
     nil
   end
 
-  def lines_without_reference_pricing_line_groups(lines, candidates)
+  def resolve_reference_pricing_item_layout(structured_items:, structured_candidates:, descriptors:)
+    structured_items = Array(structured_items)
+    structured_candidates = Array(structured_candidates)
+    descriptors = Array(descriptors)
+    if structured_items.empty?
+      accepted_descriptors = if descriptors.one? && layout_only_descriptor?(descriptors.sole)
+        descriptors
+      else
+        []
+      end
+      return {
+        candidates: accepted_descriptors.map { |descriptor| layout_reference_candidate(descriptor, item_index: 0) },
+        accepted_descriptors: accepted_descriptors,
+        replacement_item_indexes: [],
+        conflict_item_indexes: []
+      }
+    end
+
+    candidates = structured_candidates.dup
+    accepted_descriptors = []
+    replacement_item_indexes = []
+    conflict_item_indexes = []
+    structured_by_index = structured_candidates.index_by { |candidate| candidate[:item_index] }
+
+    descriptors.each do |descriptor|
+      item_index = descriptor[:structured_item_index]
+      next unless item_index.is_a?(Integer) && item_index.between?(0, structured_items.size - 1)
+
+      layout_candidate = layout_reference_candidate(descriptor, item_index:)
+      next if layout_candidate.nil?
+
+      structured_candidate = structured_by_index[item_index]
+      if structured_item_layout_conflict?(
+        structured_items.fetch(item_index),
+        structured_candidate:,
+        layout_candidate:
+      )
+        candidates.reject! { |candidate| candidate[:item_index] == item_index }
+        conflict_item_indexes << item_index
+        next
+      end
+      next if complete_structured_reference_pricing_candidate?(structured_candidate)
+
+      candidates.reject! { |candidate| candidate[:item_index] == item_index }
+      candidates << layout_candidate
+      accepted_descriptors << descriptor
+      if descriptor[:destination_kind] == "azure_layout_item"
+        replacement_item_indexes << item_index
+      end
+    end
+
+    {
+      candidates: candidates.sort_by { |candidate| candidate[:item_index] || MAX_REFERENCE_PRICING_TOTAL_LINES },
+      accepted_descriptors: accepted_descriptors,
+      replacement_item_indexes: replacement_item_indexes.uniq.sort,
+      conflict_item_indexes: conflict_item_indexes.uniq.sort
+    }
+  rescue KeyError, NoMethodError, TypeError
+    {
+      candidates: structured_candidates,
+      accepted_descriptors: [],
+      replacement_item_indexes: [],
+      conflict_item_indexes: []
+    }
+  end
+
+  def promote_single_structured_item_gross_reference_pricing(
+    analyze_result:,
+    structured_items:,
+    candidates:,
+    retained_item_indexes:,
+    receipt_total:,
+    receipt_tax:,
+    tax_details:,
+    adjustment_candidates:,
+    discount_count:,
+    discount_evidence:
+  )
+    candidates = Array(candidates)
+    retained_indexes = Array(retained_item_indexes)
+    return candidates unless structured_items.is_a?(Array) && structured_items.one?
+    return candidates unless candidates.one?
+
+    candidate = candidates.sole
+    evidence = Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossEvidenceExtractor.call(
+      analyze_result:,
+      profile:,
+      receipt_total:,
+      receipt_tax:
+    )
+    policy = Ocr::ResponseParser::ReferencePricingSingleStructuredItemGrossPolicy.call(
+      candidate:,
+      item_count: structured_items.size,
+      retained_item_indexes: retained_indexes,
+      summary_gross_evidence: evidence,
+      adjustment_count: Array(adjustment_candidates).size,
+      discount_count:,
+      discount_evidence:,
+      competing_tax_basis_count: competing_tax_basis_count(tax_details),
+      item_line_total_limit: ReceiptAmountService.receipt_item_line_total_max
+    )
+    return candidates unless policy.eligible?
+
+    promoted = candidate.deep_dup.merge(
+      validation_state: "valid",
+      rejection_reasons: [],
+      reference_price_tax_inclusion: policy.reference_price_tax_inclusion,
+      tax_inclusion_evidence: single_structured_item_gross_evidence(evidence, policy:)
+    )
+    [ promoted ]
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    candidates
+  end
+
+  def promote_structured_items_gross_reference_pricing(
+    analyze_result:,
+    structured_items:,
+    candidates:,
+    retained_item_indexes:,
+    receipt_total:,
+    adjustment_candidates:,
+    discount_count:
+  )
+    candidates = Array(candidates)
+    unchanged = { candidates:, evidence: nil }
+    return unchanged unless structured_items.is_a?(Array) && structured_items.size.between?(2, 20)
+
+    evidence = Ocr::ResponseParser::ReferencePricingStructuredItemsGrossEvidenceExtractor.call(
+      analyze_result:,
+      profile:,
+      receipt_total:
+    )
+    policy = Ocr::ResponseParser::ReferencePricingStructuredItemsGrossPolicy.call(
+      candidates:,
+      item_count: structured_items.size,
+      retained_item_indexes: Array(retained_item_indexes),
+      summary_gross_evidence: evidence,
+      adjustment_count: Array(adjustment_candidates).size,
+      discount_count:,
+      item_line_total_limit: ReceiptAmountService.receipt_item_line_total_max
+    )
+    return unchanged unless policy.eligible?
+
+    promoted_ids = policy.candidate_ids.to_set
+    promoted = candidates.map do |candidate|
+      next candidate unless promoted_ids.include?(candidate[:candidate_id])
+
+      candidate.deep_dup.merge(
+        validation_state: "valid",
+        rejection_reasons: [],
+        reference_price_tax_inclusion: policy.reference_price_tax_inclusion,
+        tax_inclusion_evidence: {
+          kind: policy.member_evidence_kind,
+          policy_contract_version: policy.contract_version,
+          item_index: candidate[:item_index]
+        }
+      )
+    end
+    {
+      candidates: promoted,
+      evidence: structured_items_gross_evidence(evidence, policy:)
+    }
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    unchanged
+  end
+
+  def promote_single_item_gross_summary_reference_pricing(
+    analyze_result:,
+    candidates:,
+    accepted_descriptors:,
+    retained_item_indexes:,
+    receipt_total:,
+    receipt_tax:,
+    tax_details:,
+    adjustment_candidates:,
+    discount_count:
+  )
+    candidates = Array(candidates)
+    descriptors = Array(accepted_descriptors)
+    retained_indexes = Array(retained_item_indexes)
+    return candidates unless descriptors.one? && retained_indexes.one?
+
+    descriptor = descriptors.sole
+    return candidates unless descriptor[:destination_kind] == "azure_structured_item"
+    return candidates unless descriptor[:structured_item_index] == retained_indexes.sole
+
+    candidate_id = descriptor.dig(:reference_pricing_candidate, :candidate_id)
+    matches = candidates.select do |candidate|
+      candidate.is_a?(Hash) &&
+        candidate[:source_kind] == "azure_item_layout" &&
+        candidate[:candidate_id] == candidate_id &&
+        candidate[:item_identity] == descriptor[:item_identity] &&
+        candidate[:item_index] == retained_indexes.sole
+    end
+    return candidates unless matches.one?
+
+    candidate = matches.sole
+    evidence = Ocr::ResponseParser::ReferencePricingSingleItemGrossSummaryEvidenceExtractor.call(
+      analyze_result:,
+      profile:,
+      receipt_total:,
+      receipt_tax:,
+      existing_tax_details: tax_details,
+      excluded_span_ranges: [
+        {
+          span_start: descriptor[:block_provider_span_start],
+          span_end: descriptor[:block_provider_span_end]
+        }
+      ]
+    )
+    policy = Ocr::ResponseParser::ReferencePricingSingleItemGrossSummaryPolicy.call(
+      candidate:,
+      item_identities: [ descriptor[:item_identity] ],
+      block_candidate_ids: [ candidate_id ],
+      destination_identities: [ descriptor[:item_identity] ],
+      summary_gross_evidence: evidence,
+      adjustment_count: Array(adjustment_candidates).size,
+      discount_count: discount_count + descriptors.count { |entry| entry[:per_unit_discount_note_present] },
+      competing_tax_basis_count: competing_tax_basis_count(tax_details),
+      item_line_total_limit: ReceiptAmountService.receipt_item_line_total_max
+    )
+    return candidates unless policy.eligible?
+
+    promoted = candidate.deep_dup.merge(
+      validation_state: "valid",
+      rejection_reasons: [],
+      reference_price_tax_inclusion: policy.reference_price_tax_inclusion,
+      tax_inclusion_evidence: single_item_gross_summary_evidence(evidence, policy:)
+    )
+    candidates.map { |entry| entry.equal?(candidate) ? promoted : entry }
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    candidates
+  end
+
+  def promote_shared_basis_external_tax_reference_pricing(
+    analyze_result:,
+    candidates:,
+    accepted_descriptors:,
+    retained_item_indexes:,
+    receipt_subtotal:,
+    receipt_total:,
+    receipt_tax:,
+    tax_detail_structural_metadata:,
+    adjustment_candidates:,
+    discount_count:
+  )
+    candidates = Array(candidates)
+    descriptors = Array(accepted_descriptors)
+    retained_indexes = Array(retained_item_indexes)
+    return candidates unless descriptors.one? && retained_indexes.one?
+
+    descriptor = descriptors.sole
+    return candidates unless descriptor[:destination_kind] == "azure_structured_item"
+    return candidates unless descriptor[:structured_item_index] == retained_indexes.sole
+
+    candidate_id = descriptor.dig(:reference_pricing_candidate, :candidate_id)
+    matches = candidates.select do |candidate|
+      candidate.is_a?(Hash) &&
+        candidate[:source_kind] == "azure_item_layout" &&
+        candidate[:candidate_id] == candidate_id &&
+        candidate[:item_identity] == descriptor[:item_identity] &&
+        candidate[:item_index] == retained_indexes.sole
+    end
+    return candidates unless matches.one?
+
+    candidate = matches.sole
+    evidence = Ocr::ResponseParser::ReferencePricingSharedBasisExternalTaxEvidenceExtractor.call(
+      analyze_result:,
+      profile:,
+      receipt_subtotal:,
+      receipt_total:,
+      receipt_tax:,
+      tax_detail_structural_metadata:
+    )
+    policy = Ocr::ResponseParser::ReferencePricingSharedBasisExternalTaxPolicy.call(
+      candidate:,
+      item_identities: [ descriptor[:item_identity] ],
+      block_candidate_ids: [ candidate_id ],
+      destination_identities: [ descriptor[:item_identity] ],
+      external_tax_evidence: evidence,
+      tax_detail_structural_metadata:,
+      adjustment_count: Array(adjustment_candidates).size,
+      discount_count: discount_count + descriptors.count { |entry| entry[:per_unit_discount_note_present] },
+      item_line_total_limit: ReceiptAmountService.receipt_item_line_total_max
+    )
+    return candidates unless policy.eligible?
+
+    promoted = candidate.deep_dup.merge(
+      validation_state: "valid",
+      rejection_reasons: [],
+      reference_price_tax_inclusion: policy.reference_price_tax_inclusion,
+      tax_inclusion_evidence: shared_basis_external_tax_evidence(evidence, policy:)
+    )
+    candidates.map { |entry| entry.equal?(candidate) ? promoted : entry }
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    candidates
+  end
+
+  def competing_tax_basis_count(tax_details)
+    rates = Array(tax_details).filter_map do |detail|
+      normalize_rate_value(detail[:rate]) if detail.is_a?(Hash)
+    end.uniq
+    [ rates.size - 1, 0 ].max
+  rescue ArgumentError, NoMethodError, TypeError
+    1
+  end
+
+  def single_item_gross_summary_evidence(evidence, policy:)
+    {
+      kind: evidence.kind,
+      string_index_type: evidence.string_index_type,
+      policy_contract_version: policy.contract_version,
+      summary_total: evidence.summary_total.deep_dup,
+      gross_tax_target: evidence.gross_tax_target.deep_dup
+    }
+  end
+
+  def single_structured_item_gross_evidence(evidence, policy:)
+    {
+      kind: evidence.kind,
+      string_index_type: evidence.string_index_type,
+      policy_contract_version: policy.contract_version,
+      item_parent: evidence.item_parent.deep_dup,
+      tax_detail_parent: evidence.tax_detail_parent.deep_dup,
+      tax_description: evidence.tax_description.deep_dup,
+      tax_amount: evidence.tax_amount.deep_dup,
+      document_tax_total: evidence.document_tax_total.deep_dup,
+      summary_total: evidence.summary_total.deep_dup
+    }
+  end
+
+  def structured_items_gross_evidence(evidence, policy:)
+    {
+      kind: evidence.kind,
+      string_index_type: evidence.string_index_type,
+      policy_contract_version: policy.contract_version,
+      candidate_members: policy.candidate_members.map(&:deep_dup),
+      item_parents: evidence.item_parents.map(&:deep_dup),
+      item_totals: evidence.item_totals.map(&:deep_dup),
+      tax_detail_parents: evidence.tax_detail_parents.map(&:deep_dup),
+      tax_descriptions: evidence.tax_descriptions.map(&:deep_dup),
+      tax_amounts: evidence.tax_amounts.map(&:deep_dup),
+      summary_total: evidence.summary_total.deep_dup
+    }
+  end
+
+  def shared_basis_external_tax_evidence(evidence, policy:)
+    {
+      kind: evidence.kind,
+      string_index_type: evidence.string_index_type,
+      policy_contract_version: policy.contract_version,
+      tax_detail_index: evidence.tax_detail_index,
+      subtotal: evidence.subtotal.deep_dup,
+      document_tax_total: evidence.document_tax_total.deep_dup,
+      summary_total: evidence.summary_total.deep_dup
+    }
+  end
+
+  def layout_only_descriptor?(descriptor)
+    descriptor.is_a?(Hash) &&
+      descriptor[:source_kind] == "azure_item_layout" &&
+      descriptor[:destination_kind] == "azure_layout_item" &&
+      descriptor[:structured_item_index].nil? &&
+      descriptor[:layout_item].is_a?(Hash)
+  end
+
+  def layout_reference_candidate(descriptor, item_index:)
+    return unless descriptor.is_a?(Hash) && descriptor[:source_kind] == "azure_item_layout"
+
+    candidate = descriptor[:reference_pricing_candidate]
+    return unless candidate.is_a?(Hash)
+
+    candidate.merge(
+      page_index: descriptor[:page_index],
+      item_index:,
+      item_identity: descriptor[:item_identity],
+      destination_kind: descriptor[:destination_kind],
+      structured_item_index: descriptor[:structured_item_index],
+      name_line_index: descriptor[:name_line_index],
+      reference_line_index: descriptor[:reference_line_index],
+      reference_line_provider_span_start: descriptor[:reference_line_provider_span_start],
+      reference_line_provider_span_end: descriptor[:reference_line_provider_span_end],
+      per_unit_discount_note_present: descriptor[:per_unit_discount_note_present],
+      purchased_quantity_line_indexes: descriptor[:purchased_quantity_line_indexes],
+      printed_total_line_index: descriptor[:printed_total_line_index],
+      owned_line_indexes: descriptor[:owned_line_indexes],
+      block_provider_span_start: descriptor[:block_provider_span_start],
+      block_provider_span_end: descriptor[:block_provider_span_end]
+    )
+  end
+
+  def complete_structured_reference_pricing_candidate?(candidate)
+    return false unless candidate.is_a?(Hash)
+    return false unless candidate[:validation_state] == "valid"
+    return false unless Array(candidate[:rejection_reasons]).empty?
+
+    candidate.dig(:reference_price, :amount).present? &&
+      candidate.dig(:reference_quantity, :amount).present? &&
+      candidate.dig(:reference_quantity, :unit_code).present? &&
+      candidate.dig(:purchased_quantity, :amount).present? &&
+      candidate.dig(:purchased_quantity, :unit_code).present? &&
+      candidate[:reference_price_tax_inclusion].present?
+  end
+
+  def structured_item_layout_conflict?(item, structured_candidate:, layout_candidate:)
+    return true if structured_total_conflicts_with_layout?(item, layout_candidate)
+    return false unless structured_candidate.is_a?(Hash)
+
+    comparable_reference_pricing_values(structured_candidate).any? do |key, value|
+      layout_value = comparable_reference_pricing_values(layout_candidate)[key]
+      layout_value.present? && value.present? && layout_value != value
+    end
+  end
+
+  def structured_total_conflicts_with_layout?(item, layout_candidate)
+    value_object = item.is_a?(Hash) ? item["valueObject"] : nil
+    return false unless value_object.is_a?(Hash)
+
+    total_field = value_object["TotalPrice"]
+    return false unless total_field.is_a?(Hash)
+
+    structured_amount = total_field.dig("valueCurrency", "amount") || total_field["valueNumber"]
+    return false if structured_amount.nil?
+
+    exact_decimal_value(structured_amount) != exact_decimal_value(layout_candidate.dig(:printed_line_total, :amount))
+  end
+
+  def comparable_reference_pricing_values(candidate)
+    {
+      reference_price: exact_decimal_value(candidate.dig(:reference_price, :amount)),
+      reference_quantity: exact_decimal_value(candidate.dig(:reference_quantity, :amount)),
+      reference_unit: candidate.dig(:reference_quantity, :unit_code),
+      purchased_quantity: exact_decimal_value(candidate.dig(:purchased_quantity, :amount)),
+      purchased_unit: candidate.dig(:purchased_quantity, :unit_code),
+      tax_inclusion: exact_tax_inclusion(candidate[:reference_price_tax_inclusion]),
+      printed_line_total: exact_decimal_value(candidate.dig(:printed_line_total, :amount))
+    }
+  end
+
+  def exact_decimal_value(value)
+    return if value.nil?
+
+    decimal = BigDecimal(value.to_s)
+    decimal.to_s("F")
+  rescue ArgumentError
+    nil
+  end
+
+  def exact_tax_inclusion(value)
+    value if %w[gross net].include?(value)
+  end
+
+  def calculation_layout_fallback(analyze_result:, candidates:, reference_candidates:)
+    descriptors = Ocr::ResponseParser::ItemCalculationModeLayoutExtractor.call(analyze_result:, profile:)
+    return if descriptors.empty?
+
+    candidates_by_index = candidates.group_by { |candidate| candidate[:item_index] }
+    reference_item_indexes = reference_candidates.filter_map do |candidate|
+      candidate[:item_index] if complete_structured_reference_pricing_candidate?(candidate)
+    end.to_set
+    return if descriptors.all? do |descriptor|
+      calculation_layout_has_complete_structured_source?(descriptor, candidates_by_index:, reference_item_indexes:)
+    end
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    entries = descriptors.map.with_index do |descriptor, item_index|
+      calculation_layout_entry(descriptor, item_index:, analyze_result:, mapper:)
+    end
+    return if entries.any?(&:nil?)
+
+    {
+      items: entries.map { |entry| entry.fetch(:item) },
+      candidates: entries.filter_map { |entry| entry[:candidate] },
+      blocks: descriptors.map do |descriptor|
+        descriptor.slice(:block_provider_span_start, :block_provider_span_end, :owned_line_indexes)
+          .merge(source_kind: "azure_calculation_layout")
+      end
+    }
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    nil
+  end
+
+  def calculation_layout_has_complete_structured_source?(descriptor, candidates_by_index:, reference_item_indexes:)
+    indexes = descriptor[:structured_item_indexes]
+    return false unless indexes.is_a?(Array) && indexes.one?
+
+    item_index = indexes.sole
+    existing = candidates_by_index.fetch(item_index, [])
+    return false unless existing.one?
+
+    modes = existing.sole.fetch(:options).map { |option| option[:pricing_source_kind] }
+    modes << "reference_quantity_price" if reference_item_indexes.include?(item_index)
+    descriptor.fetch(:options).all? { |option| modes.include?(option[:pricing_source_kind]) }
+  end
+
+  def calculation_layout_fragments(
+    analyze_result:,
+    parsed_response:,
+    candidates:,
+    reference_candidates:,
+    item_layout_descriptors:,
+    discount_item_indexes:,
+    retained_item_indexes:
+  )
+    descriptors = Ocr::ResponseParser::ItemCalculationModeFragmentExtractor.call(analyze_result:, profile:)
+    return [] if descriptors.empty?
+
+    occupied_indexes = (candidates + reference_candidates).filter_map { |candidate| candidate[:item_index] }
+    occupied_indexes += item_layout_descriptors.filter_map { |descriptor| descriptor[:structured_item_index] }
+    occupied_indexes += discount_item_indexes
+    consumed_indexes = descriptors.flat_map { |descriptor| descriptor.fetch(:structured_item_indexes) }
+    return [] unless consumed_indexes.uniq == consumed_indexes
+    return [] unless (consumed_indexes - retained_item_indexes).empty? && (consumed_indexes & occupied_indexes).empty?
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    descriptors.map do |descriptor|
+      item_index = descriptor.fetch(:structured_item_index)
+      entry = calculation_layout_entry(descriptor, item_index:, analyze_result:, mapper:)
+      return [] if entry.nil? || entry[:candidate].nil?
+
+      items = analyze_result.dig("documents", 0, "fields", "Items", "valueArray")
+      name_item = items.fetch(item_index)
+      total_index = descriptor.fetch(:total_item_index)
+      total_field = items.fetch(total_index).dig("valueObject", "TotalPrice")
+      entry.fetch(:item).merge!(
+        tax_rate: extract_item_tax_rate(name_item, name_item.fetch("valueObject")),
+        confidence: name_item["confidence"],
+        **structured_source_metadata(
+          parsed_response,
+          total_field,
+          field_path: "documents[0].fields.Items[#{total_index}].TotalPrice"
+        )
+      )
+      entry.merge(structured_item_indexes: descriptor.fetch(:structured_item_indexes))
+    end
+  rescue ArgumentError, KeyError, NoMethodError, TypeError
+    []
+  end
+
+  def calculation_layout_entry(descriptor, item_index:, analyze_result:, mapper:)
+    return unless descriptor[:source_provider] == "azure_calculation_layout"
+
+    identity = descriptor.fetch(:item_identity)
+    destination = calculation_layout_component(descriptor[:destination_evidence], analyze_result:, mapper:)
+    return if destination.nil?
+    tax_evidence = descriptor[:item_tax_evidence]
+    return if tax_evidence && calculation_layout_component(tax_evidence, analyze_result:, mapper:).nil?
+
+    options = descriptor.fetch(:options).map do |option|
+      evidence = option.fetch(:evidence).to_h do |role, component|
+        sanitized = calculation_layout_component(component, analyze_result:, mapper:)
+        return if sanitized.nil?
+
+        [ role, sanitized ]
+      end
+      source = option.fetch(:source).deep_dup
+      mode = option.fetch(:pricing_source_kind)
+      if mode == "reference_quantity_price"
+        source[:reference_quantity_origin] = "explicit"
+        evidence[:purchased_quantity] = evidence.delete(:quantity)
+        evidence[:purchased_unit] = evidence.delete(:quantity_unit)
+      end
+      {
+        proposal_id: "#{identity}_#{mode}",
+        pricing_source_kind: mode,
+        source: source,
+        evidence: evidence
+      }
+    end
+    total_option = options.find { |option| option[:pricing_source_kind] == "explicit_line_total" }
+    layout_item = descriptor.fetch(:layout_item)
+    unit = ReceiptQuantityUnit.unit_for(layout_item[:quantity_unit_code])
+    item = layout_item.slice(:price, :quantity, :quantity_unit_code, :line_total, :tax_rate, :ocr_item_identity).merge(
+      raw_text: layout_item.fetch(:name),
+      original_line_total: layout_item[:line_total],
+      quantity_unit_status: unit ? "known" : "blank"
+    )
+    return { item: item } if options.empty?
+    return if total_option.nil?
+
+    candidate = {
+      candidate_id: "#{identity}_item_calculation_mode",
+      item_identity: identity,
+      item_index: item_index,
+      source_provider: "azure_calculation_layout",
+      provider_model_id: analyze_result["modelId"],
+      provider_api_version: analyze_result["apiVersion"],
+      string_index_type: analyze_result["stringIndexType"],
+      source_field_path: descriptor[:source_field_path],
+      provider_span_start: descriptor[:block_provider_span_start],
+      provider_span_end: descriptor[:block_provider_span_end],
+      destination_evidence: destination,
+      printed_line_total: {
+        amount: total_option.dig(:source, :line_total_amount),
+        evidence: total_option.dig(:evidence, :line_total)
+      },
+      conflicts: [],
+      options: options
+    }
+    { item: item, candidate: candidate }
+  end
+
+  def calculation_layout_component(evidence, analyze_result:, mapper:)
+    return unless evidence.is_a?(Hash) && evidence[:page_index] == 0
+
+    line_index = evidence[:line_index]
+    return unless line_index.is_a?(Integer) && line_index.between?(0, MAX_REFERENCE_PRICING_TOTAL_LINES - 1)
+    return unless evidence[:source_field_path] == "pages[0].lines[#{line_index}]"
+
+    line = analyze_result.dig("pages", 0, "lines", line_index)
+    content = analyze_result["content"]
+    line_span = exact_structured_authority_span(line, content:, mapper:)
+    return if line_span.nil?
+
+    span_start = evidence[:provider_span_start]
+    span_end = evidence[:provider_span_end]
+    return unless span_start.is_a?(Integer) && span_end.is_a?(Integer) && span_end > span_start
+    return unless span_start >= line_span.first && span_end <= line_span.last
+    return unless calculation_layout_word_coverage?(evidence, analyze_result:, mapper:, line_span:)
+
+    evidence.slice(:source_field_path, :provider_span_start, :provider_span_end)
+  end
+
+  def calculation_layout_word_coverage?(evidence, analyze_result:, mapper:, line_span:)
+    word_spans = evidence[:word_spans]
+    return false unless word_spans.is_a?(Array) && word_spans.size.between?(1, Ocr::ResponseParser::ItemCalculationModeLayoutExtractor::MAX_WORDS)
+
+    words = analyze_result.dig("pages", 0, "words")
+    span_start = evidence[:provider_span_start]
+    span_end = evidence[:provider_span_end]
+    validated = word_spans.all? do |word_span|
+      next false unless word_span.is_a?(Hash)
+
+      index = word_span[:word_index]
+      next false unless index.is_a?(Integer) && index.between?(0, words.size - 1)
+
+      word = words[index]
+      word_span_start = word_span[:provider_span_start]
+      word_span_end = word_span[:provider_span_end]
+      next false unless word_span_start.is_a?(Integer) && word_span_end.is_a?(Integer) && word_span_end > word_span_start
+      next false unless word_span_start >= line_span.first && word_span_end <= line_span.last
+      next false unless word_span_start < span_end && word_span_end > span_start
+
+      word.dig("span", "offset") == word_span_start && word.dig("span", "length") == word_span_end - word_span_start
+    end
+    return false unless validated
+    return false unless word_spans.first[:provider_span_start] <= span_start && word_spans.last[:provider_span_end] >= span_end
+
+    word_spans.each_cons(2).all? do |left, right|
+      gap_start = left[:provider_span_end]
+      gap_end = right[:provider_span_start]
+      gap_start <= gap_end && mapper.slice(analyze_result["content"], offset: gap_start, length: gap_end - gap_start)&.match?(/\A[ \t]*\z/)
+    end
+  end
+
+  def lines_without_reference_pricing_blocks(lines, blocks)
     source_lines = Array(lines)
-    excluded_indexes = Array(candidates).filter_map do |candidate|
-      next unless candidate.is_a?(Hash) && candidate[:source_kind] == "azure_line_group"
-
-      reference_index = candidate[:reference_line_index]
-      purchased_index = candidate[:purchased_quantity_line_index]
-      next unless reference_index.is_a?(Integer) && purchased_index == reference_index + 1
-      next unless reference_index >= 0 && purchased_index < source_lines.size
-
-      [ reference_index, purchased_index ]
-    end.flatten.uniq
+    excluded_indexes = reference_pricing_block_line_indexes(blocks).select do |index|
+      index < source_lines.size
+    end
     return source_lines if excluded_indexes.empty?
 
     source_lines.each_with_index.map do |line, index|
@@ -535,11 +1334,33 @@ class Ocr::ResponseParser
     end
   end
 
-  # A strict line-group candidate is diagnostic evidence only. Azure occasionally assigns
+  def reference_pricing_block_line_indexes(blocks)
+    Array(blocks).filter_map do |block|
+      next unless block.is_a?(Hash)
+
+      case block[:source_kind]
+      when "azure_line_group"
+        reference_index = block[:reference_line_index]
+        purchased_index = block[:purchased_quantity_line_index]
+        next unless reference_index.is_a?(Integer) && purchased_index == reference_index + 1
+        next if reference_index.negative?
+
+        [ reference_index, purchased_index ]
+      when "azure_item_layout", "azure_calculation_layout"
+        indexes = block[:owned_line_indexes]
+        next unless indexes.is_a?(Array) && indexes.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_LINES)
+        next unless indexes.all? { |index| index.is_a?(Integer) && index.between?(0, MAX_REFERENCE_PRICING_TOTAL_LINES - 1) }
+
+        indexes
+      end
+    end.flatten.uniq.sort
+  end
+
+  # Item-pricing blocks own item-local evidence. Azure occasionally assigns
   # receipt-level fields to the same glyphs, so those fields must prove ownership outside
   # the candidate block before any receipt authority extractor can consume them.
-  def response_without_reference_pricing_line_group_fields(parsed_response, candidates)
-    block_ranges = reference_pricing_line_group_block_ranges(candidates)
+  def response_without_reference_pricing_block_fields(parsed_response, blocks)
+    block_ranges = reference_pricing_block_ranges(blocks)
     return parsed_response if block_ranges.empty?
 
     analyze_result = extract_analyze_result(parsed_response)
@@ -571,7 +1392,8 @@ class Ocr::ResponseParser
         field,
         content:,
         mapper:,
-        block_ranges:
+        block_ranges:,
+        pages: analyze_result["pages"]
       )
         filtered[field_name] = field
       end
@@ -594,12 +1416,13 @@ class Ocr::ResponseParser
     { "analyzeResult" => { "documents" => [ { "fields" => {} } ] } }
   end
 
-  def reference_pricing_line_group_block_ranges(candidates)
-    Array(candidates).filter_map do |candidate|
-      next unless candidate.is_a?(Hash) && candidate[:source_kind] == "azure_line_group"
+  def reference_pricing_block_ranges(blocks)
+    Array(blocks).filter_map do |block|
+      next unless block.is_a?(Hash)
+      next unless %w[azure_item_layout azure_line_group azure_calculation_layout].include?(block[:source_kind])
 
-      range_start = candidate[:block_provider_span_start]
-      range_end = candidate[:block_provider_span_end]
+      range_start = block[:block_provider_span_start]
+      range_end = block[:block_provider_span_end]
       next unless range_start.is_a?(Integer) && range_end.is_a?(Integer)
       next unless range_start >= 0 && range_end > range_start
       next if range_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN ||
@@ -609,7 +1432,7 @@ class Ocr::ResponseParser
     end
   end
 
-  def structured_authority_field_owned_outside_blocks?(field, content:, mapper:, block_ranges:)
+  def structured_authority_field_owned_outside_blocks?(field, content:, mapper:, block_ranges:, pages:)
     return false unless field.is_a?(Hash)
 
     stack = [ field ]
@@ -626,10 +1449,12 @@ class Ocr::ResponseParser
 
         has_authority_value = REFERENCE_PRICING_AUTHORITY_VALUE_KEYS.any? { |key| node.key?(key) }
         if node.key?("spans") || has_authority_value
-          span_range = exact_structured_authority_span(node, content:, mapper:)
-          return false if span_range.nil?
-          return false if block_ranges.any? do |block_start, block_end|
-            spans_overlap?(span_range.first, span_range.last, block_start, block_end)
+          span_ranges = exact_structured_authority_span_ranges(node, content:, mapper:)
+          return false if span_ranges.nil?
+          return false if span_ranges.any? do |span_start, span_end|
+            block_ranges.any? do |block_start, block_end|
+              spans_overlap?(span_start, span_end, block_start, block_end)
+            end
           end
 
           exact_span_found = true if has_authority_value
@@ -637,6 +1462,11 @@ class Ocr::ResponseParser
         children = []
         node.each do |key, value|
           next if key == "spans"
+          if key == "boundingRegions"
+            return false unless valid_structured_authority_bounding_regions?(value, pages:)
+
+            next
+          end
           next unless value.is_a?(Hash) || value.is_a?(Array)
 
           children << value
@@ -659,6 +1489,112 @@ class Ocr::ResponseParser
     end
 
     exact_span_found
+  end
+
+  def exact_structured_authority_span_ranges(field, content:, mapper:)
+    field_content = field["content"]
+    spans = field["spans"]
+    return unless field_content.is_a?(String) && field_content.valid_encoding?
+    return if field_content.blank? || field_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+    return unless spans.is_a?(Array) &&
+      spans.size.between?(1, MAX_REFERENCE_PRICING_AUTHORITY_SPANS) &&
+      spans.all?(Hash)
+
+    total_length = 0
+    total_bytes = 0
+    previous_end = nil
+    fragments = []
+    ranges = spans.map do |span|
+      span_start = span["offset"]
+      span_length = span["length"]
+      return unless span_start.is_a?(Integer) && span_length.is_a?(Integer)
+      return if span_start.negative? || span_length <= 0
+      return if span_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN ||
+        span_length > MAX_REFERENCE_PRICING_PROVIDER_SPAN - span_start
+
+      span_end = span_start + span_length
+      return if previous_end && span_start < previous_end
+
+      fragment = mapper.slice(content, offset: span_start, length: span_length)
+      return unless fragment.is_a?(String) && fragment.valid_encoding?
+
+      total_length += span_length
+      total_bytes += fragment.bytesize
+      return if total_length > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES ||
+        total_bytes > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+
+      previous_end = span_end
+      fragments << fragment
+      [ span_start, span_end ]
+    end
+    return unless fragments.join("\n") == field_content
+
+    ranges
+  rescue EncodingError, ArgumentError, NoMethodError, TypeError
+    nil
+  end
+
+  def valid_structured_authority_bounding_regions?(regions, pages:)
+    return false unless regions.is_a?(Array) &&
+      regions.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
+    return false unless pages.is_a?(Array) &&
+      pages.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
+
+    page_dimensions = pages.each_with_object({}) do |page, dimensions|
+      return false unless page.is_a?(Hash)
+
+      page_number = page["pageNumber"]
+      width = page["width"]
+      height = page["height"]
+      return false unless page_number.is_a?(Integer) &&
+        page_number.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
+      return false if dimensions.key?(page_number)
+      return false unless valid_structured_authority_page_dimension?(width) &&
+        valid_structured_authority_page_dimension?(height)
+
+      dimensions[page_number] = [ width, height ]
+    end
+
+    regions.all? do |region|
+      next false unless region.is_a?(Hash) && region.size == 2
+      next false unless region.key?("pageNumber") && region.key?("polygon")
+
+      dimensions = page_dimensions[region["pageNumber"]]
+      dimensions && valid_structured_authority_polygon?(
+        region["polygon"],
+        page_width: dimensions[0],
+        page_height: dimensions[1]
+      )
+    end
+  rescue ArgumentError, NoMethodError, TypeError
+    false
+  end
+
+  def valid_structured_authority_page_dimension?(value)
+    value.is_a?(Numeric) && value.finite? && value.positive? &&
+      value <= MAX_REFERENCE_PRICING_PAGE_DIMENSION
+  end
+
+  def valid_structured_authority_polygon?(polygon, page_width:, page_height:)
+    return false unless polygon.is_a?(Array) && polygon.size == 8
+    return false unless polygon.all? { |coordinate| coordinate.is_a?(Numeric) && coordinate.finite? }
+
+    points = polygon.each_slice(2).to_a
+    return false unless points.all? do |x, y|
+      x.between?(0, page_width) && y.between?(0, page_height)
+    end
+
+    cross_products = points.each_index.map do |index|
+      first = points.fetch(index)
+      second = points.fetch((index + 1) % points.size)
+      third = points.fetch((index + 2) % points.size)
+      ((second[0] - first[0]) * (third[1] - second[1])) -
+        ((second[1] - first[1]) * (third[0] - second[0]))
+    end
+
+    cross_products.all?(&:positive?) || cross_products.all?(&:negative?)
+  rescue ArgumentError, NoMethodError, TypeError
+    false
   end
 
   def exact_structured_authority_span(field, content:, mapper:)
@@ -757,41 +1693,21 @@ class Ocr::ResponseParser
     total_start:,
     total_length:
   )
-    analyze_result = extract_analyze_result(parsed_response)
-    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(
-      index_type: analyze_result["stringIndexType"]
-    )
-    return false if mapper.nil?
+    summary = exact_strict_summary_total(parsed_response, total_field:)
+    return false if summary.nil?
 
-    content = analyze_result["content"]
-    field_content = total_field["content"]
-    return false unless content.is_a?(String) && content.valid_encoding?
-    return false unless field_content.is_a?(String) && field_content.valid_encoding?
-    return false if field_content.blank? || field_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
-    return false unless mapper.length(field_content) == total_length
-    return false unless mapper.slice(content, offset: total_start, length: total_length) == field_content
+    document_total_evidence = summary.document_total_evidence
+    return false if document_total_evidence.nil?
 
-    structured_amount = strict_document_total_amount(total_field, field_content)
-    return false if structured_amount.nil?
-
-    summary_lines = exact_strict_summary_lines(parsed_response)
-    return false if summary_lines.nil?
-
-    owners = summary_lines.filter_map do |line|
-      line_start = line.fetch(:span_start)
-      line_end = line.fetch(:span_end)
-      next unless total_start >= line_start && total_start + total_length <= line_end
-      next unless line.fetch(:amount) == structured_amount
-
-      line
-    end
-
-    owners.one?
+    line_start = document_total_evidence.fetch(:provider_span_start)
+    line_end = document_total_evidence.fetch(:provider_span_end)
+    total_start >= line_start && total_start + total_length <= line_end &&
+      summary.amount == strict_summary_total_amount(total_field)
   rescue EncodingError, ArgumentError, TypeError
     false
   end
 
-  def strict_document_total_amount(total_field, field_content)
+  def strict_summary_total_amount(total_field)
     currency = total_field["valueCurrency"]
     raw_amount = if currency
       return unless currency.is_a?(Hash) && currency["currencyCode"] == "JPY"
@@ -804,96 +1720,23 @@ class Ocr::ResponseParser
     return if raw_amount.negative? || raw_amount > MAX_REFERENCE_PRICING_TOTAL_AMOUNT
     return if raw_amount.is_a?(Float) && (!raw_amount.finite? || raw_amount.floor != raw_amount)
 
-    amount = raw_amount.to_i
-
-    lexical_amounts = normalized_money_numbers(field_content)
-    amount if lexical_amounts.one? && lexical_amounts.sole == amount
+    raw_amount.to_i
   rescue NoMethodError, TypeError
     nil
   end
 
-  def strict_summary_line_amount(line_content)
-    amounts = normalized_money_numbers(line_content)
-    amounts.sole if amounts.one?
-  rescue Enumerable::SoleItemExpectedError
-    nil
-  end
-
-  def normalized_money_numbers(text)
-    text.unicode_normalize(:nfkc).scan(/\d[\d,]*/).filter_map do |value|
-      ReceiptAmountService.parse_amount_or_nil(value)&.to_i
-    end.uniq
-  rescue EncodingError, ArgumentError
-    []
-  end
-
   def extract_strict_summary_total_from_response(parsed_response)
-    matches = exact_strict_summary_lines(parsed_response)
-    return if matches.nil? || !matches.one?
-
-    matches.sole.fetch(:amount)
-  rescue Enumerable::SoleItemExpectedError, KeyError
-    nil
+    total_field = extract_fields(parsed_response)["Total"]
+    exact_strict_summary_total(parsed_response, total_field:)&.amount
   end
 
-  def exact_strict_summary_lines(parsed_response)
+  def exact_strict_summary_total(parsed_response, total_field: nil)
     analyze_result = extract_analyze_result(parsed_response)
-    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(
-      index_type: analyze_result["stringIndexType"]
+    Ocr::ResponseParser::ReferencePricingStrictSummaryTotalExtractor.call(
+      analyze_result:,
+      profile:,
+      total_field:
     )
-    return if mapper.nil?
-
-    content = analyze_result["content"]
-    return unless content.is_a?(String) && content.valid_encoding?
-    return if content.bytesize > Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
-
-    content = content.dup.freeze
-
-    pages = analyze_result["pages"]
-    return unless pages.is_a?(Array) && pages.size.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
-
-    line_count = 0
-    matches = []
-    pages.each do |page|
-      return unless page.is_a?(Hash) && page["lines"].is_a?(Array)
-
-      raw_lines = page["lines"]
-      return if raw_lines.size > MAX_REFERENCE_PRICING_TOTAL_LINES - line_count
-
-      line_count += raw_lines.size
-      raw_lines.each do |line|
-        return unless line.is_a?(Hash)
-
-        line_content = line["content"]
-        spans = line["spans"]
-        return unless line_content.is_a?(String) && line_content.valid_encoding?
-        return if line_content.blank? || line_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
-        return unless spans.is_a?(Array) && spans.size == 1 && spans.sole.is_a?(Hash)
-
-        line_start = spans.sole["offset"]
-        line_length = spans.sole["length"]
-        return unless line_start.is_a?(Integer) && line_length.is_a?(Integer) && line_length.positive?
-        return if line_start.negative? || line_start > MAX_REFERENCE_PRICING_PROVIDER_SPAN
-        return if line_length > MAX_REFERENCE_PRICING_PROVIDER_SPAN - line_start
-        return unless mapper.length(line_content) == line_length
-        return unless mapper.slice(content, offset: line_start, length: line_length) == line_content
-        next unless line_content.match?(profile.ocr_strict_receipt_summary_total_line_pattern)
-
-        amount = strict_summary_line_amount(line_content)
-        return if amount.nil?
-
-        matches << {
-          span_start: line_start,
-          span_end: line_start + line_length,
-          amount:
-        }
-        return if matches.many?
-      end
-    end
-
-    matches
-  rescue EncodingError, ArgumentError, TypeError
-    nil
   end
 
   def reference_pricing_evidence_ranges(candidates)
@@ -961,21 +1804,22 @@ class Ocr::ResponseParser
     end.max
   end
 
-  def extract_tax_amount(parsed_response, lines)
+  def extract_tax_amount(parsed_response, lines, tax_details: nil)
     fields = extract_fields(parsed_response)
 
     fields.dig("TotalTax", "valueCurrency", "amount") ||
       fields.dig("TotalTax", "valueNumber") ||
       fields.dig("Tax", "valueCurrency", "amount") ||
       fields.dig("Tax", "valueNumber") ||
-      extract_tax_amount_from_tax_details(parsed_response, lines) ||
+      extract_tax_amount_from_tax_details(parsed_response, lines, tax_details:) ||
       extract_amount_from_lines(lines, profile.ocr_tax_amount_description_pattern)
   rescue NoMethodError, TypeError
     nil
   end
 
-  def extract_tax_amount_from_tax_details(parsed_response, lines)
-    amounts = extract_tax_details(parsed_response, lines).filter_map do |tax_detail|
+  def extract_tax_amount_from_tax_details(parsed_response, lines, tax_details: nil)
+    details = tax_details || extract_tax_detail_result(parsed_response, lines)[:tax_details]
+    amounts = Array(details).filter_map do |tax_detail|
       next if normalize_rate_value(tax_detail[:rate]).blank?
       next if tax_detail[:net_amount].present? && tax_detail[:net_amount].to_i <= 0
 
@@ -1273,6 +2117,76 @@ class Ocr::ResponseParser
     []
   end
 
+  def reject_exact_external_tax_detail_adjustments(candidates, tax_detail_structural_metadata:)
+    candidates = Array(candidates)
+    metadata = tax_detail_structural_metadata
+    return candidates unless metadata.is_a?(Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::Result)
+    return candidates unless metadata.source_provider ==
+      Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SOURCE_PROVIDER
+    return candidates unless metadata.provider_model_id ==
+      Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SUPPORTED_MODEL_ID
+    return candidates unless metadata.provider_api_version ==
+      Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SUPPORTED_API_VERSION
+
+    tax_pairs = metadata.tax_details.filter_map do |detail|
+      next unless detail.is_a?(Hash)
+
+      tax_inclusion = detail[:tax_inclusion_evidence]
+      rate = detail[:rate]
+      tax_amount = detail[:tax_amount]
+      next unless exact_external_tax_inclusion_evidence?(tax_inclusion, detail:)
+      next unless exact_external_tax_detail_child_evidence?(rate, detail:, field_name: "Rate")
+      next unless exact_external_tax_detail_child_evidence?(tax_amount, detail:, field_name: "Amount")
+      next unless rate[:page_index] == tax_inclusion[:page_index]
+      next unless rate[:page_index] == tax_amount[:page_index]
+      next unless tax_amount[:line_index] == rate[:line_index] + 1
+
+      [ rate[:line_index], tax_amount[:amount] ]
+    end
+    return candidates if tax_pairs.empty?
+
+    candidates.reject do |candidate|
+      next false unless candidate.is_a?(Hash)
+      next false unless candidate[:candidate_reason] == "label_next_amount"
+
+      amount = exact_adjustment_amount(candidate[:amount])
+      tax_pairs.include?([ candidate[:source_line_index], amount ])
+    end
+  rescue ArgumentError, NoMethodError, TypeError
+    candidates
+  end
+
+  def exact_external_tax_inclusion_evidence?(evidence, detail:)
+    index = detail[:tax_detail_index]
+    evidence.is_a?(Hash) &&
+      evidence[:kind] == Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::EXTERNAL_TAX_EVIDENCE_KIND &&
+      evidence[:tax_inclusion] == Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::EXTERNAL_TAX_INCLUSION &&
+      evidence[:source_provider] == Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SOURCE_PROVIDER &&
+      evidence[:source_field_path] == "documents[0].fields.TaxDetails[#{index}].Description" &&
+      evidence[:tax_detail_index] == index
+  end
+
+  def exact_external_tax_detail_child_evidence?(evidence, detail:, field_name:)
+    index = detail[:tax_detail_index]
+    evidence.is_a?(Hash) &&
+      evidence[:source_provider] == Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::SOURCE_PROVIDER &&
+      evidence[:source_field_path] == "documents[0].fields.TaxDetails[#{index}].#{field_name}" &&
+      evidence[:tax_detail_index] == index &&
+      evidence[:page_index].is_a?(Integer) && evidence[:page_index] >= 0 &&
+      evidence[:line_index].is_a?(Integer) && evidence[:line_index] >= 0 &&
+      evidence[:string_index_type].is_a?(String) &&
+      evidence[:provider_span_start].is_a?(Integer) && evidence[:provider_span_start] >= 0 &&
+      evidence[:provider_span_end].is_a?(Integer) &&
+      evidence[:provider_span_end] > evidence[:provider_span_start]
+  end
+
+  def exact_adjustment_amount(value)
+    decimal = BigDecimal(value.to_s)
+    decimal.to_i if decimal.frac.zero? && decimal.between?(0, MAX_REFERENCE_PRICING_TOTAL_AMOUNT)
+  rescue ArgumentError
+    nil
+  end
+
   def signed_amount_candidate(lines, index, items)
     line = lines[index].to_s
     return nil unless amount_only_line?(line)
@@ -1289,7 +2203,7 @@ class Ocr::ResponseParser
     return nil unless amount&.positive?
 
     sign_hint = adjustment_sign_hint(label, line)
-    return nil if sign_hint == "discount" && item_discount_amount?(amount, items)
+    return nil if sign_hint == "discount" && item_discount_source?(items, index, amount)
 
     confidence = known_adjustment_label?(label) ? 0.9 : 0.72
 
@@ -1306,11 +2220,14 @@ class Ocr::ResponseParser
   def label_amount_candidate(lines, index, items)
     line = lines[index].to_s
     return nil if amount_only_line?(line)
-    return nil if adjustment_excluded_line?(line) && !explicit_payment_adjustment_line?(line)
+    receipt_discount = receipt_level_discount_line?(line) && line.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
+    return nil if adjustment_excluded_line?(line) && !explicit_payment_adjustment_line?(line) && !receipt_discount
     return nil if line.match?(/\d{4}[\/\-年]\s*\d{1,2}|\d{1,2}[:：]\d{2}/)
 
     known_label = known_adjustment_label?(line)
     signed_same_line = line.match?(ADJUSTMENT_SIGNED_MONEY_PATTERN)
+    return nil if item_discount_keyword_line?(line) && !signed_same_line &&
+      !line.match?(profile.adjustment_currency_evidence_pattern)
     return nil if bag_item_owned_line?(line) && !signed_same_line
     return nil if item_line_candidate?(line, items) && !known_label && !signed_same_line
     return nil if tax_detail_amount_context?(lines, index) && !known_label && !signed_same_line
@@ -1335,7 +2252,9 @@ class Ocr::ResponseParser
 
     sign_hint = adjustment_sign_hint(line, lines[index + 1], lines[index - 1])
     return nil if sign_hint == "discount" && reason != "label_same_line_amount" && !neighbor_signed
-    return nil if sign_hint == "discount" && item_discount_amount?(amount, items)
+    return nil if sign_hint == "discount" && item_discount_source?(items, index, amount)
+    return nil if sign_hint == "discount" && item_discount_keyword_line?(line) &&
+      [ index, index - 1, index + 1 ].any? { |line_index| item_discount_source?(items, line_index, amount) }
 
     confidence =
       if known_label
@@ -1487,12 +2406,11 @@ class Ocr::ResponseParser
     end
   end
 
-  def item_discount_amount?(amount, items)
-    amount = amount.to_i.abs
-    return false unless amount.positive?
-
+  def item_discount_source?(items, line_index, amount)
     Array(items).any? do |item|
-      item.respond_to?(:[]) && item[:discount_amount].to_i.abs == amount
+      Array(item[:discount_source_refs]).any? do |source|
+        source[:source_line_index] == line_index && source[:amount] == amount.to_i.abs
+      end
     end
   end
 
@@ -1508,6 +2426,9 @@ class Ocr::ResponseParser
   def adjustment_tax_rate_hint(lines, source_line_index)
     context = lines[[ source_line_index - 6, 0 ].max..[ source_line_index + 6, lines.length - 1 ].min].to_a
     rates = context.filter_map do |line|
+      next unless line.to_s.match?(profile.ocr_tax_context_label_pattern)
+      next if item_discount_keyword_line?(line)
+
       line.to_s.scan(/(\d+(?:\.\d+)?)\s*[%％]/).map do |match|
         rate = BigDecimal(match.first) / 100
         rate.positive? ? rate : nil
@@ -1552,10 +2473,14 @@ class Ocr::ResponseParser
   end
 
   # 税詳細は取得できる場合のみ保存し、金額計算/サマリー表示の補助情報として利用する。
-  def extract_tax_details(parsed_response, lines = [])
+  def extract_tax_detail_result(parsed_response, lines = [])
     fields = extract_fields(parsed_response)
     details = fields.dig("TaxDetails", "valueArray")
     details = [] unless details.is_a?(Array)
+    structural_metadata = Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor.call(
+      analyze_result: extract_analyze_result(parsed_response),
+      profile:
+    )
 
     tax_detail_rates = details.filter_map do |detail|
       normalize_rate_value(detail.dig("valueObject", "Rate", "valueNumber"))
@@ -1589,11 +2514,57 @@ class Ocr::ResponseParser
     end
 
     inferred_from_lines = infer_included_tax_details_from_rate_targets(fields, details, lines)
-    return inferred_from_lines if inferred_from_lines.present? && !complete_multi_rate_tax_details?(tax_details)
+    if inferred_from_lines.present? && !complete_multi_rate_tax_details?(tax_details)
+      return { tax_details: inferred_from_lines, tax_detail_amount_basis: "net" }
+    end
 
-    deduplicate_inferred_tax_details(tax_details).map { |tax_detail| tax_detail.except(:_net_amount_inferred) }
+    normalized_tax_details = deduplicate_inferred_tax_details(tax_details).map do |tax_detail|
+      tax_detail.except(:_net_amount_inferred)
+    end
+    result = { tax_details: normalized_tax_details }
+    if exact_tax_detail_structural_metadata_matches?(
+      structural_metadata,
+      raw_details: details,
+      normalized_tax_details:,
+      inferred_tax_details: tax_details
+    )
+      result[:tax_detail_structural_metadata] = structural_metadata.to_h
+      result[:tax_detail_structural_result] = structural_metadata
+    end
+    result
   rescue NoMethodError, TypeError
-    []
+    { tax_details: [] }
+  end
+
+  def exact_tax_detail_structural_metadata_matches?(
+    metadata,
+    raw_details:,
+    normalized_tax_details:,
+    inferred_tax_details:
+  )
+    return false unless metadata.is_a?(Ocr::ResponseParser::StructuredTaxDetailMetadataExtractor::Result)
+    return false unless metadata.tax_details.size == raw_details.size
+    return false unless normalized_tax_details.size == raw_details.size
+    return false unless inferred_tax_details.size == raw_details.size
+    return false if inferred_tax_details.any? { |detail| detail[:_net_amount_inferred] == true }
+
+    metadata.tax_details.zip(normalized_tax_details).each_with_index.all? do |(structural, normalized), index|
+      structural.fetch(:tax_detail_index) == index &&
+        exact_tax_detail_metadata_rate_matches?(structural.dig(:rate, :rate), normalized[:rate]) &&
+        structural.dig(:net_amount, :amount) == ReceiptAmountService.parse_amount_or_nil(normalized[:net_amount])&.to_i &&
+        structural.dig(:tax_amount, :amount) == ReceiptAmountService.parse_amount_or_nil(normalized[:amount])&.to_i
+    end
+  rescue ArgumentError, NoMethodError, TypeError
+    false
+  end
+
+  def exact_tax_detail_metadata_rate_matches?(expected, actual)
+    rate = normalize_rate_value(actual)
+    return false if rate.nil?
+
+    BigDecimal(expected) == rate
+  rescue ArgumentError, TypeError
+    false
   end
 
   def complete_multi_rate_tax_details?(tax_details)
@@ -1660,12 +2631,13 @@ class Ocr::ResponseParser
   end
 
   def tax_target_rate_from_line(line)
-    text = line.to_s
+    text = line.to_s.unicode_normalize(:nfkc)
+    return nil unless text.match?(profile.analysis_tax_summary_line_pattern)
     return nil unless text.match?(profile.ocr_tax_target_marker_pattern)
     return nil if text.match?(profile.ocr_tax_amount_description_pattern)
 
-    match = text.match(/(\d+(?:\.\d+)?)\s*[%％]/)
-    normalize_rate_value(match[1]) if match
+    match = text.unicode_normalize(:nfkc).match(/(\d+(?:\.\d+)?)\s*%/)
+    normalize_rate_value(match[1], percentage: true) if match
   end
 
   def included_tax_amount(gross_amount, rate)
@@ -1775,13 +2747,18 @@ class Ocr::ResponseParser
   end
 
   def tax_target_line?(line, rate_label)
-    text = line.to_s
-    text.match?(profile.ocr_tax_rate_target_line_pattern(rate_label)) &&
+    text = line.to_s.unicode_normalize(:nfkc)
+    text.match?(profile.analysis_tax_summary_line_pattern) &&
+      text.match?(profile.ocr_tax_rate_target_line_pattern(rate_label)) &&
       !text.match?(profile.ocr_tax_amount_description_pattern)
   end
 
   def tax_target_amount_from_line(line)
-    amounts = line.to_s.to_enum(:scan, /[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?/).filter_map do |match|
+    text = line.to_s.unicode_normalize(:nfkc)
+    return nil unless text.match?(profile.analysis_tax_summary_continuation_line_pattern)
+
+    text = text.gsub(/\d+(?:\.\d+)?\s*%/, " ")
+    amounts = text.to_enum(:scan, /[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?/).filter_map do |match|
       amount = ReceiptAmountService.parse_amount_or_nil(match)
       amount&.to_i
     end
@@ -1789,11 +2766,13 @@ class Ocr::ResponseParser
     amounts.select { |amount| amount.positive? && amount > 20 }.max
   end
 
-  def normalize_rate_value(value)
+  def normalize_rate_value(value, percentage: false)
     return if value.blank?
 
-    rate = BigDecimal(value.to_s)
-    rate > 1 ? rate / 100 : rate
+    text = value.to_s.unicode_normalize(:nfkc)
+    percentage ||= text.include?("%")
+    rate = BigDecimal(text.delete("%"))
+    percentage || rate > 1 ? rate / 100 : rate
   rescue ArgumentError
     nil
   end
@@ -1804,24 +2783,111 @@ class Ocr::ResponseParser
     percentage.frac.zero? ? percentage.to_i.to_s : percentage.to_s("F")
   end
 
-  def extract_items(parsed_response, lines = [])
+  def extract_items(
+    parsed_response,
+    lines = [],
+    reference_pricing_candidates: [],
+    item_calculation_mode_candidates: [],
+    retained_item_indexes: nil,
+    item_layout_descriptors: [],
+    item_calculation_mode_fragments: []
+  )
     fields = extract_fields(parsed_response)
     items = fields.dig("Items", "valueArray")
+    items = [] if items.nil? && Array(item_layout_descriptors).any?
     return [] unless items.is_a?(Array)
 
+    layout_descriptors = Array(item_layout_descriptors).select { |descriptor| descriptor.is_a?(Hash) }
+    if items.empty?
+      descriptor = layout_descriptors.sole if layout_descriptors.one?
+      layout_item = descriptor&.dig(:layout_item)
+      return layout_item.is_a?(Hash) ? [ layout_item.deep_dup ] : []
+    end
+
     discount_details_by_index = extract_discount_details_by_item_index(items, lines)
+    fragment_replacements = item_calculation_mode_fragments.to_h do |entry|
+      [ entry.fetch(:structured_item_indexes).min, entry.fetch(:item) ]
+    end
+    fragment_indexes = item_calculation_mode_fragments.flat_map { |entry| entry.fetch(:structured_item_indexes) }.to_set
+    retained_item_indexes ||= retained_structured_item_indexes(items)
+    retained_item_index_lookup = Array(retained_item_indexes).index_with(true)
+    layout_replacements_by_index = layout_descriptors.each_with_object({}) do |descriptor, replacements|
+      next unless descriptor[:destination_kind] == "azure_layout_item"
+
+      item_index = descriptor[:structured_item_index]
+      layout_item = descriptor[:layout_item]
+      next unless item_index.is_a?(Integer) && item_index.between?(0, items.size - 1)
+      next unless layout_item.is_a?(Hash)
+
+      replacements[item_index] = layout_item
+    end
+    structured_layout_candidate_ids_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, ids|
+      next unless candidate.is_a?(Hash)
+      next unless candidate[:source_provider] == "azure_item_layout"
+      next unless candidate[:destination_kind] == "azure_structured_item"
+
+      item_index = candidate[:item_index]
+      candidate_id = candidate[:candidate_id]
+      ids[item_index] = candidate_id if item_index.is_a?(Integer) && candidate_id.is_a?(String)
+    end
+    layout_overlays_by_index = layout_descriptors.each_with_object({}) do |descriptor, overlays|
+      next unless descriptor[:destination_kind] == "azure_structured_item"
+
+      item_index = descriptor[:structured_item_index]
+      expected_candidate_id = "#{descriptor[:candidate_id]}_item_calculation_mode"
+      next unless structured_layout_candidate_ids_by_index[item_index] == expected_candidate_id
+
+      overlays[item_index] = descriptor
+    end
+    item_identities_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, identities|
+      next unless candidate.is_a?(Hash)
+
+      item_index = candidate[:item_index]
+      identity = candidate[:item_identity]
+      identities[item_index] = identity if item_index.is_a?(Integer) && identity.is_a?(String)
+    end
+    count_sources_by_index = Array(item_calculation_mode_candidates).each_with_object({}) do |candidate, sources|
+      next unless candidate.is_a?(Hash) && candidate[:source_provider] == "azure_structured"
+
+      item_index = candidate[:item_index]
+      options = Array(candidate[:options]).select { |option| option[:pricing_source_kind] == "count_unit_price" }
+      next unless item_index.is_a?(Integer) && item_index.between?(0, items.size - 1) && options.one?
+
+      source = options.sole[:source]
+      sources[item_index] = source if ReceiptQuantityUnit.countable?(source[:quantity_unit_code])
+    end
+    reference_quantity_overlays_by_index = Ocr::ResponseParser::ReferencePricingStructuredItemQuantityOverlay.call(
+      analyze_result: extract_analyze_result(parsed_response),
+      profile:,
+      items:,
+      reference_pricing_candidates:,
+      item_calculation_mode_candidates:,
+      excluded_item_indexes: fragment_indexes | layout_descriptors.filter_map { |descriptor| descriptor[:structured_item_index] }
+    )
 
     items.filter_map.with_index do |item, index|
+      next fragment_replacements[index].deep_dup if fragment_replacements.key?(index)
+      next if fragment_indexes.include?(index)
+      next unless retained_item_index_lookup[index]
+
+      layout_replacement = layout_replacements_by_index[index]
+      next layout_replacement.deep_dup if layout_replacement
+
       value_object = item["valueObject"] || {}
+      count_source = count_sources_by_index[index]
+      layout_overlay = layout_overlays_by_index[index]
+      reference_quantity_overlay = reference_quantity_overlays_by_index[index]
       amount_field_name = value_object["TotalPrice"].present? ? "TotalPrice" : "Price"
       amount_field = value_object[amount_field_name]
-      total_price = value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
+      total_price = if layout_overlay
+        ReceiptAmountService.parse_amount_or_nil(layout_overlay.dig(:printed_line_total, :amount))&.to_i
+      else
+        value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
+      end
       raw_text = value_object.dig("Description", "valueString") ||
         value_object.dig("Description", "content") ||
         item["content"]
       raw_text = clean_item_raw_text(raw_text, item)
-      next if adjustment_only_item?(item, raw_text:, total_price:)
-
       discount_amount = discount_details_by_index.dig(index, :amount).to_i
       original_line_total = discount_details_by_index.dig(index, :original_line_total).presence || total_price
       line_total =
@@ -1830,32 +2896,72 @@ class Ocr::ResponseParser
         else
           original_line_total
         end
-      quantity_unit_resolution = profile.resolve_quantity_unit(value_object.dig("QuantityUnit", "valueString"))
+      purchased_quantity = layout_overlay&.dig(:reference_pricing_candidate, :purchased_quantity) ||
+        reference_quantity_overlay
+      quantity_unit_resolution = if purchased_quantity
+        ReceiptQuantityUnit::Resolution.new(
+          code: purchased_quantity[:unit_code],
+          status: purchased_quantity[:unit_status].to_sym,
+          raw: nil
+        )
+      elsif value_object["QuantityUnit"].nil? && count_source
+        ReceiptQuantityUnit::Resolution.new(code: count_source[:quantity_unit_code], status: :known, raw: nil)
+      else
+        profile.resolve_quantity_unit(value_object.dig("QuantityUnit", "valueString"))
+      end
       quantity_unit_code = quantity_unit_resolution.known? ? quantity_unit_resolution.code : ReceiptQuantityUnit.default_code
+      source_metadata = if layout_overlay
+        layout_source_metadata(parsed_response, layout_overlay.dig(:printed_line_total, :evidence))
+      else
+        structured_source_metadata(
+          parsed_response,
+          amount_field,
+          field_path: "documents[0].fields.Items[#{index}].#{amount_field_name}"
+        )
+      end
 
       {
         raw_text: raw_text,
-        price: value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
-        quantity: value_object.dig("Quantity", "valueNumber"),
+        price: count_source ? count_source[:price_amount].to_i : value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
+        quantity: purchased_quantity&.dig(:amount) || count_source&.dig(:quantity)&.to_i || value_object.dig("Quantity", "valueNumber"),
         quantity_unit_code: quantity_unit_code,
         quantity_unit_status: quantity_unit_resolution.status.to_s,
         **unknown_quantity_unit_diagnostic(quantity_unit_resolution),
         product_code: value_object.dig("ProductCode", "valueString"),
         line_total: line_total,
         original_line_total: original_line_total,
-        discount_amount: discount_amount.positive? ? discount_amount : nil,
+        discount_amount: discount_amount.positive? || discount_details_by_index.dig(index, :calculation_mode_discount) ? discount_amount : nil,
         discount_rate: discount_details_by_index.dig(index, :rate),
+        discount_source_refs: discount_details_by_index.dig(index, :source_refs),
         tax_rate: extract_item_tax_rate(item, value_object),
         confidence: item["confidence"],
-        **structured_source_metadata(
-          parsed_response,
-          amount_field,
-          field_path: "documents[0].fields.Items[#{index}].#{amount_field_name}"
-        )
+        ocr_item_identity: item_identities_by_index[index],
+        **source_metadata
       }
     end
   rescue NoMethodError, TypeError
     []
+  end
+
+  def retained_structured_item_indexes(items)
+    return [] unless items.is_a?(Array)
+
+    items.filter_map.with_index do |item, index|
+      next unless item.is_a?(Hash)
+
+      value_object = item["valueObject"]
+      next unless value_object.is_a?(Hash)
+
+      total_price = value_object.dig("TotalPrice", "valueCurrency", "amount") ||
+        value_object.dig("TotalPrice", "valueNumber")
+      raw_text = value_object.dig("Description", "valueString") ||
+        value_object.dig("Description", "content") ||
+        item["content"]
+      raw_text = clean_item_raw_text(raw_text, item)
+      index unless adjustment_only_item?(item, raw_text:, total_price:)
+    rescue EncodingError, NoMethodError, TypeError
+      nil
+    end
   end
 
   def unknown_quantity_unit_diagnostic(resolution)
@@ -1894,9 +3000,17 @@ class Ocr::ResponseParser
       value_object.dig("Rate", "valueNumber")
     return explicit_rate if explicit_rate.present?
 
-    item["content"].to_s.scan(/(\d+(?:\.\d+)?)\s*[%％]/).filter_map do |match|
-      normalize_rate_value(match.first)
-    end.first
+    lines = item["content"].to_s.unicode_normalize(:nfkc).lines
+    rates = lines.each_with_index.flat_map do |line, index|
+      if index.positive? && item_discount_keyword_line?(lines[index - 1]) && line.strip.match?(/\A\d+(?:\.\d+)?\s*%\z/)
+        next []
+      end
+
+      line.chomp.to_enum(:scan, profile.ocr_item_tax_rate_pattern).filter_map do
+        normalize_rate_value(Regexp.last_match[:rate], percentage: true)
+      end
+    end.uniq
+    rates.sole if rates.one?
   rescue NoMethodError, TypeError
     nil
   end
@@ -1911,6 +3025,40 @@ class Ocr::ResponseParser
     extractor.call(field:, field_path:)
   end
 
+  def layout_source_metadata(parsed_response, evidence)
+    return {} unless evidence.is_a?(Hash)
+    return {} unless evidence[:source_provider] == "azure_item_layout"
+
+    page_index = evidence[:page_index]
+    line_index = evidence[:line_index]
+    return {} unless page_index.is_a?(Integer) && page_index.zero?
+    return {} unless line_index.is_a?(Integer) && line_index.between?(0, MAX_REFERENCE_PRICING_TOTAL_LINES - 1)
+    return {} unless evidence[:source_field_path] == "pages[#{page_index}].lines[#{line_index}]"
+
+    line = extract_analyze_result(parsed_response).dig("pages", page_index, "lines", line_index)
+    spans = line.is_a?(Hash) ? line["spans"] : nil
+    return {} unless spans.is_a?(Array) && spans.one? && spans.sole.is_a?(Hash)
+
+    line_start = spans.sole["offset"]
+    line_length = spans.sole["length"]
+    source_start = evidence[:provider_span_start]
+    source_end = evidence[:provider_span_end]
+    return {} unless [ line_start, line_length, source_start, source_end ].all?(Integer)
+    return {} unless line_start >= 0 && line_length.positive?
+    return {} unless source_start >= line_start && source_end > source_start
+    return {} unless source_end <= line_start + line_length
+
+    {
+      source_provider: evidence[:source_provider],
+      source_field_path: evidence[:source_field_path],
+      source_line_index: line_index,
+      source_span_start: source_start - line_start,
+      source_span_end: source_end - line_start
+    }
+  rescue NoMethodError, TypeError
+    {}
+  end
+
   def build_structured_source_metadata_extractor(parsed_response)
     Ocr::ResponseParser::StructuredSourceMetadataExtractor.new(
       pages: extract_analyze_result(parsed_response)["pages"],
@@ -1918,10 +3066,196 @@ class Ocr::ResponseParser
     )
   end
 
-  # 割引検出。
-  # lines上で item名 → 金額 → 割引 → 割引率 → 割引額 の順に並ぶケースを対象に、
-  # 割引額・割引率・割引前金額を直前itemへ紐付ける。
   def extract_discount_details_by_item_index(items, lines)
+    return extract_structured_item_discounts(items, lines) if items.any? { |item| item.key?("spans") }
+
+    extract_unstructured_item_discounts(items, lines)
+  end
+
+  def extract_structured_item_discounts(items, lines)
+    purchase_indexes = retained_structured_item_indexes(items)
+    labels = items.each_with_index.map do |item, index|
+      next unless purchase_indexes.include?(index)
+
+      normalize_text(item.dig("valueObject", "Description", "valueString") || item.dig("valueObject", "Description", "content"))
+    end
+    details = {}
+    structured_discount_line_groups(items, lines).each do |index, entries|
+      waiting_discount = false
+      current_rate = nil
+      target_index = nil
+      target_evidence_seen = false
+      target_conflict = false
+      pending_sources = []
+
+      entries.each do |entry|
+        line = entry[:text]
+        break if receipt_level_discount_line?(line) || line.match?(profile.analysis_previous_subtotal_context_pattern)
+
+        if item_discount_keyword_line?(line)
+          waiting_discount = true
+          current_rate = nil
+          target_index = index if purchase_indexes.include?(index)
+          target_evidence_seen = false
+          target_conflict = false
+          pending_sources = []
+        end
+        next unless waiting_discount
+
+        current_rate = extract_discount_rate_from_line(line) || current_rate
+        pending_sources.concat(discount_source_refs(line, entry[:line_index]))
+        break if pending_sources.size > MAX_ITEM_DISCOUNT_SOURCE_REFS
+        next if line.match?(profile.ocr_item_discount_per_unit_note_pattern)
+
+        amount = extract_discount_amount_from_line(line)
+        if amount.nil?
+          unless item_discount_keyword_line?(line) || extract_discount_rate_from_line(line)
+            matches = labels.each_index.select { |label_index| labels[label_index].present? && discount_target_line_matches_label?(line, labels[label_index]) }
+            if matches.any? || entry[:description_component]
+              matched_target_index = if matches == [ index ]
+                index
+              elsif entry[:description_component] && matches.one?
+                matches.sole
+              end
+              target_conflict ||= target_evidence_seen || matched_target_index.nil?
+              target_evidence_seen = true
+              target_index = target_conflict ? nil : matched_target_index
+            end
+          end
+          next
+        end
+        if target_conflict || target_index.nil?
+          waiting_discount = false
+          next
+        end
+
+        detail = (details[target_index] ||= {
+          amount: 0,
+          rate: nil,
+          original_line_total: nil,
+          amount_lines: [],
+          amount_entries: [],
+          source_refs: []
+        })
+        detail[:amount] += amount
+        detail[:rate] ||= current_rate
+        detail[:amount_lines] << line
+        detail[:amount_entries] << entry
+        detail[:source_refs].concat(pending_sources)
+        waiting_discount = false
+      end
+    end
+    details.filter_map do |index, detail|
+      next if detail[:amount_lines].empty? || detail[:source_refs].size > MAX_ITEM_DISCOUNT_SOURCE_REFS
+
+      total = items[index].dig("valueObject", "TotalPrice") || {}
+      detail[:original_line_total] = total.dig("valueCurrency", "amount") || total["valueNumber"]
+      reconcile_discount_total_stage(items, index, detail)
+      detail[:source_refs] = [] unless detail[:amount].positive? || detail[:calculation_mode_discount]
+      detail.delete(:amount_lines)
+      detail.delete(:amount_entries)
+      [ index, detail ]
+    end.to_h
+  end
+
+  def structured_discount_line_groups(items, lines)
+    return {} if items.size > MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS
+
+    analyze_result = extract_analyze_result(@parsed_response)
+    return {} unless analyze_result["modelId"] == "prebuilt-receipt" && analyze_result["apiVersion"] == "2024-11-30"
+
+    content = analyze_result["content"]
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    return {} unless mapper && content.is_a?(String) && mapper.length(content)
+
+    parent_spans_by_index = items.map do |item|
+      spans = discount_parent_spans(item, content:, mapper:)
+      return {} unless spans && item["content"].is_a?(String)
+      return {} unless spans.map { |start, finish| mapper.slice(content, offset: start, length: finish - start) }.join("\n") == item["content"]
+
+      spans
+    end
+    description_spans_by_index = items.each_with_index.map do |item, index|
+      structured_discount_description_spans(
+        item,
+        parent_spans: parent_spans_by_index.fetch(index),
+        content:,
+        mapper:
+      )
+    end
+    parents = parent_spans_by_index.each_with_index.flat_map do |spans, index|
+      spans.map { |start, finish| [ start, finish, index ] }
+    end.sort
+    return {} if parents.each_cons(2).any? { |left, right| left[1] > right[0] }
+
+    pages = analyze_result["pages"]
+    return {} unless pages.is_a?(Array) && pages.size <= MAX_REFERENCE_PRICING_TOTAL_PAGES
+
+    source_lines = pages.flat_map do |page|
+      entries = page.is_a?(Hash) ? page["lines"] : nil
+      return {} unless entries.is_a?(Array) && entries.size <= MAX_REFERENCE_PRICING_TOTAL_LINES
+
+      entries.select { |entry| entry.is_a?(Hash) && entry["content"].is_a?(String) && normalize_text(entry["content"]).present? }
+    end
+    return {} unless source_lines.size == lines.size
+
+    source_lines.each_with_index.each_with_object({}) do |(line, index), groups|
+      next if lines[index].blank?
+      return {} unless normalize_text(line["content"]) == lines[index]
+
+      span = exact_structured_authority_span(line, content:, mapper:)
+      next unless span
+
+      parent_index = (parents.bsearch_index { |parent| parent[0] > span[0] } || parents.size) - 1
+      next if parent_index.negative?
+
+      parent = parents[parent_index]
+      next unless span[1] <= parent[1]
+
+      (groups[parent[2]] ||= []) << {
+        text: lines[index],
+        line_index: index,
+        provider_line: line,
+        description_component: description_spans_by_index.fetch(parent[2]).include?(span)
+      }
+    end
+  end
+
+  def structured_discount_description_spans(item, parent_spans:, content:, mapper:)
+    return [] unless item.is_a?(Hash)
+
+    description = item.dig("valueObject", "Description")
+    return [] unless description.is_a?(Hash)
+    return [] unless description["content"] == description["valueString"]
+
+    ranges = exact_structured_authority_span_ranges(description, content:, mapper:)
+    return [] unless ranges&.all? do |start, finish|
+      parent_spans.any? { |parent_start, parent_finish| start >= parent_start && finish <= parent_finish }
+    end
+
+    ranges
+  end
+
+  def discount_source_refs(line, line_index)
+    Analysis.money_token_matches(
+      text: line,
+      money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+      profile: profile,
+      allow_bare_money: false
+    ).filter_map do |token|
+      next unless token[:raw_text].match?(/[▲△\-−]/)
+
+      {
+        source_line_index: line_index,
+        source_span_start: token[:span_start],
+        source_span_end: token[:span_end],
+        amount: token[:amount]
+      }
+    end
+  end
+
+  # Provider spanを持たない旧入力だけは、完全な商品ラベルを境界として扱う。
+  def extract_unstructured_item_discounts(items, lines)
     normalized_lines = Array(lines)
     return {} if normalized_lines.blank?
 
@@ -1934,6 +3268,8 @@ class Ocr::ResponseParser
       normalize_text(clean_item_raw_text(raw_text, item))
     end
 
+    purchase_indexes = retained_structured_item_indexes(items).index_with(true)
+    purchase_labels = item_labels.each_with_index.map { |label, index| purchase_indexes[index] ? label : nil }
     item_original_totals = items.map do |item|
       value_object = item["valueObject"] || {}
       value_object.dig("TotalPrice", "valueCurrency", "amount") || value_object.dig("TotalPrice", "valueNumber")
@@ -1944,39 +3280,10 @@ class Ocr::ResponseParser
     next_item_index = 0
     waiting_discount = false
     current_discount_rate = nil
-    discount_details_by_index = Hash.new { |hash, key| hash[key] = { amount: 0, rate: nil, original_line_total: nil } }
+    discount_details_by_index = Hash.new { |hash, key| hash[key] = { amount: 0, rate: nil, original_line_total: nil, amount_lines: [] } }
 
     normalized_lines.each do |line|
-      if waiting_discount
-        extracted_rate = extract_discount_rate_from_line(line)
-        if extracted_rate
-          current_discount_rate = extracted_rate
-          next
-        end
-
-        matched_discount_target_index = match_discount_target_item_index_from_line(line, item_labels, current_item_index)
-        if matched_discount_target_index
-          discount_target_item_index = matched_discount_target_index
-          next
-        end
-
-        discount_amount = extract_discount_amount_from_line(line)
-        if discount_amount.positive?
-          target_item_index = discount_target_item_index || current_item_index
-          original_line_total = normalize_amount_for_discount(item_original_totals[target_item_index])
-          detail = discount_details_by_index[target_item_index]
-          detail[:amount] += discount_amount
-          detail[:rate] ||= current_discount_rate
-          detail[:original_line_total] ||= original_line_total if original_line_total.positive?
-
-          waiting_discount = false
-          current_discount_rate = nil
-          discount_target_item_index = nil
-          next
-        end
-      end
-
-      matched_item_index = match_item_index_from_line(line, item_labels, next_item_index)
+      matched_item_index = match_item_index_from_line(line, purchase_labels, next_item_index)
       if matched_item_index
         current_item_index = matched_item_index
         discount_target_item_index = nil
@@ -1986,15 +3293,464 @@ class Ocr::ResponseParser
         next
       end
 
-      if item_discount_keyword_line?(line)
+      if receipt_level_discount_line?(line) || line.match?(profile.analysis_previous_subtotal_context_pattern)
+        waiting_discount = false
+        current_discount_rate = nil
+        discount_target_item_index = nil
+        current_item_index = nil
+        next
+      elsif item_discount_keyword_line?(line)
         waiting_discount = current_item_index.present?
         discount_target_item_index = current_item_index
         current_discount_rate = nil
+      end
+
+      next unless waiting_discount
+      next if line.match?(profile.ocr_item_discount_per_unit_note_pattern)
+
+      extracted_rate = extract_discount_rate_from_line(line)
+      current_discount_rate = extracted_rate if extracted_rate
+      discount_amount = extract_discount_amount_from_line(line)
+      if discount_amount.nil?
+        matched_discount_target_index = match_discount_target_item_index_from_line(line, item_labels, current_item_index)
+        discount_target_item_index = matched_discount_target_index if matched_discount_target_index
         next
       end
+
+      target_item_index = discount_target_item_index || current_item_index
+      original_line_total = ReceiptAmountService.parse_amount_or_nil(item_original_totals[target_item_index])
+      detail = discount_details_by_index[target_item_index]
+      detail[:amount] += discount_amount
+      detail[:rate] ||= current_discount_rate
+      detail[:original_line_total] ||= original_line_total unless original_line_total.nil?
+      detail[:amount_lines] << line
+
+      waiting_discount = false
+      current_discount_rate = nil
+      discount_target_item_index = nil
     end
 
+    discount_details_by_index.each do |index, detail|
+      reconcile_discount_total_stage(items, index, detail)
+      detail.delete(:amount_lines)
+    end
     discount_details_by_index
+  end
+
+  def reconcile_discount_total_stage(items, index, detail)
+    return unless items.size <= MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS
+
+    item = items[index]
+    analyze_result = extract_analyze_result(@parsed_response)
+    pages = analyze_result["pages"]
+    pages = [] unless pages.is_a?(Array) && pages.size <= MAX_REFERENCE_PRICING_TOTAL_PAGES
+
+    total = item.dig("valueObject", "TotalPrice")
+    total_amount = normalize_amount_for_discount(detail[:original_line_total])
+    post_discount_lines = pages.flat_map do |page|
+      lines = page.is_a?(Hash) ? page["lines"] : nil
+      next [] unless lines.is_a?(Array) && lines.size <= MAX_REFERENCE_PRICING_TOTAL_LINES
+
+      lines.each_cons(2).filter_map do |discount_line, total_line|
+        next unless discount_line.is_a?(Hash) && total_line.is_a?(Hash)
+        next unless detail[:amount_lines].include?(normalize_text(discount_line["content"]))
+
+        match = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern.match(total_line["content"].to_s)
+        next unless match && normalize_amount_for_discount(match[:amount]) == total_amount
+
+        [ discount_line, total_line ]
+      end
+    end
+    if post_discount_lines.empty? && !printed_total_after_discount?(item, detail)
+      detail[:calculation_mode_discount] = before_item_discount_evidence(analyze_result, items, index, detail) ||
+        before_item_absolute_discount_evidence(analyze_result, items, index, detail)
+      return
+    end
+
+    other_items = items.each_with_index.filter_map { |other, other_index| other unless other_index == index }
+    exact_lines = post_discount_lines.select do |discount_line, total_line|
+      exact_post_discount_total?(analyze_result, item, total, discount_line, total_line, detail, other_items:)
+    end
+    if exact_lines.one? && total_amount + detail[:amount] <= MAX_REFERENCE_PRICING_TOTAL_AMOUNT
+      detail[:original_line_total] = total_amount + detail[:amount]
+      detail[:calculation_mode_discount] = calculation_mode_discount_evidence(
+        analyze_result, exact_lines.sole.first, index, detail
+      )
+    else
+      detail[:amount] = 0
+      detail[:rate] = nil
+    end
+  end
+
+  def printed_total_after_discount?(item, detail)
+    content = item["content"].to_s
+    return true unless content.valid_encoding? && content.bytesize <= Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
+
+    discount_seen = false
+    content.each_line.any? do |line|
+      discount_seen ||= detail[:amount_lines].include?(normalize_text(line))
+      next false unless discount_seen
+
+      match = profile.ocr_reference_pricing_item_layout_printed_total_line_pattern.match(line.chomp)
+      match && normalize_amount_for_discount(match[:amount]) == detail[:original_line_total]
+    end
+  end
+
+  def exact_post_discount_total?(analyze_result, item, total, discount_line, total_line, detail, other_items:)
+    return false unless detail[:amount_lines].one? && total.is_a?(Hash)
+    return false unless analyze_result["modelId"] == "prebuilt-receipt" && analyze_result["apiVersion"] == "2024-11-30"
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    content = analyze_result["content"]
+    return false unless mapper && content.is_a?(String) && mapper.length(content)
+    total_content = total["content"]
+    return false unless total_content.is_a?(String) && total_content.valid_encoding?
+    return false unless total_content.unicode_normalize(:nfkc).match?(ADJUSTMENT_AMOUNT_ONLY_PATTERN)
+    return false unless normalize_amount_for_discount(total["content"]) == detail[:original_line_total]
+
+    total_span = exact_structured_authority_span(total, content:, mapper:)
+    discount_span = exact_structured_authority_span(discount_line, content:, mapper:)
+    total_line_span = exact_structured_authority_span(total_line, content:, mapper:)
+    parent_spans = discount_parent_spans(item, content:, mapper:)
+    return false if [ total_span, discount_span, total_line_span, parent_spans ].any?(&:nil?)
+    return false unless total_span[0] >= total_line_span[0] && total_span[1] <= total_line_span[1]
+    return false unless discount_span[1] <= total_line_span[0]
+    return false unless [ total_span, discount_span ].all? do |span|
+      parent_spans.any? { |parent| span[0] >= parent[0] && span[1] <= parent[1] }
+    end
+
+    other_items.none? do |other|
+      other_parent_spans = discount_parent_spans(other, content:, mapper:)
+      return false unless other_parent_spans
+
+      other_parent_spans.any? do |parent|
+        [ total_span, discount_span ].any? { |span| spans_overlap?(*span, *parent) }
+      end
+    end
+  end
+
+  def discount_parent_spans(item, content:, mapper:)
+    spans = item.is_a?(Hash) ? item["spans"] : nil
+    return unless spans.is_a?(Array) && spans.any? && spans.size <= MAX_REFERENCE_PRICING_AUTHORITY_ARRAY_ITEMS
+
+    ranges = spans.map do |span|
+      return unless span.is_a?(Hash)
+
+      offset = span["offset"]
+      length = span["length"]
+      return unless offset.is_a?(Integer) && length.is_a?(Integer) && offset >= 0 && length.positive?
+      return unless offset <= MAX_REFERENCE_PRICING_PROVIDER_SPAN && length <= MAX_REFERENCE_PRICING_PROVIDER_SPAN - offset
+      return unless mapper.slice(content, offset:, length:)
+
+      [ offset, offset + length ]
+    end.sort
+    return if ranges.each_cons(2).any? { |left, right| left[1] > right[0] }
+
+    ranges
+  end
+
+  def calculation_mode_discount_evidence(analyze_result, line, item_index, detail)
+    raw_content = line["content"]
+    return unless raw_content.is_a?(String) && raw_content.valid_encoding?
+    return if raw_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+
+    match = profile.ocr_item_calculation_discount_line_pattern.match(raw_content)
+    return unless match && %i[rate amount].all? { |key| match[key].bytesize <= 64 }
+
+    rate = BigDecimal(match[:rate].unicode_normalize(:nfkc)) / 100
+    amount = BigDecimal(match[:amount].unicode_normalize(:nfkc).delete(","))
+    rate_text = rate.to_s("F").sub(/0+\z/, "").sub(/\.\z/, "")
+    return unless rate.positive? && rate < 1 && rate_text.split(".").last.length <= 3
+    return unless amount.between?(0, MAX_REFERENCE_PRICING_TOTAL_AMOUNT)
+    return unless rate == detail[:rate] && amount == detail[:amount]
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    line_span = exact_structured_authority_span(line, content: analyze_result["content"], mapper:)
+    return unless line_span
+
+    evidence = %i[rate amount].to_h do |key|
+      span = mapper.span_for_bytes(
+        raw_content,
+        byte_offset: raw_content[0...match.begin(key)].bytesize,
+        byte_length: match[key].bytesize
+      )
+      return if span.nil?
+
+      [
+        key,
+        {
+          source_field_path: "documents[0].fields.Items[#{item_index}]",
+          provider_span_start: line_span[0] + span[:offset],
+          provider_span_end: line_span[0] + span[:offset] + span[:length]
+        }
+      ]
+    end
+
+    {
+      amount: amount.to_i.to_s,
+      rate: rate_text,
+      printed_total_stage: "after_item_discount",
+      evidence: evidence
+    }
+  rescue ArgumentError, EncodingError, TypeError
+    nil
+  end
+
+  def before_item_discount_evidence(analyze_result, items, item_index, detail)
+    return unless detail[:amount_lines].one?
+    return unless analyze_result["modelId"] == "prebuilt-receipt" && analyze_result["apiVersion"] == "2024-11-30"
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    content = analyze_result["content"]
+    return unless mapper && content.is_a?(String) && mapper.length(content)
+
+    item = items[item_index]
+    parents = discount_parent_spans(item, content:, mapper:)
+    return unless parents && parents.map { |start, finish| mapper.slice(content, offset: start, length: finish - start) }.join("\n") == item["content"]
+
+    total = item.dig("valueObject", "TotalPrice")
+    return unless total.is_a?(Hash) && total["content"].is_a?(String) && total["content"].valid_encoding?
+    total_content = total["content"].unicode_normalize(:nfkc)
+      .sub(profile.ocr_item_calculation_tax_marker_prefix_pattern, "")
+      .sub(profile.ocr_item_calculation_tax_marker_suffix_pattern, "")
+    return unless total_content.match?(ADJUSTMENT_AMOUNT_ONLY_PATTERN)
+    return unless normalize_amount_for_discount(total_content) == detail[:original_line_total]
+
+    total_span = exact_structured_authority_span(total, content:, mapper:)
+    return unless total_span && parents.any? { |start, finish| total_span[0] >= start && total_span[1] <= finish }
+    return unless items.each_with_index.all? do |other, index|
+      next true if index == item_index
+
+      other_parents = discount_parent_spans(other, content:, mapper:)
+      other_parents && other_parents.none? { |other_parent| parents.any? { |parent| spans_overlap?(*parent, *other_parent) } }
+    end
+
+    pages = analyze_result["pages"]
+    return unless pages.is_a?(Array) && pages.size <= MAX_REFERENCE_PRICING_TOTAL_PAGES
+
+    page_lines = pages.filter_map do |page|
+      lines = page.is_a?(Hash) ? page["lines"] : nil
+      return unless lines.is_a?(Array) && lines.size <= MAX_REFERENCE_PRICING_TOTAL_LINES
+
+      entries = lines.each_with_index.filter_map do |line, line_index|
+        next unless line.is_a?(Hash)
+
+        span = exact_structured_authority_span(line, content:, mapper:)
+        next unless span && parents.any? { |start, finish| span[0] >= start && span[1] <= finish }
+
+        { line: line, span: span, index: line_index }
+      end
+      [ page, entries ] unless entries.empty?
+    end
+    return unless page_lines.one?
+
+    page, entries = page_lines.sole
+    return unless entries.each_cons(2).all? { |left, right| left[:span][1] <= right[:span][0] }
+
+    block = Ocr::ResponseParser::ItemCalculationDiscountBlock.call(lines: entries.map { |entry| entry[:line]["content"] }, profile:)
+    return unless block && block[:rate] == detail[:rate] && block[:amount] == detail[:amount]
+
+    block_entries = entries[block[:block_start_line_index]..block[:block_end_line_index]]
+    return unless block_entries.first[:span][0] >= total_span[1]
+    return unless discount_block_contiguous?(block_entries, page:, item:, parents:, content:, mapper:)
+
+    evidence = block[:evidence].to_h do |key, component|
+      entry = entries[component[:line_index]]
+      span = mapper.span_for_bytes(
+        entry[:line]["content"],
+        byte_offset: component[:byte_offset],
+        byte_length: component[:byte_length]
+      )
+      return unless span
+
+      start = entry[:span][0] + span[:offset]
+      return unless start >= total_span[1]
+
+      [
+        key,
+        {
+          source_field_path: "documents[0].fields.Items[#{item_index}]",
+          provider_span_start: start,
+          provider_span_end: start + span[:length]
+        }
+      ]
+    end
+    {
+      amount: block[:amount].to_s,
+      rate: block[:rate].to_s("F").sub(/0+\z/, "").sub(/\.\z/, ""),
+      printed_total_stage: "before_item_discount",
+      evidence: evidence
+    }
+  rescue ArgumentError, EncodingError, TypeError
+    nil
+  end
+
+  def before_item_absolute_discount_evidence(analyze_result, items, item_index, detail)
+    return unless detail[:rate].nil?
+    return unless Array(detail[:amount_lines]).one? && Array(detail[:amount_entries]).one? && Array(detail[:source_refs]).one?
+    return unless analyze_result["modelId"] == "prebuilt-receipt" && analyze_result["apiVersion"] == "2024-11-30"
+
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    content = analyze_result["content"]
+    return unless mapper && content.is_a?(String) && mapper.length(content)
+
+    item = items[item_index]
+    parents = discount_parent_spans(item, content:, mapper:)
+    return unless parents && parents.map { |start, finish| mapper.slice(content, offset: start, length: finish - start) }.join("\n") == item["content"]
+
+    total = item.dig("valueObject", "TotalPrice")
+    return unless total.is_a?(Hash) && total["content"].is_a?(String) && total["content"].valid_encoding?
+
+    total_content = total["content"].unicode_normalize(:nfkc)
+      .sub(profile.ocr_item_calculation_tax_marker_prefix_pattern, "")
+      .sub(profile.ocr_item_calculation_tax_marker_suffix_pattern, "")
+    return unless total_content.match?(ADJUSTMENT_AMOUNT_ONLY_PATTERN)
+    return unless normalize_amount_for_discount(total_content) == detail[:original_line_total]
+
+    total_span = exact_structured_authority_span(total, content:, mapper:)
+    return unless total_span && parents.any? { |start, finish| total_span[0] >= start && total_span[1] <= finish }
+
+    entry = detail[:amount_entries].sole
+    line = entry[:provider_line]
+    raw_content = line.is_a?(Hash) ? line["content"] : nil
+    return unless raw_content.is_a?(String) && raw_content.valid_encoding?
+    return if raw_content.bytesize > MAX_REFERENCE_PRICING_TOTAL_FIELD_BYTES
+
+    line_span = exact_structured_authority_span(line, content:, mapper:)
+    return unless line_span && parents.any? { |start, finish| line_span[0] >= start && line_span[1] <= finish }
+    return unless line_span[0] >= total_span[1]
+
+    tokens = Analysis.money_token_matches(
+      text: raw_content,
+      money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+      profile:,
+      allow_bare_money: false
+    ).select { |token| token[:raw_text].match?(/[▲△\-−]/) }
+    return unless tokens.one? && tokens.sole[:amount] == detail[:amount]
+
+    source_ref = detail[:source_refs].sole
+    return unless source_ref[:source_line_index] == entry[:line_index]
+    return unless source_ref[:amount] == detail[:amount]
+
+    token = tokens.sole
+    span = mapper.span_for_bytes(
+      raw_content,
+      byte_offset: raw_content[0...token[:span_start]].bytesize,
+      byte_length: token[:raw_text].bytesize
+    )
+    return if span.nil?
+
+    start = line_span[0] + span[:offset]
+    finish = start + span[:length]
+    return unless start >= total_span[1] && finish <= line_span[1]
+
+    {
+      amount: detail[:amount].to_i.to_s,
+      printed_total_stage: "before_item_discount",
+      evidence: {
+        amount: {
+          source_field_path: "documents[0].fields.Items[#{item_index}]",
+          provider_span_start: start,
+          provider_span_end: finish
+        }
+      }
+    }
+  rescue ArgumentError, EncodingError, TypeError
+    nil
+  end
+
+  def discount_block_contiguous?(entries, page:, item:, parents:, content:, mapper:)
+    gaps = entries.each_cons(2).reject { |left, right| right[:index] == left[:index] + 1 }
+    return true if gaps.empty?
+
+    regions = item["boundingRegions"]
+    return false unless regions.is_a?(Array) && regions.one? && regions.sole.is_a?(Hash)
+    return false unless page["pageNumber"].is_a?(Integer) && page["pageNumber"].positive? && regions.sole["pageNumber"] == page["pageNumber"]
+
+    parent_bounds = discount_polygon_bounds(regions.sole["polygon"], page:)
+    return false unless parent_bounds
+
+    words = page["words"]
+    return false unless words.is_a?(Array) && words.size.between?(1, Ocr::ResponseParser::ItemCalculationModeLayoutExtractor::MAX_WORDS)
+
+    word_entries = words.map do |word|
+      return false unless word.is_a?(Hash)
+      return false unless word["content"].is_a?(String) && word["content"].bytesize <= Ocr::ResponseParser::ItemCalculationModeLayoutExtractor::MAX_WORD_CONTENT_BYTES
+
+      span = exact_structured_authority_span({ "content" => word["content"], "spans" => [ word["span"] ] }, content:, mapper:)
+      return false unless span
+
+      { span:, polygon: word["polygon"] }
+    end
+    return false unless word_entries.each_cons(2).all? { |left, right| left[:span][1] <= right[:span][0] }
+
+    gaps.all? do |left, right|
+      previous_end = left[:span][1]
+      page["lines"][(left[:index] + 1)...right[:index]].all? do |line|
+        next false unless line.is_a?(Hash)
+
+        span = exact_structured_authority_span(line, content:, mapper:)
+        next false unless span && span[0] >= previous_end && span[1] <= right[:span][0]
+        next false if parents.any? { |parent| spans_overlap?(*span, *parent) }
+
+        previous_end = span[1]
+        discount_gap_line_outside_parent?(line, span:, word_entries:, parent_bounds:, page:, content:, mapper:)
+      end
+    end
+  end
+
+  def discount_gap_line_outside_parent?(line, span:, word_entries:, parent_bounds:, page:, content:, mapper:)
+    bounds = discount_polygon_bounds(line["polygon"], page:)
+    return false unless bounds
+
+    side = if bounds[:right] < parent_bounds[:left]
+      :left
+    elsif bounds[:left] > parent_bounds[:right]
+      :right
+    end
+    return false unless side
+
+    index = word_entries.bsearch_index { |word| word[:span][1] > span[0] }
+    return false unless index
+
+    cursor = span[0]
+    count = 0
+    while index < word_entries.size && word_entries[index][:span][0] < span[1]
+      word = word_entries[index]
+      return false unless word[:span][0] >= cursor && word[:span][1] <= span[1]
+      return false unless mapper.slice(content, offset: cursor, length: word[:span][0] - cursor)&.match?(/\A[ \t]*\z/)
+
+      word_bounds = discount_polygon_bounds(word[:polygon], page:)
+      return false unless word_bounds
+      return false unless side == :left ? word_bounds[:right] < parent_bounds[:left] : word_bounds[:left] > parent_bounds[:right]
+
+      cursor = word[:span][1]
+      count += 1
+      index += 1
+    end
+    count.positive? && mapper.slice(content, offset: cursor, length: span[1] - cursor)&.match?(/\A[ \t]*\z/)
+  end
+
+  def discount_polygon_bounds(polygon, page:)
+    dimensions = [ page["width"], page["height"] ]
+    maximum = Ocr::ResponseParser::ItemCalculationModeLayoutExtractor::MAX_PAGE_DIMENSION
+    return unless dimensions.all? { |value| value.is_a?(Numeric) && value.finite? && value.positive? && value <= maximum }
+    return unless polygon.is_a?(Array) && polygon.size == 8
+    return unless polygon.all? { |value| value.is_a?(Numeric) && value.finite? }
+    return unless polygon.each_slice(2).all? { |x, y| x.between?(0, dimensions[0]) && y.between?(0, dimensions[1]) }
+
+    points = polygon.each_slice(2).map { |pair| pair.map { |value| Rational(value.to_s) } }
+    crosses = 4.times.map do |index|
+      first = points[index]
+      second = points[(index + 1) % 4]
+      third = points[(index + 2) % 4]
+      (second[0] - first[0]) * (third[1] - second[1]) -
+        (second[1] - first[1]) * (third[0] - second[0])
+    end
+    return unless crosses.all?(&:positive?) || crosses.all?(&:negative?)
+
+    left, right = points.map(&:first).minmax
+    { left:, right: }
   end
 
   def match_discount_target_item_index_from_line(line, item_labels, current_item_index)
@@ -2010,17 +3766,17 @@ class Ocr::ResponseParser
   def discount_target_line_matches_label?(line, label)
     normalized_line = normalize_text(line)
     normalized_label = normalize_text(label)
-    return true if normalized_line.include?(normalized_label) || normalized_label.include?(normalized_line)
+    return true if normalized_line == normalized_label || normalized_label.start_with?("#{normalized_line} ")
 
-    key = normalized_line.split(/[[:space:]　(（]/).first
-    key.present? && key.length >= 2 && normalized_label.include?(key)
+    key = normalized_line.split(/[（(]/).first
+    key.present? && key.length >= 2 && normalized_label.start_with?("#{key} ")
   end
 
   def match_item_index_from_line(line, item_labels, start_index)
     item_labels.each_with_index.drop(start_index).find do |label, _index|
       next false if label.blank?
 
-      line.include?(label) || label.include?(line)
+      line == label || line.start_with?("#{label} ")
     end&.last
   end
 
@@ -2035,18 +3791,21 @@ class Ocr::ResponseParser
   end
 
   def extract_discount_rate_from_line(line)
-    return nil if line.match?(/[-−▲]/)
+    rates = line.to_s.unicode_normalize(:nfkc).scan(/(\d+(?:\.\d+)?)\s*%/).flatten.uniq
+    return nil unless rates.one?
 
-    matched = line.match(/(\d+(?:\.\d+)?)\s*%/)
-    return nil unless matched
-
-    BigDecimal(matched[1]) / 100
+    rate = BigDecimal(rates.sole) / 100
+    rate if rate.between?(0, 1)
   end
 
   def extract_discount_amount_from_line(line)
-    return 0 unless line.match?(/[-−▲]/)
+    text = line.to_s.unicode_normalize(:nfkc).gsub(/\d+(?:\.\d+)?\s*%/, " ")
+    return if text.include?("/")
 
-    line.scan(/\d[\d,]*/).map { |value| ReceiptAmountService.parse_amount(value) }.max.to_i
+    amounts = text.scan(/[-−▲]\s*[¥￥]?\s*(\d[\d,]*)(?![\d,.])/).flatten
+    return unless amounts.one?
+
+    ReceiptAmountService.parse_amount(amounts.sole)
   end
 
   def normalize_amount_for_discount(value)

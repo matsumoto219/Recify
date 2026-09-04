@@ -1,0 +1,59 @@
+{
+  "case_id": "g151_calc_count_item_discount",
+  "category": "calculation_mode",
+  "intent": "An exact item-local discount is applied once after extending an exact count formula.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル日用品A", "@500円 × 2個", "明細値引 -100円", "明細計 900円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "500",
+        "printed_line_total": 900,
+        "discount_amount": 100
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算境界店",
+    "store_address": "サンプル県サンプル市境界町2-2",
+    "purchased_at": "2026-08-27T09:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル日用品A",
+        "unit_price": 500,
+        "quantity": "2",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 1000,
+        "line_total": 900,
+        "tax_rate": 0.1,
+        "discount_amount": 100,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 819, "tax": 81, "gross": 900, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 819,
+    "tax": 81,
+    "total": 900,
+    "payments": [{"method": "cash", "label": "現金", "amount": 900}],
+    "payment_sum": 900,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

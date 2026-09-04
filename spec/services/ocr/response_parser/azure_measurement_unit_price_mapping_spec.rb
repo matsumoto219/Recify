@@ -90,6 +90,40 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
     value.encode(Encoding::UTF_16LE).bytesize / 2
   end
 
+  def reindex_item(item, index_type:)
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type:)
+    value_object = item.fetch('valueObject')
+    fields = %w[Description Price Quantity TotalPrice].map { |name| value_object.fetch(name) }
+    content = fields.map { |field| field.fetch('content') }.join("\n")
+    byte_cursor = 0
+
+    fields.each do |field|
+      field_content = field.fetch('content')
+      span = mapper.span_for_bytes(
+        content,
+        byte_offset: byte_cursor,
+        byte_length: field_content.bytesize
+      ).transform_keys(&:to_s)
+      field['spans'] = [ span ]
+      byte_cursor += field_content.bytesize + 1
+    end
+    quantity = value_object.fetch('Quantity')
+    unit = value_object.fetch('QuantityUnit')
+    quantity_byte_offset = content.b.index(quantity.fetch('content').b)
+    unit_byte_offset = quantity.fetch('content').b.index(unit.fetch('content').b)
+    unit['spans'] = [
+      mapper.span_for_bytes(
+        content,
+        byte_offset: quantity_byte_offset + unit_byte_offset,
+        byte_length: unit.fetch('content').bytesize
+      ).transform_keys(&:to_s)
+    ]
+    item.merge(
+      'content' => content,
+      'spans' => [ { 'offset' => 0, 'length' => mapper.length(content) } ]
+    )
+  end
+
   def structured_item(description:, price:, quantity:, unit:, total:)
     content = [ description, price.fetch(:content), quantity.fetch(:content), total.fetch(:content) ].join("\n")
     description_offset = 0
@@ -176,6 +210,71 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
           :reference_quantity_unit_code
         )
       end
+    end
+  end
+
+  it 'maps textElements structured evidence without splitting emoji or combining sequences' do
+    item = fixture('ocr_azure_item_calculation_reference_gross_anonymized.json')
+      .dig('analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray', 0)
+      .deep_dup
+    description = item.dig('valueObject', 'Description')
+    description.merge!('content' => '検証😀品', 'valueString' => '検証😀品')
+    item = reindex_item(item, index_type: 'textElements')
+    prefix = "受付e\u0301\n"
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: 'textElements')
+    prefix_length = mapper.length(prefix)
+    [ item, *item.fetch('valueObject').values ].each do |component|
+      component.fetch('spans').each { |span| span['offset'] += prefix_length }
+    end
+    response = synthetic_response(item)
+    analyze_result = response.fetch('analyzeResult')
+    analyze_result['stringIndexType'] = 'textElements'
+    analyze_result['content'] = "#{prefix}#{item.fetch('content')}"
+    cursor = 0
+    analyze_result.dig('pages', 0)['lines'] = analyze_result.fetch('content').lines(chomp: true).map do |line|
+      entry = {
+        'content' => line,
+        'spans' => [ { 'offset' => cursor, 'length' => mapper.length(line) } ]
+      }
+      cursor += mapper.length(line) + 1
+      entry
+    end
+
+    result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+    candidate = result.dig(:candidates, :reference_pricing_candidates).sole
+
+    aggregate_failures do
+      expect(candidate).to include(
+        item_index: 0,
+        validation_state: 'valid',
+        rejection_reasons: [],
+        reference_price_tax_inclusion: 'gross'
+      )
+      expect(candidate.dig(:reference_price, :amount)).to eq('498')
+      expect(candidate.dig(:reference_quantity, :amount)).to eq('100')
+      expect(candidate.dig(:purchased_quantity, :amount)).to eq('342')
+      expect(result.dig(:candidates, :item_calculation_mode_candidates).sole).to include(
+        string_index_type: 'textElements'
+      )
+    end
+  end
+
+  it 'fails closed when the provider index type is unsupported or the top-level content binding differs' do
+    item = positive_cases.first.fetch('item').deep_dup
+    unsupported = synthetic_response(item.deep_dup)
+    unsupported.dig('analyzeResult')['stringIndexType'] = 'utf8Byte'
+    mismatched = synthetic_response(item.deep_dup)
+    mismatched.dig('analyzeResult')['content'] = "X#{mismatched.dig('analyzeResult', 'content')}"
+
+    aggregate_failures do
+      expect(Ocr::ResponseParser.new(
+        response: unsupported,
+        provider: :fixture
+      ).call.dig(:candidates, :reference_pricing_candidates)).to eq([])
+      expect(Ocr::ResponseParser.new(
+        response: mismatched,
+        provider: :fixture
+      ).call.dig(:candidates, :reference_pricing_candidates)).to eq([])
     end
   end
 
@@ -280,6 +379,72 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
     expect(parser.call.dig(:candidates, :total_amount)).to eq(summary_amount.to_i)
   end
 
+  it 'preserves an exact document Total split from its same-row summary label' do
+    item = positive_cases.first.fetch('item').deep_dup
+    response = synthetic_response(item)
+    analyze_result = response.fetch('analyzeResult')
+    analyze_result['stringIndexType'] = 'utf16CodeUnit'
+    analyze_result.dig('pages', 0).merge!(
+      'pageNumber' => 1,
+      'unit' => 'pixel',
+      'width' => 800,
+      'height' => 1_200
+    )
+    summary_amount = item.dig('valueObject', 'TotalPrice', 'content')
+    append_response_line(response, '合計')
+    append_response_line(response, "¥#{summary_amount}")
+    label_line, amount_line = analyze_result.dig('pages', 0, 'lines').last(2)
+    label_line['polygon'] = [ 20, 100, 80, 100, 80, 116, 20, 116 ]
+    amount_line['polygon'] = [ 200, 102, 270, 102, 270, 118, 200, 118 ]
+    amount_offset = amount_line.dig('spans', 0, 'offset') + 1
+    analyze_result.dig('documents', 0, 'fields')['Total'] = {
+      'content' => summary_amount,
+      'spans' => [ { 'offset' => amount_offset, 'length' => utf16_length(summary_amount) } ],
+      'valueCurrency' => { 'amount' => summary_amount.to_i, 'currencyCode' => 'JPY' }
+    }
+
+    result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+
+    expect(result.dig(:candidates, :total_amount)).to eq(summary_amount.to_i)
+  end
+
+  it 'preserves strict split totals with a bounded purchase count or gross suffix label' do
+    item = positive_cases.first.fetch('item').deep_dup
+    summary_amount = item.dig('valueObject', 'TotalPrice', 'content')
+    cases = {
+      purchase_count: [ '買上合計 1点', '内税', '現金' ],
+      gross_suffix: [ '合計(税込)' ]
+    }
+
+    cases.each do |label, lines|
+      response = synthetic_response(item.deep_dup)
+      analyze_result = response.fetch('analyzeResult')
+      analyze_result['stringIndexType'] = 'utf16CodeUnit'
+      analyze_result.dig('pages', 0).merge!(
+        'pageNumber' => 1,
+        'unit' => 'pixel',
+        'width' => 800,
+        'height' => 1_200
+      )
+      lines.each { |line| append_response_line(response, line) }
+      append_response_line(response, "¥#{summary_amount}")
+      label_line = analyze_result.dig('pages', 0, 'lines', -(lines.size + 1))
+      amount_line = analyze_result.dig('pages', 0, 'lines', -1)
+      label_line['polygon'] = [ 20, 100, 120, 100, 120, 116, 20, 116 ]
+      amount_line['polygon'] = [ 200, 102, 270, 102, 270, 118, 200, 118 ]
+      amount_offset = amount_line.dig('spans', 0, 'offset') + 1
+      analyze_result.dig('documents', 0, 'fields')['Total'] = {
+        'content' => summary_amount,
+        'spans' => [ { 'offset' => amount_offset, 'length' => utf16_length(summary_amount) } ],
+        'valueCurrency' => { 'amount' => summary_amount.to_i, 'currencyCode' => 'JPY' }
+      }
+
+      result = Ocr::ResponseParser.new(response:, provider: :fixture).call
+
+      expect(result.dig(:candidates, :total_amount)).to eq(summary_amount.to_i), label.to_s
+    end
+  end
+
   it 'fails closed from malformed or non-JPY structured Total ownership' do
     item = positive_cases.first.fetch('item').deep_dup
     response = synthetic_response(item)
@@ -308,16 +473,22 @@ RSpec.describe 'Azure structured measurement unit-price mapping' do
     end
   end
 
-  it 'rejects an oversized structured Total before decimal conversion' do
+  it 'rejects an oversized structured Total without raising' do
     item = positive_cases.first.fetch('item').deep_dup
     response = synthetic_response(item)
-    parser = Ocr::ResponseParser.new(response:, provider: :fixture)
     total = {
       'valueCurrency' => { 'amount' => 10**10_000, 'currencyCode' => 'JPY' }
     }
 
-    expect(parser).not_to receive(:BigDecimal)
-    expect(parser.send(:strict_document_total_amount, total, '300')).to be_nil
+    result = nil
+    expect do
+      result = Ocr::ResponseParser::ReferencePricingStrictSummaryTotalExtractor.call(
+        analyze_result: response.fetch('analyzeResult'),
+        profile: ReceiptAnalysisProfiles.fetch('JPN'),
+        total_field: total
+      )
+    end.not_to raise_error
+    expect(result).to be_nil
   end
 
   it 'indexes bounded provider content once while validating a dense summary-line receipt' do

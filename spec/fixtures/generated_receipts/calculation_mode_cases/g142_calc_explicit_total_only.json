@@ -1,0 +1,57 @@
+{
+  "case_id": "g142_calc_explicit_total_only",
+  "category": "calculation_mode",
+  "intent": "A strongly item-owned printed total without a complete formula selects explicit line-total pricing.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル固定C 180円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "fallback",
+        "printed_line_total": 180
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算方式店",
+    "store_address": "サンプル県サンプル市計算町1-1",
+    "purchased_at": "2026-08-20T10:10:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル固定C",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 180,
+        "line_total": 180,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 164, "tax": 16, "gross": 180, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 164,
+    "tax": 16,
+    "total": 180,
+    "payments": [{"method": "cash", "label": "現金", "amount": 180}],
+    "payment_sum": 180,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

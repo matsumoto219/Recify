@@ -1,0 +1,102 @@
+{
+  "case_id": "g173_calc_count_package_purchase_separation",
+  "category": "calculation_mode",
+  "intent": "Package capacity is not purchased quantity; a separate exact price and purchased count still establish count pricing. Fixed before render: required rates 1%,27%; LCG32 seed 20260830 draws 96%,75%,31%,60% from 1..99 except 1,8,10,27. Synthetic, not statutory rates.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["例示洗浄液500ml入り (税込27%)", "単価 @223円", "数量 2本", "明細計 446円"],
+        "purchased_quantity": "2",
+        "purchased_unit": "piece",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "223",
+        "printed_line_total": 446
+      },
+      {
+        "item_index": 1,
+        "printed_lines": ["例示飲料500ml入り (税込27%)", "明細計 331円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "fallback",
+        "formula_conflicts": ["package_content"],
+        "printed_line_total": 331
+      },
+      {
+        "item_index": 2,
+        "printed_lines": ["例示小袋2袋入100g (税込27%)", "明細計 487円"],
+        "purchased_quantity": "1",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "fallback",
+        "formula_conflicts": ["package_content"],
+        "printed_line_total": 487
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "架空計数検証店",
+    "store_address": "架空県例示市検証町1-1",
+    "purchased_at": "2026-08-01T09:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.27,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "例示洗浄液500ml入り",
+        "unit_price": 223,
+        "quantity": "2",
+        "quantity_unit_code": "piece",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 446,
+        "line_total": 446,
+        "tax_rate": 0.27,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示飲料500ml入り",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 331,
+        "line_total": 331,
+        "tax_rate": 0.27,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      },
+      {
+        "name": "例示小袋2袋入100g",
+        "unit_price": null,
+        "quantity": "1",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "explicit_line_total",
+        "original_line_total": 487,
+        "line_total": 487,
+        "tax_rate": 0.27,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.27, "net": 996, "tax": 268, "gross": 1264, "basis": "gross", "label": "27%対象計"}],
+    "subtotal": 996,
+    "tax": 268,
+    "total": 1264,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1264}],
+    "payment_sum": 1264,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts", "item_review_states"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

@@ -186,6 +186,80 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
     end
   end
 
+  it '計算方式reasonの対象行だけ詳細を開き、計算方式selectだけをエラー強調する' do
+    receipt = build(:receipt)
+    item = receipt.receipt_items.build(
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 180,
+      line_total: 180,
+      needs_review: true,
+      review_reasons: [ 'item_pricing_mode_uncertain' ]
+    )
+
+    document = render_item(item, new_record: false)
+    row = document.at_css('[data-receipt-form-target="itemRow"]')
+    toggles = row.css('[data-receipt-form-target="itemDetailsToggle"]')
+    item_details = row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
+    pricing_details = row.at_css('details[data-receipt-pricing-source-details]')
+    pricing_content = pricing_details.at_css('[data-collapsible-details-target="content"]')
+    pricing_mode = row.at_css('[data-receipt-form-target="pricingSourceModeInput"]')
+    quantity = row.at_css('[data-receipt-form-target="quantityInput"]')
+
+    aggregate_failures do
+      expect(row['class']).to include('receipt-form-item-details-open')
+      expect(toggles).to all(satisfy { |toggle| toggle['aria-expanded'] == 'true' })
+      expect(item_details['class']).to include('is-open')
+      expect(item_details['aria-hidden']).to eq('false')
+      expect(item_details['inert']).to be_nil
+      expect(pricing_details).to have_attribute('open')
+      expect(pricing_content['aria-hidden']).to eq('false')
+      expect(pricing_content['inert']).to be_nil
+      expect(pricing_mode['class']).to include('input-field-error')
+      expect(quantity['class']).not_to include('input-field-error')
+    end
+  end
+
+  it '別reasonの対象行は計算方式detailsとselectを強調しない' do
+    receipt = build(:receipt)
+    item = receipt.receipt_items.build(
+      pricing_source_kind: 'explicit_line_total',
+      original_line_total: 180,
+      line_total: 180,
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ]
+    )
+
+    document = render_item(item, new_record: false)
+    row = document.at_css('[data-receipt-form-target="itemRow"]')
+    item_details = row.at_css('[data-receipt-form-target="itemDetailsPanel"]')
+    pricing_details = row.at_css('details[data-receipt-pricing-source-details]')
+    pricing_mode = row.at_css('[data-receipt-form-target="pricingSourceModeInput"]')
+
+    aggregate_failures do
+      expect(row['class']).not_to include('receipt-form-item-details-open')
+      expect(item_details['class']).not_to include('is-open')
+      expect(item_details['aria-hidden']).to eq('true')
+      expect(item_details).to have_attribute('inert')
+      expect(pricing_details['open']).to be_nil
+      expect(pricing_mode['class']).not_to include('input-field-error')
+    end
+  end
+
+  it '明細金額方式を入力操作ではなく計算基準として説明する' do
+    receipt = build(:receipt)
+    item = receipt.receipt_items.build(pricing_source_kind: 'explicit_line_total')
+
+    document = render_item(item)
+    pricing_mode = document.at_css('[data-receipt-form-target="pricingSourceModeInput"]')
+    explicit_option = pricing_mode.at_css('option[value="explicit_line_total"]')
+    explicit_help = document.at_css('[data-receipt-form-target="explicitLineTotalHelp"]')
+
+    aggregate_failures do
+      expect(explicit_option.text.strip).to eq('明細金額を使用')
+      expect(explicit_help.text.strip).to eq('印字または入力された明細金額を計算の基準にします。')
+    end
+  end
+
   it '新規行は単価と数量modeを選択し、非選択sourceを送信しない' do
     receipt = build(:receipt)
     item = receipt.receipt_items.build
@@ -267,7 +341,7 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
       expect(discount_source_row['data-receipt-form-has-persisted-absolute-discount-source']).to eq('true')
       expect(explicit_help.text).to include('入力値に明細割引を1回適用')
       expect(explicit_help['data-receipt-form-text-with-discount']).to include('入力値に明細割引を1回適用')
-      expect(explicit_help['data-receipt-form-text-without-discount']).to include('印字された明細金額')
+      expect(explicit_help['data-receipt-form-text-without-discount']).to include('明細金額を計算の基準')
     end
   end
 

@@ -33,7 +33,11 @@ module Receipts::Processing::Runs
     MAX_PAYMENT_CANDIDATES = 10
     MAX_TAX_DETAILS = 10
     MAX_REVIEW_REASONS = 20
+    MAX_OCR_ITEM_DISCOUNT_SOURCE_REFS = 16
+    OCR_ITEM_DISCOUNT_SOURCE_REF_KEYS = %w[source_line_index source_span_start source_span_end amount].freeze
     MAX_REFERENCE_PRICING_CANDIDATES = 100
+    MAX_ITEM_CALCULATION_MODE_CANDIDATES = Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_SETS
+    ITEM_CALCULATION_MODE_ITEM_IDENTITY_MAX_BYTES = Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
     MAX_REFERENCE_PRICING_ITEM_INDEX = MAX_REFERENCE_PRICING_CANDIDATES - 1
     MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET = 10_000_000
     MAX_REFERENCE_PRICING_PROJECTED_AMOUNT = 999_999_999
@@ -72,12 +76,81 @@ module Receipts::Processing::Runs
     REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES = 256
     REFERENCE_PRICING_DESTINATION_ID_MAX_BYTES = 160
     REFERENCE_PRICING_SOURCE_PROVIDERS = %w[azure_structured].freeze
+    REFERENCE_PRICING_LAYOUT_SOURCE_PROVIDERS = %w[azure_item_layout].freeze
     REFERENCE_PRICING_LINE_SOURCE_PROVIDERS = %w[azure_line_group].freeze
-    REFERENCE_PRICING_SOURCE_KINDS = %w[azure_line_group].freeze
+    REFERENCE_PRICING_SOURCE_KINDS = %w[azure_item_layout azure_line_group].freeze
     REFERENCE_PRICING_STRING_INDEX_TYPES = %w[utf16CodeUnit textElements].freeze
     REFERENCE_PRICING_LINE_GROUP_PROVIDER_MODELS = %w[prebuilt-receipt].freeze
     REFERENCE_PRICING_LINE_GROUP_API_VERSIONS = %w[2024-11-30].freeze
     REFERENCE_PRICING_LINE_GROUP_VALIDATION_CONTRACTS = %w[azure_line_group_v1].freeze
+    REFERENCE_PRICING_LAYOUT_VALIDATION_CONTRACTS = %w[
+      azure_item_layout_v1
+      azure_item_layout_shared_basis_v1
+    ].freeze
+    REFERENCE_PRICING_LAYOUT_DESTINATION_KINDS = %w[azure_layout_item azure_structured_item].freeze
+    REFERENCE_PRICING_SHARED_BASIS_VALIDATION_CONTRACT = "azure_item_layout_shared_basis_v1"
+    MAX_REFERENCE_PRICING_SHARED_BASIS_HEADER_CONTEXT_LINES = 3
+    REFERENCE_PRICING_SHARED_BASIS_CANDIDATE_ID_PATTERN = /
+      \Aazure_item_layout_p(?<page>\d+)_name_l(?<name>\d+)_ref_l(?<reference>\d+)
+      _qty_l(?<quantity>\d+)_total_l(?<total>\d+)_reference_pricing\z
+    /x.freeze
+    REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND = "single_item_receipt_gross_summary"
+    REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_POLICY_VERSION = "reference_pricing_single_item_gross_summary_policy_v1"
+    REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_KEYS = %w[
+      kind string_index_type policy_contract_version summary_total gross_tax_target
+    ].freeze
+    REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_STRUCTURAL_KEYS = %w[
+      source_provider source_field_path page_index line_index string_index_type
+      provider_span_start provider_span_end
+    ].freeze
+    REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_TOTAL_KEYS =
+      (REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_STRUCTURAL_KEYS + %w[amount]).freeze
+    REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_TAX_KEYS =
+      (REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_STRUCTURAL_KEYS + %w[rate net_amount tax_amount gross_amount]).freeze
+    REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND = "shared_basis_external_tax_summary"
+    REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_POLICY_VERSION =
+      "reference_pricing_shared_basis_external_tax_policy_v1"
+    REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_KEYS = %w[
+      kind string_index_type policy_contract_version tax_detail_index subtotal
+      document_tax_total summary_total
+    ].freeze
+    REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_AMOUNT_KEYS = %w[
+      source_provider source_field_path page_index line_index string_index_type
+      provider_span_start provider_span_end amount
+    ].freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND = "single_item_receipt_inner_tax_summary"
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION =
+      "reference_pricing_single_structured_item_gross_policy_v1"
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_KEYS = %w[
+      kind string_index_type policy_contract_version item_parent tax_detail_parent
+      tax_description tax_amount document_tax_total summary_total
+    ].freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_ITEM_PARENT_KEYS = %w[
+      source_provider source_field_path item_index provider_span_start provider_span_end
+    ].freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_PARENT_KEYS = %w[
+      source_provider source_field_path tax_detail_index provider_span_start provider_span_end
+    ].freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_STRUCTURAL_KEYS = %w[
+      source_provider source_field_path page_index line_index string_index_type
+      provider_span_start provider_span_end
+    ].freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS =
+      (REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_STRUCTURAL_KEYS + %w[tax_detail_index]).freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_AMOUNT_KEYS =
+      (REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS + %w[amount]).freeze
+    REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS =
+      (REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_STRUCTURAL_KEYS + %w[amount]).freeze
+    REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND =
+      "structured_items_receipt_inner_tax_summary_member"
+    REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_POLICY_VERSION =
+      "reference_pricing_structured_items_gross_policy_v1"
+    REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_KEYS = %w[
+      kind policy_contract_version item_index
+    ].freeze
+    REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_BOUND_MEMBER_KEYS =
+      (REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_KEYS + %w[evidence_set_checksum]).freeze
+    MAX_REFERENCE_PRICING_RECEIPT_AMOUNT = 999_999_999_999
     REFERENCE_PRICING_LINE_GROUP_PROFILE_COUNTRY_CODES = %w[JPN].freeze
     REFERENCE_PRICING_DESTINATION_CONTRACTS = %w[azure_line_group_destination_v1].freeze
     REFERENCE_PRICING_DESTINATION_KINDS = %w[reference_line_prefix].freeze
@@ -331,14 +404,23 @@ module Receipts::Processing::Runs
       ocr_lines_limit = snapshot_ocr_lines_limit
       lines = limited_strings(result[:lines], ocr_lines_limit)
       case_preserved_lines = limited_strings(result[:case_preserved_lines], ocr_lines_limit)
-      candidates_snapshot = ocr_candidates_snapshot(candidates)
+      candidates_snapshot = ocr_candidates_snapshot(
+        candidates,
+        lines: lines,
+        source_lines: Array(result[:lines]),
+        item_calculation_mode_proofs: item_calculation_mode_discount_proofs(result, candidates)
+      )
       snapshot = {
         schema_version: OCR_RESULT_SCHEMA_VERSION,
         success: result[:success] == true,
         lines: lines,
         case_preserved_lines: case_preserved_lines.presence,
         candidates: candidates_snapshot,
-        candidate_counts: ocr_candidate_counts(candidates, candidates_snapshot),
+        candidate_counts: ocr_candidate_counts(
+          candidates,
+          candidates_snapshot,
+          stored_result: result
+        ),
         error_code: safe_string(result[:error_code]),
         meta: ocr_meta_snapshot(result[:meta]),
         truncated: {
@@ -348,10 +430,15 @@ module Receipts::Processing::Runs
           payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
           tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,
           adjustment_candidates: Array(candidates[:adjustment_candidates]).size > receipt_adjustments_snapshot_limit,
-          reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).size > MAX_REFERENCE_PRICING_CANDIDATES
+          reference_pricing_candidates: reference_pricing_source_truncated?(result, candidates),
+          item_calculation_mode_candidates: item_calculation_mode_source_truncated?(result, candidates)
         }
       }.compact
-      snapshot[:adoption_proposals] = reference_pricing_adoption_proposals_snapshot(result, snapshot).presence
+      snapshot[:adoption_proposals] = adoption_proposals_snapshot(result, snapshot).presence
+      snapshot[:candidate_counts][:item_calculation_mode_candidates][:snapshot_count] = Array(snapshot.dig(:adoption_proposals, :item_calculation_modes)).size
+      if normalized_tax_detail_basis_preserved?(result, candidates, snapshot)
+        candidates_snapshot[:tax_detail_amount_basis] = "net"
+      end
 
       sanitize_hash(snapshot.compact)
     end
@@ -568,9 +655,15 @@ module Receipts::Processing::Runs
       }
     end
 
-    def ocr_candidates_snapshot(candidates)
+    def ocr_candidates_snapshot(candidates, lines:, source_lines:, item_calculation_mode_proofs: [])
       purchase_candidates_limit = snapshot_purchase_candidates_limit
       payment_candidates_limit = snapshot_payment_candidates_limit
+      items = limited_ocr_items(
+        candidates[:items],
+        lines: lines,
+        source_lines: source_lines,
+        profile: ReceiptAnalysisProfiles.fetch(candidates[:country_region])
+      )
 
       {
         store_name: safe_string(candidates[:store_name]),
@@ -593,29 +686,258 @@ module Receipts::Processing::Runs
         payments: limited_ocr_payments(candidates[:payments]),
         tax_details: limited_ocr_tax_details(candidates[:tax_details]),
         adjustment_candidates: limited_hashes(candidates[:adjustment_candidates], receipt_adjustments_snapshot_limit),
-        reference_pricing_candidates: limited_reference_pricing_candidates(candidates[:reference_pricing_candidates]),
-        items: limited_ocr_items(candidates[:items]),
+        reference_pricing_candidates: limited_reference_pricing_candidates(
+          candidates[:reference_pricing_candidates],
+          item_calculation_mode_candidates: item_calculation_mode_proofs,
+          items:
+        ),
+        reference_pricing_block_line_indexes: reference_pricing_block_line_indexes_snapshot(
+          candidates[:reference_pricing_block_line_indexes]
+        ),
+        items:,
         review_reasons: limited_strings(candidates[:review_reasons], snapshot_review_reasons_limit),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
       }.compact
     end
 
-    def ocr_candidate_counts(candidates, snapshot)
+    def item_calculation_mode_discount_proofs(result, candidates)
+      unless result.key?(:schema_version)
+        return Array(candidates[:item_calculation_mode_candidates])
+      end
+      return [] unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+      stored = normalized_hash(result[:adoption_proposals])[:item_calculation_modes]
+      Array(
+        Receipts::Processing::Contracts::ItemCalculationModeProposalSet.from_snapshot(
+          stored,
+          ocr_snapshot: result
+        )
+      )
+    end
+
+    def normalized_tax_detail_basis_preserved?(result, candidates, snapshot)
+      return false unless candidates[:tax_detail_amount_basis] == "net"
+      return false if normalized_hash(result[:truncated])[:tax_details] == true || snapshot.dig(:truncated, :tax_details)
+
+      count = Array(candidates[:tax_details]).size
+      return false unless count.positive? && count == Array(snapshot.dig(:candidates, :tax_details)).size
+
+      counts = normalized_hash(normalized_hash(result[:candidate_counts])[:tax_details])
+      counts.blank? || (counts[:actual_count] == count && counts[:snapshot_count] == count)
+    end
+
+    def ocr_candidate_counts(candidates, snapshot, stored_result: nil)
       {
         items: count_metadata(candidates[:items], snapshot[:items]),
         payments: count_metadata(candidates[:payments], snapshot[:payments]),
         tax_details: count_metadata(candidates[:tax_details], snapshot[:tax_details]),
         adjustment_candidates: count_metadata(candidates[:adjustment_candidates], snapshot[:adjustment_candidates]),
-        reference_pricing_candidates: count_metadata(
-          candidates[:reference_pricing_candidates],
-          snapshot[:reference_pricing_candidates]
+        reference_pricing_candidates: reference_pricing_candidate_counts(
+          candidates,
+          snapshot: snapshot,
+          stored_result: stored_result
+        ),
+        item_calculation_mode_candidates: item_calculation_mode_candidate_counts(
+          candidates,
+          stored_result: stored_result
         )
       }
     end
 
-    def limited_reference_pricing_candidates(value)
+    def reference_pricing_candidate_counts(candidates, snapshot:, stored_result:)
+      if stored_reference_pricing_metadata?(stored_result)
+        counts = normalized_hash(stored_result[:candidate_counts])[:reference_pricing_candidates]
+        counts = normalized_hash(counts)
+        actual_count = counts[:actual_count]
+        snapshot_count = counts[:snapshot_count]
+        source_count = Array(candidates[:reference_pricing_candidates]).size
+        if actual_count.is_a?(Integer) && snapshot_count.is_a?(Integer) &&
+            actual_count.between?(0, MAX_OCR_ITEMS) &&
+            snapshot_count.between?(0, MAX_REFERENCE_PRICING_CANDIDATES) &&
+            source_count <= MAX_REFERENCE_PRICING_CANDIDATES &&
+            actual_count >= snapshot_count && snapshot_count == source_count
+          return { actual_count: actual_count, snapshot_count: snapshot_count }
+        end
+
+        return { actual_count: 0, snapshot_count: 0 }
+      end
+
+      count_metadata(candidates[:reference_pricing_candidates], snapshot[:reference_pricing_candidates])
+    end
+
+    def reference_pricing_source_truncated?(result, candidates)
+      if stored_reference_pricing_metadata?(result)
+        source_count = Array(candidates[:reference_pricing_candidates]).size
+        return true if source_count > MAX_REFERENCE_PRICING_CANDIDATES
+
+        counts = normalized_hash(normalized_hash(result[:candidate_counts])[:reference_pricing_candidates])
+        actual_count = counts[:actual_count]
+        snapshot_count = counts[:snapshot_count]
+        return true unless actual_count.is_a?(Integer) && snapshot_count.is_a?(Integer)
+        return true unless actual_count.between?(0, MAX_OCR_ITEMS)
+        return true unless snapshot_count.between?(0, MAX_REFERENCE_PRICING_CANDIDATES)
+        return true unless actual_count >= snapshot_count && snapshot_count == source_count
+
+        truncated = normalized_hash(result[:truncated])
+        return true unless truncated.key?(:reference_pricing_candidates)
+
+        return true if truncated[:reference_pricing_candidates] != false
+
+        return actual_count != snapshot_count
+      end
+
+      Array(candidates[:reference_pricing_candidates]).size > MAX_REFERENCE_PRICING_CANDIDATES
+    end
+
+    def stored_reference_pricing_metadata?(result)
+      return false unless result.is_a?(Hash)
+      return false unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+      normalized_hash(result[:candidate_counts]).key?(:reference_pricing_candidates) ||
+        normalized_hash(result[:truncated]).key?(:reference_pricing_candidates)
+    end
+
+    def item_calculation_mode_candidate_counts(candidates, stored_result:)
+      if stored_item_calculation_mode_metadata?(stored_result)
+        stored = normalized_hash(stored_result[:candidate_counts])[:item_calculation_mode_candidates]
+        counts = normalized_hash(stored)
+        actual_count = counts[:actual_count]
+        snapshot_count = counts[:snapshot_count]
+        if actual_count.is_a?(Integer) && snapshot_count.is_a?(Integer) &&
+            actual_count.between?(0, MAX_OCR_ITEMS) &&
+            snapshot_count.between?(0, MAX_ITEM_CALCULATION_MODE_CANDIDATES)
+          return { actual_count: actual_count, snapshot_count: snapshot_count }
+        end
+
+        return { actual_count: 0, snapshot_count: 0 }
+      end
+
+      values = Array(candidates[:item_calculation_mode_candidates])
+      count_metadata(values, values.first(MAX_ITEM_CALCULATION_MODE_CANDIDATES))
+    end
+
+    def item_calculation_mode_source_truncated?(result, candidates)
+      if stored_item_calculation_mode_metadata?(result)
+        truncated = normalized_hash(result[:truncated])
+        return true unless truncated.key?(:item_calculation_mode_candidates)
+
+        return truncated[:item_calculation_mode_candidates] != false
+      end
+
+      candidates[:item_calculation_mode_source_truncated] == true ||
+        Array(candidates[:item_calculation_mode_candidates]).size > MAX_ITEM_CALCULATION_MODE_CANDIDATES
+    end
+
+    def stored_item_calculation_mode_metadata?(result)
+      return false unless result.is_a?(Hash)
+      return false unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+      normalized_hash(result[:candidate_counts]).key?(:item_calculation_mode_candidates) ||
+        normalized_hash(result[:truncated]).key?(:item_calculation_mode_candidates) ||
+        normalized_hash(result[:adoption_proposals]).key?(:item_calculation_modes)
+    end
+
+    def adoption_proposals_snapshot(result, ocr_snapshot)
+      proposals = reference_pricing_adoption_proposals_snapshot(result, ocr_snapshot) || {}
+      tax_details = reference_pricing_tax_detail_structural_evidence_snapshot(result, ocr_snapshot)
+      proposals[:reference_pricing_tax_details] = tax_details if tax_details.present?
+      structured_items_gross = reference_pricing_structured_items_gross_evidence_snapshot(
+        result,
+        ocr_snapshot
+      )
+      if structured_items_gross.present?
+        proposals[:reference_pricing_structured_items_gross] = structured_items_gross
+        bind_reference_pricing_structured_items_gross_members!(
+          ocr_snapshot,
+          structured_items_gross
+        )
+      end
+      proposal_context = ocr_snapshot.deep_dup
+      structural_proposals = {
+        reference_pricing_tax_details: tax_details,
+        reference_pricing_structured_items_gross: structured_items_gross
+      }.compact
+      if structural_proposals.present?
+        proposal_context[:adoption_proposals] = structural_proposals
+      end
+      item_calculation_modes = item_calculation_mode_proposals_snapshot(result, proposal_context)
+      proposals[:item_calculation_modes] = item_calculation_modes if item_calculation_modes.present?
+      proposals
+    end
+
+    def reference_pricing_tax_detail_structural_evidence_snapshot(result, ocr_snapshot)
+      contract = Receipts::Processing::Contracts::ReferencePricingTaxDetailStructuralEvidenceSet
+      if result.key?(:schema_version)
+        return nil unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+        stored = normalized_hash(result[:adoption_proposals])[:reference_pricing_tax_details]
+        contract.from_snapshot(stored, ocr_snapshot:)
+      else
+        metadata = normalized_hash(result[:candidates])[:tax_detail_structural_metadata]
+        contract.build(metadata:, ocr_snapshot:)
+      end
+    end
+
+    def reference_pricing_structured_items_gross_evidence_snapshot(result, ocr_snapshot)
+      contract = Receipts::Processing::Contracts::ReferencePricingStructuredItemsGrossEvidenceSet
+      if result.key?(:schema_version)
+        return nil unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+        stored = normalized_hash(result[:adoption_proposals])[:reference_pricing_structured_items_gross]
+        contract.from_snapshot(stored, ocr_snapshot:)
+      else
+        metadata = normalized_hash(result[:candidates])[:reference_pricing_structured_items_gross_evidence]
+        contract.build(metadata:, ocr_snapshot:)
+      end
+    end
+
+    def bind_reference_pricing_structured_items_gross_members!(ocr_snapshot, evidence_set)
+      checksum = evidence_set["integrity_checksum"] || evidence_set[:integrity_checksum]
+      members = Array(evidence_set["candidate_members"] || evidence_set[:candidate_members]).index_by do |member|
+        normalized_hash(member)[:item_index]
+      end
+      references = Array(ocr_snapshot.dig(:candidates, :reference_pricing_candidates))
+      references.each do |candidate|
+        normalized_candidate = normalized_hash(candidate)
+        evidence = normalized_hash(normalized_candidate[:tax_inclusion_evidence])
+        next unless evidence[:kind].to_s == REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+
+        member = normalized_hash(members[normalized_candidate[:item_index]])
+        next unless member[:candidate_id].to_s == normalized_candidate[:candidate_id].to_s
+
+        candidate[:tax_inclusion_evidence] = {
+          kind: REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND,
+          policy_contract_version: REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_POLICY_VERSION,
+          evidence_set_checksum: checksum,
+          item_index: normalized_candidate[:item_index]
+        }
+      end
+    end
+
+    def item_calculation_mode_proposals_snapshot(result, ocr_snapshot)
+      if result.key?(:schema_version)
+        return nil unless result[:schema_version].to_s == OCR_RESULT_SCHEMA_VERSION
+
+        stored = normalized_hash(result[:adoption_proposals])[:item_calculation_modes]
+        Receipts::Processing::Contracts::ItemCalculationModeProposalSet.from_snapshot(
+          stored,
+          ocr_snapshot: ocr_snapshot
+        )
+      else
+        Receipts::Processing::Contracts::ItemCalculationModeProposalSet.build_all(
+          candidates: Array(normalized_hash(result[:candidates])[:item_calculation_mode_candidates]),
+          ocr_snapshot: ocr_snapshot
+        )
+      end
+    end
+
+    def limited_reference_pricing_candidates(value, item_calculation_mode_candidates:, items:)
       Array(value).first(MAX_REFERENCE_PRICING_CANDIDATES).filter_map do |candidate|
-        reference_pricing_candidate_snapshot(candidate)
+        reference_pricing_candidate_snapshot(
+          candidate,
+          item_calculation_mode_candidates:,
+          items:
+        )
       end
     end
 
@@ -643,12 +965,13 @@ module Receipts::Processing::Runs
       { reference_pricing: proposal }
     end
 
-    def reference_pricing_candidate_snapshot(value)
+    def reference_pricing_candidate_snapshot(value, item_calculation_mode_candidates:, items:)
       candidate = normalized_hash(value)
       return nil if candidate.blank?
 
       source_kind = enum_string(candidate[:source_kind], REFERENCE_PRICING_SOURCE_KINDS)
       line_group = source_kind == "azure_line_group"
+      item_layout = source_kind == "azure_item_layout"
       return nil if line_group && (
         normalized_hash(candidate[:printed_line_total]).present? ||
         normalized_hash(candidate[:corroboration]).present?
@@ -658,52 +981,100 @@ module Receipts::Processing::Runs
         candidate_id: bounded_string(
           candidate[:candidate_id],
           max_bytes: REFERENCE_PRICING_CANDIDATE_ID_MAX_BYTES,
-          pattern: line_group ?
-            /\Aazure_line_group_p\d+_l\d+_l\d+_reference_pricing\z/ :
-            /\Aazure_items_\d+_reference_pricing\z/
+          pattern: if line_group
+                     /\Aazure_line_group_p\d+_l\d+_l\d+_reference_pricing\z/
+                   elsif item_layout
+                     /\Aazure_item_layout_p\d+_name_l\d+_ref_l\d+_qty_l\d+_total_l\d+_reference_pricing\z/
+                   else
+                     /\Aazure_items_\d+_reference_pricing\z/
+                   end
         ),
         source_kind: source_kind,
         item_index: line_group ? nil : bounded_non_negative_integer(
           candidate[:item_index],
           maximum: MAX_REFERENCE_PRICING_ITEM_INDEX
         ),
-        page_index: line_group ? bounded_non_negative_integer(
+        item_identity: item_layout ? bounded_string(
+          candidate[:item_identity],
+          max_bytes: ITEM_CALCULATION_MODE_ITEM_IDENTITY_MAX_BYTES,
+          pattern: /\A(?:azure_item_layout_item_p\d+_name_l\d+_s\d+_e\d+_ref_l\d+_qty_l\d+_total_l\d+|azure_structured_item_i\d+_s\d+_e\d+)\z/
+        ) : nil,
+        destination_kind: item_layout ? enum_string(
+          candidate[:destination_kind],
+          REFERENCE_PRICING_LAYOUT_DESTINATION_KINDS
+        ) : nil,
+        structured_item_index: item_layout ? bounded_non_negative_integer(
+          candidate[:structured_item_index],
+          maximum: MAX_REFERENCE_PRICING_ITEM_INDEX
+        ) : nil,
+        page_index: line_group || item_layout ? bounded_non_negative_integer(
           candidate[:page_index],
           maximum: MAX_REFERENCE_PRICING_PAGE_INDEX
         ) : nil,
-        reference_line_index: line_group ? bounded_non_negative_integer(
+        name_line_index: item_layout ? bounded_non_negative_integer(
+          candidate[:name_line_index],
+          maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+        ) : nil,
+        reference_line_index: line_group || item_layout ? bounded_non_negative_integer(
           candidate[:reference_line_index],
           maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+        ) : nil,
+        reference_line_provider_span_start: item_layout ? bounded_non_negative_integer(
+          candidate[:reference_line_provider_span_start],
+          maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+        ) : nil,
+        reference_line_provider_span_end: item_layout ? bounded_non_negative_integer(
+          candidate[:reference_line_provider_span_end],
+          maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
         ) : nil,
         purchased_quantity_line_index: line_group ? bounded_non_negative_integer(
           candidate[:purchased_quantity_line_index],
           maximum: MAX_REFERENCE_PRICING_LINE_INDEX
         ) : nil,
-        string_index_type: line_group ? enum_string(
+        purchased_quantity_line_indexes: item_layout ? reference_pricing_line_indexes_snapshot(
+          candidate[:purchased_quantity_line_indexes],
+          maximum_count: 2
+        ) : nil,
+        printed_total_line_index: item_layout ? bounded_non_negative_integer(
+          candidate[:printed_total_line_index],
+          maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+        ) : nil,
+        owned_line_indexes: item_layout ? reference_pricing_line_indexes_snapshot(
+          candidate[:owned_line_indexes],
+          maximum_count: 6
+        ) : nil,
+        string_index_type: line_group || item_layout ? enum_string(
           candidate[:string_index_type],
           REFERENCE_PRICING_STRING_INDEX_TYPES
         ) : nil,
-        provider_model_id: line_group ? enum_string(
+        provider_model_id: line_group || item_layout ? enum_string(
           candidate[:provider_model_id],
           REFERENCE_PRICING_LINE_GROUP_PROVIDER_MODELS
         ) : nil,
-        provider_api_version: line_group ? enum_string(
+        provider_api_version: line_group || item_layout ? enum_string(
           candidate[:provider_api_version],
           REFERENCE_PRICING_LINE_GROUP_API_VERSIONS
         ) : nil,
-        validation_contract_version: line_group ? enum_string(
-          candidate[:validation_contract_version],
-          REFERENCE_PRICING_LINE_GROUP_VALIDATION_CONTRACTS
-        ) : nil,
+        validation_contract_version: if line_group
+                                       enum_string(
+                                         candidate[:validation_contract_version],
+                                         REFERENCE_PRICING_LINE_GROUP_VALIDATION_CONTRACTS
+                                       )
+                                     elsif item_layout
+                                       enum_string(
+                                         candidate[:validation_contract_version],
+                                         REFERENCE_PRICING_LAYOUT_VALIDATION_CONTRACTS
+                                       )
+                                     end,
         analysis_profile_country_code: line_group ? enum_string(
           candidate[:analysis_profile_country_code],
           REFERENCE_PRICING_LINE_GROUP_PROFILE_COUNTRY_CODES
         ) : nil,
-        block_provider_span_start: line_group ? bounded_non_negative_integer(
+        block_provider_span_start: line_group || item_layout ? bounded_non_negative_integer(
           candidate[:block_provider_span_start],
           maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
         ) : nil,
-        block_provider_span_end: line_group ? bounded_non_negative_integer(
+        block_provider_span_end: line_group || item_layout ? bounded_non_negative_integer(
           candidate[:block_provider_span_end],
           maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
         ) : nil,
@@ -729,9 +1100,12 @@ module Receipts::Processing::Runs
           candidate[:reference_price_tax_inclusion],
           REFERENCE_PRICE_TAX_INCLUSIONS
         ),
-        tax_inclusion_evidence: reference_pricing_evidence_snapshot(
+        tax_inclusion_evidence: reference_pricing_tax_inclusion_evidence_snapshot(
           candidate[:tax_inclusion_evidence],
-          source_kind:
+          source_kind:,
+          candidate:,
+          item_calculation_mode_candidates:,
+          items:
         ).presence,
         printed_line_total: line_group ? nil : printed_line_total_snapshot(
           candidate[:printed_line_total],
@@ -746,8 +1120,839 @@ module Receipts::Processing::Runs
       }.compact
 
       return unless !line_group || valid_line_group_candidate_snapshot?(snapshot)
+      return unless !item_layout || valid_item_layout_candidate_snapshot?(snapshot)
 
       snapshot
+    end
+
+    def reference_pricing_tax_inclusion_evidence_snapshot(
+      value,
+      source_kind:,
+      candidate:,
+      item_calculation_mode_candidates:,
+      items:
+    )
+      evidence = normalized_hash(value)
+      if source_kind.nil? &&
+          evidence[:kind].to_s == REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+        return reference_pricing_structured_items_gross_member_snapshot(evidence, candidate:)
+      end
+      if source_kind.nil? &&
+          evidence[:kind].to_s == REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+        return reference_pricing_single_structured_item_gross_snapshot(
+          evidence,
+          candidate:,
+          item_calculation_mode_candidates:,
+          items:
+        )
+      end
+      if source_kind == "azure_item_layout" &&
+          evidence[:kind].to_s == REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND
+        return reference_pricing_single_item_gross_summary_snapshot(evidence, candidate:)
+      end
+      if source_kind == "azure_item_layout" &&
+          evidence[:kind].to_s == REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+        return reference_pricing_shared_basis_external_tax_snapshot(evidence, candidate:)
+      end
+
+      reference_pricing_evidence_snapshot(value, source_kind:)
+    end
+
+    def reference_pricing_structured_items_gross_member_snapshot(value, candidate:)
+      expected_keys = if value.key?(:evidence_set_checksum)
+        REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_BOUND_MEMBER_KEYS
+      else
+        REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_KEYS
+      end
+      return {} unless exact_snapshot_keys?(value, expected_keys)
+      return {} unless value[:kind].to_s == REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND
+      return {} unless value[:policy_contract_version].to_s ==
+        REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_POLICY_VERSION
+      return {} unless value[:item_index] == candidate[:item_index]
+      return {} unless candidate[:reference_price_tax_inclusion].to_s == "gross"
+      return {} unless candidate[:validation_state].to_s == "valid"
+      return {} unless Array(candidate[:rejection_reasons]).empty?
+
+      checksum = value[:evidence_set_checksum]
+      return {} if checksum && !checksum.to_s.match?(/\A[0-9a-f]{64}\z/)
+
+      {
+        kind: REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_MEMBER_EVIDENCE_KIND,
+        policy_contract_version: REFERENCE_PRICING_STRUCTURED_ITEMS_GROSS_POLICY_VERSION,
+        evidence_set_checksum: checksum,
+        item_index: candidate[:item_index]
+      }.compact
+    end
+
+    def reference_pricing_shared_basis_external_tax_snapshot(value, candidate:)
+      return {} unless exact_snapshot_keys?(value, REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_KEYS)
+      return {} unless candidate[:validation_contract_version].to_s ==
+        REFERENCE_PRICING_SHARED_BASIS_VALIDATION_CONTRACT
+      return {} unless candidate[:reference_price_tax_inclusion].to_s == "net"
+      return {} unless candidate[:validation_state].to_s == "valid"
+      return {} unless Array(candidate[:rejection_reasons]).empty?
+
+      index_type = enum_string(value[:string_index_type], REFERENCE_PRICING_STRING_INDEX_TYPES)
+      return {} if index_type.nil? || index_type != candidate[:string_index_type].to_s
+      return {} unless value[:kind].to_s == REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+      return {} unless value[:policy_contract_version].to_s ==
+        REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_POLICY_VERSION
+      return {} unless value[:tax_detail_index] == 0
+
+      entries = {
+        subtotal: "documents[0].fields.Subtotal",
+        document_tax_total: "documents[0].fields.TotalTax",
+        summary_total: "documents[0].fields.Total"
+      }.to_h do |key, expected_path|
+        entry = reference_pricing_shared_basis_external_tax_amount_snapshot(
+          value[key],
+          index_type:,
+          expected_path:
+        )
+        return {} if entry.empty?
+
+        [ key, entry ]
+      end
+      return {} if entries.values.combination(2).any? { |left, right| reference_pricing_ranges_overlap?(left, right) }
+
+      block = reference_pricing_candidate_block_range(candidate)
+      parent = reference_pricing_structured_item_range(candidate)
+      return {} if block.nil? || parent.nil?
+      return {} if entries.values.any? do |entry|
+        reference_pricing_range_overlaps_block?(entry, block) ||
+          reference_pricing_range_overlaps_block?(entry, parent)
+      end
+      return {} unless entries[:subtotal][:amount] + entries[:document_tax_total][:amount] ==
+        entries[:summary_total][:amount]
+      return {} unless reference_pricing_single_item_gross_amounts_match_candidate?(
+        candidate,
+        gross_amount: entries[:subtotal][:amount]
+      )
+
+      {
+        kind: REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND,
+        string_index_type: index_type,
+        policy_contract_version: REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_POLICY_VERSION,
+        tax_detail_index: 0,
+        **entries
+      }
+    rescue ArgumentError, TypeError
+      {}
+    end
+
+    def reference_pricing_shared_basis_external_tax_amount_snapshot(value, index_type:, expected_path:)
+      entry = normalized_hash(value)
+      return {} unless exact_snapshot_keys?(
+        entry,
+        REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_AMOUNT_KEYS
+      )
+      return {} unless entry[:source_provider].to_s == "azure_structured"
+      return {} unless entry[:source_field_path].to_s == expected_path
+      return {} unless entry[:string_index_type].to_s == index_type
+
+      page_index = bounded_non_negative_integer(entry[:page_index], maximum: MAX_REFERENCE_PRICING_PAGE_INDEX)
+      line_index = bounded_non_negative_integer(entry[:line_index], maximum: MAX_REFERENCE_PRICING_LINE_INDEX)
+      span_start = bounded_non_negative_integer(
+        entry[:provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        entry[:provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      amount = bounded_non_negative_integer(entry[:amount], maximum: MAX_REFERENCE_PRICING_RECEIPT_AMOUNT)
+      return {} unless page_index == 0 && line_index && span_start && span_end && span_end > span_start
+      return {} if amount.nil?
+
+      {
+        source_provider: "azure_structured",
+        source_field_path: expected_path,
+        page_index: 0,
+        line_index:,
+        string_index_type: index_type,
+        provider_span_start: span_start,
+        provider_span_end: span_end,
+        amount:
+      }
+    end
+
+    def reference_pricing_single_structured_item_gross_snapshot(
+      value,
+      candidate:,
+      item_calculation_mode_candidates:,
+      items:
+    )
+      return {} unless exact_snapshot_keys?(
+        value,
+        REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_KEYS
+      )
+      return {} unless candidate[:candidate_id].to_s == "azure_items_0_reference_pricing"
+      return {} unless candidate[:item_index] == 0
+      return {} unless candidate[:reference_price_tax_inclusion].to_s == "gross"
+      return {} unless candidate[:validation_state].to_s == "valid"
+      return {} unless Array(candidate[:rejection_reasons]).empty?
+
+      index_type = enum_string(value[:string_index_type], REFERENCE_PRICING_STRING_INDEX_TYPES)
+      return {} if index_type.nil?
+      return {} unless value[:kind].to_s == REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND
+      return {} unless value[:policy_contract_version].to_s ==
+        REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION
+
+      item_parent = reference_pricing_single_structured_item_parent_snapshot(
+        value[:item_parent],
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_ITEM_PARENT_KEYS,
+        expected_path: "documents[0].fields.Items[0]",
+        index_key: :item_index
+      )
+      tax_detail_parent = reference_pricing_single_structured_item_parent_snapshot(
+        value[:tax_detail_parent],
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_PARENT_KEYS,
+        expected_path: "documents[0].fields.TaxDetails[0]",
+        index_key: :tax_detail_index
+      )
+      return {} if item_parent.empty? || tax_detail_parent.empty?
+      return {} if reference_pricing_ranges_overlap?(item_parent, tax_detail_parent)
+      return {} unless reference_pricing_native_candidate_components_within_parent?(candidate, item_parent:)
+
+      tax_description = reference_pricing_single_structured_item_line_snapshot(
+        value[:tax_description],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_LINE_KEYS,
+        expected_provider: "azure_structured",
+        expected_path: "documents[0].fields.TaxDetails[0].Description",
+        index_key: :tax_detail_index
+      )
+      tax_amount = reference_pricing_single_structured_item_line_snapshot(
+        value[:tax_amount],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_TAX_AMOUNT_KEYS,
+        expected_provider: "azure_structured",
+        expected_path: "documents[0].fields.TaxDetails[0].Amount",
+        index_key: :tax_detail_index
+      )
+      document_tax_total = reference_pricing_single_structured_item_line_snapshot(
+        value[:document_tax_total],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS,
+        expected_provider: "azure_structured",
+        expected_path: "documents[0].fields.TotalTax"
+      )
+      summary_total = reference_pricing_single_structured_item_line_snapshot(
+        value[:summary_total],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_AMOUNT_KEYS,
+        expected_provider: "azure_document_total"
+      )
+      return {} if [ tax_description, tax_amount, document_tax_total, summary_total ].any?(&:empty?)
+      return {} unless reference_pricing_range_within?(tax_description, tax_detail_parent)
+      return {} unless reference_pricing_range_within?(tax_amount, tax_detail_parent)
+      return {} if reference_pricing_ranges_overlap?(tax_description, tax_amount)
+      return {} unless reference_pricing_ranges_equal_or_disjoint?(tax_amount, document_tax_total)
+      return {} if reference_pricing_ranges_overlap?(summary_total, item_parent)
+      return {} if reference_pricing_ranges_overlap?(summary_total, tax_detail_parent)
+      return {} unless tax_amount[:amount] == document_tax_total[:amount]
+      amounts_match = reference_pricing_single_item_gross_amounts_match_candidate?(
+        candidate,
+        gross_amount: summary_total[:amount]
+      ) || reference_pricing_discounted_single_item_gross_amounts_match_candidate?(
+        candidate,
+        summary_amount: summary_total[:amount],
+        item_parent:,
+        string_index_type: index_type,
+        item_calculation_mode_candidates:,
+        items:
+      )
+      return {} unless amounts_match
+
+      {
+        kind: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_EVIDENCE_KIND,
+        string_index_type: index_type,
+        policy_contract_version: REFERENCE_PRICING_SINGLE_STRUCTURED_ITEM_GROSS_POLICY_VERSION,
+        item_parent:,
+        tax_detail_parent:,
+        tax_description:,
+        tax_amount:,
+        document_tax_total:,
+        summary_total:
+      }
+    rescue ArgumentError, TypeError
+      {}
+    end
+
+    def reference_pricing_single_structured_item_parent_snapshot(
+      value,
+      expected_keys:,
+      expected_path:,
+      index_key:
+    )
+      parent = normalized_hash(value)
+      return {} unless exact_snapshot_keys?(parent, expected_keys)
+      return {} unless parent[:source_provider].to_s == "azure_structured"
+      return {} unless parent[:source_field_path].to_s == expected_path
+      return {} unless parent[index_key] == 0
+
+      span_start = bounded_non_negative_integer(
+        parent[:provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        parent[:provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      return {} if span_start.nil? || span_end.nil? || span_end <= span_start
+
+      {
+        source_provider: "azure_structured",
+        source_field_path: expected_path,
+        index_key => 0,
+        provider_span_start: span_start,
+        provider_span_end: span_end
+      }
+    end
+
+    def reference_pricing_single_structured_item_line_snapshot(
+      value,
+      index_type:,
+      expected_keys:,
+      expected_provider:,
+      expected_path: nil,
+      index_key: nil
+    )
+      entry = normalized_hash(value)
+      return {} unless exact_snapshot_keys?(entry, expected_keys)
+      return {} unless entry[:source_provider].to_s == expected_provider
+      return {} if index_key && entry[index_key] != 0
+
+      line_index = bounded_non_negative_integer(
+        entry[:line_index],
+        maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+      )
+      page_index = bounded_non_negative_integer(
+        entry[:page_index],
+        maximum: MAX_REFERENCE_PRICING_PAGE_INDEX
+      )
+      span_start = bounded_non_negative_integer(
+        entry[:provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        entry[:provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      return {} unless page_index == 0 && line_index && span_start && span_end && span_end > span_start
+      return {} unless entry[:string_index_type].to_s == index_type
+
+      source_field_path = entry[:source_field_path].to_s
+      expected_source_field_path = expected_path || "pages[0].lines[#{line_index}]"
+      return {} unless source_field_path == expected_source_field_path
+
+      snapshot = {
+        source_provider: expected_provider,
+        source_field_path: expected_source_field_path,
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: index_type,
+        provider_span_start: span_start,
+        provider_span_end: span_end
+      }
+      snapshot[index_key] = 0 if index_key
+      if expected_keys.include?("amount")
+        amount = reference_pricing_positive_receipt_amount(entry[:amount])
+        return {} if amount.nil?
+
+        snapshot[:amount] = amount
+      end
+      snapshot
+    end
+
+    def reference_pricing_native_candidate_components_within_parent?(candidate, item_parent:)
+      reference_quantity = normalized_hash(candidate[:reference_quantity])
+      reference_quantity_paths = if reference_quantity[:origin].to_s == "implicit_per_unit"
+        return false unless exact_decimal_string(reference_quantity[:amount]) == "1"
+
+        %w[Price Quantity QuantityUnit]
+      else
+        [ "Price" ]
+      end
+      paths = {
+        reference_price: [ "Price" ],
+        reference_quantity: reference_quantity_paths,
+        purchased_quantity: [ "Quantity" ],
+        printed_line_total: [ "TotalPrice" ]
+      }
+      paths.all? do |component_name, field_names|
+        component = normalized_hash(candidate[component_name])
+        evidence = normalized_hash(component[:evidence])
+        evidence[:source_provider].to_s == "azure_structured" &&
+          field_names.any? do |field_name|
+            evidence[:source_field_path].to_s == "documents[0].fields.Items[0].#{field_name}"
+          end &&
+          evidence[:item_index] == 0 &&
+          reference_pricing_range_within?(evidence, item_parent)
+      end
+    end
+
+    def reference_pricing_range_within?(inner, outer)
+      inner[:provider_span_start].is_a?(Integer) && inner[:provider_span_end].is_a?(Integer) &&
+        inner[:provider_span_start] >= outer[:provider_span_start] &&
+        inner[:provider_span_end] <= outer[:provider_span_end] &&
+        inner[:provider_span_end] > inner[:provider_span_start]
+    end
+
+    def reference_pricing_ranges_equal_or_disjoint?(left, right)
+      same_range = left[:provider_span_start] == right[:provider_span_start] &&
+        left[:provider_span_end] == right[:provider_span_end]
+      same_range || !reference_pricing_ranges_overlap?(left, right)
+    end
+
+    def reference_pricing_single_item_gross_summary_snapshot(value, candidate:)
+      return {} unless exact_snapshot_keys?(value, REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_KEYS)
+      return {} unless candidate[:destination_kind].to_s == "azure_structured_item"
+      return {} unless candidate[:reference_price_tax_inclusion].to_s == "gross"
+      return {} unless candidate[:validation_state].to_s == "valid"
+      return {} unless Array(candidate[:rejection_reasons]).empty?
+
+      index_type = enum_string(value[:string_index_type], REFERENCE_PRICING_STRING_INDEX_TYPES)
+      return {} if index_type.nil? || index_type != candidate[:string_index_type].to_s
+      return {} unless value[:kind].to_s == REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND
+      return {} unless value[:policy_contract_version].to_s ==
+        REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_POLICY_VERSION
+
+      block_range = reference_pricing_candidate_block_range(candidate)
+      structured_item_range = reference_pricing_structured_item_range(candidate)
+      owned_line_indexes = reference_pricing_line_indexes_snapshot(
+        candidate[:owned_line_indexes],
+        maximum_count: 6
+      )
+      return {} if block_range.nil? || structured_item_range.nil? || owned_line_indexes.empty?
+      excluded_ranges = [ block_range, structured_item_range ]
+
+      summary_total = reference_pricing_single_item_gross_entry_snapshot(
+        value[:summary_total],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_TOTAL_KEYS
+      )
+      gross_tax_target = reference_pricing_single_item_gross_entry_snapshot(
+        value[:gross_tax_target],
+        index_type:,
+        expected_keys: REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_TAX_KEYS
+      )
+      return {} if summary_total.empty? || gross_tax_target.empty?
+      return {} unless reference_pricing_external_summary_evidence?(
+        summary_total,
+        excluded_ranges:,
+        owned_line_indexes:
+      )
+      return {} unless reference_pricing_external_summary_evidence?(
+        gross_tax_target,
+        excluded_ranges:,
+        owned_line_indexes:
+      )
+      return {} if reference_pricing_ranges_overlap?(summary_total, gross_tax_target)
+      return {} unless summary_total[:amount] == gross_tax_target[:gross_amount]
+      return {} unless reference_pricing_single_item_gross_tax_arithmetic_valid?(gross_tax_target)
+      return {} unless reference_pricing_single_item_gross_amounts_match_candidate?(
+        candidate,
+        gross_amount: gross_tax_target[:gross_amount]
+      )
+
+      {
+        kind: REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_EVIDENCE_KIND,
+        string_index_type: index_type,
+        policy_contract_version: REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_POLICY_VERSION,
+        summary_total: summary_total,
+        gross_tax_target: gross_tax_target
+      }
+    rescue ArgumentError, TypeError
+      {}
+    end
+
+    def reference_pricing_single_item_gross_entry_snapshot(value, index_type:, expected_keys:)
+      entry = normalized_hash(value)
+      return {} unless exact_snapshot_keys?(entry, expected_keys)
+
+      line_index = bounded_non_negative_integer(
+        entry[:line_index],
+        maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+      )
+      page_index = bounded_non_negative_integer(
+        entry[:page_index],
+        maximum: MAX_REFERENCE_PRICING_PAGE_INDEX
+      )
+      span_start = bounded_non_negative_integer(
+        entry[:provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        entry[:provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      return {} unless page_index == 0 && line_index && span_start && span_end && span_end > span_start
+      return {} unless entry[:source_provider].to_s == "azure_item_layout"
+      return {} unless entry[:string_index_type].to_s == index_type
+      return {} unless entry[:source_field_path].to_s == "pages[0].lines[#{line_index}]"
+
+      snapshot = {
+        source_provider: "azure_item_layout",
+        source_field_path: "pages[0].lines[#{line_index}]",
+        page_index: 0,
+        line_index: line_index,
+        string_index_type: index_type,
+        provider_span_start: span_start,
+        provider_span_end: span_end
+      }
+      if expected_keys == REFERENCE_PRICING_SINGLE_ITEM_GROSS_SUMMARY_TOTAL_KEYS
+        amount = reference_pricing_positive_receipt_amount(entry[:amount])
+        return {} if amount.nil?
+
+        snapshot[:amount] = amount
+      else
+        snapshot.merge!(
+          rate: reference_pricing_positive_rate(entry[:rate]),
+          net_amount: bounded_non_negative_integer(
+            entry[:net_amount],
+            maximum: MAX_REFERENCE_PRICING_RECEIPT_AMOUNT
+          ),
+          tax_amount: reference_pricing_positive_receipt_amount(entry[:tax_amount]),
+          gross_amount: reference_pricing_positive_receipt_amount(entry[:gross_amount])
+        )
+        return {} if snapshot.values_at(:rate, :net_amount, :tax_amount, :gross_amount).any?(&:nil?)
+      end
+      snapshot
+    end
+
+    def reference_pricing_single_item_gross_tax_arithmetic_valid?(target)
+      rate = BigDecimal(target[:rate])
+      expected_tax = ReceiptAmountService.apply_rounding(
+        BigDecimal(target[:gross_amount].to_s) * rate / (BigDecimal("1") + rate),
+        :floor
+      )
+      target[:tax_amount] == expected_tax && target[:net_amount] == target[:gross_amount] - expected_tax
+    rescue ArgumentError, TypeError
+      false
+    end
+
+    def reference_pricing_candidate_block_range(candidate)
+      block_start = bounded_non_negative_integer(
+        candidate[:block_provider_span_start],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      block_end = bounded_non_negative_integer(
+        candidate[:block_provider_span_end],
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      return if block_start.nil? || block_end.nil? || block_end <= block_start
+
+      (block_start...block_end)
+    end
+
+    def reference_pricing_structured_item_range(candidate)
+      identity = candidate[:item_identity].to_s
+      match = /\Aazure_structured_item_i(?<item>\d+)_s(?<start>\d+)_e(?<end>\d+)\z/.match(identity)
+      return if match.nil?
+
+      item_index = bounded_non_negative_integer(
+        Integer(match[:item], 10),
+        maximum: MAX_REFERENCE_PRICING_ITEM_INDEX
+      )
+      span_start = bounded_non_negative_integer(
+        Integer(match[:start], 10),
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      span_end = bounded_non_negative_integer(
+        Integer(match[:end], 10),
+        maximum: MAX_REFERENCE_PRICING_PROVIDER_SPAN_OFFSET
+      )
+      return unless item_index == candidate[:structured_item_index]
+      return if span_start.nil? || span_end.nil? || span_end <= span_start
+
+      (span_start...span_end)
+    rescue ArgumentError
+      nil
+    end
+
+    def reference_pricing_external_summary_evidence?(evidence, excluded_ranges:, owned_line_indexes:)
+      line_index = evidence[:line_index]
+      external_line = line_index < owned_line_indexes.first || line_index > owned_line_indexes.last
+      external_line && excluded_ranges.none? do |range|
+        reference_pricing_range_overlaps_block?(evidence, range)
+      end
+    end
+
+    def reference_pricing_range_overlaps_block?(evidence, block_range)
+      evidence[:provider_span_start] < block_range.end &&
+        block_range.begin < evidence[:provider_span_end]
+    end
+
+    def reference_pricing_ranges_overlap?(left, right)
+      left[:provider_span_start] < right[:provider_span_end] &&
+        right[:provider_span_start] < left[:provider_span_end]
+    end
+
+    def reference_pricing_single_item_gross_amounts_match_candidate?(candidate, gross_amount:)
+      printed_amount = exact_integer_string(normalized_hash(candidate[:printed_line_total])[:amount])
+      corroboration = normalized_hash(candidate[:corroboration])
+      projected_amount = bounded_non_negative_integer(
+        corroboration[:projected_amount],
+        maximum: MAX_REFERENCE_PRICING_RECEIPT_AMOUNT
+      )
+      corroborated_printed = exact_integer_string(corroboration[:printed_line_total])
+      [ printed_amount, projected_amount&.to_s, corroborated_printed ].all? do |amount|
+        amount == gross_amount.to_s
+      end
+    end
+
+    def reference_pricing_discounted_single_item_gross_amounts_match_candidate?(
+      candidate,
+      summary_amount:,
+      item_parent:,
+      string_index_type:,
+      item_calculation_mode_candidates:,
+      items:
+    )
+      mode_candidate = reference_pricing_absolute_discount_mode_candidate(
+        candidate,
+        item_parent:,
+        string_index_type:,
+        item_calculation_mode_candidates:
+      )
+      return false unless mode_candidate
+
+      option = reference_pricing_absolute_discount_option(mode_candidate)
+      return false unless option
+
+      discount = normalized_hash(option[:discount])
+      discount_amount = exact_integer_string(discount[:amount])
+      return false if discount_amount.nil? || discount_amount == "0"
+
+      projection = ReceiptAmountService.reference_item_extension_projection(
+        reference_price_amount: normalized_hash(candidate[:reference_price])[:amount],
+        reference_quantity: normalized_hash(candidate[:reference_quantity])[:amount],
+        reference_unit_code: normalized_hash(candidate[:reference_quantity])[:unit_code],
+        purchased_quantity: normalized_hash(candidate[:purchased_quantity])[:amount],
+        purchased_unit_code: normalized_hash(candidate[:purchased_quantity])[:unit_code],
+        discount_amount:
+      )
+      return false unless reference_pricing_single_item_gross_amounts_match_candidate?(
+        candidate,
+        gross_amount: projection.fetch(:original_line_total)
+      )
+      return false unless projection.fetch(:projected_amount) == summary_amount
+
+      matching_items = Array(items).select do |item|
+        normalized_hash(item)[:ocr_item_identity].to_s == mode_candidate[:item_identity].to_s
+      end
+      return false unless matching_items.one?
+
+      item = normalized_hash(matching_items.sole)
+      item[:original_line_total] == projection.fetch(:original_line_total) &&
+        item[:discount_amount] == projection.fetch(:discount_amount) &&
+        item[:discount_rate].nil? &&
+        item[:line_total] == projection.fetch(:projected_amount)
+    rescue ReceiptAmountService::InvalidItemSourceError, ArgumentError, KeyError, TypeError
+      false
+    end
+
+    def reference_pricing_absolute_discount_mode_candidate(
+      candidate,
+      item_parent:,
+      string_index_type:,
+      item_calculation_mode_candidates:
+    )
+      candidates = Array(item_calculation_mode_candidates)
+      return if candidates.size > MAX_ITEM_CALCULATION_MODE_CANDIDATES
+
+      matches = candidates.filter_map do |value|
+        mode_candidate = normalized_hash(value)
+        next unless reference_pricing_absolute_discount_mode_candidate_identity_valid?(
+          mode_candidate,
+          item_parent:,
+          string_index_type:
+        )
+        next unless reference_pricing_absolute_discount_mode_candidate_evidence_valid?(
+          mode_candidate,
+          candidate:,
+          item_parent:
+        )
+
+        mode_candidate
+      end
+      matches.sole if matches.one?
+    end
+
+    def reference_pricing_absolute_discount_mode_candidate_identity_valid?(
+      mode_candidate,
+      item_parent:,
+      string_index_type:
+    )
+      mode_candidate[:candidate_id].to_s == "azure_items_0_item_calculation_mode" &&
+        mode_candidate[:item_index] == 0 &&
+        mode_candidate[:item_identity].to_s ==
+          "azure_structured_item_i0_s#{item_parent[:provider_span_start]}_e#{item_parent[:provider_span_end]}" &&
+        mode_candidate[:source_provider].to_s == "azure_structured" &&
+        mode_candidate[:provider_model_id].to_s == "prebuilt-receipt" &&
+        mode_candidate[:provider_api_version].to_s == "2024-11-30" &&
+        mode_candidate[:string_index_type].to_s == string_index_type &&
+        mode_candidate[:source_field_path].to_s == item_parent[:source_field_path].to_s &&
+        mode_candidate[:provider_span_start] == item_parent[:provider_span_start] &&
+        mode_candidate[:provider_span_end] == item_parent[:provider_span_end] &&
+        mode_candidate[:conflicts] == %w[discount reference_expression] &&
+        reference_pricing_stored_mode_candidate_version_valid?(mode_candidate)
+    end
+
+    def reference_pricing_stored_mode_candidate_version_valid?(mode_candidate)
+      return true unless mode_candidate.key?(:schema_version)
+
+      mode_candidate[:schema_version].to_s ==
+        Receipts::Processing::Contracts::ItemCalculationModeProposalSet::SCHEMA_VERSION &&
+        mode_candidate[:integrity_checksum].to_s.match?(/\A[0-9a-f]{64}\z/)
+    end
+
+    def reference_pricing_absolute_discount_mode_candidate_evidence_valid?(
+      mode_candidate,
+      candidate:,
+      item_parent:
+    )
+      option = reference_pricing_absolute_discount_option(mode_candidate)
+      return false unless option
+
+      return false unless exact_snapshot_keys?(
+        option,
+        %w[proposal_id pricing_source_kind source evidence discount]
+      )
+      return false unless option[:pricing_source_kind].to_s == "explicit_line_total"
+
+      printed = normalized_hash(mode_candidate[:printed_line_total])
+      reference_printed = normalized_hash(candidate[:printed_line_total])
+      return false unless exact_integer_string(printed[:amount]) == exact_integer_string(reference_printed[:amount])
+      return false unless reference_pricing_component_evidence_contains?(
+        normalized_hash(printed[:evidence]),
+        normalized_hash(reference_printed[:evidence])
+      )
+
+      source = normalized_hash(option[:source])
+      evidence = normalized_hash(option[:evidence])
+      return false unless exact_snapshot_keys?(source, %w[line_total_amount])
+      return false unless exact_snapshot_keys?(evidence, %w[line_total])
+      return false unless source[:line_total_amount].to_s == printed[:amount].to_s
+      return false unless reference_pricing_same_component_evidence?(
+        normalized_hash(evidence[:line_total]),
+        normalized_hash(printed[:evidence])
+      )
+
+      reference_pricing_absolute_discount_component_valid?(
+        option[:discount],
+        mode_candidate:,
+        candidate:,
+        item_parent:,
+        printed_evidence: normalized_hash(printed[:evidence])
+      )
+    end
+
+    def reference_pricing_absolute_discount_option(mode_candidate)
+      options = mode_candidate[:options]
+      return unless options.is_a?(Array) && options.size.between?(1, 2)
+
+      options = options.map { |option| normalized_hash(option) }
+
+      explicit = options.select { |option| option[:pricing_source_kind].to_s == "explicit_line_total" }
+      return unless explicit.one?
+
+      references = options.select { |option| option[:pricing_source_kind].to_s == "reference_quantity_price" }
+      return unless references.size == options.size - 1
+      if references.one?
+        return unless normalized_hash(references.sole[:discount]) == normalized_hash(explicit.sole[:discount])
+      end
+
+      explicit.sole
+    end
+
+    def reference_pricing_absolute_discount_component_valid?(
+      value,
+      mode_candidate:,
+      candidate:,
+      item_parent:,
+      printed_evidence:
+    )
+      discount = normalized_hash(value)
+      return false unless exact_snapshot_keys?(discount, %w[amount printed_total_stage evidence])
+      return false unless discount[:printed_total_stage].to_s == "before_item_discount"
+      return false if exact_integer_string(discount[:amount]).nil? || discount[:amount].to_s == "0"
+
+      evidence = normalized_hash(discount[:evidence])
+      return false unless exact_snapshot_keys?(evidence, %w[amount])
+
+      amount_evidence = normalized_hash(evidence[:amount])
+      return false unless exact_snapshot_keys?(
+        amount_evidence,
+        %w[source_field_path provider_span_start provider_span_end]
+      )
+      return false unless amount_evidence[:source_field_path].to_s == mode_candidate[:source_field_path].to_s
+      return false unless reference_pricing_range_within?(amount_evidence, item_parent)
+      return false unless amount_evidence[:provider_span_start] >= printed_evidence[:provider_span_end]
+
+      other_evidence = [ mode_candidate[:destination_evidence] ] + %i[
+        reference_price reference_quantity purchased_quantity printed_line_total
+      ].map { |name| normalized_hash(candidate[name])[:evidence] }
+      other_evidence.none? do |component|
+        reference_pricing_ranges_overlap?(amount_evidence, normalized_hash(component))
+      end
+    end
+
+    def reference_pricing_same_component_evidence?(left, right)
+      left[:source_field_path].to_s == right[:source_field_path].to_s &&
+        left[:provider_span_start] == right[:provider_span_start] &&
+        left[:provider_span_end] == right[:provider_span_end]
+    end
+
+    def reference_pricing_component_evidence_contains?(outer, inner)
+      return false unless outer[:source_field_path].to_s == inner[:source_field_path].to_s
+
+      reference_pricing_range_within?(inner, outer)
+    end
+
+    def reference_pricing_positive_receipt_amount(value)
+      value if value.is_a?(Integer) && value.between?(1, MAX_REFERENCE_PRICING_RECEIPT_AMOUNT)
+    end
+
+    def reference_pricing_positive_rate(value)
+      rate = exact_decimal_string(value)
+      return if rate.nil?
+
+      decimal = BigDecimal(rate)
+      canonical = decimal.to_s("F").sub(/\.0+\z/, "").sub(/(\.\d*?)0+\z/, '\\1')
+      scale = rate.include?(".") ? rate.split(".", 2).last.length : 0
+      rate if decimal.positive? && decimal <= 1 && scale <= 6 && rate == canonical
+    rescue ArgumentError
+      nil
+    end
+
+    def exact_snapshot_keys?(value, expected_keys)
+      return false unless value.is_a?(Hash)
+
+      keys = value.keys.map(&:to_s)
+      keys.uniq.size == keys.size && keys.sort == expected_keys.sort
+    end
+
+    def reference_pricing_line_indexes_snapshot(value, maximum_count: MAX_OCR_LINES)
+      indexes = Array(value)
+      return [] unless indexes.size.between?(1, maximum_count)
+
+      bounded = indexes.filter_map do |index|
+        bounded_non_negative_integer(index, maximum: MAX_REFERENCE_PRICING_LINE_INDEX)
+      end
+      return [] unless bounded.size == indexes.size && bounded.uniq == bounded && bounded.sort == bounded
+
+      bounded
+    end
+
+    def reference_pricing_block_line_indexes_snapshot(value)
+      return nil if value.nil?
+
+      indexes = Array(value)
+      return [] if indexes.empty?
+
+      reference_pricing_line_indexes_snapshot(indexes)
     end
 
     def reference_pricing_line_component_snapshot(value, source_kind:)
@@ -830,10 +2035,11 @@ module Receipts::Processing::Runs
       valid_span = span_start && span_end && span_end >= span_start
 
       line_group = source_kind == "azure_line_group"
+      item_layout = source_kind == "azure_item_layout"
       source_field_path = bounded_string(
         evidence[:source_field_path],
         max_bytes: REFERENCE_PRICING_SOURCE_FIELD_PATH_MAX_BYTES,
-        pattern: line_group ?
+        pattern: line_group || item_layout ?
           REFERENCE_PRICING_LINE_SOURCE_FIELD_PATH_PATTERN :
           REFERENCE_PRICING_SOURCE_FIELD_PATH_PATTERN
       )
@@ -841,14 +2047,28 @@ module Receipts::Processing::Runs
       {
         source_provider: enum_string(
           evidence[:source_provider],
-          line_group ? REFERENCE_PRICING_LINE_SOURCE_PROVIDERS : REFERENCE_PRICING_SOURCE_PROVIDERS
+          if line_group
+            REFERENCE_PRICING_LINE_SOURCE_PROVIDERS
+          elsif item_layout
+            REFERENCE_PRICING_LAYOUT_SOURCE_PROVIDERS
+          else
+            REFERENCE_PRICING_SOURCE_PROVIDERS
+          end
         ),
         source_field_path: source_field_path,
-        item_index: line_group ? nil : bounded_non_negative_integer(
+        item_index: line_group || item_layout ? nil : bounded_non_negative_integer(
           evidence[:item_index],
           maximum: MAX_REFERENCE_PRICING_ITEM_INDEX
         ),
-        string_index_type: line_group ? enum_string(
+        page_index: item_layout ? bounded_non_negative_integer(
+          evidence[:page_index],
+          maximum: MAX_REFERENCE_PRICING_PAGE_INDEX
+        ) : nil,
+        line_index: item_layout ? bounded_non_negative_integer(
+          evidence[:line_index],
+          maximum: MAX_REFERENCE_PRICING_LINE_INDEX
+        ) : nil,
+        string_index_type: line_group || item_layout ? enum_string(
           evidence[:string_index_type],
           REFERENCE_PRICING_STRING_INDEX_TYPES
         ) : nil,
@@ -1053,6 +2273,165 @@ module Receipts::Processing::Runs
       end
     end
 
+    def valid_item_layout_candidate_snapshot?(snapshot)
+      case snapshot[:validation_contract_version]
+      when "azure_item_layout_v1"
+        true
+      when REFERENCE_PRICING_SHARED_BASIS_VALIDATION_CONTRACT
+        valid_shared_basis_candidate_snapshot?(snapshot)
+      else
+        false
+      end
+    end
+
+    def valid_shared_basis_candidate_snapshot?(snapshot)
+      metadata = shared_basis_candidate_metadata(snapshot)
+      block = reference_pricing_candidate_block_range(snapshot)
+      parent = reference_pricing_structured_item_range(snapshot)
+      return false if metadata.nil? || block.nil? || parent.nil? || block != parent
+      return false unless valid_shared_basis_identity?(snapshot, metadata:)
+      return false unless valid_shared_basis_line_ownership?(snapshot, metadata:)
+      return false unless valid_shared_basis_components?(snapshot, metadata:, parent:)
+
+      valid_shared_basis_state?(snapshot)
+    rescue ArgumentError, KeyError, NoMethodError, TypeError
+      false
+    end
+
+    def shared_basis_candidate_metadata(snapshot)
+      match = REFERENCE_PRICING_SHARED_BASIS_CANDIDATE_ID_PATTERN.match(snapshot[:candidate_id].to_s)
+      return if match.nil?
+
+      metadata = %i[page name reference quantity total].index_with do |key|
+        Integer(match[key], 10)
+      end
+      return unless metadata.values.all? { |index| index.between?(0, MAX_REFERENCE_PRICING_LINE_INDEX) }
+      return unless metadata[:page].zero?
+      return unless metadata.values_at(:name, :reference, :quantity, :total).each_cons(2).all? do |left, right|
+        left < right
+      end
+
+      expected_id = "azure_item_layout_p#{metadata[:page]}_name_l#{metadata[:name]}_" \
+        "ref_l#{metadata[:reference]}_qty_l#{metadata[:quantity]}_total_l#{metadata[:total]}_reference_pricing"
+      snapshot[:candidate_id] == expected_id ? metadata : nil
+    end
+
+    def valid_shared_basis_identity?(snapshot, metadata:)
+      snapshot[:source_kind] == "azure_item_layout" &&
+        snapshot[:destination_kind] == "azure_structured_item" &&
+        snapshot[:item_index] == snapshot[:structured_item_index] &&
+        snapshot[:page_index] == metadata[:page] &&
+        snapshot[:name_line_index] == metadata[:name] &&
+        snapshot[:reference_line_index] == metadata[:reference] &&
+        snapshot[:printed_total_line_index] == metadata[:total] &&
+        snapshot[:purchased_quantity_line_indexes] == [ metadata[:quantity] ] &&
+        snapshot[:provider_model_id] == "prebuilt-receipt" &&
+        snapshot[:provider_api_version] == "2024-11-30" &&
+        REFERENCE_PRICING_STRING_INDEX_TYPES.include?(snapshot[:string_index_type])
+    end
+
+    def valid_shared_basis_line_ownership?(snapshot, metadata:)
+      row_indexes = (metadata[:name]..metadata[:total]).to_a
+      return false unless row_indexes.size.between?(4, 5)
+
+      owned = snapshot[:owned_line_indexes]
+      return false unless owned.is_a?(Array) && owned.size <= 6
+
+      header_index = owned.first
+      return false unless header_index.is_a?(Integer)
+
+      header_to_name_distance = metadata[:name] - header_index
+      header_to_name_distance.between?(1, MAX_REFERENCE_PRICING_SHARED_BASIS_HEADER_CONTEXT_LINES + 1) &&
+        owned == [ header_index, *row_indexes ]
+    end
+
+    def valid_shared_basis_components?(snapshot, metadata:, parent:)
+      index_type = snapshot[:string_index_type]
+      header = snapshot.dig(:reference_quantity, :evidence)
+      price = snapshot.dig(:reference_price, :evidence)
+      quantity = snapshot.dig(:purchased_quantity, :evidence)
+      total = snapshot.dig(:printed_line_total, :evidence)
+      reference_line = {
+        provider_span_start: snapshot[:reference_line_provider_span_start],
+        provider_span_end: snapshot[:reference_line_provider_span_end]
+      }
+      return false unless shared_basis_evidence_on_line?(
+        header,
+        line_index: snapshot[:owned_line_indexes].first,
+        index_type:
+      ) && header[:provider_span_end] <= parent.begin
+      return false unless {
+        price => metadata[:reference],
+        quantity => metadata[:quantity],
+        total => metadata[:total]
+      }.all? do |evidence, line_index|
+        shared_basis_evidence_on_line?(evidence, line_index:, index_type:) &&
+          reference_pricing_range_within?(evidence, provider_span_start: parent.begin, provider_span_end: parent.end)
+      end
+      return false unless reference_pricing_range_within?(price, reference_line)
+
+      price[:provider_span_end] <= quantity[:provider_span_start] &&
+        quantity[:provider_span_end] <= total[:provider_span_start] &&
+        valid_shared_basis_exact_components?(snapshot)
+    end
+
+    def shared_basis_evidence_on_line?(evidence, line_index:, index_type:)
+      evidence.is_a?(Hash) &&
+        evidence[:source_provider] == "azure_item_layout" &&
+        evidence[:source_field_path] == "pages[0].lines[#{line_index}]" &&
+        evidence[:page_index] == 0 && evidence[:line_index] == line_index &&
+        evidence[:string_index_type] == index_type &&
+        reference_pricing_range_within?(evidence, evidence)
+    end
+
+    def valid_shared_basis_exact_components?(snapshot)
+      reference_price = snapshot[:reference_price]
+      reference_quantity = snapshot[:reference_quantity]
+      purchased_quantity = snapshot[:purchased_quantity]
+      printed_total = snapshot[:printed_line_total]
+      return false unless [ reference_price, reference_quantity, purchased_quantity, printed_total ].all?(Hash)
+      return false unless reference_quantity[:unit_status] == "known"
+      return false unless purchased_quantity[:unit_status] == "known"
+      return false unless reference_quantity[:origin] == "explicit"
+
+      reference_unit = ReceiptQuantityUnit.unit_for(reference_quantity[:unit_code])
+      purchased_unit = ReceiptQuantityUnit.unit_for(purchased_quantity[:unit_code])
+      return false unless reference_unit&.kind == :decimal && purchased_unit&.kind == :decimal
+      return false unless reference_unit.dimension == purchased_unit.dimension
+
+      %i[reference_price reference_quantity purchased_quantity printed_line_total].all? do |component|
+        positive_exact_decimal?(snapshot.dig(component, :amount))
+      end
+    end
+
+    def valid_shared_basis_state?(snapshot)
+      corroboration = snapshot[:corroboration]
+      return false unless corroboration.is_a?(Hash) && corroboration.dig(:exact_amount, :numerator).present? &&
+        corroboration.dig(:exact_amount, :denominator).present? &&
+        Array(corroboration[:rounding_matches]).present? &&
+        reference_pricing_single_item_gross_amounts_match_candidate?(
+          snapshot,
+          gross_amount: snapshot.dig(:printed_line_total, :amount).to_i
+        )
+
+      if snapshot[:validation_state] == "ambiguous"
+        snapshot[:rejection_reasons] == [ "ambiguous_tax_inclusion" ] &&
+          snapshot[:reference_price_tax_inclusion] == "unknown" &&
+          snapshot[:tax_inclusion_evidence].nil?
+      else
+        snapshot[:validation_state] == "valid" && snapshot[:rejection_reasons] == [] &&
+          snapshot[:reference_price_tax_inclusion] == "net" &&
+          snapshot.dig(:tax_inclusion_evidence, :kind) ==
+            REFERENCE_PRICING_SHARED_BASIS_EXTERNAL_TAX_EVIDENCE_KIND
+      end
+    end
+
+    def positive_exact_decimal?(value)
+      value.is_a?(String) && BigDecimal(value).positive?
+    rescue ArgumentError
+      false
+    end
+
     def valid_line_group_candidate_snapshot?(snapshot)
       page_index = snapshot[:page_index]
       reference_line_index = snapshot[:reference_line_index]
@@ -1177,7 +2556,7 @@ module Receipts::Processing::Runs
       }.compact
     end
 
-    def limited_ocr_items(items)
+    def limited_ocr_items(items, lines:, source_lines:, profile:)
       Array(items).first(ocr_items_snapshot_limit).filter_map do |item|
         item = normalized_hash(item)
         next if item.blank?
@@ -1190,15 +2569,63 @@ module Receipts::Processing::Runs
           quantity_unit_code: safe_string(item[:quantity_unit_code]),
           quantity_unit_status: quantity_unit_status,
           quantity_unit_raw: safe_quantity_unit_raw(item[:quantity_unit_raw], status: quantity_unit_status),
+          ocr_item_identity: bounded_string(
+            item[:ocr_item_identity],
+            max_bytes: ITEM_CALCULATION_MODE_ITEM_IDENTITY_MAX_BYTES,
+            pattern: /\A(?:azure_calculation_layout_p0_name_l\d+_s\d+_e\d+_block_e\d+|azure_structured_item_i\d+_s\d+_e\d+|azure_item_layout_item_p\d+_name_l\d+_s\d+_e\d+_ref_l\d+_qty_l\d+_total_l\d+)\z/
+          ),
           product_code: safe_string(item[:product_code]),
           line_total: safe_value(item[:line_total]),
           original_line_total: safe_value(item[:original_line_total]),
           discount_amount: safe_value(item[:discount_amount]),
           discount_rate: safe_value(item[:discount_rate]),
+          discount_source_refs: discount_source_refs_snapshot(
+            item[:discount_source_refs],
+            lines: lines,
+            source_lines: source_lines,
+            profile: profile
+          ),
           tax_rate: safe_value(item[:tax_rate]),
           confidence: safe_value(item[:confidence])
         }.compact
       end
+    end
+
+    def discount_source_refs_snapshot(value, lines:, source_lines:, profile:)
+      return nil unless profile && value.is_a?(Array) && value.size.between?(1, MAX_OCR_ITEM_DISCOUNT_SOURCE_REFS)
+      return nil unless source_lines.first(lines.size) == lines
+
+      references = value.map do |entry|
+        return nil unless entry.is_a?(Hash) && entry.keys.map(&:to_s).sort == OCR_ITEM_DISCOUNT_SOURCE_REF_KEYS.sort
+
+        reference = normalized_hash(entry)
+        return nil unless reference.values.all? { |component| component.is_a?(Integer) }
+
+        line_index = reference[:source_line_index]
+        return nil unless line_index.between?(0, lines.size - 1)
+
+        line = lines[line_index]
+        return nil unless line == source_lines[line_index] && safe_utf8_string?(line)
+        return nil unless reference[:source_span_start].between?(0, line.length - 1)
+        return nil unless reference[:source_span_end].between?(reference[:source_span_start] + 1, line.length)
+        return nil unless reference[:amount].between?(1, MAX_REFERENCE_PRICING_RECEIPT_AMOUNT)
+
+        tokens = Analysis.money_token_matches(
+          text: line,
+          money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+          profile: profile,
+          allow_bare_money: false
+        )
+        return nil unless tokens.any? do |token|
+          token[:span_start] == reference[:source_span_start] && token[:span_end] == reference[:source_span_end] &&
+            token[:amount] == reference[:amount] && token[:raw_text].match?(profile.adjustment_sign_evidence_pattern)
+        end
+
+        reference.to_h
+      end
+      return nil unless references.uniq.size == references.size
+
+      references
     end
 
     def safe_quantity_unit_status(value)

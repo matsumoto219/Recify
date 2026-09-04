@@ -33,6 +33,7 @@ RSpec.describe ReviewReasons do
         expect(described_class.display_category_for('mixed_basis_search_truncated')).to eq(:amount)
         expect(described_class.display_category_for('calculation_profile_uncertain')).to eq(:amount)
         expect(described_class.display_category_for('item_tax_rate_group_uncertain')).to eq(:amount)
+        expect(described_class.display_category_for('item_pricing_mode_uncertain')).to eq(:amount)
         expect(described_class.display_category_for('purchase_adjustment_tax_allocation_uncertain')).to eq(:amount)
       end
     end
@@ -145,6 +146,7 @@ RSpec.describe ReviewReasons do
         'multiple_receipts_suspected',
         'item_tax_rate_uncertain',
         'item_name_uncertain',
+        'item_pricing_mode_uncertain',
         'tax_detail_mismatch',
         'analysis_missing_keys',
         'custom_reason'
@@ -153,6 +155,7 @@ RSpec.describe ReviewReasons do
       expect(result).to eq([
         'multiple_receipts_suspected',
         'item_name_uncertain',
+        'item_pricing_mode_uncertain',
         'tax_detail_mismatch'
       ])
     end
@@ -165,6 +168,7 @@ RSpec.describe ReviewReasons do
         :adjustment_uncertain,
         'ocr_low_confidence',
         'payment_amount_mismatch',
+        'item_pricing_mode_uncertain',
         'ai_timeout',
         'custom_reason',
         nil,

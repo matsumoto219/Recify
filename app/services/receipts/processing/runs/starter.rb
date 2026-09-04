@@ -34,7 +34,7 @@ module Receipts::Processing::Runs
         adoption_gate_snapshot = Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot.capture_start(
           run_key:,
           run_source: source,
-          receipt_lock_version: receipt.lock_version
+          receipt:
         )
         runtime_config_metadata = RuntimeConfigSnapshot.metadata_for_new_run
         if adoption_gate_snapshot

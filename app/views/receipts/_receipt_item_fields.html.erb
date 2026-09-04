@@ -26,7 +26,8 @@
   item_row_dom_key = item.persisted? ? item.id : item_form.object_name.to_s.gsub(/[^a-zA-Z0-9_-]/, "-")
   item_details_id = "receipt-item-#{item_row_dom_key}-details"
   pricing_source_ui_mode = row_state.pricing_source_ui_mode
-  pricing_source_details_open = local_assigns.fetch(:pricing_source_details_open, false)
+  item_details_open = row_state.pricing_source_review?
+  pricing_source_details_open = local_assigns.fetch(:pricing_source_details_open, false) || item_details_open
 %>
 
 <div class="swipe-action rounded-lg"
@@ -79,7 +80,7 @@
               data-action="click->receipt-form#toggleItemDetails"
               data-receipt-form-target="itemDetailsToggle"
               aria-controls="<%= item_details_id %>"
-              aria-expanded="false"
+              aria-expanded="<%= item_details_open %>"
               aria-label="<%= t("receipts.item_fields.details_aria") %>">
         <span class="material-symbols-outlined text-lg transition-transform duration-150" data-receipt-form-target="itemDetailsIcon">expand_more</span>
       </button>
@@ -232,7 +233,7 @@
             data-action="click->receipt-form#toggleItemDetails"
             data-receipt-form-target="itemDetailsToggle"
             aria-controls="<%= item_details_id %>"
-            aria-expanded="false"
+            aria-expanded="<%= item_details_open %>"
             aria-label="<%= t("receipts.item_fields.details_aria") %>">
       <span class="text-xs font-bold md:sr-only"><%= t("receipts.item_fields.details") %></span>
       <span class="material-symbols-outlined text-lg transition-transform duration-150" data-receipt-form-target="itemDetailsIcon">expand_more</span>
@@ -268,10 +269,10 @@
   </div>
 
   <div id="<%= item_details_id %>"
-       class="col-span-2 md:col-span-full collapsible-grid"
+       class="col-span-2 md:col-span-full collapsible-grid<%= " is-open" if item_details_open %>"
        data-receipt-form-target="itemDetailsPanel"
-       aria-hidden="true"
-       inert>
+       aria-hidden="<%= !item_details_open %>"
+       <% unless item_details_open %> inert<% end %>>
     <div class="collapsible-grid-inner min-w-0">
       <div class="grid grid-cols-2 md:grid-cols-12 gap-4 p-0 md:rounded-lg md:border token-border-default md:p-3">
         <details class="collapsible-details group col-span-2 min-w-0 md:col-span-12"

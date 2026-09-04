@@ -1,0 +1,58 @@
+{
+  "case_id": "g140_calc_count_exact_total",
+  "category": "calculation_mode",
+  "intent": "An exact count unit price, explicit quantity, and matching item total select count-unit pricing.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル文具A", "@120円 × 3個", "360円"],
+        "purchased_quantity": "3",
+        "purchased_unit": "each",
+        "purchased_quantity_origin": "explicit",
+        "count_unit_price_amount": "120",
+        "printed_line_total": 360
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算方式店",
+    "store_address": "サンプル県サンプル市計算町1-1",
+    "purchased_at": "2026-08-20T10:00:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル文具A",
+        "unit_price": 120,
+        "quantity": "3",
+        "quantity_unit_code": "each",
+        "pricing_source_kind": "count_unit_price",
+        "original_line_total": 360,
+        "line_total": 360,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 328, "tax": 32, "gross": 360, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 328,
+    "tax": 32,
+    "total": 360,
+    "payments": [{"method": "cash", "label": "現金", "amount": 360}],
+    "payment_sum": 360,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

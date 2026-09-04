@@ -45,6 +45,7 @@ module ReviewReasons
     competing_exact_basis_candidate
     mixed_basis_search_truncated
     calculation_profile_uncertain
+    item_pricing_mode_uncertain
     invalid_amount_relation
     payment_amount_mismatch
     tax_details_double_counted

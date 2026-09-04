@@ -69,6 +69,7 @@ module Analysis
     def target_basis_from_line(line)
       text = normalize_text(line)
       return nil if text.blank?
+      return nil unless text.match?(profile.analysis_tax_summary_line_pattern)
       return nil if text.match?(profile.analysis_tax_amount_description_pattern)
       return :net if text.match?(profile.amount_tax_detail_net_pattern)
       return :net if text.match?(profile.amount_tax_detail_intermediate_pattern)
@@ -80,7 +81,7 @@ module Analysis
 
     def rate_from_line(line)
       match = normalize_text(line).match(/(\d+(?:\.\d+)?)\s*[%％]/)
-      normalize_rate(match[1]) if match
+      normalize_rate(match[1], percentage: true) if match
     end
 
     def amount_near_line(index)
@@ -100,7 +101,10 @@ module Analysis
 
     def lines_window_until_next_tax_target(index)
       lines[index, 4].to_a.take_while.with_index do |line, offset|
-        offset.zero? || target_basis_from_line(line).blank?
+        offset.zero? || (
+          target_basis_from_line(line).blank? &&
+            normalize_text(line).match?(profile.analysis_tax_summary_continuation_line_pattern)
+        )
       end
     end
 
@@ -155,11 +159,13 @@ module Analysis
       ReceiptAmountService.parse_amount_or_nil(value)
     end
 
-    def normalize_rate(value)
+    def normalize_rate(value, percentage: false)
       return if value.blank?
 
-      rate = BigDecimal(value.to_s.delete("%"))
-      rate > 1 ? rate / 100 : rate
+      text = normalize_text(value)
+      percentage ||= text.include?("%")
+      rate = BigDecimal(text.delete("%"))
+      percentage || rate > 1 ? rate / 100 : rate
     rescue ArgumentError
       nil
     end

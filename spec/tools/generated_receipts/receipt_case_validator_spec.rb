@@ -14,6 +14,7 @@ RSpec.describe GeneratedReceipts::Validator do
 
   let(:case_paths) { Dir[File.join(GeneratedReceipts::CASES_DIR, "*.json")].sort }
   let(:measurement_case_paths) { GeneratedReceipts.measurement_case_paths }
+  let(:calculation_mode_case_paths) { GeneratedReceipts.calculation_mode_case_paths }
   let(:case_schema) do
     JSON.parse(File.read(File.expand_path("../../fixtures/generated_receipts/case_schema.json", __dir__)))
   end
@@ -113,6 +114,38 @@ RSpec.describe GeneratedReceipts::Validator do
       expect(candidate_states).to match_array(described_class::REFERENCE_CANDIDATE_STATES)
       expect(rejection_reasons).to match_array(described_class::REFERENCE_CANDIDATE_REJECTION_REASONS)
       expect(described_class::REFERENCE_CANDIDATE_STATES).to include("missing", "none")
+    end
+  end
+
+  it "keeps the calculation-mode category and source enums in sync with the schema" do
+    categories = case_schema.dig("properties", "category", "enum")
+    expected_item_properties = case_schema.dig(
+      "properties", "expected", "properties", "items", "items", "properties"
+    )
+    source_properties = case_schema.dig("properties", "source", "properties")
+    source_item_properties = source_properties.dig("items", "items", "properties")
+    canonical_unit_codes = (
+      GeneratedReceipts::CalculationModeContract::COUNTABLE_UNIT_CODES +
+        GeneratedReceipts::MeasurementContract::UNIT_SCALES.keys
+    )
+
+    aggregate_failures do
+      expect(categories).to match_array(described_class::CATEGORIES)
+      expect(Array(expected_item_properties.dig("quantity_unit_code", "enum")).compact).to match_array(
+        canonical_unit_codes
+      )
+      expect(Array(expected_item_properties.dig("reference_quantity_unit_code", "enum")).compact).to match_array(
+        canonical_unit_codes
+      )
+      expect(source_properties.dig("count_tax_semantics", "enum")).to match_array(
+        GeneratedReceipts::CalculationModeContract::COUNT_TAX_SEMANTICS
+      )
+      expect(source_item_properties.dig("purchased_quantity_origin", "enum")).to match_array(
+        GeneratedReceipts::CalculationModeContract::PURCHASED_QUANTITY_ORIGINS
+      )
+      expect(source_item_properties.dig("formula_conflicts", "items", "enum")).to match_array(
+        GeneratedReceipts::CalculationModeContract::FORMULA_CONFLICTS
+      )
     end
   end
 
@@ -436,6 +469,24 @@ RSpec.describe GeneratedReceipts::Validator do
     end
   end
 
+  it "allows only bounded exact optional discount-rate expectations" do
+    data = deep_dup(load_case("g001_normal_included_10_cash"))
+    item = data.fetch("expected").fetch("items").first
+
+    aggregate_failures do
+      [ nil, "0", "0.01", "0.27", "0.99", "1" ].each do |rate|
+        item["discount_rate"] = rate
+        expect(described_class.call(data).errors).to eq([])
+      end
+      [ "27", "1.01", "0.2700001", "-0.01", "NaN", 0.27 ].each do |rate|
+        item["discount_rate"] = rate
+        expect(described_class.call(data).errors).to include(
+          a_string_starting_with("expected.items[0].discount_rate:")
+        )
+      end
+    end
+  end
+
   it "validates the additive Measurement cases separately from the existing 112 cases" do
     results = measurement_case_paths.map do |path|
       [ File.basename(path), described_class.call(described_class.load_file(path)) ]
@@ -444,11 +495,143 @@ RSpec.describe GeneratedReceipts::Validator do
     aggregate_failures do
       expect(case_paths.size).to eq(112)
       expect(results.size).to eq(10)
-      expect(GeneratedReceipts.case_paths.size).to eq(122)
+      expect(case_paths.size + results.size).to eq(122)
       results.each do |filename, result|
         expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
       end
     end
+  end
+
+  it "validates the calculation-mode cases without changing the candidate-only Measurement corpus" do
+    results = calculation_mode_case_paths.map do |path|
+      [ File.basename(path), described_class.call(described_class.load_file(path)) ]
+    end
+
+    aggregate_failures do
+      expect(case_paths.size).to eq(112)
+      expect(measurement_case_paths.size).to eq(10)
+      expect(results.size).to eq(43)
+      expect(GeneratedReceipts.case_paths.size).to eq(165)
+      results.each do |filename, result|
+        expect(result.errors).to eq([]), "#{filename}: #{result.errors.join(', ')}"
+      end
+    end
+  end
+
+  it "validates known tax amounts while an unresolved calculation-mode item has no line total" do
+    data = described_class.load_file(
+      File.join(
+        GeneratedReceipts::CALCULATION_MODE_CASES_DIR,
+        "g153_calc_adjacent_item_isolation.json"
+      )
+    )
+
+    result = described_class.call(data)
+
+    expect(result.errors).to eq([])
+  end
+
+  it "validates a zero receipt summary when every calculation-mode item remains unresolved" do
+    data = described_class.load_file(
+      File.join(
+        GeneratedReceipts::CALCULATION_MODE_CASES_DIR,
+        "g162_calc_incomplete_formula_unresolved.json"
+      )
+    )
+
+    result = described_class.call(data)
+
+    expect(result.errors).to eq([])
+  end
+
+  it "does not let unresolved calculation-mode items hide a tax group below the known item amount" do
+    data = deep_dup(
+      described_class.load_file(
+        File.join(
+          GeneratedReceipts::CALCULATION_MODE_CASES_DIR,
+          "g153_calc_adjacent_item_isolation.json"
+        )
+      )
+    )
+    data["expected"]["tax_details"] = [
+      { "rate" => 0.1, "net" => 545, "tax" => 54, "gross" => 599, "basis" => "gross" }
+    ]
+    data["expected"]["subtotal"] = 545
+    data["expected"]["total"] = 599
+    data["expected"]["payments"][0]["amount"] = 599
+    data["expected"]["payment_sum"] = 599
+
+    result = described_class.call(data)
+
+    expect(result.errors).to include(
+      "expected.tax_details[rate=0.1].gross: must be at least computed 600"
+    )
+  end
+
+  it "does not let unresolved calculation-mode items authorize unrelated tax rates" do
+    data = deep_dup(
+      described_class.load_file(
+        File.join(
+          GeneratedReceipts::CALCULATION_MODE_CASES_DIR,
+          "g153_calc_adjacent_item_isolation.json"
+        )
+      )
+    )
+    data["expected"]["tax_details"] << {
+      "rate" => 0.08,
+      "net" => 0,
+      "tax" => 0,
+      "gross" => 0,
+      "basis" => "gross"
+    }
+
+    result = described_class.call(data)
+
+    expect(result.errors).to include("expected.tax_details: has unexpected rate 0.08")
+  end
+
+  it "keeps nil line totals invalid outside the calculation-mode unresolved contract" do
+    data = deep_dup(load_case("g001_normal_included_10_cash"))
+    data["expected"]["items"][0]["line_total"] = nil
+
+    result = described_class.call(data)
+
+    expect(result.errors).to include(
+      "expected.items[0].line_total: must equal unit_price * quantity - discount_amount (550)"
+    )
+  end
+
+  it "allows an unresolved zero-tax calculation-mode item without inventing an amount" do
+    data = deep_dup(
+      described_class.load_file(
+        File.join(
+          GeneratedReceipts::CALCULATION_MODE_CASES_DIR,
+          "g162_calc_incomplete_formula_unresolved.json"
+        )
+      )
+    )
+    data["expected"]["items"][0]["tax_rate"] = 0
+    data["expected"]["tax_details"] = []
+    data["expected"]["tax_rate"] = 0
+
+    result = described_class.call(data)
+
+    expect(result.errors).to eq([])
+  end
+
+  it "does not permit a fallback quantity to establish count-unit pricing authority" do
+    data = deep_dup(
+      described_class.load_file(
+        File.join(GeneratedReceipts::CALCULATION_MODE_CASES_DIR, "g140_calc_count_exact_total.json")
+      )
+    )
+    data.dig("source", "items", 0)["purchased_quantity_origin"] = "fallback"
+
+    result = described_class.call(data)
+
+    expect(result.errors).to include(
+      "source.items[0].purchased_quantity_origin: must be explicit for count-unit pricing authority"
+    )
   end
 
   it "covers the generated discount/adjustment and tax/rounding expansion cases" do
@@ -497,6 +680,17 @@ RSpec.describe GeneratedReceipts::Validator do
     result = described_class.call(data)
 
     expect(result.errors).to include("expected.invalid_key: is not allowed")
+  end
+
+  it "rejects a noncanonical persisted quantity unit" do
+    data = deep_dup(load_case("g001_normal_included_10_cash"))
+    data["expected"]["items"][0]["quantity_unit_code"] = "bundle"
+
+    result = described_class.call(data)
+
+    expect(result.errors).to include(
+      "expected.items[0].quantity_unit_code: must be one of each, item, piece, bag, sheet, unit, box, set, gram, kilogram, milligram, liter, milliliter, cubic_centimeter"
+    )
   end
 
   it "rejects item line total drift" do

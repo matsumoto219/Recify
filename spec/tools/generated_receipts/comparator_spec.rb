@@ -40,6 +40,25 @@ RSpec.describe GeneratedReceipts::Comparator do
     end
   end
 
+  it "compares an explicitly declared discount rate independently of the discount amount" do
+    case_data = load_case("g001_normal_included_10_cash")
+    case_data.fetch("expected").fetch("items").first["discount_rate"] = "0.27"
+    actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
+    actual.fetch("items").first["discount_rate"] = "0.2700"
+
+    aggregate_failures do
+      expect(described_class.call(case_data, actual).status).to eq("PASS")
+
+      [ nil, "0.01", "27", "invalid" ].each do |rate|
+        actual.fetch("items").first["discount_rate"] = rate
+
+        expect(described_class.call(case_data, actual).diffs).to include(
+          hash_including(path: "item_amounts", severity: "FAIL")
+        )
+      end
+    end
+  end
+
   it "keeps a safer review_needed result as a warning when completed was expected" do
     case_data = load_case("g001_normal_included_10_cash")
     actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
@@ -213,6 +232,71 @@ RSpec.describe GeneratedReceipts::Comparator do
     expect(described_class.call(case_data, actual).status).to eq("PASS")
   end
 
+  it "compares item review state only when the fixture declares it" do
+    case_data = deep_dup(load_case("g001_normal_included_10_cash"))
+    expected_item = case_data.fetch("expected").fetch("items").first
+    expected_item.merge!(
+      "needs_review" => true,
+      "review_reasons" => [ "item_quantity_uncertain", "item_pricing_mode_uncertain" ]
+    )
+    matching_actual = GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data)
+
+    aggregate_failures do
+      expect(described_class.call(case_data, matching_actual).status).to eq("PASS")
+
+      {
+        "needs_review" => false,
+        "review_reasons" => [ "item_quantity_uncertain" ]
+      }.each do |key, value|
+        actual = deep_dup(matching_actual)
+        actual.fetch("items").first[key] = value
+
+        result = described_class.call(case_data, actual)
+
+        expect(result.status).to eq("FAIL"), key
+        expect(result.diffs).to include(hash_including(path: "item_review_states", severity: "FAIL")), key
+      end
+    end
+  end
+
+  it "ignores undeclared item review state for legacy cases" do
+    case_data = load_case("g001_normal_included_10_cash")
+    actual = deep_dup(GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data))
+    actual.fetch("items").first.merge!(
+      "needs_review" => true,
+      "review_reasons" => [ "item_pricing_mode_uncertain" ]
+    )
+
+    expect(described_class.call(case_data, actual).status).to eq("PASS")
+  end
+
+  it "rejects malformed item review state instead of normalizing it" do
+    case_data = load_case("g001_normal_included_10_cash")
+    base_actual = GeneratedReceipts::ComparisonRunner.expected_snapshot(case_data)
+    malformed_values = [
+      { "needs_review" => "true", "review_reasons" => [] },
+      { "needs_review" => true, "review_reasons" => [ "item_pricing_mode_uncertain" ] * 2 },
+      {
+        "needs_review" => true,
+        "review_reasons" => Array.new(described_class::ITEM_REVIEW_REASON_LIMIT + 1) do |index|
+          "reason_#{index}"
+        end
+      }
+    ]
+
+    aggregate_failures do
+      malformed_values.each do |review_state|
+        actual = deep_dup(base_actual)
+        actual.fetch("items").first.merge!(review_state)
+
+        result = described_class.call(case_data, actual)
+
+        expect(result.status).to eq("FAIL")
+        expect(result.diffs).to contain_exactly(hash_including(path: "comparison_input"))
+      end
+    end
+  end
+
   it "snapshots persisted measurement source decimals without losing precision" do
     item = double(
       confirmed_name: "サンプル量売商品",
@@ -225,11 +309,14 @@ RSpec.describe GeneratedReceipts::Comparator do
       original_line_total: 4_100,
       tax_rate: BigDecimal("0.08"),
       discount_amount: nil,
+      discount_rate: BigDecimal("0.27"),
       pricing_source_kind: "reference_quantity_price",
       reference_price_amount: BigDecimal("3280.500000"),
       reference_quantity: BigDecimal("1.000"),
       reference_quantity_unit_code: "kilogram",
-      reference_price_tax_inclusion: "gross"
+      reference_price_tax_inclusion: "gross",
+      needs_review?: true,
+      review_reasons: [ "item_quantity_uncertain", "item_pricing_mode_uncertain" ]
     )
     empty_relation = double(order: [])
     receipt = double(
@@ -259,7 +346,10 @@ RSpec.describe GeneratedReceipts::Comparator do
         "reference_quantity" => "1",
         "reference_quantity_unit_code" => "kilogram",
         "reference_price_tax_inclusion" => "gross",
-        "original_line_total" => 4_100
+        "original_line_total" => 4_100,
+        "discount_rate" => "0.27",
+        "needs_review" => true,
+        "review_reasons" => [ "item_pricing_mode_uncertain", "item_quantity_uncertain" ]
       )
     end
   end

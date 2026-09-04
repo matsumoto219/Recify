@@ -1,0 +1,65 @@
+{
+  "case_id": "g141_calc_reference_gross_exact_total",
+  "category": "calculation_mode",
+  "intent": "An exact item-local gross reference price and matching total select reference-quantity pricing when its existing operational gate is enabled.",
+  "receipt_kind": "receipt",
+  "source": {
+    "context": "analysis",
+    "count_tax_semantics": "reproducible_as_recorded",
+    "items": [
+      {
+        "item_index": 0,
+        "printed_lines": ["サンプル量売B", "税込 498円/100g", "計量 342g", "1,703円"],
+        "purchased_quantity": "342",
+        "purchased_unit": "gram",
+        "purchased_quantity_origin": "explicit",
+        "reference_price_amount": "498",
+        "reference_quantity": "100",
+        "reference_unit": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "printed_line_total": 1703
+      }
+    ]
+  },
+  "expected": {
+    "store_name": "サンプル計算方式店",
+    "store_address": "サンプル県サンプル市計算町1-1",
+    "purchased_at": "2026-08-20T10:05:00+09:00",
+    "currency": "JPY",
+    "amount_basis": "tax_included",
+    "tax_rate": 0.1,
+    "rounding": {"tax": "floor", "discount": "round", "scope": "per_tax_rate_group"},
+    "items": [
+      {
+        "name": "サンプル量売B",
+        "unit_price": null,
+        "quantity": "342",
+        "quantity_unit_code": "gram",
+        "pricing_source_kind": "reference_quantity_price",
+        "reference_price_amount": "498",
+        "reference_quantity": "100",
+        "reference_quantity_unit_code": "gram",
+        "reference_price_tax_inclusion": "gross",
+        "original_line_total": 1703,
+        "line_total": 1703,
+        "tax_rate": 0.1,
+        "discount_amount": 0,
+        "needs_review": false,
+        "review_reasons": []
+      }
+    ],
+    "receipt_adjustments": [],
+    "tax_details": [{"rate": 0.1, "net": 1549, "tax": 154, "gross": 1703, "basis": "gross", "label": "10%対象計"}],
+    "subtotal": 1549,
+    "tax": 154,
+    "total": 1703,
+    "payments": [{"method": "cash", "label": "現金", "amount": 1703}],
+    "payment_sum": 1703,
+    "payment_method": "cash",
+    "status": "completed",
+    "review_reasons": []
+  },
+  "render": {"locale": "ja-JP", "paper_width": "58mm", "font": "monospace", "include_tax_detail_lines": true, "noise_lines": []},
+  "degradation": {"enabled": false, "profile": null},
+  "assertions": {"critical_exact": ["subtotal", "tax", "total", "payments", "tax_details", "item_amounts"], "allow_review_reasons": [], "allow_item_name_minor_diff": false}
+}

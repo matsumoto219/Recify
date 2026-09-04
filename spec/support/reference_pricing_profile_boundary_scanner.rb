@@ -3,6 +3,7 @@ require "prism"
 
 module ReferencePricingProfileBoundary
   TARGET_GLOBS = %w[
+    app/services/ocr/response_parser/item_calculation_mode_candidate_extractor.rb
     app/services/ocr/response_parser/reference_pricing*_extractor.rb
   ].freeze
   JAPANESE_SCRIPT_PATTERN = /[\p{Hiragana}\p{Katakana}\p{Han}]/u.freeze
@@ -27,7 +28,7 @@ module ReferencePricingProfileBoundary
     (?![A-Za-z_])
   }ix.freeze
   ALLOWED_SHARED_CURRENCY_TEXT = "円".freeze
-  PROVIDER_STRUCTURAL_TEXTS = %w[Total TotalPrice].freeze
+  PROVIDER_STRUCTURAL_TEXT_PATTERN = /\A(?:documents\[\d+\]\.fields\.)?(?:Subtotal|Total|TotalPrice)\z/.freeze
   JAPAN_PROFILE_CONSTANT = "ReceiptAnalysisProfiles::Japan".freeze
   JAPAN_PROFILE_CODE = "JPN".freeze
 
@@ -77,7 +78,7 @@ module ReferencePricingProfileBoundary
       return unless node.is_a?(Prism::StringNode) || node.is_a?(Prism::RegularExpressionNode)
 
       text = literal_text(node)
-      return if PROVIDER_STRUCTURAL_TEXTS.include?(text)
+      return if text.match?(PROVIDER_STRUCTURAL_TEXT_PATTERN)
 
       inspected = text.delete(ALLOWED_SHARED_CURRENCY_TEXT)
       return unless inspected.match?(JAPANESE_SCRIPT_PATTERN) ||
@@ -104,7 +105,7 @@ module ReferencePricingProfileBoundary
         kind: :direct_country_profile_reference,
         source: node.location.slice
       )
-    rescue Prism::DynamicPartsInConstantPathError
+    rescue Prism::ConstantPathNode::DynamicPartsInConstantPathError
       nil
     end
 
@@ -152,7 +153,7 @@ module ReferencePricingProfileBoundary
       when Prism::ConstantPathNode
         node.full_name.to_s.delete_prefix("::")
       end
-    rescue Prism::DynamicPartsInConstantPathError
+    rescue Prism::ConstantPathNode::DynamicPartsInConstantPathError
       nil
     end
   end
