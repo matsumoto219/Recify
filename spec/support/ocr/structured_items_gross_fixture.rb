@@ -5,6 +5,7 @@ module StructuredItemsGrossFixture
     item_specs: default_structured_items_gross_item_specs,
     tax_descriptions: [ "内税" ],
     tax_amounts: [ 100 ],
+    tax_parenthesized: false,
     total_amount: nil,
     string_index_type: "textElements"
   )
@@ -23,8 +24,8 @@ module StructuredItemsGrossFixture
     tax_line_ranges = tax_descriptions.map.with_index do |description, index|
       amount = tax_amounts[index]
       start_index = entries.size
-      entries << description
-      entries << "¥#{amount}" unless amount.nil?
+      entries << (tax_parenthesized ? "(#{description}" : description)
+      entries << (tax_parenthesized ? "¥#{amount})" : "¥#{amount}") unless amount.nil?
       start_index..entries.size - 1
     end
     total_amount ||= item_specs.sum { |item| item.fetch(:total_amount) }
@@ -112,11 +113,13 @@ module StructuredItemsGrossFixture
         ],
         "spans" => [ structured_items_gross_range(lines, first_line, last_line) ],
         "valueObject" => {
-          "Description" => structured_items_gross_string_field(
+          "Description" => structured_items_gross_tax_description_field(
             lines,
             entries,
             first_line,
-            tax_descriptions.fetch(tax_detail_index)
+            tax_descriptions.fetch(tax_detail_index),
+            parenthesized: tax_parenthesized,
+            string_index_type:
           ),
           "Amount" => amount.nil? ? nil : structured_items_gross_currency_field(
             lines,
@@ -226,6 +229,29 @@ module StructuredItemsGrossFixture
       "boundingRegions" => lines.fetch(line_index).fetch("boundingRegions").deep_dup,
       "spans" => lines.fetch(line_index).fetch("spans").deep_dup
     }
+  end
+
+  def structured_items_gross_tax_description_field(
+    lines,
+    entries,
+    line_index,
+    value,
+    parenthesized:,
+    string_index_type:
+  )
+    field = structured_items_gross_string_field(lines, entries, line_index, value)
+    return field unless parenthesized
+
+    field.merge(
+      "content" => value,
+      "spans" => [
+        {
+          "offset" => lines.fetch(line_index).dig("spans", 0, "offset") +
+            structured_items_gross_provider_length("(", string_index_type),
+          "length" => structured_items_gross_provider_length(value, string_index_type)
+        }
+      ]
+    )
   end
 
   def structured_items_gross_currency_field(lines, entries, line_index, amount)

@@ -80,6 +80,17 @@ RSpec.describe Ocr::ResponseParser::ReferencePricingStructuredItemsGrossEvidence
     end
   end
 
+  it "括弧で囲まれたTaxDetailsの末尾記号を税額component境界として許容する" do
+    evidence = extract(
+      build_structured_items_gross_response(tax_parenthesized: true)
+    )
+
+    aggregate_failures do
+      expect(evidence).to be_present
+      expect(evidence.tax_amounts.pluck(:amount)).to eq([ 100 ])
+    end
+  end
+
   it "内税語彙は注入profileだけから取得する" do
     profile = ReceiptAnalysisProfiles.fetch("JPN")
     allow(profile).to receive(

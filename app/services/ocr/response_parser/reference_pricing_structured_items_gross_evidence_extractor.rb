@@ -193,7 +193,8 @@ class Ocr::ResponseParser::ReferencePricingStructuredItemsGrossEvidenceExtractor
         source_field_path: "#{path}.Amount",
         index_key: :tax_detail_index,
         index: tax_detail_index,
-        positive: false
+        positive: false,
+        allow_trailing_closing_parenthesis: parent.fetch(:enclosed_by_parentheses)
       )
     end
     return if description.nil? || (amount_field && amount.nil?)
@@ -227,7 +228,12 @@ class Ocr::ResponseParser::ReferencePricingStructuredItemsGrossEvidenceExtractor
         }.freeze
       end.freeze
     }.freeze
-    { evidence:, spans:, bounds: }.freeze
+    {
+      evidence:,
+      spans:,
+      bounds:,
+      enclosed_by_parentheses: enclosed_by_parentheses?(parent_content)
+    }.freeze
   end
 
   def exact_tax_description(field, parent:, source_field_path:, tax_detail_index:)
@@ -261,7 +267,15 @@ class Ocr::ResponseParser::ReferencePricingStructuredItemsGrossEvidenceExtractor
     )
   end
 
-  def exact_money_child(field, parent:, source_field_path:, index_key:, index:, positive:)
+  def exact_money_child(
+    field,
+    parent:,
+    source_field_path:,
+    index_key:,
+    index:,
+    positive:,
+    allow_trailing_closing_parenthesis: false
+  )
     return unless field.is_a?(Hash)
 
     field_content = bounded_content(
@@ -273,7 +287,11 @@ class Ocr::ResponseParser::ReferencePricingStructuredItemsGrossEvidenceExtractor
     return if field_content.nil? || span.nil?
     return unless exact_provider_content?(field_content, span)
 
-    amount = exact_jpy_lexeme(field_content)
+    amount = exact_jpy_lexeme(
+      field_content,
+      allow_trailing_closing_parenthesis: allow_trailing_closing_parenthesis &&
+        span.end == parent.fetch(:spans).last.end
+    )
     return if amount.nil? || exact_structured_currency_amount(field) != amount
     return if positive ? !amount.positive? : amount.negative?
 
@@ -470,8 +488,27 @@ class Ocr::ResponseParser::ReferencePricingStructuredItemsGrossEvidenceExtractor
       inner.fetch(:bottom) <= outer.fetch(:bottom) + FIELD_LINE_BOUNDS_TOLERANCE
   end
 
-  def exact_jpy_lexeme(value)
-    match = JPY_AMOUNT_PATTERN.match(value.unicode_normalize(:nfkc))
+  def enclosed_by_parentheses?(value)
+    normalized = value.unicode_normalize(:nfkc).strip
+    return false unless normalized.start_with?("(") && normalized.end_with?(")")
+
+    depth = 0
+    normalized.each_char do |character|
+      depth += 1 if character == "("
+      depth -= 1 if character == ")"
+      return false if depth.negative?
+    end
+    depth.zero?
+  end
+
+  def exact_jpy_lexeme(value, allow_trailing_closing_parenthesis: false)
+    normalized = value.unicode_normalize(:nfkc)
+    if allow_trailing_closing_parenthesis
+      return unless normalized.rstrip.end_with?(")")
+
+      normalized = normalized.rstrip.delete_suffix(")").rstrip
+    end
+    match = JPY_AMOUNT_PATTERN.match(normalized)
     return if match.nil?
 
     amount = Integer(match[:amount].delete(","), exception: false)
