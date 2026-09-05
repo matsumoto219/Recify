@@ -1,6 +1,12 @@
 module ExternalServices
   class ErrorDetail
     MAX_MESSAGE_BYTES = 500
+    MAX_CLASSIFICATION_BYTES = 4_096
+    QUOTA_ERROR_IDENTIFIERS = %w[
+      insufficientquota
+      quotaexceeded
+      quotaexceededforsubscription
+    ].freeze
     REQUEST_ID_HEADERS = %w[
       apim-request-id
       request-id
@@ -106,10 +112,16 @@ module ExternalServices
       }
       @body = body
       @headers = normalized_headers(headers)
+      @provider_message = provider_message || provider_message_safe
     end
 
     def to_h
       body_data = body_error_data
+      classification_data = body_data.merge(
+        provider_error_code: @attributes[:provider_error_code] || body_data[:provider_error_code],
+        provider_error_type: @attributes[:provider_error_type] || body_data[:provider_error_type],
+        provider_message: @provider_message || body_data[:provider_message]
+      )
       retry_after = @attributes[:retry_after] || safe_retry_after(header_value(RETRY_AFTER_HEADERS))
       detail = @attributes.merge(
         provider_error_code: @attributes[:provider_error_code] || body_data[:provider_error_code],
@@ -120,9 +132,9 @@ module ExternalServices
         policy_id: @attributes[:policy_id] || safe_identifier(header_value(POLICY_ID_HEADERS)),
         retry_after: retry_after,
         retry_after_at: @attributes[:retry_after_at] || retry_after_at_for(retry_after),
-        quota_exceeded: boolean_or(@attributes[:quota_exceeded], quota_exceeded?(body_data)),
-        rate_limited: boolean_or(@attributes[:rate_limited], rate_limited?(body_data)),
-        auth_error: boolean_or(@attributes[:auth_error], auth_error?(body_data))
+        quota_exceeded: boolean_or(@attributes[:quota_exceeded], quota_exceeded?(classification_data)),
+        rate_limited: boolean_or(@attributes[:rate_limited], rate_limited?(classification_data)),
+        auth_error: boolean_or(@attributes[:auth_error], auth_error?(classification_data))
       )
 
       detail.slice(*SAFE_KEYS).compact
@@ -144,6 +156,7 @@ module ExternalServices
       {
         provider_error_code: safe_string(code),
         provider_error_type: safe_string(type),
+        provider_message: message,
         provider_message_safe: safe_message(message),
         request_id: safe_string(parsed[:request_id] || parsed["request_id"])
       }.compact
@@ -178,8 +191,18 @@ module ExternalServices
     end
 
     def quota_exceeded?(data)
-      text = classification_text(data)
-      text.match?(/quota|insufficient_quota|call volume|resource_exhausted/i)
+      identifiers = [ data[:provider_error_code], data[:provider_error_type] ].filter_map do |value|
+        classification_value(value)&.delete("_ -")&.downcase
+      end
+      identifiers.reject! { |value| value.match?(/\A\d{3}\z/) }
+      return identifiers.any? { |value| QUOTA_ERROR_IDENTIFIERS.include?(value) } if identifiers.any?
+
+      message = classification_value(data[:provider_message])
+      return false unless message
+      return true if QUOTA_ERROR_IDENTIFIERS.include?(message.delete("_ -").downcase)
+      return false if message.match?(/\b(?:no|not|never|without)\s+(?:\w+\s+){0,3}(?:quota|call volume)\b/i)
+
+      message.match?(/\b(?:out of call volume quota|quota (?:has been )?exceeded|exceeded (?:your )?(?:current )?quota|insufficient[_ -]quota)\b/i)
     end
 
     def rate_limited?(data)
@@ -200,8 +223,15 @@ module ExternalServices
     def classification_text(data)
       [
         data[:provider_error_code],
-        data[:provider_message_safe]
-      ].compact.join(" ")
+        data[:provider_error_type],
+        data[:provider_message]
+      ].filter_map { |value| classification_value(value) }.join(" ")
+    end
+
+    def classification_value(value)
+      return unless value.is_a?(String) && value.valid_encoding? && value.bytesize <= MAX_CLASSIFICATION_BYTES
+
+      value.presence
     end
 
     def boolean_or(left, right)

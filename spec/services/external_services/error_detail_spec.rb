@@ -98,5 +98,77 @@ RSpec.describe ExternalServices::ErrorDetail do
         expect(detail.keys).not_to include(:authorization, :api_key, :raw_response, :body)
       end
     end
+
+    it '表示用にfilterされたquota messageも元の分類根拠から判定する' do
+      detail = described_class.build(
+        service: :ocr,
+        provider: 'azure_document_intelligence',
+        http_status: 403,
+        body: { error: { code: '403', message: 'QuotaExceededForSubscription' } }
+      )
+
+      expect(detail).to include(provider_message_safe: '[FILTERED]', quota_exceeded: true)
+      expect(detail[:auth_error]).not_to eq(true)
+      expect(detail).not_to have_key(:provider_message)
+    end
+
+    it '明示されたprovider codeを本文の表示内容と独立して分類する' do
+      detail = described_class.build(
+        service: :ai,
+        provider: 'openai',
+        http_status: 429,
+        provider_error_code: 'insufficient_quota',
+        provider_message_safe: '[FILTERED]'
+      )
+
+      expect(detail[:quota_exceeded]).to eq(true)
+    end
+
+    it 'provider typeだけにあるquota分類を保持する' do
+      detail = described_class.build(
+        service: :ai,
+        provider: 'openai',
+        http_status: 429,
+        body: { error: { code: 'error', type: 'insufficient_quota', message: '[FILTERED]' } }
+      )
+
+      expect(detail[:quota_exceeded]).to eq(true)
+    end
+
+    it 'quotaを含む説明文より構造化された認証エラーcodeを優先する' do
+      detail = described_class.build(
+        service: :ocr,
+        provider: 'azure_document_intelligence',
+        http_status: 403,
+        body: { error: { code: 'invalid_api_key', message: 'Check quota and API key settings.' } }
+      )
+
+      expect(detail[:quota_exceeded]).not_to eq(true)
+      expect(detail[:auth_error]).to eq(true)
+    end
+
+    [
+      'Quota was not exceeded; invalid API key.',
+      'No quota exceeded; permission denied.',
+      'Check your quota settings.',
+      'Quota is available.',
+      'UnknownQuotaFailure'
+    ].each do |message|
+      it "quotaを確定できない説明をquota exceededへ分類しない: #{message}" do
+        detail = described_class.build(http_status: 403, body: { error: { code: '403', message: message } })
+
+        expect(detail[:quota_exceeded]).not_to eq(true)
+      end
+    end
+
+    it 'rate-limit codeにquotaという語が併記されても429をquotaへ変えない' do
+      detail = described_class.build(
+        http_status: 429,
+        body: { error: { code: 'rate_limit_exceeded', message: 'Rate limit exceeded; check quota settings.' } }
+      )
+
+      expect(detail[:quota_exceeded]).not_to eq(true)
+      expect(detail[:rate_limited]).to eq(true)
+    end
   end
 end
