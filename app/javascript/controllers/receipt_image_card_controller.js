@@ -339,14 +339,11 @@ export default class extends Controller {
     if (!this.imagePreviewReviewTargetId(targetId)) return
     if (!this.containsImagePreviewReviewTarget(targetId)) return
 
-    if (window.location.hash !== this.reviewTargetHash(targetId)) {
-      this.openPreview({ userDirected: true })
-      return
-    }
-
     event.preventDefault()
-    this.openPreview({ userDirected: true })
-    this.replaceReviewTargetHash(targetId)
+    if (window.location.hash !== this.reviewTargetHash(targetId)) {
+      window.history.pushState(window.history.state, '', this.reviewTargetHash(targetId))
+    }
+    this.openFromReviewTarget({ scroll: true })
   }
 
   handleReviewTargetHashChange () {
@@ -398,17 +395,6 @@ export default class extends Controller {
 
   reviewTargetHash (targetId) {
     return reviewTargetHash(targetId)
-  }
-
-  replaceReviewTargetHash (targetId) {
-    if (typeof window.history?.replaceState !== 'function' || typeof window.location?.replace !== 'function') {
-      this.openFromReviewTarget({ scroll: true })
-      return
-    }
-
-    const path = `${window.location.pathname}${window.location.search}`
-    window.history.replaceState(null, '', path)
-    window.location.replace(`${path}${this.reviewTargetHash(targetId)}`)
   }
 
   scrollReviewTargetIntoView () {
