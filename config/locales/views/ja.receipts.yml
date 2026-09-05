@@ -275,8 +275,12 @@ ja:
         guide: レシート全体を枠内に収めてください。枠内だけを撮影します。
         close_guide: 撮影の案内を閉じる
         capture: 撮影する
+        capture_help: 撮影する（Space）
+        rotate: 回転
+        rotate_help: 映像を右に90度回転
         retry: もう一度試す
         cancel: キャンセル
+        cancel_help: キャンセル（Esc）
         messages:
           requesting:
             title: カメラを起動しています

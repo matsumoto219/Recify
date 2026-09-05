@@ -39,6 +39,12 @@
   stroke-dasharray: 8 6;
 }
 
+.receipt-camera-video {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(var(--receipt-camera-rotation, 0deg));
+}
+
 .receipt-camera-guide-outline {
   stroke: var(--bg-input);
   stroke-width: 4;

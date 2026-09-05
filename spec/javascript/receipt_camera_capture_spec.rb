@@ -176,19 +176,167 @@ RSpec.describe "Receipt camera capture" do
     )
   end
 
+  [
+    [ 0, [ 140, 80, 300, 500 ], [] ],
+    [ 90, [ 80, 360, 500, 300 ], [ [ "translate", 300, 0 ], [ "rotate", Math::PI / 2 ] ] ],
+    [ 180, [ 760, 220, 300, 500 ], [ [ "translate", 300, 500 ], [ "rotate", Math::PI ] ] ],
+    [ 270, [ 620, 140, 500, 300 ], [ [ "translate", 0, 500 ], [ "rotate", Math::PI * 1.5 ] ] ]
+  ].each do |rotation, source_crop, transforms|
+    it "captures a noncentral landscape crop rotated #{rotation} degrees clockwise in one canvas" do
+      result = run_camera_script(<<~JAVASCRIPT)
+        const calls = [], frame = videoFrame(1200, 800, bounds(-40, 30, 600, 600))
+        let canvases = 0
+        const canvas = {
+          getContext: () => ({
+            translate (...args) { calls.push(['translate', ...args]) },
+            rotate (...args) { calls.push(['rotate', ...args]) },
+            drawImage (...args) { calls.push(['draw', args[0] === frame, ...args.slice(1)]) }
+          }),
+          toBlob (callback, type, quality) { calls.push(['blob', type, quality, this.width, this.height]); callback(new Blob(['jpeg'], { type })) }
+        }
+        const camera = new CameraCapture({ mediaDevices: { async getUserMedia () { return stream() } }, createCanvas: () => { canvases += 1; return canvas } })
+        await camera.start()
+        const blob = await camera.capture(frame, #{rotation % 180 == 0 ? "bounds(30, 170, 150, 250)" : "bounds(130, 70, 150, 250)"}, #{rotation})
+        return { type: blob.type, size: blob.size, canvases, calls, width: canvas.width, height: canvas.height }
+      JAVASCRIPT
+
+      expect(result).to eq(
+        "type" => "image/jpeg", "size" => 4, "canvases" => 1,
+        "calls" => [ *transforms, [ "draw", true, *source_crop, 0, 0, *source_crop.last(2) ], [ "blob", "image/jpeg", 0.95, 300, 500 ] ],
+        "width" => 0, "height" => 0
+      )
+    end
+  end
+
+  it "maps portrait source crops through every clockwise quarter turn without upscaling" do
+    result = run_camera_script(<<~JAVASCRIPT)
+      const calls = []
+      const canvas = {
+        getContext: () => ({ translate () {}, rotate () {}, drawImage (...args) { calls.push(args.slice(1)) } }),
+        toBlob (callback) { calls.push([this.width, this.height]); callback(new Blob(['jpeg'], { type: 'image/jpeg' })) }
+      }
+      const camera = new CameraCapture({ mediaDevices: { async getUserMedia () { return stream() } }, createCanvas: () => canvas })
+      await camera.start()
+      const frame = videoFrame(800, 1200, bounds(10, 20, 600, 600))
+      for (const rotation of [0, 90, 180, 270]) {
+        const guide = rotation % 180 === 0 ? bounds(170, 70, 210, 130) : bounds(70, 170, 210, 130)
+        await camera.capture(frame, guide, rotation)
+      }
+      return calls
+    JAVASCRIPT
+
+    expect(result).to eq([
+      [ 120, 100, 420, 260, 0, 0, 420, 260 ], [ 420, 260 ],
+      [ 100, 660, 260, 420, 0, 0, 260, 420 ], [ 420, 260 ],
+      [ 260, 840, 420, 260, 0, 0, 420, 260 ], [ 420, 260 ],
+      [ 440, 120, 260, 420, 0, 0, 260, 420 ], [ 420, 260 ]
+    ])
+  end
+
+  it "rounds scrolled fractional guide edges inward before inverting each rotation" do
+    result = run_camera_script(<<~JAVASCRIPT)
+      const draws = []
+      const canvas = {
+        getContext: () => ({ translate () {}, rotate () {}, drawImage (...args) { draws.push(args.slice(1)) } }),
+        toBlob (callback) { callback(new Blob(['jpeg'], { type: 'image/jpeg' })) }
+      }
+      const camera = new CameraCapture({ mediaDevices: { async getUserMedia () { return stream() } }, createCanvas: () => canvas })
+      await camera.start()
+      for (const rotation of [0, 90, 180, 270]) {
+        await camera.capture(videoFrame(1000, 1000, bounds(-100, -200, 333, 333)), bounds(-66.5, -159.75, 100.1, 100.9), rotation)
+      }
+      return draws
+    JAVASCRIPT
+
+    expect(result).to eq([
+      [ 101, 121, 300, 302, 0, 0, 300, 302 ],
+      [ 121, 599, 302, 300, 0, 0, 302, 300 ],
+      [ 599, 577, 300, 302, 0, 0, 300, 302 ],
+      [ 577, 101, 302, 300, 0, 0, 302, 300 ]
+    ])
+  end
+
+  it "rejects unsupported rotations before allocating a canvas" do
+    result = run_camera_script(<<~JAVASCRIPT)
+      let canvases = 0
+      const camera = new CameraCapture({ mediaDevices: { async getUserMedia () { return stream() } }, createCanvas: () => { canvases += 1 } })
+      await camera.start()
+      const rejected = []
+      for (const rotation of [null, '0', '90', 45, -90, 360, 90.5, NaN, Infinity, -Infinity, true, false, {}, [], new Number(90)]) {
+        try { await camera.capture(videoFrame(), bounds(), rotation) } catch (error) { rejected.push([error.reason, error.message]) }
+      }
+      return { canvases, rejected }
+    JAVASCRIPT
+
+    expect(result).to eq("canvases" => 0, "rejected" => Array.new(15) { %w[capture capture] })
+  end
+
+  it "keeps rotated crops inside the source frame and rejects letterboxing and subpixel undersized edges" do
+    result = run_camera_script(<<~JAVASCRIPT)
+      let canvases = 0
+      const draws = [], rejected = []
+      const canvas = {
+        getContext: () => ({ translate () {}, rotate () {}, drawImage (...args) { draws.push(args.slice(1)) } }),
+        toBlob (callback) { callback(new Blob(['jpeg'], { type: 'image/jpeg' })) }
+      }
+      const camera = new CameraCapture({ mediaDevices: { async getUserMedia () { return stream() } }, createCanvas: () => { canvases += 1; return canvas } })
+      await camera.start()
+      for (const rotation of [90, 180, 270]) {
+        const width = rotation === 180 ? 1200 : 800, height = rotation === 180 ? 800 : 1200
+        const frame = videoFrame(1200, 800, bounds(0, 0, width, height))
+        await camera.capture(frame, bounds(width - 100, height - 100, 100, 100), rotation)
+        for (const guide of [bounds(-0.1, 0, 100, 100), bounds(0, -0.1, 100, 100), bounds(width - 99.9, 0, 100, 100), bounds(0, height - 99.9, 100, 100), bounds(0.5, 0.5, 100, 100)]) {
+          try { await camera.capture(frame, guide, rotation) } catch (error) { rejected.push(error.reason) }
+        }
+        try { await camera.capture(videoFrame(1200, 800, bounds(0, 0, 600, 600)), bounds(0, 0, 100, 100), rotation) } catch (error) { rejected.push(error.reason) }
+      }
+      return { canvases, draws, rejected }
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "canvases" => 3,
+      "draws" => [ [ 1100, 0, 100, 100, 0, 0, 100, 100 ], [ 0, 0, 100, 100, 0, 0, 100, 100 ], [ 0, 700, 100, 100, 0, 0, 100, 100 ] ],
+      "rejected" => Array.new(18, "capture")
+    )
+  end
+
+  it "clears the rotated crop canvas after transformation, drawing and encoding failures" do
+    result = run_camera_script(<<~JAVASCRIPT)
+      const rejected = []
+      for (const failure of ['context', 'translate', 'rotate', 'draw', 'encode']) {
+        const fail = (stage) => { if (failure === stage) throw new Error('private detail') }
+        const canvas = {
+          getContext () {
+            fail('context')
+            return { translate () { fail('translate') }, rotate () { fail('rotate') }, drawImage () { fail('draw') } }
+          },
+          toBlob (callback) { fail('encode'); callback(new Blob(['jpeg'], { type: 'image/jpeg' })) }
+        }
+        const camera = new CameraCapture({ mediaDevices: { async getUserMedia () { return stream() } }, createCanvas: () => canvas })
+        await camera.start()
+        try { await camera.capture(videoFrame(1200, 800, bounds(0, 0, 800, 1200)), bounds(100, 200, 300, 500), 90) } catch (error) { rejected.push([error.reason, error.message, canvas.width, canvas.height]) }
+      }
+      return rejected
+    JAVASCRIPT
+
+    expect(result).to eq(Array.new(5) { [ "capture", "capture", 0, 0 ] })
+  end
+
   it "rejects unavailable, undersized and oversized frames before allocating a canvas" do
     result = run_camera_script(<<~JAVASCRIPT)
       let canvases = 0
       const camera = new CameraCapture({ mediaDevices: { async getUserMedia () { return stream() } }, createCanvas: () => { canvases += 1 } })
       await camera.start()
       const rejected = []
-      for (const [videoWidth, videoHeight, readyState] of [[0, 0, 0], [99, 400, 2], [400, 99, 2], [10001, 100, 2], [100, 10001, 2], [Infinity, 400, 2], [100.5, 400, 2]]) {
-        try { await camera.capture({ ...videoFrame(videoWidth, videoHeight), readyState }, bounds()) } catch (error) { rejected.push(error.reason) }
+      for (const rotation of [0, 90, 180, 270]) {
+        for (const [videoWidth, videoHeight, readyState] of [[0, 0, 0], [99, 400, 2], [400, 99, 2], [10001, 100, 2], [100, 10001, 2], [Infinity, 400, 2], [100.5, 400, 2]]) {
+          try { await camera.capture({ ...videoFrame(videoWidth, videoHeight), readyState }, bounds(), rotation) } catch (error) { rejected.push(error.reason) }
+        }
       }
       return { canvases, rejected }
     JAVASCRIPT
 
-    expect(result).to eq("canvases" => 0, "rejected" => Array.new(7, "capture"))
+    expect(result).to eq("canvases" => 0, "rejected" => Array.new(28, "capture"))
   end
 
   it "rejects missing, empty, wrong-format and oversized blobs and drawing failures with bounded errors" do
@@ -263,17 +411,19 @@ RSpec.describe "Receipt camera capture" do
     result = run_camera_script(<<~JAVASCRIPT)
       const sizes = []
       const canvas = {
-        getContext: () => ({ drawImage () {} }),
+        getContext: () => ({ translate () {}, rotate () {}, drawImage () {} }),
         toBlob (callback) { sizes.push([this.width, this.height]); callback({ type: 'image/jpeg', size: 20 * 1024 * 1024 }) }
       }
       const camera = new CameraCapture({ mediaDevices: { async getUserMedia () { return stream() } }, createCanvas: () => canvas })
       await camera.start()
-      await camera.capture(videoFrame(100, 100, bounds(0, 0, 500, 500)), bounds(0, 0, 500, 500))
-      await camera.capture(videoFrame(10000, 10000, bounds(0, 0, 500, 500)), bounds(0, 0, 500, 500))
+      for (const rotation of [0, 90, 180, 270]) {
+        await camera.capture(videoFrame(100, 100, bounds(0, 0, 500, 500)), bounds(0, 0, 500, 500), rotation)
+        await camera.capture(videoFrame(10000, 10000, bounds(0, 0, 500, 500)), bounds(0, 0, 500, 500), rotation)
+      }
       return sizes
     JAVASCRIPT
 
-    expect(result).to eq([ [ 100, 100 ], [ 10000, 10000 ] ])
+    expect(result).to eq(Array.new(4) { [ [ 100, 100 ], [ 10000, 10000 ] ] }.flatten(1))
   end
 
   it "rejects missing, malformed, outside and undersized guides without allocating a full-frame fallback" do

@@ -1,8 +1,10 @@
 <div class="hidden absolute inset-0 flex-col gap-3 p-3 image-preview-surface text-left"
      aria-busy="false"
-     data-receipt-upload-target="cameraPanel">
+     tabindex="-1"
+     data-receipt-upload-target="cameraPanel"
+     data-action="keydown->receipt-upload#handleCameraKeydown">
   <video autoplay muted playsinline
-         class="hidden absolute inset-0 h-full w-full object-contain"
+         class="hidden absolute h-full w-full object-contain receipt-camera-video"
          aria-label="<%= t("receipts.new_upload.camera.preview_label") %>"
          data-receipt-upload-target="cameraVideo"
          data-action="loadedmetadata->receipt-upload#cameraFrameReady loadeddata->receipt-upload#cameraFrameReady canplay->receipt-upload#cameraFrameReady resize->receipt-upload#cameraFrameReady error->receipt-upload#cameraVideoFailed"></video>
@@ -54,9 +56,21 @@
   </div>
 
   <div class="glass-panel relative grid min-h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-xl px-3 py-2" data-camera-actions>
+    <%= render "shared/ui/actions/button",
+      label: t("receipts.new_upload.camera.rotate"),
+      label_class: "sr-only sm:not-sr-only",
+      icon: "rotate_right",
+      variant: :secondary,
+      size: :sm,
+      type: "button",
+      class: "hidden col-start-1 row-start-1 min-h-11 min-w-11 max-w-full justify-self-start max-sm:px-3",
+      html_options: { title: t("receipts.new_upload.camera.rotate_help") },
+      data: { receipt_upload_target: "cameraRotate", action: "receipt-upload#rotateCamera" } %>
     <button type="button"
             class="ui-touch-control hidden col-start-2 row-start-1 inline-flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 token-border-strong token-bg-card token-text-base disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="<%= t("receipts.new_upload.camera.capture") %>"
+            aria-keyshortcuts="Space"
+            title="<%= t("receipts.new_upload.camera.capture_help") %>"
             disabled
             data-receipt-upload-target="cameraCaptureButton"
             data-action="receipt-upload#captureCamera">
@@ -71,10 +85,13 @@
       data: { receipt_upload_target: "cameraRetry", action: "receipt-upload#openCamera" } %>
     <%= render "shared/ui/actions/button",
       label: t("receipts.new_upload.camera.cancel"),
+      label_class: "sr-only sm:not-sr-only",
+      icon: "close",
       variant: :secondary,
       size: :sm,
       type: "button",
-      class: "col-start-3 row-start-1 min-w-0 max-w-full justify-self-end",
+      class: "col-start-3 row-start-1 min-h-11 min-w-11 max-w-full justify-self-end max-sm:px-3",
+      html_options: { aria: { keyshortcuts: "Escape" }, title: t("receipts.new_upload.camera.cancel_help") },
       data: { receipt_upload_target: "cameraCancel", action: "receipt-upload#cancelCamera" } %>
   </div>
 </div>

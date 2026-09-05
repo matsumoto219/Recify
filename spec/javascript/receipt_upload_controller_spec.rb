@@ -153,6 +153,87 @@ RSpec.describe "Receipt upload camera controller" do
     )
   end
 
+  it "rotates the preview in quarter turns, carries the rotation into capture and resets it on exit" do
+    result = run_upload_script(<<~JAVASCRIPT)
+      const controller = setup(), rotations = [], received = []
+      await controller.openCamera()
+      for (let index = 0; index < 4; index++) {
+        controller.rotateCamera()
+        rotations.push([controller.cameraRotation, controller.cameraVideoTarget.style.getPropertyValue('width'), controller.cameraVideoTarget.style.getPropertyValue('height')])
+      }
+      controller.rotateCamera()
+      controller.cameraCapture.capture = async (video, guide, rotation) => { received.push(rotation); return new Blob(['jpeg'], { type: 'image/jpeg' }) }
+      await controller.captureCamera()
+      return { rotations, received, final: controller.cameraRotation, state: controller.cameraState }
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "rotations" => [ [ 90, "400px", "600px" ], [ 180, "600px", "400px" ], [ 270, "400px", "600px" ], [ 0, "600px", "400px" ] ],
+      "received" => [ 90 ], "final" => 0, "state" => "idle"
+    )
+  end
+
+  it "does not rotate outside live capture or during upload and resets orientation for another camera" do
+    result = run_upload_script(<<~JAVASCRIPT)
+      const controller = setup(), ignored = []
+      for (const state of ['idle', 'requesting', 'capturing', 'error']) {
+        controller.cameraState = state
+        controller.rotateCamera()
+        ignored.push(controller.cameraRotation)
+      }
+      controller.cameraState = 'idle'
+      await controller.openCamera()
+      controller.element.setAttribute('aria-busy', 'true')
+      controller.rotateCamera()
+      ignored.push(controller.cameraRotation)
+      controller.element.removeAttribute('aria-busy')
+      controller.rotateCamera()
+      await controller.startCamera('another-device')
+      return { ignored, reset: controller.cameraRotation }
+    JAVASCRIPT
+
+    expect(result).to eq("ignored" => [ 0, 0, 0, 0, 0 ], "reset" => 0)
+  end
+
+  it "assigns scoped Space to the enabled shutter and Escape to the existing cancellation path" do
+    result = run_upload_script(<<~JAVASCRIPT)
+      const controller = setup(), target = node()
+      await controller.openCamera()
+      const event = (key) => ({ key, target, preventDefault () { this.prevented = true }, stopPropagation () { this.stopped = true } })
+      const space = event(' ')
+      controller.handleCameraKeydown(space)
+      controller.cameraCaptureButtonTarget.disabled = true
+      controller.handleCameraKeydown(event(' '))
+      const escape = event('Escape')
+      controller.handleCameraKeydown(escape)
+      return { shots: controller.cameraCaptureButtonTarget.clicks, space: [space.prevented, space.stopped], escape: [escape.prevented, escape.stopped], state: controller.cameraState, focused: controller.cameraButtonTarget.focused }
+    JAVASCRIPT
+
+    expect(result).to eq("shots" => 1, "space" => [ true, true ], "escape" => [ true, true ], "state" => "idle", "focused" => true)
+  end
+
+  it "does not steal editing, native button, composition, modifier or repeated keyboard operations" do
+    result = run_upload_script(<<~JAVASCRIPT)
+      const controller = setup(), target = node()
+      await controller.openCamera()
+      const ignored = [
+        { key: 'Enter' }, { key: 'Backspace' }, { key: ' ', repeat: true }, { key: 'Escape', isComposing: true },
+        { key: 'Escape', keyCode: 229 }, { key: 'Escape', defaultPrevented: true },
+        ...['ctrlKey', 'altKey', 'metaKey', 'shiftKey'].map((modifier) => ({ key: 'Escape', [modifier]: true })),
+        { key: ' ', target: { closest: (selector) => selector.startsWith('button,') ? node() : null } },
+        { key: 'Escape', target: { closest: () => node() } },
+        { key: 'Escape', target: { isContentEditable: true, closest: () => null } }
+      ]
+      const prevented = []
+      for (const values of ignored) controller.handleCameraKeydown({ target, preventDefault () { prevented.push(true) }, stopPropagation () {}, ...values })
+      controller.cameraState = 'capturing'
+      controller.handleCameraKeydown({ key: ' ', target, preventDefault () {}, stopPropagation () {} })
+      return { shots: controller.cameraCaptureButtonTarget.clicks, prevented, state: controller.cameraState }
+    JAVASCRIPT
+
+    expect(result).to eq("shots" => 0, "prevented" => [], "state" => "capturing")
+  end
+
   it "keeps native capture for coarse pointers and unavailable browser APIs" do
     result = run_upload_script(<<~JAVASCRIPT)
       const results = []

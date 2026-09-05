@@ -63,6 +63,7 @@ export default class extends Controller {
     'cameraStatusHelp',
     'cameraRetry',
     'cameraCancel',
+    'cameraRotate',
     'cameraCaptureButton',
     'cameraDeviceField',
     'cameraDeviceSelect',
@@ -110,6 +111,7 @@ export default class extends Controller {
     this.cameraDevices = new Map()
     this.cameraTracks = []
     this.cameraState = 'idle'
+    this.cameraRotation = 0
     this.stopCameraForNavigation = this.stopCamera.bind(this)
     this.prepareUploadForCache = () => {
       this.stopCamera()
@@ -227,7 +229,7 @@ export default class extends Controller {
     const request = this.cameraRequest
     this.setCameraState('capturing')
     try {
-      const blob = await this.cameraCapture.capture(this.cameraVideoTarget, guideBounds)
+      const blob = await this.cameraCapture.capture(this.cameraVideoTarget, guideBounds, this.cameraRotation)
       if (request !== this.cameraRequest) return
 
       const file = new File([blob], 'receipt-camera.jpg', { type: 'image/jpeg' })
@@ -369,13 +371,18 @@ export default class extends Controller {
   syncCameraGuide () {
     if (!['live', 'capturing'].includes(this.cameraState)) return
 
+    const panel = this.cameraPanelTarget.getBoundingClientRect()
+    const rotated = this.cameraRotation % 180 !== 0
+    this.cameraVideoTarget.style.setProperty('width', `${rotated ? panel.height : panel.width}px`)
+    this.cameraVideoTarget.style.setProperty('height', `${rotated ? panel.width : panel.height}px`)
+    this.cameraVideoTarget.style.setProperty('--receipt-camera-rotation', `${this.cameraRotation}deg`)
     const outline = this.cameraGuideTarget.querySelector('.receipt-camera-guide-outline')
     const bounds = cameraGuideBounds({
-      videoWidth: this.cameraVideoTarget.videoWidth,
-      videoHeight: this.cameraVideoTarget.videoHeight,
+      videoWidth: rotated ? this.cameraVideoTarget.videoHeight : this.cameraVideoTarget.videoWidth,
+      videoHeight: rotated ? this.cameraVideoTarget.videoWidth : this.cameraVideoTarget.videoHeight,
       video: this.cameraVideoTarget.getBoundingClientRect(),
       frame: this.cameraGuideFrameTarget.getBoundingClientRect(),
-      panel: this.cameraPanelTarget.getBoundingClientRect(),
+      panel,
       inset: outline ? Number.parseFloat(window.getComputedStyle(outline).strokeWidth) / 2 : NaN
     })
     this.cameraGuideTarget.classList.toggle('invisible', !bounds)
@@ -413,8 +420,35 @@ export default class extends Controller {
     this.cameraButtonTarget.focus()
   }
 
+  handleCameraKeydown (event) {
+    if (this.cameraState === 'idle' || this.uploadSubmitting() || event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.repeat) return
+    if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return
+    if (event.target.isContentEditable || event.target.closest('input, textarea, select, [role="textbox"], [role="combobox"], [role="listbox"]')) return
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      this.cancelCamera()
+    } else if (event.key === ' ' && this.cameraState === 'live' && !this.cameraCaptureButtonTarget.disabled) {
+      if (event.target.closest('button, a[href], summary, [role="button"]')) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      this.cameraCaptureButtonTarget.click()
+    }
+  }
+
+  rotateCamera () {
+    if (this.uploadSubmitting() || !this.ocrAvailableValue || this.cameraState !== 'live') return
+
+    this.cameraRotation = (this.cameraRotation + 90) % 360
+    this.syncCameraGuide()
+  }
+
   stopCamera () {
     this.cameraRequest += 1
+    this.cameraRotation = 0
+    ;['width', 'height', '--receipt-camera-rotation'].forEach((property) => this.cameraVideoTarget.style.removeProperty(property))
     this.resetCameraHint()
     this.cameraTracks.forEach((track) => track.removeEventListener('ended', this.cameraTrackEnded))
     this.cameraTracks = []
@@ -452,6 +486,9 @@ export default class extends Controller {
     this.cameraRetryTarget.classList.toggle('inline-flex', state === 'error')
     this.cameraCaptureButtonTarget.classList.toggle('hidden', !live)
     this.cameraCaptureButtonTarget.classList.toggle('inline-flex', live)
+    this.cameraRotateTarget.classList.toggle('hidden', !live)
+    this.cameraRotateTarget.classList.toggle('inline-flex', live)
+    this.cameraRotateTarget.disabled = state !== 'live' || this.uploadSubmitting() || !this.ocrAvailableValue
     this.cameraRetryTarget.disabled = !this.ocrAvailableValue
     this.cameraDeviceSelectTarget.disabled = state !== 'live'
     this.cameraButtonTarget.disabled = this.uploadSubmitting() || !this.ocrAvailableValue || active

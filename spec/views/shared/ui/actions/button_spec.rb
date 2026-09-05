@@ -67,4 +67,17 @@ RSpec.describe 'shared/ui/actions/_button', type: :view do
       expect(button['class']).not_to include('btn-link-secondary')
     end
   end
+
+  it 'can hide only the visible label while preserving its text and icon semantics' do
+    document = render_button(icon: 'close', label_class: 'sr-only sm:not-sr-only')
+
+    expect(document.at_css('button > span.sr-only').text).to eq('確認')
+    expect(document.at_css('.material-symbols-outlined')['aria-hidden']).to eq('true')
+  end
+
+  it 'keeps the existing label markup when no label class is supplied' do
+    document = render_button
+
+    expect(document.at_css('button > span').to_html).to eq('<span>確認</span>')
+  end
 end

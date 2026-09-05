@@ -146,7 +146,8 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     video_width, video_height = page.evaluate_script(<<~JAVASCRIPT)
       (() => {
         const video = document.querySelector('[data-receipt-upload-target=cameraVideo]')
-        return [video.videoWidth, video.videoHeight]
+        const rotated = Math.abs(Number.parseFloat(video.style.getPropertyValue('--receipt-camera-rotation')) || 0) % 180 !== 0
+        return rotated ? [video.videoHeight, video.videoWidth] : [video.videoWidth, video.videoHeight]
       })()
     JAVASCRIPT
     video = geometry.fetch("video")
@@ -534,6 +535,123 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
       click_button I18n.t("receipts.new_upload.camera.cancel")
       expect_browser_console_clean
     end
+  end
+
+  it "カメラ領域のSpaceとEscapeを処理し、選択欄とボタンの標準キーを奪わない" do
+    visit_camera_upload(create_system_test_user)
+    install_synthetic_camera(devices: 2)
+    start_camera
+    rotate = find("[data-receipt-upload-target=cameraRotate]")
+    rotate.send_keys(:space)
+    expect(page).to have_css("video[style*='90deg']")
+    expect(page).to have_css("[data-receipt-upload-target=cameraLive]:not(.hidden)")
+    select = find("[data-receipt-upload-target=cameraDeviceSelect]")
+    select.send_keys(:escape)
+    expect(page).to have_css("[data-receipt-upload-target=cameraLive]:not(.hidden)")
+    find("[data-camera-guide-frame]").click
+    expect(page.evaluate_script("document.activeElement.dataset.receiptUploadTarget")).to eq("cameraPanel")
+    page.driver.browser.action.send_keys(:space).perform
+    expect(page).to have_css("[data-receipt-upload-target=previewWrapper]:not(.hidden)")
+    expect(page.evaluate_script("window.receiptCameraTest.calls.length")).to eq(1)
+    start_camera
+    find("[data-receipt-upload-target=cameraCaptureButton]").send_keys(:escape)
+    expect(page).to have_css("[data-receipt-upload-target=previewWrapper]:not(.hidden)")
+    expect(page.evaluate_script("window.receiptCameraTest.streams.flatMap(stream => stream.getTracks()).every(track => track.readyState === 'ended')")).to be(true)
+    start_camera
+    find("[data-receipt-upload-target=cameraCaptureButton]").send_keys(:enter)
+    expect(page).to have_css("[data-receipt-upload-target=previewWrapper]:not(.hidden)")
+    expect_browser_console_clean
+  end
+
+  [ [ 1440, 900 ], [ 390, 640 ], [ 320, 640 ] ].each do |width, height|
+    it "#{width}pxで回転とキャンセルの名前を保持し、中央のシャッターと重ねない", screen_size: [ width, height ], viewport_override: true do
+      visit_camera_upload(create_system_test_user)
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride",
+        width: width,
+        height: height,
+        deviceScaleFactor: 1,
+        mobile: false
+      )
+      install_synthetic_camera(devices: 2)
+      start_camera
+      rotate = find_button(I18n.t("receipts.new_upload.camera.rotate"))
+      cancel = find_button(I18n.t("receipts.new_upload.camera.cancel"))
+      [ rotate, cancel ].each do |button|
+        expect(button).to have_css(".material-symbols-outlined[aria-hidden=true]")
+        label = button.find("span.sr-only", visible: :all)
+        expect(page.evaluate_script("getComputedStyle(arguments[0]).position", label)).to eq(width < 640 ? "absolute" : "static")
+      end
+      4.times do
+        rotate.click
+        expect_camera_regions_separated(camera_geometry)
+        bounds = page.evaluate_script(<<~JAVASCRIPT)
+          (() => {
+            const rotate = document.querySelector('[data-receipt-upload-target=cameraRotate]').getBoundingClientRect()
+            const capture = document.querySelector('[data-receipt-upload-target=cameraCaptureButton]').getBoundingClientRect()
+            return [rotate.width, rotate.height, rotate.right, capture.left, document.documentElement.scrollWidth <= innerWidth]
+          })()
+        JAVASCRIPT
+        expect(bounds[0]).to be >= 44
+        expect(bounds[1]).to be >= 44
+        expect(bounds[2]).to be <= bounds[3]
+        expect(bounds[4]).to be(true)
+      end
+      cancel.send_keys(:enter)
+      expect_browser_console_clean
+    end
+  end
+
+  it "回転したプレビューとJPEGの四隅・寸法が全4方向で一致する" do
+    visit_camera_upload(create_system_test_user)
+    install_synthetic_camera
+    colors = [ [ 255, 0, 0 ], [ 0, 255, 0 ], [ 0, 0, 255 ], [ 255, 255, 0 ] ]
+    [ [ 1600, 900 ], [ 900, 1600 ], [ 1000, 1000 ] ].each do |video_width, video_height|
+      4.times do |turns|
+        start_camera
+        resize_synthetic_camera(video_width, video_height)
+        turns.times { click_button I18n.t("receipts.new_upload.camera.rotate") }
+        expect_camera_regions_separated(camera_geometry)
+        expected = page.evaluate_async_script(<<~JAVASCRIPT, turns)
+          const turns = arguments[0], done = arguments[arguments.length - 1]
+          const video = document.querySelector('[data-receipt-upload-target=cameraVideo]')
+          const box = video.getBoundingClientRect(), guide = document.querySelector('[data-camera-guide]').getBoundingClientRect()
+          const [width, height] = turns % 2 ? [video.videoHeight, video.videoWidth] : [video.videoWidth, video.videoHeight]
+          const scale = Math.min(box.width / width, box.height / height)
+          const left = box.left + (box.width - width * scale) / 2, top = box.top + (box.height - height * scale) / 2
+          const expected = { width: Math.floor((guide.right - left) / scale) - Math.ceil((guide.left - left) / scale), height: Math.floor((guide.bottom - top) / scale) - Math.ceil((guide.top - top) / scale) }
+          const canvas = window.receiptCameraTest.canvases.at(-1), context = canvas.getContext('2d')
+          const positions = [[0, 0], [canvas.width / 2, 0], [canvas.width / 2, canvas.height / 2], [0, canvas.height / 2]]
+          video.requestVideoFrameCallback(() => done(expected))
+          ;['#ff0000', '#00ff00', '#0000ff', '#ffff00'].forEach((color, index) => {
+            context.fillStyle = color
+            context.fillRect(...positions[index], canvas.width / 2, canvas.height / 2)
+          })
+          window.receiptCameraTest.streams.at(-1).getVideoTracks()[0].requestFrame()
+        JAVASCRIPT
+        click_button I18n.t("receipts.new_upload.camera.capture")
+        expect(page).to have_css("[data-receipt-upload-target=previewWrapper]:not(.hidden)")
+        captured = page.evaluate_async_script(<<~JAVASCRIPT)
+          const done = arguments[arguments.length - 1]
+          createImageBitmap(document.querySelector('[data-receipt-upload-target=cameraInput]').files[0]).then(image => {
+            const canvas = document.createElement('canvas')
+            canvas.width = image.width
+            canvas.height = image.height
+            const context = canvas.getContext('2d')
+            context.drawImage(image, 0, 0)
+            const samples = [[8, 8], [image.width - 9, 8], [image.width - 9, image.height - 9], [8, image.height - 9]]
+              .map(([x, y]) => [...context.getImageData(x, y, 1, 1).data].slice(0, 3))
+            done({ width: image.width, height: image.height, samples })
+            image.close()
+          })
+        JAVASCRIPT
+        expect(captured.slice("width", "height")).to eq(expected)
+        colors.rotate(-turns).zip(captured.fetch("samples")) do |color, sample|
+          color.zip(sample) { |channel, actual| expect(actual).to be_within(15).of(channel) }
+        end
+      end
+    end
+    expect_browser_console_clean
   end
 
   it "横長・縦長・正方形の映像から枠内だけを元のピクセル数でJPEGへ保存する" do

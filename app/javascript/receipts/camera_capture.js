@@ -17,20 +17,22 @@ function validDimensions (width, height) {
   return [width, height].every((value) => Number.isInteger(value) && value >= MIN_FRAME_DIMENSION && value <= MAX_FRAME_DIMENSION)
 }
 
-function cropBounds (video, guide) {
+function cropBounds (video, guide, rotation) {
   const viewport = video.getBoundingClientRect()
   const validBounds = [viewport, guide].every((bounds) => bounds &&
     [bounds.left, bounds.top, bounds.width, bounds.height].every(Number.isFinite) && bounds.width > 0 && bounds.height > 0)
   if (!validBounds) throw new CameraCaptureError('capture')
 
-  const scale = Math.min(viewport.width / video.videoWidth, viewport.height / video.videoHeight)
-  const renderedLeft = viewport.left + (viewport.width - video.videoWidth * scale) / 2
-  const renderedTop = viewport.top + (viewport.height - video.videoHeight * scale) / 2
+  const frameWidth = rotation % 180 === 0 ? video.videoWidth : video.videoHeight
+  const frameHeight = rotation % 180 === 0 ? video.videoHeight : video.videoWidth
+  const scale = Math.min(viewport.width / frameWidth, viewport.height / frameHeight)
+  const renderedLeft = viewport.left + (viewport.width - frameWidth * scale) / 2
+  const renderedTop = viewport.top + (viewport.height - frameHeight * scale) / 2
   const left = (guide.left - renderedLeft) / scale
   const top = (guide.top - renderedTop) / scale
   const right = (guide.left + guide.width - renderedLeft) / scale
   const bottom = (guide.top + guide.height - renderedTop) / scale
-  if (![left, top, right, bottom].every(Number.isFinite) || left < 0 || top < 0 || right > video.videoWidth || bottom > video.videoHeight) {
+  if (![left, top, right, bottom].every(Number.isFinite) || left < 0 || top < 0 || right > frameWidth || bottom > frameHeight) {
     throw new CameraCaptureError('capture')
   }
 
@@ -41,6 +43,19 @@ function cropBounds (video, guide) {
   if (!validDimensions(width, height)) throw new CameraCaptureError('capture')
 
   return { x, y, width, height }
+}
+
+function sourceBounds (video, { x, y, width, height }, rotation) {
+  switch (rotation) {
+    case 90:
+      return { x: y, y: video.videoHeight - x - width, width: height, height: width }
+    case 180:
+      return { x: video.videoWidth - x - width, y: video.videoHeight - y - height, width, height }
+    case 270:
+      return { x: video.videoWidth - y - height, y: x, width: height, height: width }
+    default:
+      return { x, y, width, height }
+  }
 }
 
 export function supportsInlineCamera ({ secureContext, mediaDevices, finePointer }) {
@@ -98,16 +113,23 @@ export class CameraCapture {
     }
   }
 
-  async capture (video, guideBounds) {
+  async capture (video, guideBounds, rotation = 0) {
     let canvas
     try {
+      if (![0, 90, 180, 270].includes(rotation)) throw new CameraCaptureError('capture')
       if (!this.stream || ![2, 3, 4].includes(video.readyState) || !validDimensions(video.videoWidth, video.videoHeight)) throw new CameraCaptureError('capture')
 
-      const { x, y, width, height } = cropBounds(video, guideBounds)
+      const crop = cropBounds(video, guideBounds, rotation)
+      const source = sourceBounds(video, crop, rotation)
       canvas = this.createCanvas()
-      canvas.width = width
-      canvas.height = height
-      canvas.getContext('2d').drawImage(video, x, y, width, height, 0, 0, width, height)
+      canvas.width = crop.width
+      canvas.height = crop.height
+      const context = canvas.getContext('2d')
+      if (rotation === 90) context.translate(crop.width, 0)
+      if (rotation === 180) context.translate(crop.width, crop.height)
+      if (rotation === 270) context.translate(0, crop.height)
+      if (rotation !== 0) context.rotate(rotation * Math.PI / 180)
+      context.drawImage(video, source.x, source.y, source.width, source.height, 0, 0, source.width, source.height)
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.95))
       if (!blob || blob.type !== 'image/jpeg' || blob.size === 0 || blob.size > MAX_CAPTURE_BYTES) {
         throw new CameraCaptureError('capture')
