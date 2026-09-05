@@ -505,10 +505,11 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         }
       ]
       ai_result = {
+        meta: { ai_name_completion_enabled: true },
         receipt_items_attributes: [
           {
             index: 0,
-            suggested_name: 'コーヒー補完',
+            suggested_name: 'ｺｰﾋｰ',
             category: 'food',
             needs_review: false
           }
@@ -518,7 +519,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       item = described_class.call(ocr_result:, ai_result:)
         .fetch(:receipt_items_attributes).first
 
-      expect(item).to include(raw_text: 'コーヒー', suggested_name: 'コーヒー補完', category: 'food')
+      expect(item).to include(raw_text: 'コーヒー', suggested_name: 'ｺｰﾋｰ', category: 'food')
     end
 
     context 'AI結果なしの場合' do
@@ -2938,8 +2939,9 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
-      it 'AI name completion ONでOCR文脈に根拠があるsuggested_nameは採用する' do
+      it 'AI name completion ONで同じOCR itemのname-onlyに根拠があるsuggested_nameは採用する' do
         ai_result[:meta] = { ai_name_completion_enabled: true }
+        ocr_result[:candidates][:items].first[:name] = 'ブレンドコーヒー'
 
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
         first_item = params[:receipt_items_attributes].first
@@ -2968,7 +2970,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
-      it 'AI item indexが重複した場合は先勝ちにし、該当itemを確認対象にする' do
+      it 'AI item indexが重複した場合は提案を拒否し、該当itemを確認対象にする' do
         ai_result[:receipt_items_attributes] = [
           { index: 0, suggested_name: 'ブレンドコーヒー', category: 'drink', needs_review: false },
           { index: 0, suggested_name: '重複コーヒー', category: 'food', needs_review: false }
@@ -2978,7 +2980,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         first_item = params[:receipt_items_attributes].first
 
         aggregate_failures do
-          expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+          expect(first_item[:suggested_name]).to eq('コーヒー')
           expect(first_item[:category]).to eq('drink')
           expect(first_item[:needs_review]).to eq(true)
           expect(first_item[:review_reasons]).to include('item_name_uncertain')
@@ -3806,20 +3808,20 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
       end
 
-      it 'AI補完で明細名とカテゴリを上書きしてもAzure由来のquantity_unit_codeとproduct_codeを保持する' do
+      it 'AIカテゴリ補完時もOCR名とAzure由来のquantity_unit_codeとproduct_codeを保持する' do
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
         first_item = params[:receipt_items_attributes].first
         second_item = params[:receipt_items_attributes].second
 
         aggregate_failures do
-          expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+          expect(first_item[:suggested_name]).to eq('コーヒー')
           expect(first_item[:category]).to eq('drink')
           expect(first_item[:quantity_unit_code]).to eq('each')
           expect(first_item[:product_code]).to eq('C001')
           expect(first_item[:needs_review]).to eq(false)
 
-          expect(second_item[:suggested_name]).to eq('たまごサンド')
+          expect(second_item[:suggested_name]).to eq('サンド')
           expect(second_item[:category]).to eq('food')
           expect(second_item[:quantity_unit_code]).to eq('each')
           expect(second_item[:product_code]).to eq('S001')
@@ -4588,7 +4590,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
           aggregate_failures do
             expect(params[:receipt_items_attributes].size).to eq(2)
-            expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+            expect(first_item[:suggested_name]).to eq('コーヒー')
             expect(first_item[:quantity_unit_code]).to eq('each')
             expect(second_item[:raw_text]).to eq('サンド')
             expect(second_item[:quantity_unit_code]).to eq('each')
@@ -4649,7 +4651,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             expect(first_item[:raw_text]).to eq('コーヒー')
             expect(first_item[:quantity_unit_code]).to eq('each')
             expect(first_item[:product_code]).to eq('C001')
-            expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+            expect(first_item[:suggested_name]).to eq('コーヒー')
             expect(first_item[:category]).to eq('drink')
             expect(first_item[:needs_review]).to eq(true)
             expect(first_item[:review_reasons]).to include('item_name_uncertain')

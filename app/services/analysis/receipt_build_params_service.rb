@@ -383,7 +383,7 @@ module Analysis
         source_items =
           if candidate_items.present?
             if applicable_ai_items.present?
-              merge_items(candidate_items, applicable_ai_items, lines:, ai_name_completion_enabled: ai_name_completion_enabled)
+              merge_items(candidate_items, applicable_ai_items, ai_name_completion_enabled: ai_name_completion_enabled)
             else
               candidate_items
             end
@@ -396,7 +396,6 @@ module Analysis
               merge_items(
                 fallback_items,
                 applicable_ai_items,
-                lines: fallback_lines,
                 ai_name_completion_enabled: ai_name_completion_enabled
               )
             else
@@ -2436,24 +2435,24 @@ module Analysis
         nil
       end
 
-      def merge_items(candidate_items, ai_items, lines: [], ai_name_completion_enabled: nil)
+      def merge_items(candidate_items, ai_items, ai_name_completion_enabled: nil)
         normalized_candidate_items = Array(candidate_items).map do |item|
           item_hash = item.respond_to?(:deep_symbolize_keys) ? item.deep_symbolize_keys : {}
           item_hash.with_indifferent_access
         end
         normalized_ai_items = normalize_items(ai_items)
         raw_ai_indexes = raw_ai_item_indexes(normalized_ai_items)
-        index_mode = ai_item_index_mode(raw_ai_indexes, normalized_candidate_items.size)
-        index_issues = ai_item_index_issues(raw_ai_indexes, normalized_candidate_items.size, index_mode)
+        index_issues = ai_item_index_issues(raw_ai_indexes, normalized_candidate_items.size)
 
         ai_items_by_index = normalized_ai_items.each_with_object({}) do |item, result|
           ai_index = normalize_item_index(
-            item[:index] || item["index"] || item[:position_index] || item["position_index"]
+            item.key?(:index) ? item[:index] : item[:position_index]
           )
-          target_index = ai_item_target_index(ai_index, normalized_candidate_items.size, index_mode)
+          target_index = ai_item_target_index(ai_index, normalized_candidate_items.size)
           next if target_index.nil?
+          next if index_issues[:duplicate_indexes].include?(target_index)
 
-          result[target_index] ||= item
+          result[target_index] = item
         end
 
         normalized_candidate_items.each_with_index.map do |candidate_item, candidate_index|
@@ -2465,14 +2464,12 @@ module Analysis
           suggested_name = suggested_item_name_for(
             candidate_item,
             ai_item,
-            lines: lines,
             ai_name_completion_enabled: ai_name_completion_enabled
           )
           name_completion_review_needed = ai_suggested_name_rejected?(
             candidate_item,
             ai_item,
             suggested_name,
-            lines: lines,
             ai_name_completion_enabled: ai_name_completion_enabled
           )
           review_reasons |= [ "item_name_uncertain" ] if name_completion_review_needed
@@ -2498,69 +2495,52 @@ module Analysis
         end
       end
 
-      def suggested_item_name_for(candidate_item, ai_item, lines:, ai_name_completion_enabled:)
+      def suggested_item_name_for(candidate_item, ai_item, ai_name_completion_enabled:)
         candidate_name = candidate_item[:suggested_name]
         ai_name = ai_item[:suggested_name].presence
 
-        return candidate_name if ai_name_completion_enabled == false
+        return candidate_name unless ai_name_completion_enabled == true
         return candidate_name if ai_name.blank?
-        return ai_name unless ai_name_completion_enabled == true
 
-        ai_suggested_name_supported?(candidate_item, ai_name, lines) ? ai_name : candidate_name
+        ai_suggested_name_supported?(candidate_item, ai_name) ? ai_name : candidate_name
       end
 
-      def ai_suggested_name_rejected?(candidate_item, ai_item, suggested_name, lines:, ai_name_completion_enabled:)
+      def ai_suggested_name_rejected?(candidate_item, ai_item, suggested_name, ai_name_completion_enabled:)
         return false unless ai_name_completion_enabled == true
 
         ai_name = ai_item[:suggested_name].presence
         return false if ai_name.blank?
 
-        suggested_name != ai_name && !ai_suggested_name_supported?(candidate_item, ai_name, lines)
+        suggested_name != ai_name && !ai_suggested_name_supported?(candidate_item, ai_name)
       end
 
-      def ai_suggested_name_supported?(candidate_item, ai_name, lines)
+      def ai_suggested_name_supported?(candidate_item, ai_name)
         ai_text = compact_item_text(ai_name)
         return false if ai_text.blank?
 
-        item_name_evidence_texts(candidate_item, lines).any? do |evidence|
-          evidence_text = compact_item_text(evidence)
+        name_evidence = [
+          candidate_item[:suggested_name].presence || candidate_item[:raw_text],
+          candidate_item[:confirmed_name],
+          candidate_item[:name]
+        ]
+        name_evidence.any? do |name|
+          evidence_text = compact_item_text(name)
           next false if evidence_text.blank?
           next false if evidence_text.match?(/\A[¥￥$€£]?[+-]?\d[\d,]*(?:\.\d+)?\z/)
 
-          ai_text.include?(evidence_text) || evidence_text.include?(ai_text)
+          ai_text == evidence_text
         end
-      end
-
-      def item_name_evidence_texts(candidate_item, lines)
-        evidence = [
-          candidate_item[:raw_text],
-          candidate_item[:suggested_name],
-          candidate_item[:confirmed_name],
-          candidate_item[:name],
-          candidate_item[:source_text]
-        ]
-        source_indexes = item_line_indexes(candidate_item, lines)
-        evidence.concat(source_indexes.map { |index| Array(lines)[index] })
-        evidence.compact_blank
       end
 
       def raw_ai_item_indexes(ai_items)
-        Array(ai_items).filter_map do |item|
-          normalize_item_index(item[:index] || item["index"] || item[:position_index] || item["position_index"])
+        Array(ai_items).map do |item|
+          normalize_item_index(item.key?(:index) ? item[:index] : item[:position_index])
         end
       end
 
-      def ai_item_index_mode(indexes, candidate_count)
-        normalized_indexes = Array(indexes)
-        return :zero_based if normalized_indexes.blank? || normalized_indexes.include?(0)
-        return :one_based if normalized_indexes.all? { |index| index.positive? && index <= candidate_count.to_i }
-
-        :zero_based
-      end
-
-      def ai_item_index_issues(indexes, candidate_count, index_mode)
+      def ai_item_index_issues(indexes, candidate_count)
         target_indexes = Array(indexes).map do |index|
-          ai_item_target_index(index, candidate_count, index_mode)
+          ai_item_target_index(index, candidate_count)
         end
         grouped = target_indexes.compact.group_by(&:itself)
 
@@ -2570,13 +2550,11 @@ module Analysis
         }
       end
 
-      def ai_item_target_index(index, candidate_count, index_mode)
+      def ai_item_target_index(index, candidate_count)
         return nil if index.nil? || index.negative? || candidate_count.to_i <= 0
+        return nil if index >= candidate_count.to_i
 
-        target_index = index_mode == :one_based ? index - 1 : index
-        return nil if target_index.negative? || target_index >= candidate_count.to_i
-
-        target_index
+        index
       end
 
       def ai_item_index_review_needed?(candidate_index, index_issues)
@@ -2621,10 +2599,10 @@ module Analysis
       end
 
       def normalize_item_index(value)
-        return nil if value.blank?
-        return value.to_i if value.is_a?(Numeric)
+        return value if value.is_a?(Integer) && value >= 0
+        return nil unless value.is_a?(String) && value.bytesize <= 20 && value.ascii_only? && value.match?(/\A\d+\z/)
 
-        Integer(value)
+        Integer(value, 10)
       rescue ArgumentError, TypeError
         nil
       end

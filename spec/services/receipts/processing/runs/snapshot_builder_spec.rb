@@ -474,6 +474,26 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
+  [ true, false, nil, 'true', 1 ].each do |flag|
+    it "商品名補完flag #{flag.inspect}を厳密なbooleanとしてAI normalized snapshotへ保持する" do
+      snapshot = described_class.ai_normalized_result_snapshot(
+        success: true,
+        meta: { ai_name_completion_enabled: flag }
+      )
+
+      aggregate_failures do
+        expect(snapshot['schema_version']).to eq('receipt_analysis_run_ai_normalized_result_v1')
+        expect(snapshot.dig('meta', 'ai_name_completion_enabled')).to eq(flag == true)
+      end
+    end
+  end
+
+  it '商品名補完flagがないAI normalized snapshotでは明示falseを保持する' do
+    snapshot = described_class.ai_normalized_result_snapshot(success: true)
+
+    expect(snapshot.dig('meta', 'ai_name_completion_enabled')).to be(false)
+  end
+
   it 'invalid categoryを保存せず未分類の確認状態だけをsnapshotへ残す' do
     snapshot = described_class.ai_normalized_result_snapshot(
       success: true,

@@ -262,7 +262,7 @@ RSpec.describe 'Receipts::Processing::Pipeline status contract' do
   end
 
   describe 'AI status contract' do
-    it 'AI成功はcompletedへ進み、OCR raw_textを保持しconfirmed_nameを自動設定しない' do
+    it 'AI成功はcompletedへ進み、商品名補完の有効指定がなければOCR名を保持する' do
       receipt, run, ai_stage, finalize_stage = run_ai_and_finalize(successful_ai_result)
       item = receipt.receipt_items.sole
 
@@ -274,10 +274,35 @@ RSpec.describe 'Receipts::Processing::Pipeline status contract' do
         expect(receipt.processing_error_message).to be_nil
         expect(receipt.review_reasons).to eq([])
         expect(item.raw_text).to eq('コーヒー')
-        expect(item.suggested_name).to eq('AI補正コーヒー')
+        expect(item.suggested_name).to eq('コーヒー')
         expect(item.confirmed_name).to be_nil
         expect(run.status).to eq('succeeded')
         expect(run.final_result_summary).to include('receipt_status' => 'completed')
+      end
+    end
+
+    it '商品名補完ONで同一nameの表記補正を採用しても確認を強制しない' do
+      ai_result = successful_ai_result(suggested_name: 'ｺｰﾋｰ').merge(meta: { ai_name_completion_enabled: true })
+
+      receipt, run = run_ai_and_finalize(ai_result)
+
+      aggregate_failures do
+        expect(receipt.status).to eq('completed')
+        expect(receipt.receipt_items.sole).to have_attributes(raw_text: 'コーヒー', suggested_name: 'ｺｰﾋｰ', confirmed_name: nil)
+        expect(run.final_result_summary).to include('receipt_status' => 'completed')
+      end
+    end
+
+    it '商品名補完ONでも同一nameの根拠がない提案はOCR名を保持して確認へ進める' do
+      ai_result = successful_ai_result.merge(meta: { ai_name_completion_enabled: true })
+
+      receipt, run = run_ai_and_finalize(ai_result)
+
+      aggregate_failures do
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.receipt_items.sole).to have_attributes(raw_text: 'コーヒー', suggested_name: 'コーヒー', confirmed_name: nil)
+        expect(receipt.receipt_items.sole.review_reasons).to include('item_name_uncertain')
+        expect(run.final_result_summary).to include('receipt_status' => 'review_needed')
       end
     end
 
