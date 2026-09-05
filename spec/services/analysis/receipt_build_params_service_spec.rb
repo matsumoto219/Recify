@@ -4024,6 +4024,37 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '商品識別子の末尾数字を後続金額の桁区切りとして連結しない' do
+        ocr_result[:lines] = [
+          'ノート A5 220',
+          'クリアファイル A4 110',
+          '電池 LR6 398',
+          '部品 AB-12 300',
+          '用紙 A5 1 234'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        items = params[:receipt_items_attributes]
+
+        aggregate_failures do
+          expect(items.pluck(:price)).to eq([ 220, 110, 398, 300, 1234 ])
+          expect(items.pluck(:line_total)).to eq([ 220, 110, 398, 300, 1234 ])
+          expect(items.pluck(:suggested_name)).to eq([ 'ノート A5', 'クリアファイル A4', '電池 LR6', '部品 AB-12', '用紙 A5' ])
+          expect(items).to all(include(needs_review: true))
+        end
+      end
+
+      it 'fallback金額の検出を注入されたprofileの構文に限定する' do
+        allow(ReceiptAnalysisProfiles.default).to receive(:analysis_fallback_amount_candidate_pattern).and_return(/¥\d+/)
+        ocr_result[:lines] = [ 'ノート A5 ¥220', 'クリアファイル A4 110' ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_items_attributes]).to contain_exactly(
+          include(raw_text: 'ノート A5 ¥220', suggested_name: 'ノート A5', price: 220)
+        )
+      end
+
       it '非明細行をfallback明細にしない' do
         ocr_result[:lines] = [
           'サンプルストア',
@@ -4034,6 +4065,9 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           '税抜 1000',
           'TEL 03-1234-5678',
           '住所 東京都港区芝1-1-1',
+          'サンプル県サンプル市西6-6-6',
+          '商品 A5',
+          '商品 1000ml',
           '登録番号 T1234567890123',
           'インボイス T1234567890123',
           '伝票番号 123456',

@@ -51,6 +51,24 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile analysis fallback amount candidates' do
+    it '識別子内の数字を除外し独立した金額と桁区切りを保持する' do
+      pattern = described_class.fetch('JPN').analysis_fallback_amount_candidate_pattern
+
+      aggregate_failures do
+        expect('ノート A5 220'.scan(pattern).map(&:strip)).to eq([ '220' ])
+        expect('電池 LR6 398'.scan(pattern).map(&:strip)).to eq([ '398' ])
+        expect('部品 AB-12 300'.scan(pattern).map(&:strip)).to eq([ '300' ])
+        expect('商品 ¥4,320'.scan(pattern).map(&:strip)).to eq([ '¥4,320' ])
+        expect('商品 1 234'.scan(pattern).map(&:strip)).to eq([ '1 234' ])
+        expect('商品100円'.scan(pattern).map(&:strip)).to eq([ '100円' ])
+        expect('サンプル県サンプル市西6-6-6'.scan(pattern)).to be_empty
+        expect('商品 A5'.scan(pattern)).to be_empty
+        expect('商品 1000ml'.scan(pattern)).to be_empty
+      end
+    end
+  end
+
   describe 'JPN profile OCR date patterns' do
     it 'OCR購入日のfallback表記をprofile側で定義する' do
       profile = described_class.fetch('JPN')

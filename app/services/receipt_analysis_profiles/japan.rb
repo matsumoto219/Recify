@@ -376,7 +376,7 @@ module ReceiptAnalysisProfiles
     ANALYSIS_FALLBACK_NON_ITEM_KEYWORD_PATTERN = /小計|消費税|税額|総合計|合計|支払|お支払い|預り|お預り|釣銭|お釣り/.freeze
     ANALYSIS_FALLBACK_REFERENCE_LINE_PATTERN = /TEL|ＴＥＬ|電話番号|電話|住所|所在地|登録番号|インボイス|T番号|適格請求書|事業者番号|伝票番号|取引番号|レシート番号/i.freeze
     ANALYSIS_FALLBACK_DATE_TIME_LINE_PATTERN = %r{\d{4}[\/-]\d{1,2}[\/-]\d{1,2}|\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}[:：]\d{2}|日付|日時|時刻|期間|販売期間|有効期限}.freeze
-    ANALYSIS_FALLBACK_AMOUNT_CANDIDATE_PATTERN = /[¥￥]?\s*-?(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/.freeze
+    ANALYSIS_FALLBACK_AMOUNT_CANDIDATE_PATTERN = /(?<![A-Za-z0-9_.-])[¥￥]?\s*-?(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?(?![A-Za-z0-9_.-])/.freeze
     ANALYSIS_ADJUSTMENT_AMOUNT_CANDIDATE_PATTERN = /[▲△\-−]?\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d{1,3}(?:\s+\d{3})+|\d+)(?:円)?/.freeze
     ANALYSIS_POINT_ONLY_TEXT_PATTERN = /ポイント|point|(?<![A-Za-z0-9])\d+\s*p(?:t|ts|oint|oints)?(?![A-Za-z0-9])/i.freeze
     ANALYSIS_POINT_MONEY_CONTEXT_PATTERN = /[¥￥円]|[▲△\-−]|利用額|支払額|決済額|金額|amount|payment|paid/i.freeze
