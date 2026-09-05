@@ -281,34 +281,38 @@ RSpec.describe "通知サーフェスの実Chrome回帰", type: :system do
     expect_browser_console_clean
   end
 
-  it "設定保存のTurbo flashを既存toastの後ろへ追加する" do
-    sign_in_through_browser(create_system_test_user(theme_preference: "system"))
-    visit settings_path
-    append_notice(
-      target: "toast-stream",
-      message: "保存前から残る通知",
-      auto_dismiss: false,
-      remove_before_cache: true,
-      surface_id: "existing-toast"
-    )
+  [ true, false ].each do |receipt_notifications_enabled|
+    it "レシートの通知#{receipt_notifications_enabled}でも設定保存のTurbo flashを既存toastの後ろへ追加する" do
+      sign_in_through_browser(create_system_test_user(theme_preference: "system", push_notification_enabled: receipt_notifications_enabled))
+      visit settings_path
+      expect(page).to have_content("レシートの通知")
+      expect(page).to have_content("レシートの処理結果を、画面上の一時メッセージで通知します。")
+      append_notice(
+        target: "toast-stream",
+        message: "保存前から残る通知",
+        auto_dismiss: false,
+        remove_before_cache: true,
+        surface_id: "existing-toast"
+      )
 
-    find("label[for='theme_preference_light']").click
+      find("label[for='theme_preference_light']").click
 
-    expect(page).to have_css("#existing-toast", text: "保存前から残る通知")
-    expect(page).to have_css(
-      "#toast-stream [data-controller~='notice-surface']",
-      text: I18n.t("flash.settings.update_success")
-    )
-    messages = page.evaluate_script(<<~JAVASCRIPT)
-      Array.from(document.querySelectorAll('#flash [data-controller~="notice-surface"]')).map((element) => element.textContent)
-    JAVASCRIPT
+      expect(page).to have_css("#existing-toast", text: "保存前から残る通知")
+      expect(page).to have_css(
+        "#toast-stream [data-controller~='notice-surface']",
+        text: I18n.t("flash.settings.update_success")
+      )
+      messages = page.evaluate_script(<<~JAVASCRIPT)
+        Array.from(document.querySelectorAll('#flash [data-controller~="notice-surface"]')).map((element) => element.textContent)
+      JAVASCRIPT
 
-    aggregate_failures do
-      expect(messages.first).to include("保存前から残る通知")
-      expect(messages.last).to include(I18n.t("flash.settings.update_success"))
-      expect(page).to have_css("[data-notice-surface-container]", count: 1)
+      aggregate_failures do
+        expect(messages.first).to include("保存前から残る通知")
+        expect(messages.last).to include(I18n.t("flash.settings.update_success"))
+        expect(page).to have_css("[data-notice-surface-container]", count: 1)
+      end
+      expect_browser_console_clean
     end
-    expect_browser_console_clean
   end
 
   it "実Turbo遷移とcache復帰で古いtoastを復活させない" do
