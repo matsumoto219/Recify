@@ -267,6 +267,29 @@ ja:
       multiple_hint: "ライブラリ選択とドラッグ＆ドロップは複数選択可・最大%{max}件"
       queued_hint: アップロード後は解析キューに追加されます
       back: 戻る
+      camera:
+        preview_label: レシート撮影用のライブカメラ映像
+        live: カメラを使用中
+        device_label: 使用するカメラ
+        device_fallback: "カメラ %{number}"
+        guide: レシート全体を枠内に収めてください。枠内だけを撮影します。
+        close_guide: 撮影の案内を閉じる
+        capture: 撮影する
+        retry: もう一度試す
+        cancel: キャンセル
+        messages:
+          requesting:
+            title: カメラを起動しています
+            help: ブラウザに確認が表示された場合は、カメラへのアクセスを許可してください。
+          permission:
+            title: カメラへのアクセスが許可されていません
+            help: ブラウザのサイト設定でカメラを許可してから、もう一度お試しください。画像ファイルから登録することもできます。
+          unavailable:
+            title: カメラを使用できません
+            help: カメラの接続と、ほかのアプリで使用中でないかを確認してください。画像ファイルから登録することもできます。
+          capture:
+            title: 撮影した画像を使用できません
+            help: もう一度撮影するか、画像ファイルを選択してください。
       guidance:
         flow_title: 解析フロー
         flow_steps:

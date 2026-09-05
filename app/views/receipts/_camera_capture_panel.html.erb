@@ -1,0 +1,80 @@
+<div class="hidden absolute inset-0 flex-col gap-3 p-3 image-preview-surface text-left"
+     aria-busy="false"
+     data-receipt-upload-target="cameraPanel">
+  <video autoplay muted playsinline
+         class="hidden absolute inset-0 h-full w-full object-contain"
+         aria-label="<%= t("receipts.new_upload.camera.preview_label") %>"
+         data-receipt-upload-target="cameraVideo"
+         data-action="loadedmetadata->receipt-upload#cameraFrameReady loadeddata->receipt-upload#cameraFrameReady canplay->receipt-upload#cameraFrameReady resize->receipt-upload#cameraFrameReady error->receipt-upload#cameraVideoFailed"></video>
+  <div class="hidden relative min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3" data-receipt-upload-target="cameraLive">
+
+    <div class="flex flex-col items-stretch justify-between gap-2 sm:flex-row sm:items-center" data-camera-toolbar>
+      <p class="glass-panel inline-flex shrink-0 items-center gap-2 self-start rounded-lg px-3 py-2 text-xs font-semibold token-text-base">
+        <span class="h-2 w-2 rounded-full bg-current token-text-success" aria-hidden="true"></span>
+        <%= t("receipts.new_upload.camera.live") %>
+      </p>
+      <div class="glass-panel hidden w-full min-w-0 max-w-full rounded-lg px-3 py-2 sm:w-auto sm:max-w-xs sm:flex-1"
+           data-receipt-upload-target="cameraDeviceField">
+        <label for="receipt-camera-device" class="block whitespace-nowrap text-[11px] token-text-muted"><%= t("receipts.new_upload.camera.device_label") %></label>
+        <select id="receipt-camera-device"
+                class="w-full min-w-0 cursor-pointer truncate bg-transparent text-xs font-semibold token-text-base"
+                data-receipt-upload-target="cameraDeviceSelect"
+                data-action="receipt-upload#switchCamera"></select>
+      </div>
+    </div>
+
+    <div class="relative min-h-0" data-camera-guide-frame data-receipt-upload-target="cameraGuideFrame">
+      <svg class="pointer-events-none invisible absolute inset-0 h-full w-full receipt-camera-guide"
+           viewBox="0 0 202 302" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"
+           data-receipt-upload-target="cameraGuide">
+        <rect class="receipt-camera-guide-outline" x="1" y="1" width="200" height="300" rx="12" vector-effect="non-scaling-stroke" />
+        <rect x="1" y="1" width="200" height="300" rx="12" vector-effect="non-scaling-stroke" data-camera-guide />
+      </svg>
+      <div class="receipt-camera-hint glass-panel absolute inset-x-0 bottom-0 flex max-h-full items-center gap-2 overflow-y-auto rounded-lg px-3 token-text-base"
+           data-receipt-upload-target="cameraHint"
+           data-action="focusout->receipt-upload#resumeCameraHintDismissal">
+        <p class="min-w-0 flex-1 text-center text-xs"><%= t("receipts.new_upload.camera.guide") %></p>
+        <button type="button"
+                class="ui-touch-control inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full token-text-muted token-hover-text-error transition-colors"
+                aria-label="<%= t("receipts.new_upload.camera.close_guide") %>"
+                data-action="receipt-upload#dismissCameraHint">
+          <span class="material-symbols-outlined" aria-hidden="true">close</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-3 text-center"
+       role="status"
+       aria-live="polite"
+       data-receipt-upload-target="cameraStatus">
+    <span class="material-symbols-outlined text-4xl token-text-brand" aria-hidden="true">photo_camera</span>
+    <h2 class="text-base font-bold token-text-base" data-receipt-upload-target="cameraStatusTitle"></h2>
+    <p class="max-w-md text-xs leading-relaxed token-text-muted" data-receipt-upload-target="cameraStatusHelp"></p>
+  </div>
+
+  <div class="glass-panel relative grid min-h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-xl px-3 py-2" data-camera-actions>
+    <button type="button"
+            class="ui-touch-control hidden col-start-2 row-start-1 inline-flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 token-border-strong token-bg-card token-text-base disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="<%= t("receipts.new_upload.camera.capture") %>"
+            disabled
+            data-receipt-upload-target="cameraCaptureButton"
+            data-action="receipt-upload#captureCamera">
+      <span class="h-8 w-8 rounded-full bg-current" aria-hidden="true"></span>
+    </button>
+    <%= render "shared/ui/actions/button",
+      label: t("receipts.new_upload.camera.retry"),
+      variant: :secondary,
+      size: :sm,
+      type: "button",
+      class: "hidden col-span-2 col-start-1 row-start-1 min-w-0 max-w-full justify-self-start",
+      data: { receipt_upload_target: "cameraRetry", action: "receipt-upload#openCamera" } %>
+    <%= render "shared/ui/actions/button",
+      label: t("receipts.new_upload.camera.cancel"),
+      variant: :secondary,
+      size: :sm,
+      type: "button",
+      class: "col-start-3 row-start-1 min-w-0 max-w-full justify-self-end",
+      data: { receipt_upload_target: "cameraCancel", action: "receipt-upload#cancelCamera" } %>
+  </div>
+</div>

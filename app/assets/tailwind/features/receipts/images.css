@@ -26,6 +26,44 @@
   );
 }
 
+.receipt-upload-stage {
+  height: var(--receipt-upload-stage-height, 400px);
+  min-height: 20rem;
+}
+
+.receipt-camera-guide {
+  overflow: visible;
+  fill: none;
+  stroke: var(--text-base);
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+}
+
+.receipt-camera-guide-outline {
+  stroke: var(--bg-input);
+  stroke-width: 4;
+}
+
+.receipt-camera-hint {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 300ms ease;
+}
+
+.receipt-camera-hint.is-dismissed {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 300ms ease, visibility 0s 300ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .receipt-camera-hint,
+  .receipt-camera-hint.is-dismissed {
+    transition: none;
+  }
+}
+
 .modal-overlay {
   background: var(--modal-overlay);
 
