@@ -36,6 +36,7 @@ module Analysis
           candidates,
           lines,
           normalized_ai_result[:receipt_items_attributes],
+          case_preserved_lines: case_preserved_lines,
           ai_name_completion_enabled: normalized_ai_result.dig(:meta, :ai_name_completion_enabled),
           skipped_negative_items:
         )
@@ -199,8 +200,21 @@ module Analysis
       end
 
       def normalized_case_preserved_lines(ocr_result)
-        Array(ocr_result[:case_preserved_lines]).filter_map do |line|
+        Array(ocr_result[:case_preserved_lines]).map do |line|
           Analysis.normalize_store_name_candidate(line)
+        end
+      end
+
+      def item_lines_preserving_case(lines, case_preserved_lines)
+        Array(lines).each_with_index.map do |line, index|
+          preserved_line = case_preserved_lines[index]
+          normalized_line = Analysis.normalize_store_name_candidate(line)
+
+          if preserved_line.present? && preserved_line.downcase == normalized_line.to_s.downcase
+            preserved_line
+          else
+            line
+          end
         end
       end
 
@@ -357,7 +371,7 @@ module Analysis
           normalize_amount(receipt_attributes[:total_amount])&.to_i == settlement_total
       end
 
-      def build_receipt_items_attributes(candidates, lines, ai_items, ai_name_completion_enabled: nil, skipped_negative_items: [])
+      def build_receipt_items_attributes(candidates, lines, ai_items, case_preserved_lines: [], ai_name_completion_enabled: nil, skipped_negative_items: [])
         candidate_items = Array(candidates[:items])
         normalized_ai_items = normalize_items(ai_items)
         applicable_ai_items = if candidate_items.empty? && reference_pricing_block_line_indexes(candidates).present?
@@ -374,7 +388,8 @@ module Analysis
               candidate_items
             end
           else
-            fallback_lines = lines_without_reference_pricing_blocks(lines, candidates)
+            fallback_lines = item_lines_preserving_case(lines, case_preserved_lines)
+            fallback_lines = lines_without_reference_pricing_blocks(fallback_lines, candidates)
             fallback_items = build_items_from_lines(fallback_lines)
 
             if applicable_ai_items.present?
@@ -474,7 +489,7 @@ module Analysis
           {
             # Azure Items[].Description / Name -> receipt_items.raw_text
             raw_text: raw_text,
-            suggested_name: normalized_item[:suggested_name].presence || extract_item_name(raw_text),
+            suggested_name: normalized_item[:suggested_name].presence || raw_text.presence,
             # AI は confirmed_name を返さず、補完候補は suggested_name に保持する。
             confirmed_name: normalized_item[:confirmed_name],
             category: resolved_category,
