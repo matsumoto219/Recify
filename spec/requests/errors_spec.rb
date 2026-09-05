@@ -121,6 +121,7 @@ RSpec.describe 'Error pages', type: :request do
         secondary_cta: I18n.t('errors.internal_server_error.secondary_cta')
       )
       expect_support_id(request_id)
+      expect(response.headers['Cache-Control']).to include('no-store')
     end
 
     it 'GET /503 はRecify error layoutで表示される' do
@@ -212,6 +213,40 @@ RSpec.describe 'Error pages', type: :request do
         primary_cta: I18n.t('errors.common.signed_in_primary_cta'),
         primary_href: receipts_path
       )
+    end
+  end
+
+  describe 'secondary error fallback' do
+    before do
+      allow_any_instance_of(HomeController).to receive(:index).and_raise(RuntimeError, 'original private detail')
+      allow_any_instance_of(ErrorsController).to receive(:internal_server_error).and_raise(ActiveRecord::ConnectionNotDefined, 'secondary private detail')
+    end
+
+    it 'serves the static branded 500 when the error controller cannot use the database' do
+      get root_path
+
+      aggregate_failures do
+        expect(response).to have_http_status(:internal_server_error)
+        expect(response.media_type).to eq('text/html')
+        expect(response.headers['Cache-Control']).to eq('no-store')
+        expect(response.body).to include('Recify', 'Error Code: 500')
+        expect(response.body).not_to include('original private detail', 'secondary private detail')
+      end
+    end
+
+    it 'preserves the JSON error contract during the same secondary failure' do
+      get root_path, headers: { 'ACCEPT' => 'application/json' }
+
+      expect(response).to have_http_status(:internal_server_error)
+      expect(response.parsed_body).to eq('status' => 500, 'error' => 'Internal Server Error')
+    end
+
+    it 'preserves HEAD semantics during the same secondary failure' do
+      head root_path
+
+      expect(response).to have_http_status(:internal_server_error)
+      expect(response.body).to be_empty
+      expect(response.headers['Cache-Control']).to eq('no-store')
     end
   end
 
