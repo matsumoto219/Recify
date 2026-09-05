@@ -1076,12 +1076,12 @@ RSpec.describe Ocr::Client do
         end
       end
 
-      context 'quota messageが表示用filterで除去される場合' do
+      context '長いquota識別語を返す場合' do
         let(:body) { { error: { code: '403', message: 'QuotaExceededForSubscription' } }.to_json }
 
         it 'sanitize済みmessageに依存せずquota errorを返す' do
           expect { handle_status }.to raise_error(Ocr::OcrError, 'external_service_quota_exceeded') { |error|
-            expect(error.provider_error_detail).to include(provider_message_safe: '[FILTERED]', quota_exceeded: true)
+            expect(error.provider_error_detail).to include(provider_message_safe: 'QuotaExceededForSubscription', quota_exceeded: true)
           }
         end
       end

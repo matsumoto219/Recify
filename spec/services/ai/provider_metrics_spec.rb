@@ -61,6 +61,37 @@ RSpec.describe Ai::ProviderMetrics do
         fallback_reason: 'ai_primary_failed'
       )
     end
+
+    it 'provider errorのmessageは共通の安全な保存境界を使う' do
+      message = "Invalid\xFF key\0 for person@example.test at https://example.test/private".force_encoding(Encoding::UTF_8)
+      metrics = described_class.build(provider_message: message, request_id: 'request-123')
+      detail = ExternalServices.error_detail(provider_message: message, request_id: 'request-123')
+
+      expect(metrics[:provider_message]).to eq(detail[:provider_message_safe])
+      expect(metrics[:provider_message]).to be_valid_encoding
+      expect(metrics[:provider_message]).not_to match(/[[:cntrl:]]/)
+      expect(metrics[:provider_message]).not_to include('person@example.test', 'https://example.test/private')
+      expect(JSON.parse(JSON.generate(metrics))).to include('request_id' => 'request-123')
+    end
+
+    it '上限超過のmessageと不正な識別子を元の値の一部として保存しない' do
+      metrics = described_class.build(
+        provider_message: 'あ' * 167,
+        model: 'x' * 501,
+        request_id: "request\0private",
+        response_id: '/private/response',
+        fallback_reason: 'person@example.test'
+      )
+
+      expect(metrics).to eq(provider_message: '[FILTERED]')
+    end
+
+    it '非有限なmetrics数値はJSONへ出さない' do
+      metrics = described_class.build(elapsed_ms: Float::NAN, retry_after: Float::INFINITY, token_usage: { total_tokens: 10**100 })
+
+      expect(metrics).to eq({})
+      expect { JSON.generate(metrics) }.not_to raise_error
+    end
   end
 
   describe '.merge' do
