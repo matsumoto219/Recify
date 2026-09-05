@@ -457,16 +457,20 @@ class Receipt < ApplicationRecord
   def quarantine!(actor:, reason:, source_security_event: nil, at: Time.current)
     raise ActiveRecord::RecordInvalid, self unless moderation_active?
 
-    update!(
-      moderation_status: MODERATION_STATUS_QUARANTINED,
-      quarantined_at: at,
-      quarantined_by: actor,
-      quarantine_reason: reason,
-      quarantine_source_security_event: source_security_event,
-      quarantine_released_at: nil,
-      quarantine_released_by: nil,
-      quarantine_released_reason: nil
-    )
+    self.class.transaction do
+      update!(
+        moderation_status: MODERATION_STATUS_QUARANTINED,
+        quarantined_at: at,
+        quarantined_by: actor,
+        quarantine_reason: reason,
+        quarantine_source_security_event: source_security_event,
+        quarantine_released_at: nil,
+        quarantine_released_by: nil,
+        quarantine_released_reason: nil
+      )
+      notifications.reload.destroy_all
+      true
+    end
   end
 
   def release_quarantine!(actor:, reason:, at: Time.current)
@@ -968,6 +972,7 @@ class Receipt < ApplicationRecord
   end
 
   def analysis_terminal_transition?
+    return false unless active_for_user?
     return false unless saved_change_to_status?
 
     previous_status, current_status = saved_change_to_status
@@ -978,6 +983,9 @@ class Receipt < ApplicationRecord
 
   def create_status_notification
     Notification.transaction do
+      current_receipt = self.class.lock.find_by(id: id)
+      next unless current_receipt&.active_for_user?
+
       notification = user.notifications.create_or_find_by!(
         kind: STATUS_NOTIFICATION_KINDS.fetch(status),
         notifiable: self

@@ -41,6 +41,9 @@ module SystemOperations
         setting = update_setting_record!(casted_value)
         after_state = state_for(value: casted_value, source: "db")
         audit_log = record_success_audit!(setting: setting, before_state: before_state, after_state: after_state)
+        if key == "limits.notifications_per_user" && casted_value < before_state[:value]
+          NotificationCleanupJob.enqueue_after_commit
+        end
       end
 
       Result.new(

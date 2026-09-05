@@ -115,6 +115,14 @@ RSpec.describe Notification, type: :model do
   end
 
   describe 'scopes' do
+    it '同じ作成日時ならidが大きい通知を先に表示する' do
+      user = create(:user)
+      first = create(:notification, user:, created_at: Time.zone.parse('2026-07-01 12:00:00'))
+      second = create(:notification, user:, created_at: first.created_at)
+
+      expect(user.notifications.recent).to eq([ second, first ])
+    end
+
     it 'unread/read/recent を返す' do
       user = create(:user)
       old_unread = create(:notification, user:, read_at: nil, created_at: 2.days.ago)
@@ -126,6 +134,17 @@ RSpec.describe Notification, type: :model do
         expect(described_class.read).to contain_exactly(read)
         expect(described_class.recent).to eq([ new_unread, read, old_unread ])
       end
+    end
+  end
+
+  describe '#action_available?' do
+    it '隔離済み対象へのリンクを無効化する読み取りでは通知を削除しない' do
+      receipt = create(:receipt, :quarantined)
+      notification = create(:notification, user: receipt.user, notifiable: receipt, action_path: "/receipts/#{receipt.public_id}")
+
+      expect {
+        expect(notification.action_available?).to be(false)
+      }.not_to change(described_class, :count)
     end
   end
 
@@ -250,6 +269,38 @@ RSpec.describe Notification, type: :model do
   end
 
   describe '.cleanup_old!' do
+    it '通知surfaceのenqueueが失敗しても全userのcleanupを完了する' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(20))
+      users = create_list(:user, 2)
+      users.each { |user| insert_notifications_for(user, count: 22, read_at: nil) }
+      allow(Turbo::StreamsChannel).to receive(:broadcast_replace_later_to).and_raise(StandardError, 'private queue endpoint')
+      allow(Rails.logger).to receive(:warn)
+
+      expect(described_class.cleanup_old!).to eq(4)
+
+      aggregate_failures do
+        expect(users.map { |user| user.notifications.count }).to eq([ 20, 20 ])
+        expect(Rails.logger).to have_received(:warn).with('[Notification] broadcast_failed error_class=StandardError').twice
+      end
+    end
+
+    it '通知surfaceのenqueueが失敗しても新規通知を保存し未読を含む上限を維持する' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(20))
+      user = create(:user)
+      insert_notifications_for(user, count: 20, read_at: nil)
+      allow(Turbo::StreamsChannel).to receive(:broadcast_replace_later_to).and_raise(StandardError, 'private queue endpoint')
+      allow(Rails.logger).to receive(:warn)
+
+      newest = create(:notification, user:, read_at: nil)
+
+      aggregate_failures do
+        expect(newest).to be_persisted
+        expect(user.notifications.count).to eq(20)
+        expect(user.notifications.recent.first).to eq(newest)
+        expect(Rails.logger).to have_received(:warn).with('[Notification] broadcast_failed error_class=StandardError').twice
+      end
+    end
+
     it '既読から30日を超えた通知を削除し、未読は残す' do
       user = create(:user)
       old_read = create(:notification, :read, user:, read_at: 31.days.ago)
@@ -387,7 +438,7 @@ RSpec.describe Notification, type: :model do
       end
     end
 
-    it '100件超でも未読通知は削除しない' do
+    it '100件を超える古い通知は未読でも削除する' do
       user = create(:user)
       insert_notifications_for(user, count: 100, read_at: 1.day.ago)
       unread_attributes = insert_notifications_for(user, count: 2, read_at: nil, created_at_start: 200.days.ago)
@@ -395,9 +446,40 @@ RSpec.describe Notification, type: :model do
       deleted_count = described_class.prune_for_user!(user, broadcast: false)
 
       aggregate_failures do
-        expect(deleted_count).to eq(0)
-        expect(user.notifications.count).to eq(102)
-        expect(described_class.where(id: unread_attributes.map { |attributes| attributes[:id] }).count).to eq(2)
+        expect(deleted_count).to eq(2)
+        expect(user.notifications.count).to eq(100)
+        expect(described_class.where(id: unread_attributes.map { |attributes| attributes[:id] })).to be_empty
+      end
+    end
+
+    it '作成日時が同じ通知もid降順で上限まで残し、新規作成時に未読を含めてpruneする' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(20))
+      user = create(:user)
+      notifications = insert_notifications_for(user, count: 20, read_at: nil)
+      timestamp = Time.current
+      described_class.where(user:).update_all(created_at: timestamp)
+
+      newest = create(:notification, user:, read_at: nil, created_at: timestamp)
+
+      aggregate_failures do
+        expect(user.notifications.count).to eq(20)
+        expect(user.notifications.recent.first).to eq(newest)
+        expect(described_class.exists?(notifications.first[:id])).to be(false)
+      end
+    end
+
+    it 'cleanupは各userの未読上限にも追従し、再実行しても保持対象は変えない' do
+      create(:system_setting, key: 'limits.notifications_per_user', value: SystemSettings.stored_value(20))
+      users = create_list(:user, 2)
+      users.each { |user| insert_notifications_for(user, count: 22, read_at: nil) }
+
+      expect(described_class.cleanup_old!).to eq(4)
+      retained_ids = described_class.order(:id).ids
+
+      aggregate_failures do
+        expect(users.map { |user| user.notifications.count }).to eq([ 20, 20 ])
+        expect(described_class.cleanup_old!).to eq(0)
+        expect(described_class.order(:id).ids).to eq(retained_ids)
       end
     end
 
