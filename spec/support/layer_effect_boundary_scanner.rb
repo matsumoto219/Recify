@@ -100,6 +100,7 @@ module LayerEffectBoundary
         record_ocr_response_artifact
         record_ocr_result
         record_ocr_snapshot
+        reset_for_retry!
         run_ai
         run_finalize
         run_ocr

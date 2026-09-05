@@ -78,6 +78,10 @@ module Receipts
         StatusTransition.mark_processing!(receipt)
       end
 
+      def reset_for_retry!(receipt)
+        StatusTransition.reset_for_retry!(receipt)
+      end
+
       def start(...)
         Runs.start(...)
       end
