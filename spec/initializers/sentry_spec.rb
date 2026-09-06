@@ -5,7 +5,7 @@ RSpec.describe Recify::SentrySanitizer do
   FakeRequest = Struct.new(:data, :headers, :cookies, :env, :query_string, :url, keyword_init: true)
   FakeExceptionValue = Struct.new(:value, keyword_init: true)
   FakeException = Struct.new(:values, keyword_init: true)
-  FakeEvent = Struct.new(:user, :extra, :contexts, :request, :exception, :attachments, keyword_init: true)
+  FakeEvent = Struct.new(:user, :extra, :contexts, :request, :exception, :attachments, :transaction, :transaction_info, keyword_init: true)
 
   it 'does not initialize Sentry in test without DSN' do
     expect(Sentry).not_to be_initialized
@@ -160,6 +160,8 @@ RSpec.describe Recify::SentrySanitizer do
 
   it '実際のSentry request interfaceでもcapability URLをredactする' do
     storage_path = '/rails/active_storage/blobs/redirect/signed-capability/file.png'
+    config = Sentry::Configuration.new
+    config.send_default_pii = false
     request = Sentry::RequestInterface.new(
       env: {
         'REQUEST_METHOD' => 'GET',
@@ -170,7 +172,7 @@ RSpec.describe Recify::SentrySanitizer do
         'SERVER_PORT' => '443',
         'rack.input' => StringIO.new('')
       },
-      send_default_pii: false,
+      data_collection: config.data_collection,
       rack_env_whitelist: [ 'PATH_INFO' ]
     )
     event = FakeEvent.new(request: request)
@@ -274,6 +276,31 @@ RSpec.describe Recify::SentrySanitizer do
       expect(event.contexts[:security][:totpSecret]).to eq(described_class::FILTERED)
       expect(event.contexts[:security][:provisioningUri]).to eq(described_class::FILTERED)
       expect(event.contexts[:security][:rawResponse]).to eq(described_class::FILTERED)
+    end
+  end
+
+  it 'URL由来のtransaction名からcapabilityを除く' do
+    event = FakeEvent.new(
+      transaction: '/rails/active_storage/blobs/redirect/short-capability/file.png',
+      transaction_info: { source: :url }
+    )
+
+    described_class.sanitize_event(event)
+
+    expect(event.transaction).to eq(Recify::ActiveStorageLogRedactor::FILTERED_URL)
+  end
+
+  it '通常pathはqueryだけ除きcontroller名とjob名は維持する' do
+    [
+      [ '/receipts?token=secret', { source: 'url' }, '/receipts' ],
+      [ 'ReceiptsController#show', { source: :view }, 'ReceiptsController#show' ],
+      [ 'ReceiptFinalizeJob', { source: :task }, 'ReceiptFinalizeJob' ]
+    ].each do |name, info, expected|
+      event = FakeEvent.new(transaction: name, transaction_info: info)
+
+      described_class.sanitize_event(event)
+
+      expect(event.transaction).to eq(expected)
     end
   end
 

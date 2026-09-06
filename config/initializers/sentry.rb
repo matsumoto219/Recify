@@ -42,6 +42,7 @@ module Recify
     def sanitize_event(event)
       sanitize_event_user!(event)
       sanitize_request!(event.request) if event.respond_to?(:request) && event.request
+      sanitize_transaction_name!(event)
       sanitize_event_attribute!(event, :extra)
       sanitize_event_attribute!(event, :contexts)
       sanitize_exception_values!(event)
@@ -117,6 +118,15 @@ module Recify
       event.public_send(writer, sanitize(event.public_send(reader)))
     end
 
+    def sanitize_transaction_name!(event)
+      return unless event.respond_to?(:transaction_info) && event.respond_to?(:transaction=)
+
+      info = event.transaction_info
+      return unless info.is_a?(Hash) && (info[:source] || info["source"]).to_s == "url"
+
+      event.transaction = RequestPathSanitizer.sanitize(event.transaction)
+    end
+
     def sanitize_request!(request)
       request.data = sanitize_request_data(request.data) if request.respond_to?(:data=)
       request.headers = sanitize(request.headers) if request.respond_to?(:headers=)
@@ -166,6 +176,9 @@ if Rails.env.production? && ENV["SENTRY_DSN"].present?
     config.send_default_pii = false
     config.include_local_variables = false
     config.breadcrumbs_logger = []
+    config.rails.structured_logging.enabled = false
+    config.before_send_log = ->(_log) { nil }
+    config.before_send_metric = ->(_metric) { nil }
     config.sample_rate = Recify::SentrySanitizer.float_env("SENTRY_SAMPLE_RATE", 1.0)
     config.traces_sample_rate = Recify::SentrySanitizer.float_env("SENTRY_TRACES_SAMPLE_RATE", 0.0)
     Recify::SentrySanitizer.configure_event_callbacks(config)

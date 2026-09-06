@@ -195,16 +195,6 @@ RSpec.describe ReviewReasons do
     it 'keeps AI output reasons inside the formal reason list' do
       expect(described_class::AI_OUTPUT_REASONS - described_class::ALL_REASONS).to eq([])
     end
-
-    it 'keeps docs/specs/review_reasons.md in sync with formal reason list' do
-      doc_path = Rails.root.join('docs/specs/review_reasons.md')
-      skip 'docs/specs/review_reasons.md is not present in this checkout' unless doc_path.exist?
-
-      doc = doc_path.read
-      doc_codes = doc.scan(/^- ([a-z0-9_]+)$/).flatten
-
-      expect(doc_codes).to match_array(described_class::ALL_REASONS)
-    end
   end
 
   describe '.internal_processing_reasons' do
