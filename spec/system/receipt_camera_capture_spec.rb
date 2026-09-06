@@ -20,9 +20,15 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     wait_for_stimulus_controller("receipt-upload")
   end
 
-  def install_synthetic_camera(mode: "live", devices: 1)
-    page.execute_script(<<~JAVASCRIPT, mode, devices)
-      const mode = arguments[0], deviceCount = arguments[1]
+  def install_synthetic_camera(mode: "live", devices: 1, fine_pointer: true)
+    page.execute_script(<<~JAVASCRIPT, mode, devices, fine_pointer)
+      const mode = arguments[0], deviceCount = arguments[1], finePointer = arguments[2]
+      const matchMedia = window.matchMedia.bind(window)
+      window.matchMedia = (query) => {
+        const media = matchMedia(query)
+        if (query === '(pointer: fine)') Object.defineProperty(media, 'matches', { configurable: true, value: finePointer })
+        return media
+      }
       const state = { calls: [], streams: [], canvases: [], resolve: null }
       const createStream = () => {
         const canvas = document.createElement('canvas')
@@ -178,6 +184,42 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     expect(guide.fetch("right") + stroke_margin).to be <= painted_left + video_width * scale
     expect(guide.fetch("y") - stroke_margin).to be >= painted_top
     expect(guide.fetch("bottom") + stroke_margin).to be <= painted_top + video_height * scale
+  end
+
+  it "fine pointerを持たない実行環境でも合成PCカメラを検証できる" do
+    visit_camera_upload(create_system_test_user)
+    page.execute_script(<<~JAVASCRIPT)
+      const matchMedia = window.matchMedia.bind(window)
+      window.matchMedia = (query) => {
+        const media = matchMedia(query)
+        if (query === '(pointer: fine)') Object.defineProperty(media, 'matches', { configurable: true, value: false })
+        return media
+      }
+    JAVASCRIPT
+    expect(page.evaluate_script("window.matchMedia('(pointer: fine)').matches")).to be(false)
+    install_synthetic_camera
+    start_camera
+
+    expect(page.evaluate_script("window.receiptCameraTest.calls.length")).to eq(1)
+    expect_browser_console_clean
+  end
+
+  it "fine pointerがない端末では画面内カメラを開始せず標準入力を開く" do
+    visit_camera_upload(create_system_test_user)
+    install_synthetic_camera(fine_pointer: false)
+    page.execute_script(<<~JAVASCRIPT)
+      window.receiptCameraTest.nativeClicks = 0
+      document.querySelector('[data-receipt-upload-target=cameraInput]').addEventListener('click', (event) => {
+        event.preventDefault()
+        window.receiptCameraTest.nativeClicks += 1
+      })
+    JAVASCRIPT
+    click_button I18n.t("receipts.new_upload.buttons.camera")
+
+    expect(page.evaluate_script("window.receiptCameraTest.nativeClicks")).to eq(1)
+    expect(page.evaluate_script("window.receiptCameraTest.calls")).to be_empty
+    expect(page).not_to have_css("[data-receipt-upload-target='cameraPanel']:not(.hidden)")
+    expect_browser_console_clean
   end
 
   it "カメラのJPEGを単一画像upload経路へ渡す" do
