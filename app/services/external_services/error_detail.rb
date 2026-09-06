@@ -1,6 +1,13 @@
 module ExternalServices
   class ErrorDetail
-    MAX_MESSAGE_BYTES = 500
+    MAX_CLASSIFICATION_BYTES = 4_096
+    MAX_BODY_BYTES = 16_384
+    MAX_NUMERIC_VALUE = (2**63) - 1
+    QUOTA_ERROR_IDENTIFIERS = %w[
+      insufficientquota
+      quotaexceeded
+      quotaexceededforsubscription
+    ].freeze
     REQUEST_ID_HEADERS = %w[
       apim-request-id
       request-id
@@ -41,12 +48,6 @@ module ExternalServices
       disabled
       source
       reason
-    ].freeze
-    SECRET_PATTERNS = [
-      /Bearer\s+[A-Za-z0-9._\-]+/i,
-      /Ocp-Apim-Subscription-Key\s*[:=]\s*[A-Za-z0-9._\-]+/i,
-      /\bsk-[A-Za-z0-9_\-]{10,}\b/i,
-      /\b[A-Za-z0-9_\-]{24,}\b/
     ].freeze
 
     class << self
@@ -91,7 +92,7 @@ module ExternalServices
         provider_message_safe: safe_message(provider_message_safe || provider_message),
         request_id: safe_string(request_id),
         region: safe_string(region),
-        policy_id: safe_identifier(policy_id),
+        policy_id: safe_string(policy_id),
         retry_after: safe_retry_after(retry_after),
         retry_after_at: safe_time(retry_after_at),
         latency_ms: safe_numeric(latency_ms),
@@ -106,23 +107,31 @@ module ExternalServices
       }
       @body = body
       @headers = normalized_headers(headers)
+      @provider_message = provider_message || provider_message_safe
+      @provider_error_code = provider_error_code
+      @provider_error_type = provider_error_type
     end
 
     def to_h
       body_data = body_error_data
+      classification_data = body_data.merge(
+        provider_error_code: @provider_error_code || body_data[:provider_error_code],
+        provider_error_type: @provider_error_type || body_data[:provider_error_type],
+        provider_message: @provider_message || body_data[:provider_message]
+      )
       retry_after = @attributes[:retry_after] || safe_retry_after(header_value(RETRY_AFTER_HEADERS))
       detail = @attributes.merge(
-        provider_error_code: @attributes[:provider_error_code] || body_data[:provider_error_code],
-        provider_error_type: @attributes[:provider_error_type] || body_data[:provider_error_type],
+        provider_error_code: @attributes[:provider_error_code] || safe_string(body_data[:provider_error_code]),
+        provider_error_type: @attributes[:provider_error_type] || safe_string(body_data[:provider_error_type]),
         provider_message_safe: @attributes[:provider_message_safe] || body_data[:provider_message_safe],
-        request_id: @attributes[:request_id] || header_value(REQUEST_ID_HEADERS) || body_data[:request_id],
-        region: @attributes[:region] || header_value(REGION_HEADERS),
-        policy_id: @attributes[:policy_id] || safe_identifier(header_value(POLICY_ID_HEADERS)),
+        request_id: @attributes[:request_id] || safe_string(header_value(REQUEST_ID_HEADERS)) || body_data[:request_id],
+        region: @attributes[:region] || safe_string(header_value(REGION_HEADERS)),
+        policy_id: @attributes[:policy_id] || safe_string(header_value(POLICY_ID_HEADERS)),
         retry_after: retry_after,
         retry_after_at: @attributes[:retry_after_at] || retry_after_at_for(retry_after),
-        quota_exceeded: boolean_or(@attributes[:quota_exceeded], quota_exceeded?(body_data)),
-        rate_limited: boolean_or(@attributes[:rate_limited], rate_limited?(body_data)),
-        auth_error: boolean_or(@attributes[:auth_error], auth_error?(body_data))
+        quota_exceeded: boolean_or(@attributes[:quota_exceeded], quota_exceeded?(classification_data)),
+        rate_limited: boolean_or(@attributes[:rate_limited], rate_limited?(classification_data)),
+        auth_error: boolean_or(@attributes[:auth_error], auth_error?(classification_data))
       )
 
       detail.slice(*SAFE_KEYS).compact
@@ -142,8 +151,9 @@ module ExternalServices
       message = source[:message] || source["message"] || (source if source.is_a?(String))
 
       {
-        provider_error_code: safe_string(code),
-        provider_error_type: safe_string(type),
+        provider_error_code: code,
+        provider_error_type: type,
+        provider_message: message,
         provider_message_safe: safe_message(message),
         request_id: safe_string(parsed[:request_id] || parsed["request_id"])
       }.compact
@@ -151,35 +161,54 @@ module ExternalServices
 
     def parse_body(value)
       return value if value.is_a?(Hash)
-      return {} if value.blank?
+      return {} unless value.is_a?(String)
+      return {} if value.bytesize > MAX_BODY_BYTES
 
-      JSON.parse(value.to_s)
-    rescue JSON::ParserError, TypeError
-      { message: value.to_s }
+      JSON.parse(value)
+    rescue JSON::ParserError, TypeError, EncodingError, ArgumentError
+      { message: value }
     end
 
     def normalized_hash(value)
-      return value.with_indifferent_access if value.respond_to?(:with_indifferent_access)
-      return { message: value.to_s }.with_indifferent_access if value.is_a?(String)
+      return value if value.is_a?(Hash)
+      return { message: value } if value.is_a?(String)
 
-      {}.with_indifferent_access
+      {}
     end
 
     def normalized_headers(value)
       return {} unless value.respond_to?(:each)
 
       value.each_with_object({}) do |(key, header_value), memo|
-        memo[key.to_s.downcase] = header_value.to_s
+        next unless key.is_a?(String) && key.ascii_only? && key.bytesize <= 100
+
+        normalized_key = key.downcase
+        next unless (REQUEST_ID_HEADERS + REGION_HEADERS + POLICY_ID_HEADERS + RETRY_AFTER_HEADERS).include?(normalized_key)
+
+        memo[normalized_key] = header_value if header_value.is_a?(String)
       end
     end
 
     def header_value(keys)
-      keys.lazy.map { |key| @headers[key] }.find { |value| value.present? }
+      keys.lazy.map { |key| @headers[key] }.find { |value| value && !value.empty? }
     end
 
     def quota_exceeded?(data)
-      text = classification_text(data)
-      text.match?(/quota|insufficient_quota|call volume|resource_exhausted/i)
+      values = [ data[:provider_error_code], data[:provider_error_type] ].compact
+      identifiers = values.filter_map do |value|
+        classification_value(value)&.delete("_ -")&.downcase
+      end
+      return false if identifiers.size != values.size
+
+      identifiers.reject! { |value| value.match?(/\A\d{3}\z/) }
+      return identifiers.any? { |value| QUOTA_ERROR_IDENTIFIERS.include?(value) } if identifiers.any?
+
+      message = classification_value(data[:provider_message])
+      return false unless message
+      return true if QUOTA_ERROR_IDENTIFIERS.include?(message.delete("_ -").downcase)
+      return false if message.match?(/\b(?:no|not|never|without)\s+(?:\w+\s+){0,3}(?:quota|call volume)\b/i)
+
+      message.match?(/\b(?:out of call volume quota|quota (?:has been )?exceeded|exceeded (?:your )?(?:current )?quota|insufficient[_ -]quota)\b/i)
     end
 
     def rate_limited?(data)
@@ -200,8 +229,19 @@ module ExternalServices
     def classification_text(data)
       [
         data[:provider_error_code],
-        data[:provider_message_safe]
-      ].compact.join(" ")
+        data[:provider_error_type],
+        data[:provider_message]
+      ].filter_map { |value| classification_value(value) }.join(" ")
+    end
+
+    def classification_value(value)
+      value = value.to_s if value.is_a?(Integer)
+      return unless value.is_a?(String) && value.valid_encoding? && value.bytesize <= MAX_CLASSIFICATION_BYTES
+
+      text = value.encode("UTF-8")
+      text.presence if text.bytesize <= MAX_CLASSIFICATION_BYTES
+    rescue EncodingError
+      nil
     end
 
     def boolean_or(left, right)
@@ -212,49 +252,35 @@ module ExternalServices
     end
 
     def safe_message(value)
-      sanitized = safe_string(value)
-      return if sanitized.blank?
-
-      SECRET_PATTERNS.each do |pattern|
-        sanitized = sanitized.gsub(pattern, "[FILTERED]")
-      end
-
-      truncate_bytes(sanitized, MAX_MESSAGE_BYTES)
+      ErrorTextSanitizer.call(value)
     end
 
     def safe_string(value)
-      value.to_s.presence if value.present?
-    end
-
-    def safe_identifier(value)
-      identifier = safe_string(value)
-      return if identifier.blank?
-
-      truncate_bytes(identifier, MAX_MESSAGE_BYTES)
+      ErrorTextSanitizer.call(value, identifier: true)
     end
 
     def safe_integer(value)
-      return value if value.is_a?(Integer)
-      return value.to_i if value.to_s.match?(/\A-?\d+\z/)
-
-      nil
+      numeric = value if value.is_a?(Integer)
+      numeric ||= value.to_i if value.is_a?(String) && value.bytesize <= 19 && value.ascii_only? && value.match?(/\A\d+\z/)
+      numeric if numeric && numeric.between?(0, MAX_NUMERIC_VALUE)
     end
 
     def safe_numeric(value)
-      return value if value.is_a?(Numeric)
-      return value.to_f if value.to_s.match?(/\A-?\d+(?:\.\d+)?\z/)
-
-      nil
+      numeric = value if value.is_a?(Numeric) && value.real?
+      if value.is_a?(String) && value.bytesize <= 32 && value.ascii_only? && value.match?(/\A\d+(?:\.\d+)?\z/)
+        numeric = value.to_f
+      end
+      numeric if numeric&.finite? && numeric.between?(0, MAX_NUMERIC_VALUE)
     end
 
     def safe_retry_after(value)
       numeric = safe_numeric(value)
       return numeric if numeric && numeric >= 0
-      return if value.blank?
+      return unless value.is_a?(String) && value.valid_encoding? && value.bytesize <= 100
 
       delay = Time.httpdate(value.to_s) - Time.current
       delay.negative? ? nil : delay
-    rescue ArgumentError, TypeError
+    rescue ArgumentError, TypeError, RangeError
       nil
     end
 
@@ -263,14 +289,16 @@ module ExternalServices
       return if seconds.nil? || seconds.negative?
 
       (Time.current + seconds).iso8601
+    rescue ArgumentError, RangeError
+      nil
     end
 
     def safe_time(value)
-      return if value.blank?
-      return value.iso8601 if value.respond_to?(:iso8601)
+      return value.iso8601 if value.is_a?(Time) || value.is_a?(DateTime)
+      return unless value.is_a?(String) && value.valid_encoding? && value.bytesize <= 100
 
       Time.zone.parse(value.to_s)&.iso8601
-    rescue ArgumentError, TypeError
+    rescue ArgumentError, TypeError, RangeError
       nil
     end
 
@@ -279,12 +307,6 @@ module ExternalServices
       return false if value == false
 
       nil
-    end
-
-    def truncate_bytes(value, max_bytes)
-      return value if value.bytesize <= max_bytes
-
-      value.byteslice(0, max_bytes).to_s.scrub
     end
   end
 end

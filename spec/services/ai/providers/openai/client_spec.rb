@@ -496,6 +496,20 @@ RSpec.describe Ai::Providers::Openai::Client do
       }
     end
 
+    it '429のrate-limit codeはquotaに言及したmessageでもrate-limitとして扱う' do
+      allow(response).to receive(:code).and_return('429')
+      allow(response).to receive(:body).and_return(
+        { error: { code: 'rate_limit_exceeded', type: 'rate_limit_error', message: 'Rate limit exceeded; check quota settings.' } }.to_json
+      )
+
+      expect do
+        client.send(:post_request, request_body)
+      end.to raise_error(Ai::Errors::RateLimitError) { |error|
+        expect(error.error_code).to eq('ai_rate_limited')
+        expect(error.quota_exceeded).not_to eq(true)
+      }
+    end
+
     it '429 の Retry-After を RateLimitError に保持する' do
       allow(response).to receive(:code).and_return('429')
       allow(response).to receive(:body).and_return({ error: { type: 'rate_limit_error', code: 'rate_limit_exceeded', message: 'Rate limit exceeded' } }.to_json)

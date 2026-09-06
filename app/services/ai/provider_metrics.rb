@@ -1,6 +1,7 @@
 module Ai
   class ProviderMetrics
     METADATA_KEY = "recify_ai_metrics".freeze
+    MAX_NUMERIC_VALUE = (2**63) - 1
     TOKEN_USAGE_KEYS = %i[
       input_tokens
       output_tokens
@@ -65,23 +66,19 @@ module Ai
       end
 
       def safe_string(value)
-        value.to_s.presence if value.present?
+        ExternalServices.sanitize_error_text(value, identifier: true)
       end
 
       def safe_message(value)
-        message = safe_string(value)
-        return if message.blank?
-
-        message
-          .gsub(/Bearer\s+[A-Za-z0-9._\-]+/i, "[FILTERED]")
-          .gsub(/\bsk-[A-Za-z0-9_\-]{10,}\b/i, "[FILTERED]")
+        ExternalServices.sanitize_error_text(value)
       end
 
       def safe_numeric(value)
-        return value if value.is_a?(Numeric)
-        return value.to_f if value.to_s.match?(/\A-?\d+(?:\.\d+)?\z/)
-
-        nil
+        numeric = value if value.is_a?(Numeric) && value.real?
+        if value.is_a?(String) && value.bytesize <= 32 && value.ascii_only? && value.match?(/\A\d+(?:\.\d+)?\z/)
+          numeric = value.to_f
+        end
+        numeric if numeric&.finite? && numeric.between?(0, MAX_NUMERIC_VALUE)
       end
 
       def safe_boolean(values, key)

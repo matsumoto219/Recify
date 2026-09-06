@@ -258,8 +258,8 @@ class Receipts::Processing::Pipeline
       else
         self.class.finalize(receipt: receipt_record, decision:, run: run_record)
       end
-      receipt_record.reload
-      Receipts::Processing.record_final_result(run_record, receipt: receipt_record)
+      finalized_receipt = Receipt.find(receipt_record.id)
+      Receipts::Processing.record_final_result(run_record, receipt: finalized_receipt)
       Receipts::Processing.succeed(run_record)
     end
     adopted

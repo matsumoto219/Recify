@@ -39,6 +39,113 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
   end
 
   describe '.call' do
+    context '以前の解析結果がある場合' do
+      before do
+        receipt.update!(memo: '利用者メモ', subtotal_amount: 1000, tax_amount: 100, total_amount: 1100)
+        receipt.receipt_items.create!(
+          confirmed_name: '手動確定商品',
+          quantity: 1,
+          price: 1000,
+          line_total: 1000,
+          original_line_total: 1000,
+          pricing_source_kind: 'explicit_line_total'
+        )
+      end
+
+      %w[full_reanalyze ocr_retry ai_retry finalize_retry].each do |retry_type|
+        it "#{retry_type}の開始時に以前の金額と手動確定明細をresetする" do
+          parent_run = create(
+            :receipt_analysis_run,
+            :succeeded,
+            receipt:,
+            ocr_result_snapshot: parent_ocr_snapshot,
+            ai_normalized_result_snapshot: parent_ai_snapshot,
+            metadata: { 'finalize_decision' => parent_finalize_decision_snapshot }
+          )
+
+          result = described_class.call(
+            receipt:,
+            parent_run:,
+            actor:,
+            retry_type:,
+            reason: '再処理',
+            reauthentication: reauthentication_context,
+            confirmation: retry_confirmation
+          )
+
+          expect(result).to be_success
+          expect(receipt.reload).to have_attributes(
+            status: 'processing',
+            total_amount: nil,
+            subtotal_amount: nil,
+            tax_amount: nil,
+            store_name: nil,
+            memo: '利用者メモ'
+          )
+          expect(receipt.receipt_items).to be_empty
+          expect(receipt.image).to be_attached
+        end
+      end
+
+      it 'usage拒否では以前の解析結果を保持する' do
+        create(:usage_counter, user: actor, key: 'retry_operations_per_day', used_count: 20)
+
+        result = described_class.call(
+          receipt:,
+          actor:,
+          retry_type: :full_reanalyze,
+          reason: '再処理',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        expect(result.error_code).to eq('usage_limit_exceeded')
+        expect(receipt.reload).to have_attributes(status: 'completed', total_amount: 1100)
+        expect(receipt.receipt_items.sole.confirmed_name).to eq('手動確定商品')
+      end
+
+      it 'enqueue失敗でも古い金額や手動明細を再表示しない' do
+        allow(ReceiptOcrJob).to receive(:perform_later).and_raise(StandardError, 'forced enqueue failure')
+
+        result = described_class.call(
+          receipt:,
+          actor:,
+          retry_type: :full_reanalyze,
+          reason: '再処理',
+          reauthentication: reauthentication_context,
+          confirmation: retry_confirmation
+        )
+
+        expect(result.error_code).to eq('analysis_enqueue_failed')
+        expect(receipt.reload).to have_attributes(status: 'failed', total_amount: nil, memo: '利用者メモ')
+        expect(receipt.receipt_items).to be_empty
+      end
+
+      it 'intent auditが失敗すると金額と明細をrollbackする' do
+        allow(AuditLogs).to receive(:record_admin_action!).and_wrap_original do |method, **kwargs|
+          if kwargs[:action] == 'receipt_analysis.retry_requested'
+            raise ActiveRecord::StatementInvalid, 'forced audit failure'
+          end
+
+          method.call(**kwargs)
+        end
+
+        expect do
+          described_class.call(
+            receipt:,
+            actor:,
+            retry_type: :full_reanalyze,
+            reason: '再処理',
+            reauthentication: reauthentication_context,
+            confirmation: retry_confirmation
+          )
+        end.to raise_error(ActiveRecord::StatementInvalid, 'forced audit failure')
+
+        expect(receipt.reload).to have_attributes(status: 'completed', total_amount: 1100)
+        expect(receipt.receipt_items.sole.confirmed_name).to eq('手動確定商品')
+      end
+    end
+
     it 'full_reanalyzeでnew runを作り、ReceiptOcrJobをrun_idだけでenqueueする' do
       result = nil
 

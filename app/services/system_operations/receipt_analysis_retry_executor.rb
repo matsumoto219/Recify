@@ -107,7 +107,7 @@ module SystemOperations
           end
 
           copy_retry_snapshots(run)
-          Receipts::Processing.mark_processing!(receipt)
+          Receipts::Processing.reset_for_retry!(receipt)
 
           result = Result.new(run: run, enqueued_job: job_class, retry_type: retry_type)
           record_retry_requested_audit!(result)

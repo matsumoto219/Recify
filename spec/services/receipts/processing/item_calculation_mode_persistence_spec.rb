@@ -458,6 +458,7 @@ RSpec.describe 'OCR item calculation mode persistence' do
   it 'AIの0始まりitem indexを保存先positionに使っても先頭Itemのcount authorityを保存する' do
     ocr_result = ocr_fixture('single_tax_receipt')
     normalized_ai_result = ai_result.merge(
+      meta: { ai_name_completion_enabled: false },
       receipt_items_attributes: Array(ocr_result.dig(:candidates, :items)).each_with_index.map do |_item, index|
         {
           index: index,
@@ -480,9 +481,10 @@ RSpec.describe 'OCR item calculation mode persistence' do
     items = receipt.reload.receipt_items.order(:position_index)
     aggregate_failures do
       expect(items.pluck(:position_index)).to eq([ 0, 1, 2, 3 ])
+      expect(items.pluck(:suggested_name)).to eq(ocr_result.dig(:candidates, :items).pluck(:raw_text))
       expect(items.pluck(:pricing_source_kind).uniq).to eq([ 'count_unit_price' ])
       expect(items.first).to have_attributes(
-        suggested_name: 'AI商品1',
+        suggested_name: 'ノート A5',
         price: 220,
         original_line_total: 220,
         line_total: 220

@@ -17,6 +17,7 @@
   - disabled: 無効化する場合は true。未指定時は false
   - loading: 送信中表示にする場合は true。未指定時は false
   - icon: 表示する Material Symbols アイコン名
+  - label_class: ラベルに付与するCSSクラス。未指定時は従来表示
   - icon_position: icon の位置。:left / :right。未指定時は :left
   - trailing_icon: 右端に表示する Material Symbols アイコン名
   - trailing_icon_animated: trailing_icon を hover 時に動かす場合は true。未指定時は false
@@ -41,6 +42,7 @@
   disabled = local_assigns.fetch(:disabled, false)
   loading = local_assigns.fetch(:loading, false)
   icon = local_assigns[:icon]
+  label_class = local_assigns[:label_class]
   icon_position = local_assigns.fetch(:icon_position, :left).to_sym
   trailing_icon = local_assigns[:trailing_icon]
   trailing_icon_animated = local_assigns.fetch(:trailing_icon_animated, false)
@@ -126,7 +128,7 @@
     <span class="material-symbols-outlined text-[18px]" aria-hidden="true"><%= icon %></span>
   <% end %>
 
-  <span><%= current_label %></span>
+  <%= tag.span(current_label, class: label_class) %>
 
   <% if trailing_icon.present? %>
     <span class="<%= trailing_icon_class %>" aria-hidden="true"><%= trailing_icon %></span>

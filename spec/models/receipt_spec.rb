@@ -326,6 +326,63 @@ RSpec.describe Receipt, type: :model do
         expect(receipt.errors[:quarantine_reason]).to be_present
       end
     end
+
+    it '隔離時に既読・未読の通知履歴を削除し、解除しても復元しない' do
+      actor = create(:user, :admin)
+      receipt = create(:receipt, :completed)
+      create(:notification, user: receipt.user, notifiable: receipt, kind: 'receipt_completed')
+      create(:notification, :read, user: receipt.user, notifiable: receipt, kind: 'receipt_review_needed')
+
+      expect {
+        receipt.quarantine!(actor:, reason: 'policy violation')
+      }.to change(receipt.notifications, :count).from(2).to(0)
+
+      receipt.release_quarantine!(actor:, reason: 'false positive')
+
+      expect(receipt.notifications).to be_empty
+    end
+
+    it '隔離transactionがrollbackした場合は通知履歴も保持する' do
+      actor = create(:user, :admin)
+      receipt = create(:receipt, :completed)
+      notification = create(:notification, user: receipt.user, notifiable: receipt)
+
+      described_class.transaction(requires_new: true) do
+        receipt.quarantine!(actor:, reason: 'policy violation')
+        expect(receipt.notifications).to be_empty
+        raise ActiveRecord::Rollback
+      end
+
+      expect(receipt.reload).to be_active_for_user
+      expect(Notification.exists?(notification.id)).to be(true)
+    end
+
+    it '事前に空の通知associationを読んでいても隔離時点の通知を削除する' do
+      actor = create(:user, :admin)
+      receipt = create(:receipt, :completed)
+      receipt.notifications.load
+      other_receipt = described_class.find(receipt.id)
+      notification = create(:notification, user: receipt.user, notifiable: other_receipt)
+
+      receipt.quarantine!(actor:, reason: 'policy violation')
+
+      expect(Notification.exists?(notification.id)).to be(false)
+    end
+
+    it '隔離されたレシートの解析終端遷移では通知を作成しない' do
+      receipt = create(:receipt, :processing, :quarantined, :with_image)
+
+      expect { receipt.update!(status: 'completed') }.not_to change(Notification, :count)
+    end
+
+    it '古いinstanceの通知callbackも現在の隔離状態を再確認する' do
+      actor = create(:user, :admin)
+      receipt = create(:receipt, :completed)
+      stale_receipt = described_class.find(receipt.id)
+      receipt.quarantine!(actor:, reason: 'policy violation')
+
+      expect { stale_receipt.send(:create_status_notification) }.not_to change(Notification, :count)
+    end
   end
 
   describe 'amount limit validation' do
@@ -1802,6 +1859,19 @@ RSpec.describe Receipt, type: :model do
       }.not_to change { user.notifications.where(kind: 'receipt_failed', notifiable: receipt).count }
 
       expect(user.notifications.where(kind: 'receipt_failed', notifiable: receipt).count).to eq(1)
+    end
+
+    it '通知作成時のrow lock再確認で確定したイベント種別を現在statusへ置き換えない' do
+      receipt = create(:receipt, :completed)
+      completed_receipt = described_class.find(receipt.id)
+      receipt.update!(status: 'review_needed')
+
+      completed_receipt.send(:create_status_notification)
+
+      expect(receipt.notifications.sole).to have_attributes(
+        kind: 'receipt_completed',
+        metadata: { 'receipt_id' => receipt.id, 'status' => 'completed' }
+      )
     end
 
     it '同じkindの未読通知を再解析結果で更新した時も通知surfaceを再描画する' do

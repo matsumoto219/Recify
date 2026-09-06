@@ -26,7 +26,7 @@ class Notification < ApplicationRecord
 
   scope :unread, -> { where(read_at: nil) }
   scope :read, -> { where.not(read_at: nil) }
-  scope :recent, -> { order(created_at: :desc) }
+  scope :recent, -> { order(created_at: :desc, id: :desc) }
 
   DROPDOWN_LIMIT = 5
   INDEX_LIMIT = 50
@@ -60,6 +60,8 @@ class Notification < ApplicationRecord
       broadcast_dropdown_content_for(user, notifications: dropdown_notifications)
       broadcast_index_header_for(user, unread_count:)
       broadcast_index_list_for(user, notifications: index_notifications)
+    rescue StandardError => error
+      Rails.logger.warn("[Notification] broadcast_failed error_class=#{error.class.name}")
     end
 
     def preload_known_notifiables(notifications)
@@ -72,18 +74,17 @@ class Notification < ApplicationRecord
 
     def cleanup_old!(now: Time.current)
       threshold = now - read_retention_days.days
-      affected_user_ids = read.where("read_at < ?", threshold).distinct.pluck(:user_id)
-      deleted_count = read.where("read_at < ?", threshold).delete_all
+      deleted_count = 0
 
-      distinct.pluck(:user_id).each do |user_id|
-        pruned_count = prune_for_user!(user_id, broadcast: false)
-        next if pruned_count.zero?
+      User.where(id: select(:user_id)).find_each do |user|
+        user_deleted_count = user.notifications.read.where("read_at < ?", threshold).delete_all
+        user_deleted_count += prune_for_user!(user, broadcast: false)
+        next if user_deleted_count.zero?
 
-        deleted_count += pruned_count
-        affected_user_ids << user_id
+        deleted_count += user_deleted_count
+        broadcast_realtime_surfaces_for(user)
       end
 
-      broadcast_cleanup_for(affected_user_ids.uniq)
       deleted_count
     end
 
@@ -91,10 +92,8 @@ class Notification < ApplicationRecord
       user = user_or_id.is_a?(User) ? user_or_id : User.find_by(id: user_or_id)
       return 0 unless user
 
-      protected_ids = user.notifications.recent.limit(notifications_per_user_limit).pluck(:id)
-      deletable_scope = user.notifications.read
-      deletable_scope = deletable_scope.where.not(id: protected_ids) if protected_ids.any?
-      deleted_count = deletable_scope.delete_all
+      protected_ids = user.notifications.recent.limit(notifications_per_user_limit).select(:id)
+      deleted_count = user.notifications.where.not(id: protected_ids).delete_all
 
       broadcast_realtime_surfaces_for(user) if broadcast && deleted_count.positive?
       deleted_count
@@ -119,12 +118,6 @@ class Notification < ApplicationRecord
 
       klass = notification.notifiable_type.safe_constantize
       klass && klass < ActiveRecord::Base
-    end
-
-    def broadcast_cleanup_for(user_ids)
-      User.where(id: user_ids).find_each do |user|
-        broadcast_realtime_surfaces_for(user)
-      end
     end
 
     def broadcast_unread_badge_for(user, unread_count:)
@@ -181,7 +174,8 @@ class Notification < ApplicationRecord
   def stale_notifiable?
     return false if notifiable_type.blank? || notifiable_id.blank?
 
-    notifiable.blank?
+    target = notifiable
+    target.blank? || (target.is_a?(Receipt) && !target.active_for_user?)
   rescue NameError
     true
   end

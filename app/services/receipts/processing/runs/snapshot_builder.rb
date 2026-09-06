@@ -2764,6 +2764,7 @@ module Receipts::Processing::Runs
       meta = normalized_hash(value)
 
       {
+        ai_name_completion_enabled: meta[:ai_name_completion_enabled] == true,
         provider: safe_string(meta[:provider]),
         model: safe_string(meta[:model]),
         primary_provider: safe_string(meta[:primary_provider]),

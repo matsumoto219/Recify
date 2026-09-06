@@ -52,8 +52,8 @@ ja:
           description: 手動入力・編集時に割引率から割引額を自動計算する際の丸め方です。
       usage:
         push_notification:
-          label: 通知
-          description: レシート処理の完了や要確認項目を通知します
+          label: レシートの通知
+          description: レシートの処理結果を、画面上の一時メッセージで通知します。
         delete_confirmation:
           label: 削除確認
           description: レシート明細や通知を削除する前に確認ダイアログを表示します

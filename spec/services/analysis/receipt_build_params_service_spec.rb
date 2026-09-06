@@ -60,6 +60,40 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       }
     end
 
+    context 'OCR商品名の表記を保持する場合' do
+      it '構造化されたname-onlyの商品名から規格・型番・容量を金額として除去しない' do
+        names = [ 'ノート A5', '部品 AB-12', '飲料 1000ml', '用紙 100', 'ひも 2m' ]
+        ocr_result[:candidates][:items] = names.map do |name|
+          { raw_text: name, price: 220, quantity: 1, line_total: 220 }
+        end
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        items = params[:receipt_items_attributes]
+
+        aggregate_failures do
+          expect(items.pluck(:raw_text)).to eq(names)
+          expect(items.pluck(:suggested_name)).to eq(names)
+          expect(items.pluck(:line_total)).to eq([ 220 ] * names.size)
+        end
+      end
+
+      it '商品名補完OFFでは構造化OCRの商品名表記をAIの提案に置き換えない' do
+        ocr_result[:candidates][:items] = [
+          { raw_text: '飲料 1000mL', price: 220, quantity: 1, line_total: 220 }
+        ]
+        ai_result = {
+          meta: { ai_name_completion_enabled: false },
+          receipt_items_attributes: [ { index: 0, suggested_name: '飲料', category: 'drink' } ]
+        }
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+        expect(params[:receipt_items_attributes]).to contain_exactly(
+          include(raw_text: '飲料 1000mL', suggested_name: '飲料 1000mL', category: 'drink', line_total: 220)
+        )
+      end
+    end
+
     it 'ownership handoffへsource evidenceのexact attributesだけを渡す' do
       evidence_attributes = {
         source_provider: 'azure',
@@ -471,10 +505,11 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         }
       ]
       ai_result = {
+        meta: { ai_name_completion_enabled: true },
         receipt_items_attributes: [
           {
             index: 0,
-            suggested_name: 'コーヒー補完',
+            suggested_name: 'ｺｰﾋｰ',
             category: 'food',
             needs_review: false
           }
@@ -484,7 +519,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       item = described_class.call(ocr_result:, ai_result:)
         .fetch(:receipt_items_attributes).first
 
-      expect(item).to include(raw_text: 'コーヒー', suggested_name: 'コーヒー補完', category: 'food')
+      expect(item).to include(raw_text: 'コーヒー', suggested_name: 'ｺｰﾋｰ', category: 'food')
     end
 
     context 'AI結果なしの場合' do
@@ -2904,8 +2939,9 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
-      it 'AI name completion ONでOCR文脈に根拠があるsuggested_nameは採用する' do
+      it 'AI name completion ONで同じOCR itemのname-onlyに根拠があるsuggested_nameは採用する' do
         ai_result[:meta] = { ai_name_completion_enabled: true }
+        ocr_result[:candidates][:items].first[:name] = 'ブレンドコーヒー'
 
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
         first_item = params[:receipt_items_attributes].first
@@ -2934,7 +2970,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
-      it 'AI item indexが重複した場合は先勝ちにし、該当itemを確認対象にする' do
+      it 'AI item indexが重複した場合は提案を拒否し、該当itemを確認対象にする' do
         ai_result[:receipt_items_attributes] = [
           { index: 0, suggested_name: 'ブレンドコーヒー', category: 'drink', needs_review: false },
           { index: 0, suggested_name: '重複コーヒー', category: 'food', needs_review: false }
@@ -2944,7 +2980,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         first_item = params[:receipt_items_attributes].first
 
         aggregate_failures do
-          expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+          expect(first_item[:suggested_name]).to eq('コーヒー')
           expect(first_item[:category]).to eq('drink')
           expect(first_item[:needs_review]).to eq(true)
           expect(first_item[:review_reasons]).to include('item_name_uncertain')
@@ -3772,20 +3808,20 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
       end
 
-      it 'AI補完で明細名とカテゴリを上書きしてもAzure由来のquantity_unit_codeとproduct_codeを保持する' do
+      it 'AIカテゴリ補完時もOCR名とAzure由来のquantity_unit_codeとproduct_codeを保持する' do
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
         first_item = params[:receipt_items_attributes].first
         second_item = params[:receipt_items_attributes].second
 
         aggregate_failures do
-          expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+          expect(first_item[:suggested_name]).to eq('コーヒー')
           expect(first_item[:category]).to eq('drink')
           expect(first_item[:quantity_unit_code]).to eq('each')
           expect(first_item[:product_code]).to eq('C001')
           expect(first_item[:needs_review]).to eq(false)
 
-          expect(second_item[:suggested_name]).to eq('たまごサンド')
+          expect(second_item[:suggested_name]).to eq('サンド')
           expect(second_item[:category]).to eq('food')
           expect(second_item[:quantity_unit_code]).to eq('each')
           expect(second_item[:product_code]).to eq('S001')
@@ -4000,6 +4036,100 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      context 'case-preserved行がある場合' do
+        before do
+          ocr_result[:lines] = [ 'ノートa5 220', 'クリアファイルa4 110' ]
+          ocr_result[:case_preserved_lines] = [ 'ノートA5 220', 'クリアファイルA4 110' ]
+        end
+
+        it '同じindexの原文から商品名の大小文字だけを復元する' do
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          expect(params[:receipt_items_attributes]).to contain_exactly(
+            include(raw_text: 'ノートA5 220', suggested_name: 'ノートA5', line_total: 220),
+            include(raw_text: 'クリアファイルA4 110', suggested_name: 'クリアファイルA4', line_total: 110)
+          )
+        end
+
+        it 'NFKCと空白を正規化して同一行と確認できる原文表記を使う' do
+          ocr_result[:case_preserved_lines] = [ '　ノートＡ５　２２０　', "クリアファイルＡ４\t１１０" ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          expect(params[:receipt_items_attributes].pluck(:suggested_name)).to eq([ 'ノートA5', 'クリアファイルA4' ])
+        end
+
+        it '商品名または金額が不一致なら原文行から値を借用しない' do
+          ocr_result[:case_preserved_lines] = [ '別商品A5 220', 'クリアファイルA4 990' ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          expect(params[:receipt_items_attributes]).to contain_exactly(
+            include(raw_text: 'ノートa5 220', suggested_name: 'ノートa5', line_total: 220),
+            include(raw_text: 'クリアファイルa4 110', suggested_name: 'クリアファイルa4', line_total: 110)
+          )
+        end
+
+        it '別indexに一致する原文があっても行を探索して関連付けない' do
+          ocr_result[:case_preserved_lines].reverse!
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          expect(params[:receipt_items_attributes].pluck(:suggested_name)).to eq([ 'ノートa5', 'クリアファイルa4' ])
+        end
+
+        it '原文の欠損や空行を除去して後続indexをずらさない' do
+          ocr_result[:lines] = [ 'ノートa5 220', 'ノートa5 220', 'クリアファイルa4 110' ]
+          ocr_result[:case_preserved_lines] = [ nil, 'ノートA5 220', 'クリアファイルA4 110' ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          expect(params[:receipt_items_attributes].pluck(:suggested_name)).to eq([ 'ノートa5', 'ノートA5', 'クリアファイルA4' ])
+        end
+
+        it '原文arrayが欠損したold snapshotでもOCRの商品名を保持する' do
+          ocr_result.delete(:case_preserved_lines)
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          expect(params[:receipt_items_attributes].pluck(:suggested_name)).to eq([ 'ノートa5', 'クリアファイルa4' ])
+        end
+
+        it '商品名補完OFFでもOCR原文の大小文字を保持する' do
+          ai_result = {
+            meta: { ai_name_completion_enabled: false },
+            receipt_items_attributes: [ { index: 0, suggested_name: 'ノート', category: 'other' } ]
+          }
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+          expect(params[:receipt_items_attributes].pluck(:suggested_name)).to eq([ 'ノートA5', 'クリアファイルA4' ])
+        end
+
+        it '原文行でもstrict blockを通常明細へ戻さず後続行のindexを維持する' do
+          ocr_result[:candidates][:reference_pricing_block_line_indexes] = [ 0 ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          expect(params[:receipt_items_attributes]).to contain_exactly(
+            include(raw_text: 'クリアファイルA4 110', suggested_name: 'クリアファイルA4', line_total: 110)
+          )
+        end
+
+        it '店舗名の大小文字復元では欠損原文行を無視する' do
+          ocr_result[:candidates][:store_name] = 'samplemart'
+          ocr_result[:lines] = [ '', 'samplemart', 'ノートa5 220' ]
+          ocr_result[:case_preserved_lines] = [ nil, 'SampleMart', 'ノートA5 220' ]
+
+          params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+          aggregate_failures do
+            expect(params.dig(:receipt_attributes, :store_name)).to eq('SampleMart')
+            expect(params[:receipt_items_attributes].pluck(:suggested_name)).to eq([ 'ノートA5' ])
+          end
+        end
+      end
+
       it 'comma付き金額を1円として誤読せずfallback明細を組み立てる' do
         ocr_result[:lines] = [
           'サンプルストア',
@@ -4024,6 +4154,37 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '商品識別子の末尾数字を後続金額の桁区切りとして連結しない' do
+        ocr_result[:lines] = [
+          'ノート A5 220',
+          'クリアファイル A4 110',
+          '電池 LR6 398',
+          '部品 AB-12 300',
+          '用紙 A5 1 234'
+        ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        items = params[:receipt_items_attributes]
+
+        aggregate_failures do
+          expect(items.pluck(:price)).to eq([ 220, 110, 398, 300, 1234 ])
+          expect(items.pluck(:line_total)).to eq([ 220, 110, 398, 300, 1234 ])
+          expect(items.pluck(:suggested_name)).to eq([ 'ノート A5', 'クリアファイル A4', '電池 LR6', '部品 AB-12', '用紙 A5' ])
+          expect(items).to all(include(needs_review: true))
+        end
+      end
+
+      it 'fallback金額の検出を注入されたprofileの構文に限定する' do
+        allow(ReceiptAnalysisProfiles.default).to receive(:analysis_fallback_amount_candidate_pattern).and_return(/¥\d+/)
+        ocr_result[:lines] = [ 'ノート A5 ¥220', 'クリアファイル A4 110' ]
+
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+
+        expect(params[:receipt_items_attributes]).to contain_exactly(
+          include(raw_text: 'ノート A5 ¥220', suggested_name: 'ノート A5', price: 220)
+        )
+      end
+
       it '非明細行をfallback明細にしない' do
         ocr_result[:lines] = [
           'サンプルストア',
@@ -4034,6 +4195,9 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           '税抜 1000',
           'TEL 03-1234-5678',
           '住所 東京都港区芝1-1-1',
+          'サンプル県サンプル市西6-6-6',
+          '商品 A5',
+          '商品 1000ml',
           '登録番号 T1234567890123',
           'インボイス T1234567890123',
           '伝票番号 123456',
@@ -4426,7 +4590,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
           aggregate_failures do
             expect(params[:receipt_items_attributes].size).to eq(2)
-            expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+            expect(first_item[:suggested_name]).to eq('コーヒー')
             expect(first_item[:quantity_unit_code]).to eq('each')
             expect(second_item[:raw_text]).to eq('サンド')
             expect(second_item[:quantity_unit_code]).to eq('each')
@@ -4487,7 +4651,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             expect(first_item[:raw_text]).to eq('コーヒー')
             expect(first_item[:quantity_unit_code]).to eq('each')
             expect(first_item[:product_code]).to eq('C001')
-            expect(first_item[:suggested_name]).to eq('ブレンドコーヒー')
+            expect(first_item[:suggested_name]).to eq('コーヒー')
             expect(first_item[:category]).to eq('drink')
             expect(first_item[:needs_review]).to eq(true)
             expect(first_item[:review_reasons]).to include('item_name_uncertain')

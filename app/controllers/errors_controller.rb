@@ -20,6 +20,7 @@ class ErrorsController < ApplicationController
   end
 
   def internal_server_error
+    response.set_header("Cache-Control", "no-store")
     log_error_page(status: 500, level: :error)
     render status: :internal_server_error, formats: :html
   end

@@ -210,15 +210,15 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
-    it '通知設定toggleを表示する' do
+    it '通知toggleはレシート処理の一時メッセージを対象として説明する' do
       get settings_path
 
       document = Nokogiri::HTML(response.body)
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(response.body).to include(I18n.t('settings.index.usage.push_notification.label'))
-        expect(response.body).to include(I18n.t('settings.index.usage.push_notification.description'))
+        expect(response.body).to include('レシートの通知')
+        expect(response.body).to include('レシートの処理結果を、画面上の一時メッセージで通知します。')
         expect(document.at_css('input[name="push_notification_enabled"]')).to be_present
       end
     end
@@ -2125,7 +2125,7 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
-    it '通知OFFなら設定保存成功のTurbo flashを表示しない' do
+    it 'レシートの通知OFFでも設定保存成功のTurbo flashを表示する' do
       user.update!(push_notification_enabled: false)
 
       patch settings_path,
@@ -2139,8 +2139,8 @@ RSpec.describe 'Settings', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.media_type).to eq('text/vnd.turbo-stream.html')
         expect(stream).to be_present
-        expect(stream.at_css('[data-controller~="notice-surface"]')).to be_nil
-        expect(stream.text).not_to include(I18n.t('flash.settings.update_success'))
+        expect(stream.at_css('[data-controller~="notice-surface"]')).to be_present
+        expect(stream.text).to include(I18n.t('flash.settings.update_success'))
       end
     end
 

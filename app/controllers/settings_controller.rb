@@ -36,7 +36,7 @@ class SettingsController < ApplicationController
         end
 
         format.turbo_stream do
-          flash.now[:notice] = message if current_user.push_notification_enabled?
+          flash.now[:notice] = message
           render turbo_stream: settings_update_streams
         end
       end

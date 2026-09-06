@@ -42,7 +42,7 @@ module Analysis
       category_review_reasons.uniq!
 
       result = {
-        index: normalize_index(normalized[:index] || normalized[:position_index]),
+        index: normalize_index(normalized.key?(:index) ? normalized[:index] : normalized[:position_index]),
         suggested_name: normalize_string(normalized[:suggested_name]),
         category: category,
         needs_review: category_review_reasons.any? ? true : normalize_boolean(normalized[:needs_review]),
@@ -60,10 +60,10 @@ module Analysis
     private
 
     def normalize_index(value)
-      return nil if value.blank?
-      return value.to_i if value.is_a?(Numeric)
+      return value if value.is_a?(Integer) && value >= 0
+      return nil unless value.is_a?(String) && value.bytesize <= 20 && value.ascii_only? && value.match?(/\A\d+\z/)
 
-      Integer(value)
+      Integer(value, 10)
     rescue ArgumentError, TypeError
       nil
     end

@@ -46,6 +46,9 @@ module SystemOperations
           before_state: before_state,
           after_state: after_state
         )
+        if key == "limits.notifications_per_user" && default_value < before_state[:value]
+          NotificationCleanupJob.enqueue_after_commit
+        end
       end
 
       Result.new(

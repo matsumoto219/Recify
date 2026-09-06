@@ -117,13 +117,18 @@ export default class extends Controller {
     })
 
     this.uploadControlTargets.forEach((control) => {
-      control.disabled = !allowed
+      const root = this.nearestUploadRoot(control)
+      const cameraActive = root?.dataset.receiptUploadCameraActive === 'true'
+      const uploadSubmitting = root?.getAttribute('aria-busy') === 'true'
+      control.disabled = !allowed || ((cameraActive || uploadSubmitting) && control.matches('[data-receipt-upload-target~="cameraButton"]'))
     })
 
     this.uploadSubmitTargets.forEach((button) => {
       const root = this.nearestUploadRoot(button)
       const hasSelectedFile = root ? this.hasSelectedFile(root) : false
-      button.disabled = !allowed || !hasSelectedFile
+      const cameraActive = root?.dataset.receiptUploadCameraActive === 'true'
+      const uploadSubmitting = root?.getAttribute('aria-busy') === 'true'
+      button.disabled = !allowed || !hasSelectedFile || cameraActive || uploadSubmitting
     })
   }
 

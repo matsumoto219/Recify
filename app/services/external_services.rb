@@ -77,6 +77,10 @@ module ExternalServices
       ErrorDetail.build(...)
     end
 
+    def sanitize_error_text(...)
+      ErrorTextSanitizer.call(...)
+    end
+
     def reset!(service = nil)
       return services.each { |service_name| StatusStore.reset!(service_name) } if service.nil?
 
