@@ -421,6 +421,10 @@ class ReceiptFormPresenter
         original_line_total: source_value
       }
       data[:original_saved_line_total] = line_total_value unless new_record? || line_total_value.nil?
+      if persisted_absolute_discount_source?
+        data[:original_discount_amount] = item.discount_amount
+        data[:original_discount_rate] = item.discount_rate_percentage_input
+      end
       data
     end
 

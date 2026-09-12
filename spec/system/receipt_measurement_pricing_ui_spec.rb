@@ -1236,6 +1236,137 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     expect_only_validation_failure_in_browser_console(receipt)
   end
 
+  it "解析済み税込金額を税抜reference sourceへ戻さず初期表示・数量往復・保存で維持する" do
+    user = create_system_test_user
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      store_name: "税抜計量確認店",
+      purchased_at: Time.zone.local(2026, 8, 13, 13, 0, 0),
+      payment_method: "cash",
+      subtotal_amount: 600,
+      tax_amount: 48,
+      total_amount: 648,
+      amount_calculation_profile: {
+        "schema_version" => 1,
+        "context" => "analysis",
+        "profile" => {
+          "tax_rounding_mode" => "floor",
+          "discount_rounding_mode" => "round",
+          "receipt_tax_basis" => "tax_added_to_subtotal",
+          "item_amount_basis" => "line_total_as_net",
+          "tax_detail_amount_basis" => "net"
+        }
+      },
+      review_reasons: []
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: "計量確認品",
+      price: nil,
+      quantity: 250,
+      quantity_unit_code: "gram",
+      tax_rate: BigDecimal("0.08"),
+      original_line_total: 600,
+      line_total: 648,
+      pricing_source_kind: "reference_quantity_price",
+      reference_price_amount: BigDecimal("240"),
+      reference_quantity: 100,
+      reference_quantity_unit_code: "gram",
+      reference_price_tax_inclusion: "net",
+      needs_review: false,
+      review_reasons: []
+    )
+    receipt.receipt_tax_details.create!(rate: BigDecimal("0.08"), net_amount: 600, amount: 48)
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    row = expand_item_row(item_row_named("計量確認品"))
+    expect(reference_line_total_display(row)).to have_text("¥648")
+    expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥648")
+    expect(item.reload.line_total).to eq(648)
+
+    quantity = row.find("[data-receipt-form-target='quantityInput']", visible: true)
+    quantity.set("300")
+    expect(reference_line_total_display(row)).to have_text("¥777")
+    quantity.set("250")
+    expect(reference_line_total_display(row)).to have_text("¥648")
+    expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥648")
+
+    save_receipt
+    expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    aggregate_failures do
+      expect(receipt.reload).to have_attributes(subtotal_amount: 600, tax_amount: 48, total_amount: 648)
+      expect(item.reload).to have_attributes(
+        price: nil,
+        quantity: BigDecimal("250"),
+        pricing_source_kind: "reference_quantity_price",
+        reference_price_amount: BigDecimal("240"),
+        reference_quantity: BigDecimal("100"),
+        reference_quantity_unit_code: "gram",
+        reference_price_tax_inclusion: "net",
+        original_line_total: 600,
+        line_total: 600
+      )
+    end
+
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    row = expand_item_row(item_row_named("計量確認品"))
+    expect(reference_line_total_display(row)).to have_text("¥648")
+    expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥648")
+    expect_mobile_viewport_without_horizontal_overflow
+    expect_browser_console_clean
+  end
+
+  it "referenceの絶対額割引は換算率が循環小数でも数量変更・保存で絶対額を維持する" do
+    user = create_system_test_user
+    receipt = create_editable_receipt(user: user, store_name: "絶対額割引確認店")
+    item = receipt.receipt_items.sole
+    item.update!(
+      price: nil,
+      quantity: 100,
+      quantity_unit_code: "gram",
+      original_line_total: 600,
+      line_total: 550,
+      discount_amount: 50,
+      discount_rate: nil,
+      pricing_source_kind: "reference_quantity_price",
+      reference_price_amount: 600,
+      reference_quantity: 100,
+      reference_quantity_unit_code: "gram",
+      reference_price_tax_inclusion: "gross"
+    )
+    receipt.update!(subtotal_amount: 550, total_amount: 550)
+
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    row = expand_item_row(item_row_named("既存商品"))
+    expect(reference_line_total_display(row)).to have_text("¥550")
+    expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥550")
+
+    quantity = row.find("[data-receipt-form-target='quantityInput']", visible: true)
+    quantity.set("200")
+    expect(reference_line_total_display(row)).to have_text("¥1,150")
+    quantity.set("100")
+    expect(reference_line_total_display(row)).to have_text("¥550")
+    save_receipt
+
+    expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+    aggregate_failures do
+      expect(receipt.reload).to have_attributes(subtotal_amount: 550, tax_amount: 0, total_amount: 550)
+      expect(item.reload).to have_attributes(
+        discount_amount: 50,
+        discount_rate: nil,
+        original_line_total: 600,
+        line_total: 550
+      )
+    end
+    expect_browser_console_clean
+  end
+
   it "保存済み税抜reference sourceをTurbo backと再保存で維持する" do
     user = create_system_test_user
     external_net_profile = {

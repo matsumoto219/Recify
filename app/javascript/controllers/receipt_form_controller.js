@@ -1181,6 +1181,7 @@ export default class extends Controller {
           discountRatePercent,
           discountRateInput,
           lineTotalInput,
+          pricingSourceMode,
           sourceModeChanged: pricingSourceChangedRow === row
         })
         : 0
@@ -1994,8 +1995,20 @@ export default class extends Controller {
     discountRatePercent,
     discountRateInput,
     lineTotalInput,
+    pricingSourceMode,
     sourceModeChanged = false
   }) {
+    if (pricingSourceMode === 'reference_quantity_price') {
+      // A stored line total may already include tax. Reference previews use only
+      // the exact extension and discount source before projecting tax again.
+      const absoluteDiscountAmount = this.referenceAbsoluteDiscountAmountFor({
+        pricingSourceMode, discountRateInput, lineTotalInput
+      })
+      if (absoluteDiscountAmount !== null) return Math.max(originalLineTotal - absoluteDiscountAmount, 0)
+
+      return this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
+    }
+
     if (!sourceModeChanged && this.shouldPreserveExistingLineTotal({
       originalLineTotal,
       discountRateInput,
@@ -2005,6 +2018,38 @@ export default class extends Controller {
     }
 
     return this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
+  }
+
+  referenceAbsoluteDiscountAmountFor ({ pricingSourceMode, discountRateInput, lineTotalInput }) {
+    if (pricingSourceMode !== 'reference_quantity_price') return null
+    const originalAmount = lineTotalInput?.dataset.originalDiscountAmount
+    if (originalAmount === undefined) return null
+
+    const amount = this.parseIntegerInput(originalAmount)
+    const originalRate = this.normalizedDiscountRateEcho(lineTotalInput?.dataset.originalDiscountRate)
+    if (!Number.isFinite(amount) || amount > this.receiptItemLineTotalMaxValue || originalRate === null) {
+      return Number.NaN
+    }
+
+    const currentRate = this.normalizedDiscountRateEcho(discountRateInput?.value)
+    return currentRate !== null && currentRate === originalRate ? amount : null
+  }
+
+  normalizedDiscountRateEcho (value) {
+    let text = this.normalizeNumericInputText(value)
+    if (text === '') return ''
+    if (text.length > 128) return null
+    const parsed = this.parseDecimalInput(text)
+    if (!Number.isFinite(parsed) || parsed > 100) return null
+
+    const commaCount = (text.match(/,/g) || []).length
+    if (!text.includes('.') && commaCount === 1) text = text.replace(',', '.')
+    const [integer, fraction = ''] = text.replace(/,/g, '').split('.')
+    const integerDigits = integer.replace(/^0+/, '') || '0'
+    const fractionalDigits = fraction.replace(/0+$/, '')
+    if (integerDigits === '100' && fractionalDigits !== '') return null
+
+    return fractionalDigits === '' ? integerDigits : `${integerDigits}.${fractionalDigits}`
   }
 
   shouldPreserveExistingLineTotal ({ originalLineTotal, discountRateInput, lineTotalInput }) {
@@ -2203,8 +2248,15 @@ export default class extends Controller {
       const quantityUnitInput = row.querySelector('[data-receipt-form-target="quantityUnitInput"]')
       const priceInput = row.querySelector('[data-receipt-form-target="priceInput"]')
       const discountRateInput = row.querySelector('[data-receipt-form-target="discountRateInput"]')
+      const lineTotalInput = row.querySelector('[data-receipt-form-target="lineTotalInput"]')
       const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
       const pricingSourceMode = this.pricingSourceModeForRow(row)
+      const absoluteDiscountAmount = this.referenceAbsoluteDiscountAmountFor({
+        pricingSourceMode, discountRateInput, lineTotalInput
+      })
+      const discountValid = absoluteDiscountAmount === null
+        ? this.previewInputInRange(discountRateInput, 'discountPercentage', { minimum: 0, maximum: 100 })
+        : Number.isFinite(absoluteDiscountAmount)
       const quantity = this.previewInputValue(quantityInput, 'quantity')
       const referencePriceAmountInput = row.querySelector(
         '[data-receipt-form-target="referencePriceAmountInput"]'
@@ -2241,7 +2293,7 @@ export default class extends Controller {
         this.previewValueInRange(quantity, { minimum: 0, maximum: 9999.999, exclusiveMinimum: true }) &&
         (this.decimalQuantityUnit(quantityUnitInput?.value) || !Number.isFinite(quantity) || Number.isInteger(quantity)) &&
         modeSourceValid &&
-        this.previewInputInRange(discountRateInput, 'discountPercentage', { minimum: 0, maximum: 100 }) &&
+        discountValid &&
         this.previewInputInRange(taxRateInput, 'taxPercentage', { minimum: 0, maximum: 100 })
     })
 

@@ -270,6 +270,7 @@ RSpec.describe "Receipt form Stimulus controller" do
     changed_first_tax_rate: nil,
     changed_discount_rate: nil,
     changed_price: nil,
+    changed_quantity: nil,
     changed_reference_price: nil,
     changed_price_before_discount: nil,
     changed_quantity_unit: nil,
@@ -279,6 +280,7 @@ RSpec.describe "Receipt form Stimulus controller" do
     receipt_tax_max: 999_999_999,
     capture_preview_unavailable: false,
     capture_line_displays: false,
+    validate_numeric_inputs: false,
     sync_initial_pricing_previews: false
   )
     run_controller_script(<<~JAVASCRIPT)
@@ -326,6 +328,10 @@ RSpec.describe "Receipt form Stimulus controller" do
               ? (definition.lineTotal === null || definition.lineTotal === undefined ? '' : String(definition.lineTotal))
               : String(definition.originalLineTotal)
           }
+        }
+        if (Object.prototype.hasOwnProperty.call(definition, 'absoluteDiscountAmount')) {
+          inputs.lineTotalInput.dataset.originalDiscountAmount = String(definition.absoluteDiscountAmount)
+          inputs.lineTotalInput.dataset.originalDiscountRate = String(definition.persistedDiscountRate ?? definition.discountRate ?? '')
         }
 
         return {
@@ -380,6 +386,7 @@ RSpec.describe "Receipt form Stimulus controller" do
         roundingModeValue: { value: 'floor' },
         discountRoundingModeValue: { value: 'round' },
         countableQuantityUnitsValue: { value: 'each,piece,item,bottle,bag,box' },
+        decimalQuantityUnitsValue: { value: 'gram,kilogram,milligram,liter,milliliter,cubic_centimeter' },
         receiptItemPriceMaxValue: { value: 999999999 },
         receiptItemLineTotalMaxValue: { value: #{item_line_total_max} },
         referenceProjectionFallbackTaxRateValue: { value: #{reference_projection_fallback_tax_rate.to_json} },
@@ -397,7 +404,7 @@ RSpec.describe "Receipt form Stimulus controller" do
         taxRateSummaryTarget: { value: taxRateSummary }
       })
 
-      controller.previewNumericInputsValid = () => true
+      if (!#{validate_numeric_inputs.to_json}) controller.previewNumericInputsValid = () => true
       controller.previewRowExcluded = () => false
       controller.animateAmount = (target, value) => { target.value = value }
       controller.shouldRenderAmountImmediately = () => true
@@ -463,6 +470,7 @@ RSpec.describe "Receipt form Stimulus controller" do
       const initial = snapshot()
       const changedDiscountRate = #{changed_discount_rate.to_json}
       const changedPrice = #{changed_price.to_json}
+      const changedQuantity = #{changed_quantity.to_json}
       const changedReferencePrice = #{changed_reference_price.to_json}
       const changedPriceBeforeDiscount = #{changed_price_before_discount.to_json}
       const changedQuantityUnit = #{changed_quantity_unit.to_json}
@@ -491,6 +499,14 @@ RSpec.describe "Receipt form Stimulus controller" do
         doubled = snapshot()
         rows[0].inputs.discountRateInput.value = initialDiscountRate
         rows[0].inputs.quantityUnitInput.value = initialQuantityUnit
+        controller.recalculate()
+        restored = snapshot()
+      } else if (changedQuantity !== null) {
+        const initialQuantity = rows[0].inputs.quantityInput.value
+        rows[0].inputs.quantityInput.value = String(changedQuantity)
+        controller.recalculate()
+        doubled = snapshot()
+        rows[0].inputs.quantityInput.value = initialQuantity
         controller.recalculate()
         restored = snapshot()
       } else if (changedReferencePrice !== null) {
@@ -1577,6 +1593,7 @@ RSpec.describe "Receipt form Stimulus controller" do
           discountRatePercent: controller.parseDiscountRateInput(discount.value),
           discountRateInput: discount,
           lineTotalInput: lineTotal,
+          pricingSourceMode: activeMode,
           sourceModeChanged: pricingSourceChangedRow === row
         })
         controller.syncPricingSourceSummaryForRow(row, activeMode)
@@ -1828,6 +1845,238 @@ RSpec.describe "Receipt form Stimulus controller" do
         "firstLineTotal" => 324
       )
     end
+  end
+
+  it "keeps persisted reference gross projections out of the source on connect and quantity changes" do
+    item = {
+      pricingSourceKind: "reference_quantity_price",
+      referencePriceAmount: "282",
+      referenceQuantity: "100",
+      referenceQuantityUnit: "gram",
+      referencePriceTaxInclusion: "net",
+      quantity: "225",
+      quantityUnit: "gram",
+      price: nil,
+      originalLineTotal: 635,
+      lineTotal: 685,
+      taxRate: 8,
+      captureOriginalLineTotal: true
+    }
+
+    result = run_amount_round_trip(
+      basis: "external",
+      items: [ item ],
+      changed_quantity: 250,
+      changed_first_tax_rate: 10,
+      sync_initial_pricing_previews: true
+    )
+
+    aggregate_failures do
+      expect(result["initial"]).to include(
+        "subtotal" => 635, "tax" => 50, "total" => 685,
+        "firstLineTotal" => 635, "sourceOriginalLineTotal" => 635
+      )
+      expect(result["doubled"]).to include(
+        "subtotal" => 705, "tax" => 56, "total" => 761,
+        "firstLineTotal" => 705, "sourceOriginalLineTotal" => 705
+      )
+      expect(result["restored"]).to eq(result["initial"])
+      expect(result["changedFirstTaxRate"]).to include("subtotal" => 635, "tax" => 63, "total" => 698)
+      gross = run_amount_round_trip(basis: "external", items: [ item.merge(referencePriceTaxInclusion: "gross") ])
+      expect(gross["initial"]).to include("firstLineTotal" => 635, "total" => 635)
+    end
+  end
+
+  it "applies reference discount sources before tax without preserving or inferring a derived amount" do
+    item = {
+      pricingSourceKind: "reference_quantity_price",
+      referencePriceAmount: "250",
+      referenceQuantity: "100",
+      referenceQuantityUnit: "gram",
+      quantity: "240",
+      quantityUnit: "gram",
+      price: nil,
+      originalLineTotal: 600,
+      taxRate: 8
+    }
+    [ "gross", "net" ].each do |tax_inclusion|
+      [
+        { discountRate: nil, initial: 600, changed: 750 },
+        { discountRate: 10, initial: 540, changed: 675 },
+        { discountRate: 10, absoluteDiscountAmount: 60, initial: 540, changed: 690 },
+        { discountRate: nil, absoluteDiscountAmount: 700, initial: 0, changed: 50 }
+      ].each do |discount|
+        source = item.merge(
+          referencePriceTaxInclusion: tax_inclusion,
+          lineTotal: tax_inclusion == "net" ? discount[:initial] + (discount[:initial] * 8 / 100) : discount[:initial]
+        ).merge(discount.except(:initial, :changed))
+        result = run_amount_round_trip(
+          basis: "external", items: [ source ], changed_quantity: 300,
+          sync_initial_pricing_previews: true
+        )
+        projection = ->(amount) { tax_inclusion == "net" ? amount + (amount * 8 / 100) : amount }
+
+        aggregate_failures("#{tax_inclusion}: #{discount}") do
+          expect(result["initial"]).to include("firstLineTotal" => discount[:initial], "total" => projection.call(discount[:initial]))
+          expect(result["doubled"]).to include("firstLineTotal" => discount[:changed], "total" => projection.call(discount[:changed]))
+          expect(result["restored"]).to eq(result["initial"])
+        end
+      end
+    end
+  end
+
+  it "replaces an absolute reference discount only when its displayed rate is edited" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [
+        {
+          pricingSourceKind: "reference_quantity_price",
+          referencePriceAmount: "250", referenceQuantity: "100", referenceQuantityUnit: "gram",
+          referencePriceTaxInclusion: "net", quantity: "240", quantityUnit: "gram",
+          price: nil, originalLineTotal: 600, lineTotal: 583, taxRate: 8,
+          discountRate: 10, absoluteDiscountAmount: 60
+        }
+      ],
+      changed_discount_rate: 20
+    )
+
+    aggregate_failures do
+      expect(result["initial"]).to include("firstLineTotal" => 540, "total" => 583)
+      expect(result["doubled"]).to include("firstLineTotal" => 480, "total" => 518)
+      expect(result["restored"]).to eq(result["initial"])
+    end
+  end
+
+  it "does not restore an absolute reference discount from a changed rate after a failed submission" do
+    [ [ 20, 480 ], [ 0, 600 ], [ "", 600 ] ].each do |discount_rate, source_total|
+      result = run_amount_round_trip(
+        basis: "internal",
+        items: [
+          {
+            pricingSourceKind: "reference_quantity_price",
+            referencePriceAmount: "250", referenceQuantity: "100", referenceQuantityUnit: "gram",
+            referencePriceTaxInclusion: "net", quantity: "240", quantityUnit: "gram",
+            price: nil, originalLineTotal: 600, lineTotal: 583, taxRate: 8,
+            discountRate: discount_rate, persistedDiscountRate: 10, absoluteDiscountAmount: 60
+          }
+        ],
+        changed_discount_rate: 10
+      )
+
+      aggregate_failures("submitted discount rate #{discount_rate.inspect}") do
+        expect(result["initial"]).to include("firstLineTotal" => source_total, "total" => source_total + (source_total * 8 / 100))
+        expect(result["doubled"]).to include("firstLineTotal" => 540, "total" => 583)
+        expect(result["restored"]).to eq(result["initial"])
+      end
+    end
+  end
+
+  it "keeps the absolute discount source when switching into and back to reference pricing" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperty(controller, 'discountRoundingModeValue', { value: 'round' })
+      const discount = { value: '10', dataset: { originalDiscountRate: '10' } }
+      const lineTotal = {
+        value: '540',
+        dataset: {
+          originalLineTotal: '600', originalSavedLineTotal: '540',
+          originalDiscountAmount: '60', originalDiscountRate: '10'
+        }
+      }
+      const calculate = (pricingSourceMode, originalLineTotal, sourceModeChanged = true) => {
+        lineTotal.value = controller.lineTotalFor({
+          originalLineTotal,
+          discountRatePercent: controller.parseDiscountRateInput(discount.value),
+          discountRateInput: discount,
+          lineTotalInput: lineTotal,
+          pricingSourceMode,
+          sourceModeChanged
+        })
+        return lineTotal.value
+      }
+      const reference = calculate('reference_quantity_price', 750)
+      discount.value = ''
+      const explicit = calculate('explicit_line_total', 900)
+      discount.value = '10'
+      const returned = calculate('reference_quantity_price', 750)
+
+      process.stdout.write(JSON.stringify({ reference, explicit, returned, data: lineTotal.dataset }))
+    JAVASCRIPT
+
+    expect(result).to include('reference' => 690, 'explicit' => 900, 'returned' => 690)
+    expect(result['data']).to include('originalSavedLineTotal' => '540', 'originalDiscountAmount' => '60')
+  end
+
+  it "validates an unchanged recurring discount display as an absolute reference source before recalculation" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [
+        {
+          pricingSourceKind: "reference_quantity_price",
+          referencePriceAmount: "600", referenceQuantity: "100", referenceQuantityUnit: "gram",
+          referencePriceTaxInclusion: "gross", quantity: "100", quantityUnit: "gram",
+          price: nil, originalLineTotal: 600, lineTotal: 550, taxRate: 8,
+          discountRate: "8.333333333333333333333333333333333333", absoluteDiscountAmount: 50
+        }
+      ],
+      changed_quantity: 200,
+      validate_numeric_inputs: true,
+      capture_preview_unavailable: true,
+      sync_initial_pricing_previews: true
+    )
+
+    aggregate_failures do
+      expect(result["initial"]).to include("total" => 550, "firstLineTotal" => 550, "previewUnavailable" => false)
+      expect(result["doubled"]).to include("total" => 1_150, "firstLineTotal" => 1_150, "previewUnavailable" => false)
+      expect(result["restored"]).to eq(result["initial"])
+    end
+  end
+
+  it "rejects edited overprecision rates and invalid absolute reference discount metadata before recalculation" do
+    source = {
+      pricingSourceKind: "reference_quantity_price",
+      referencePriceAmount: "600", referenceQuantity: "100", referenceQuantityUnit: "gram",
+      referencePriceTaxInclusion: "gross", quantity: "100", quantityUnit: "gram",
+      price: nil, originalLineTotal: 600, lineTotal: 550, taxRate: 8,
+      discountRate: "8.333333333333333333333333333333333334",
+      persistedDiscountRate: "8.333333333333333333333333333333333333", absoluteDiscountAmount: 50
+    }
+    invalid_sources = [
+      source,
+      source.merge(discountRate: "10.55"),
+      source.merge(discountRate: "NaN", persistedDiscountRate: "NaN"),
+      source.merge(discountRate: "Infinity", persistedDiscountRate: "Infinity"),
+      source.merge(discountRate: "10", persistedDiscountRate: "NaN"),
+      source.merge(discountRate: "10", persistedDiscountRate: "100.0000000000000000001"),
+      source.merge(discountRate: "10", persistedDiscountRate: "0." + ("1" * 128)),
+      source.merge(discountRate: "10", persistedDiscountRate: "10", absoluteDiscountAmount: "NaN"),
+      source.merge(discountRate: "10", persistedDiscountRate: "10", absoluteDiscountAmount: "Infinity"),
+      source.merge(discountRate: "10", persistedDiscountRate: "10", absoluteDiscountAmount: -50),
+      source.merge(discountRate: "10", persistedDiscountRate: "10", absoluteDiscountAmount: 1_000_000_000)
+    ]
+
+    invalid_sources.each do |item|
+      result = run_amount_round_trip(
+        basis: "internal", items: [ item ], changed_quantity: 200,
+        validate_numeric_inputs: true, capture_preview_unavailable: true,
+        sync_initial_pricing_previews: true
+      )
+      expect(result["initial"]).to include("total" => nil, "firstLineTotal" => 550, "previewUnavailable" => true)
+    end
+  end
+
+  it "compares discount display echoes exactly without treating numeric formatting as a rate change" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const values = ['8.3333333333333333333', '8.3333333333333333334', '008.333333333333333333300',
+        '８，３３３３３３３３３３３３３３３３３３３', '.5', '0.5000', '10', '10.0', '', 'NaN', 'Infinity']
+      process.stdout.write(JSON.stringify(values.map((value) => controller.normalizedDiscountRateEcho(value))))
+    JAVASCRIPT
+
+    expect(result).to eq([
+      '8.3333333333333333333', '8.3333333333333333334', '8.3333333333333333333',
+      '8.3333333333333333333', '0.5', '0.5', '10', '10', '', nil, nil
+    ])
   end
 
   it "projects mixed gross and net reference sources by item basis" do

@@ -543,6 +543,49 @@ RSpec.describe ReceiptFormPresenter do
       end
     end
 
+    it '絶対額割引sourceと保存時の表示率をderived totalから分離して方式変更後も参照できるようにする' do
+      receipt = create(:receipt)
+      item = receipt.receipt_items.create!(
+        confirmed_name: '計量商品',
+        pricing_source_kind: 'reference_quantity_price',
+        reference_price_amount: 250,
+        reference_quantity: 100,
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'net',
+        price: nil,
+        quantity: 240,
+        quantity_unit_code: 'gram',
+        original_line_total: 600,
+        line_total: 583,
+        discount_amount: 60,
+        discount_rate: nil,
+        tax_rate: BigDecimal('0.08')
+      )
+
+      persisted_row = described_class.new(receipt: receipt).item_row(item, new_record: false)
+      submitted_row = described_class.new(
+        receipt: receipt,
+        submitted_params: { receipt_items_attributes: { '0' => { id: item.id, discount_rate: '20' } } }
+      ).item_row(item, new_record: false)
+
+      aggregate_failures do
+        expect(persisted_row.line_total_data).to include(
+          original_line_total: 600,
+          original_saved_line_total: 583,
+          original_discount_amount: 60,
+          original_discount_rate: '10'
+        )
+        expect(submitted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '10')
+        expect(submitted_row.discount_rate_percentage_input).to eq('20')
+        item.pricing_source_kind = 'count_unit_price'
+        expect(persisted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '10')
+        item.pricing_source_kind = 'explicit_line_total'
+        expect(persisted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '10')
+        item.discount_rate = BigDecimal('0.1')
+        expect(persisted_row.line_total_data).not_to have_key(:original_discount_amount)
+      end
+    end
+
     it 'measurementの422では入力中の単価・数量・単位・明示小計をそのまま再表示する' do
       receipt = create(:receipt)
       item = receipt.receipt_items.create!(
