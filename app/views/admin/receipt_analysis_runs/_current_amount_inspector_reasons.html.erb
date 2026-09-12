@@ -1,0 +1,8 @@
+<div class="min-w-0 space-y-1">
+  <h4 class="text-sm font-semibold token-text-base"><%= label %></h4>
+  <ul class="space-y-1 text-sm token-text-muted">
+    <% Array(inspector.reasons(reasons)).each do |reason| %>
+      <li class="break-words [overflow-wrap:anywhere]"><%= reason %></li>
+    <% end %>
+  </ul>
+</div>

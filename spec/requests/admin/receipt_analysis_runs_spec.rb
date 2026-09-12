@@ -74,6 +74,21 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
   end
 
   describe 'GET /admin/receipt_analysis_runs' do
+    it '一覧ではrequestからAmount profileの詳細取得を有効化できない' do
+      admin = create(:user, :admin)
+      create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+      allow(Admin).to receive(:receipt_analysis_runs).and_call_original
+
+      get admin_receipt_analysis_runs_path, params: { include_amount_profile: true }
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(Admin).to have_received(:receipt_analysis_runs).with(no_args)
+        expect(response.body).not_to include('data-current-amount-inspector')
+      end
+    end
+
     it '非ログインユーザーには既存404と同じbody/headerを返す' do
       get '/__recify_missing_route__'
       expected_body = response.body
@@ -488,6 +503,25 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
   end
 
   describe 'GET /admin/receipt_analysis_runs/:run_key' do
+    it 'showだけで現在のAmount profile詳細取得を明示する' do
+      admin = create(:user, :admin)
+      run = create(:receipt_analysis_run, :succeeded)
+      sign_in admin
+      allow(Admin).to receive(:receipt_analysis_runs).and_call_original
+
+      get admin_receipt_analysis_run_path(run.run_key)
+
+      aggregate_failures do
+        expect(response).to have_http_status(:ok)
+        expect(Admin).to have_received(:receipt_analysis_runs).with(
+          run_key: run.run_key,
+          limit: 1,
+          include_retry_options: true,
+          include_amount_profile: true
+        )
+      end
+    end
+
     it 'adminユーザーはshowを閲覧できる' do
       admin = create(:user, :admin)
       receipt = create(
@@ -686,7 +720,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('shrink-0 whitespace-nowrap token-text-success')
         expect(response.body).to include('shrink-0 whitespace-nowrap token-text-muted')
         expect(response.body).to include('Finalize decision')
-        expect(response.body).to include('Amount calculation profile')
+        expect(response.body).to include(I18n.t('admin.current_amount_inspector.title'))
         expect(response.body).to include('再解析にはパスキー再認証が必要です')
         expect(response.body).to include(new_admin_passkey_reauthentication_path)
         expect(response.body).to include('safe content')

@@ -344,6 +344,116 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
       end
     end
 
+    it '一覧では現在のAmount profileの詳細を展開せずcompact summaryだけを返す' do
+      receipt = create(:receipt, amount_calculation_profile: {
+        schema_version: 1,
+        context: 'analysis',
+        profile: { tax_detail_amount_basis: 'gross' },
+        warnings: [ 'price_tax_inclusion_uncertain' ],
+        blocking_mismatch_codes: [ 'ITEM_TOTAL_MISMATCH' ],
+        amount_engine: { candidates: [ { candidate_id: 'recorded_line_total/floor' } ] }
+      })
+      create(:receipt_analysis_run, :succeeded, receipt:)
+      query = described_class.new(receipt:)
+      allow(query).to receive(:sanitize_summary).and_wrap_original do |method, value|
+        raise 'must not traverse the current amount profile' if value.is_a?(Hash) && value.key?('amount_engine')
+
+        method.call(value)
+      end
+
+      record = query.call.records.first
+
+      aggregate_failures do
+        expect(record).not_to have_key(:amount_calculation_profile)
+        expect(record[:correction_summary]).to include(
+          amount_warnings_count: 1,
+          amount_blocking_count: 1,
+          tax_detail_amount_basis: 'gross'
+        )
+      end
+    end
+
+    it '明示した詳細取得だけにReceiptの現在profileを渡し後続編集を反映する' do
+      receipt = create(:receipt, amount_calculation_profile: {
+        schema_version: 1,
+        context: 'analysis',
+        computed: { total_amount: 1000 }
+      })
+      run = create(:receipt_analysis_run, :succeeded, receipt:)
+
+      first_record = described_class.call(run_key: run.run_key, include_amount_profile: true).records.first
+      receipt.update!(amount_calculation_profile: {
+        schema_version: 1,
+        context: 'edit_save',
+        computed: { total_amount: 1200 }
+      })
+      current_record = described_class.call(run_key: run.run_key, include_amount_profile: true).records.first
+
+      aggregate_failures do
+        expect(first_record.dig(:amount_calculation_profile, 'context')).to eq('analysis')
+        expect(current_record[:amount_calculation_profile]).to eq(receipt.reload.amount_calculation_profile)
+        expect(current_record.dig(:amount_calculation_profile, 'computed', 'total_amount')).to eq(1200)
+      end
+    end
+
+    it 'Amount profileの不正な型や未知のtax basisをcompact summaryへ流さない' do
+      receipt = create(:receipt, amount_calculation_profile: {
+        profile: 'unexpected profile',
+        computed: { tax_detail_amount_basis: '<script>private-value</script>' },
+        warnings: { source_text: 'not a warning list' },
+        warning_mismatch_codes: 'not a mismatch list',
+        blocking_mismatch_codes: 12
+      })
+      run = create(:receipt_analysis_run, :succeeded, receipt:)
+
+      record = described_class.call(run_key: run.run_key).records.first
+
+      expect(record[:correction_summary]).to include(
+        amount_warnings_count: 0,
+        amount_blocking_count: 0,
+        tax_detail_amount_basis: nil
+      )
+    end
+
+    it 'Amount profile全体がHashでなくても現在の不正値を推測で補完しない' do
+      receipt = create(:receipt)
+      run = create(:receipt_analysis_run, :succeeded, receipt:)
+
+      [ 'unexpected profile', [], 7, false ].each do |value|
+        receipt.update!(amount_calculation_profile: value)
+        record = described_class.call(run_key: run.run_key, include_amount_profile: true).records.first
+
+        aggregate_failures do
+          expect(record[:amount_calculation_profile]).to eq(value)
+          expect(record[:correction_summary]).to include(
+            amount_warnings_count: 0,
+            amount_blocking_count: 0,
+            tax_detail_amount_basis: nil
+          )
+        end
+      end
+    end
+
+    it 'Amount profileの詳細取得でもSELECT数を増やさず保存や解析を実行しない' do
+      run = create(:receipt_analysis_run, :succeeded)
+      expect(ReceiptAmountService).not_to receive(:call)
+      expect(ReceiptOcrService).not_to receive(:call)
+      expect(ReceiptAiEnrichmentService).not_to receive(:call)
+      expect(AuditLogs).not_to receive(:record_admin_action!)
+      expect(ReceiptOcrJob).not_to receive(:perform_later)
+      expect(ReceiptAiEnrichmentJob).not_to receive(:perform_later)
+      expect(ReceiptFinalizeJob).not_to receive(:perform_later)
+
+      compact_queries = count_application_queries do
+        described_class.call(run_key: run.run_key)
+      end
+      detail_queries = count_application_queries do
+        described_class.call(run_key: run.run_key, include_amount_profile: true)
+      end
+
+      expect(detail_queries).to eq(compact_queries)
+    end
+
     it 'summaryからrawやsecret系のキーを除外する' do
       run = create(
         :receipt_analysis_run,

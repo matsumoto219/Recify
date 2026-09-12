@@ -81,14 +81,24 @@ RSpec.describe 'service sanitizer boundary' do
       final_result_summary: forbidden_payload,
       metadata: { build_params_snapshot: forbidden_payload }
     )
-    run.receipt.update!(amount_calculation_profile: forbidden_payload)
+    run.receipt.update!(amount_calculation_profile: forbidden_payload.merge(
+      schema_version: 1,
+      context: 'analysis',
+      computed: { total_amount: 1100 },
+      amount_engine: { schema_version: 1, selected_candidate: forbidden_payload }
+    ))
 
     record = Admin.receipt_analysis_runs(receipt: run.receipt).records.first
+    detail = Admin.receipt_analysis_runs(receipt: run.receipt, include_amount_profile: true).records.first
+    inspector = Admin::CurrentAmountInspectorPresenter.new(detail[:amount_calculation_profile])
 
     aggregate_failures do
       expect(record.dig(:summaries, :ocr, 'safe')).to eq('visible')
       expect(record.dig(:detailed_snapshots, :build_params_snapshot, 'safe')).to eq('visible')
-      expect(record.dig(:amount_calculation_profile, 'safe')).to eq('visible')
+      expect(record).not_to have_key(:amount_calculation_profile)
+      expect(inspector.data).to include('context' => 'analysis', 'computed' => { 'total_amount' => 1100 })
+      expect(inspector.data).not_to have_key('safe')
+      expect_no_forbidden_values(inspector.data)
       expect_no_forbidden_values(
         record.slice(:summaries, :detailed_snapshots, :amount_calculation_profile, :finalize_decision)
       )

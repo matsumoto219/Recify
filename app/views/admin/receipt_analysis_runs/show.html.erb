@@ -629,13 +629,7 @@
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
-    <section class="space-y-4" data-admin-analysis-section="amount">
-      <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.amount") %></h2>
-      <section class="<%= admin_json_container_classes %>">
-        <h3 class="mb-2 text-sm font-semibold token-text-muted"><%= t("admin.receipt_analysis_runs.show.sections.amount_calculation_profile") %></h3>
-        <pre class="<%= admin_json_pre_classes %>"><%= admin_pretty_json(@record[:amount_calculation_profile]) %></pre>
-      </section>
-    </section>
+    <%= render "admin/receipt_analysis_runs/current_amount_inspector", inspector: @amount_inspector %>
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>

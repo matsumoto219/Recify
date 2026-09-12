@@ -3,6 +3,7 @@ module Admin
     DEFAULT_LIMIT = 50
     MAX_LIMIT = 100
     ATTENTION_RECEIPT_STATUSES = %w[review_needed failed].freeze
+    TAX_DETAIL_AMOUNT_BASES = %w[gross net unknown].freeze
     FORBIDDEN_SUMMARY_KEYS = (
       %w[
         access_token
@@ -73,6 +74,7 @@ module Admin
       expires_before: nil,
       expires_within: nil,
       include_retry_options: false,
+      include_amount_profile: false,
       limit: DEFAULT_LIMIT,
       offset: 0
     )
@@ -91,6 +93,7 @@ module Admin
       @expires_before = expires_before
       @expires_within = expires_within
       @include_retry_options = ActiveModel::Type::Boolean.new.cast(include_retry_options)
+      @include_amount_profile = include_amount_profile == true
       @limit = normalize_limit(limit)
       @offset = normalize_offset(offset)
     end
@@ -236,7 +239,7 @@ module Admin
         ai_normalized_result_snapshot: safe_ai_normalized_result_snapshot(run.ai_normalized_result_snapshot),
         build_params_snapshot: safe_summary(run.metadata.to_h["build_params_snapshot"] || {})
       }
-      amount_calculation_profile = safe_summary(receipt.amount_calculation_profile || {})
+      amount_calculation_profile = receipt.amount_calculation_profile
 
       record = {
         run: run,
@@ -287,9 +290,9 @@ module Admin
         ),
         ocr_response_artifact: ocr_response_artifact_info(run),
         snapshot_presence: snapshot_presence(run),
-        finalize_decision: safe_summary(run.metadata.to_h["finalize_decision"] || {}),
-        amount_calculation_profile: amount_calculation_profile
+        finalize_decision: safe_summary(run.metadata.to_h["finalize_decision"] || {})
       }
+      record[:amount_calculation_profile] = amount_calculation_profile if @include_amount_profile
       record[:retry_options] = Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: run).retry_options if include_retry_options?
       record
     end
@@ -380,10 +383,10 @@ module Admin
     def correction_summary(detailed_snapshots:, amount_calculation_profile:)
       build_params_snapshot = indifferent_hash(detailed_snapshots[:build_params_snapshot])
       ai_normalized_snapshot = indifferent_hash(detailed_snapshots[:ai_normalized_result_snapshot])
-      amount_profile = indifferent_hash(amount_calculation_profile)
+      amount_profile = amount_calculation_profile.is_a?(Hash) ? amount_calculation_profile : {}
       fallback = indifferent_hash(build_params_snapshot.dig(:corrections, :purchased_at_fallback))
       tax_rate_correction = build_params_snapshot.dig(:corrections, :tax_rate_correction) ||
-        amount_profile.dig(:profile, :tax_rate_correction)
+        amount_profile_section(amount_profile, "profile")["tax_rate_correction"]
 
       {
         purchased_at_fallback: {
@@ -401,11 +404,15 @@ module Admin
     end
 
     def tax_rate_corrections_count(correction)
-      correction = indifferent_hash(correction)
-      matches = Array(correction[:matches])
-      return matches.size if matches.present?
+      return 0 unless correction.is_a?(Hash)
 
-      integer_or_zero(correction[:item_count]) + integer_or_zero(correction[:adjustment_count])
+      matches = correction[:matches] || correction["matches"]
+      return matches.size if matches.is_a?(Array) && matches.present?
+
+      %i[item_count adjustment_count].sum do |key|
+        count = correction[key] || correction[key.to_s]
+        count.is_a?(Integer) && count >= 0 ? count : 0
+      end
     end
 
     def uncertain_adjustments_count(ai_normalized_snapshot)
@@ -417,19 +424,31 @@ module Admin
 
     def amount_warnings_count(amount_profile)
       [
-        Array(amount_profile[:warnings]).size,
-        Array(amount_profile[:warning_mismatch_codes]).size
+        amount_profile_array_size(amount_profile, "warnings"),
+        amount_profile_array_size(amount_profile, "warning_mismatch_codes")
       ].max
     end
 
     def amount_blocking_count(amount_profile)
-      Array(amount_profile[:blocking_mismatch_codes]).size
+      amount_profile_array_size(amount_profile, "blocking_mismatch_codes")
     end
 
     def tax_detail_amount_basis(amount_profile)
-      amount_profile.dig(:profile, :tax_detail_amount_basis).presence ||
-        amount_profile.dig(:computed, :tax_detail_amount_basis).presence ||
-        amount_profile.dig(:resolved, :tax_detail_amount_basis).presence
+      %w[profile computed resolved].each do |key|
+        value = amount_profile_section(amount_profile, key)["tax_detail_amount_basis"]
+        return value if value.is_a?(String) && TAX_DETAIL_AMOUNT_BASES.include?(value)
+      end
+      nil
+    end
+
+    def amount_profile_section(amount_profile, key)
+      value = amount_profile[key]
+      value.is_a?(Hash) ? value : {}
+    end
+
+    def amount_profile_array_size(amount_profile, key)
+      value = amount_profile[key]
+      value.is_a?(Array) ? value.size : 0
     end
 
     def ai_input_highlights(ai_input_snapshot:, ocr_result_snapshot:)
