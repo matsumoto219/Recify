@@ -22,11 +22,16 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
   end
 
   def show
-    @result = Admin.receipt_analysis_runs(run_key: params[:run_key], limit: 1, include_retry_options: true)
+    @result = Admin.receipt_analysis_runs(
+      run_key: params[:run_key],
+      limit: 1,
+      include_retry_options: true,
+      include_amount_profile: true
+    )
     @record = @result.records.first
-    return if @record.present?
+    raise_not_found if @record.blank?
 
-    raise_not_found
+    @amount_inspector = Admin::CurrentAmountInspectorPresenter.new(@record[:amount_calculation_profile])
   end
 
   def status

@@ -1337,8 +1337,16 @@ module Analysis
         inferred_tax_details = tax_details_from_rate_summary_lines(lines, receipt_attributes, tax_details) if inferred_tax_details.blank?
         inferred_tax_details = tax_details_from_tax_section_pairs(lines, receipt_attributes) if inferred_tax_details.blank?
         return { tax_details: tax_details } if inferred_tax_details.blank?
+        return { tax_details: tax_details } unless recovered_tax_detail_rates_preserved?(tax_details, inferred_tax_details)
 
         { tax_details: inferred_tax_details, tax_detail_amount_basis: "net" }
+      end
+
+      def recovered_tax_detail_rates_preserved?(tax_details, inferred_tax_details)
+        source_rates = Array(tax_details).filter_map { |tax_detail| normalize_rate(tax_detail[:rate]) }.uniq
+        inferred_rates = Array(inferred_tax_details).filter_map { |tax_detail| normalize_rate(tax_detail[:rate]) }.uniq
+
+        (source_rates - inferred_rates).empty?
       end
 
       def apply_tax_rate_target_labels_from_lines(tax_details, lines)
@@ -1676,6 +1684,9 @@ module Analysis
       def apply_single_tax_detail_rate_policy(items, adjustments, tax_details, receipt_attributes)
         return unless items.present?
 
+        rate = single_tax_detail_rate(tax_details)
+        return unless rate
+
         override_rate = single_tax_detail_rate_covering_total(tax_details, receipt_attributes)
         if override_rate && single_tax_detail_matches_taxable_total?(items, adjustments, tax_details, receipt_attributes)
           changed_item_count = apply_tax_rate_to_items(items, override_rate)
@@ -1692,8 +1703,23 @@ module Analysis
           end
         end
 
-        apply_single_tax_detail_rate_to_unrated_items(items, tax_details)
+        apply_single_tax_detail_rate_to_unrated_items(items, tax_details, rate)
         nil
+      end
+
+      def single_tax_detail_rate(tax_details)
+        rate_details = Array(tax_details).reject { |tax_detail| tax_summary_without_rate?(tax_detail) }
+        rates = rate_details.map { |tax_detail| normalize_rate(tax_detail[:rate]) }.uniq
+        return unless rates.size == 1
+
+        rate = rates.first
+        rate if rate&.finite? && rate.positive? && rate <= 1
+      end
+
+      def tax_summary_without_rate?(tax_detail)
+        tax_detail[:rate].nil? && tax_detail[:net_amount].nil? &&
+          normalize_amount(tax_detail[:amount])&.positive? &&
+          tax_detail[:description].to_s.match?(profile.amount_tax_detail_tax_only_pattern)
       end
 
       def apply_tax_detail_amount_match_policy(items, adjustments, tax_details)
@@ -1891,20 +1917,13 @@ module Analysis
         item_entries + adjustment_entries
       end
 
-      def apply_single_tax_detail_rate_to_unrated_items(items, tax_details)
+      def apply_single_tax_detail_rate_to_unrated_items(items, tax_details, rate)
         return unless items.all? { |item| item[:tax_rate].nil? }
+        return unless Array(tax_details).any? do |tax_detail|
+          normalize_rate(tax_detail[:rate]) == rate && normalize_amount(tax_detail[:amount])&.positive?
+        end
 
-        rates = Array(tax_details).filter_map do |tax_detail|
-          rate = normalize_rate(tax_detail[:rate])
-          amount = normalize_amount(tax_detail[:amount])
-          next unless rate&.positive?
-          next unless amount&.positive?
-
-          rate
-        end.uniq
-        return unless rates.one?
-
-        items.each { |item| item[:tax_rate] = rates.first }
+        items.each { |item| item[:tax_rate] = rate }
       end
 
       def single_tax_detail_rate_covering_total(tax_details, receipt_attributes)
