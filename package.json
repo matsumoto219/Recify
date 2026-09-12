@@ -5,12 +5,13 @@
   "packageManager": "npm@11.17.0",
 
   "scripts": {
-    "lint:js": "standard \"app/javascript/**/*.js\" \"app/views/pwa/service-worker.js\""
+    "lint:js": "standard \"app/javascript/**/*.js\" \"app/views/pwa/service-worker.js\" \"spec/config/stylelint_config.test.mjs\"",
+    "test:stylelint": "node --test spec/config/stylelint_config.test.mjs"
   },
 
   "devDependencies": {
     "standard": "^17.1.2",
-    "stylelint": "^17.14.0",
+    "stylelint": "^17.15.0",
     "stylelint-config-standard": "^40.0.0",
     "stylelint-config-tailwindcss": "^1.0.1"
   },

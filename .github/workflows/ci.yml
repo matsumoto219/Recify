@@ -194,6 +194,10 @@ jobs:
         if: needs.classify_changes.outputs.docs_only != 'true'
         run: npx stylelint "app/assets/tailwind/**/*.css"
 
+      - name: Test CSS lint configuration
+        if: needs.classify_changes.outputs.docs_only != 'true'
+        run: npm run test:stylelint
+
   test:
     needs: classify_changes
     if: needs.classify_changes.result == 'success' && needs.classify_changes.outputs.docs_only != 'true'
