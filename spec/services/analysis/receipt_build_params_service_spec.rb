@@ -2660,6 +2660,201 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      context '不完全な税内訳を含む場合' do
+        let(:tax_group_receipt) do
+          {
+            candidates: {
+              total_amount: 813,
+              tax_amount: 60,
+              country_region: 'JPN',
+              items: [
+                { raw_text: '検証品A', price: 810, quantity: 1, line_total: 810 },
+                { raw_text: '検証品B', price: 3, quantity: 1, line_total: 3 }
+              ],
+              tax_details: [
+                { description: '8%対象', rate: 0.08, net_amount: 750, amount: 60 }
+              ]
+            },
+            lines: []
+          }
+        end
+
+        let(:mixed_rate_ai_result) do
+          {
+            receipt_items_attributes: [
+              { index: 0, tax_rate: 0.08 },
+              { index: 1, tax_rate: 0.1 }
+            ]
+          }
+        end
+
+        {
+          '税額0円で対象額が欠損' => { rate: 0.1, amount: 0 },
+          '税額が欠損' => { rate: 0.1, net_amount: 3 },
+          '税額が不正' => { rate: 0.1, net_amount: 3, amount: 'unknown' },
+          '税額が負数' => { rate: 0.1, net_amount: 3, amount: -1 },
+          '税率が欠損' => { amount: 0 },
+          '税率が不正' => { rate: 'unknown', amount: 0 },
+          '非課税グループ' => { rate: 0, net_amount: 3, amount: 0 },
+          '税額0円のsummaryラベル' => { description: '内消費税等', amount: 0 },
+          '税率不明の対象額' => { description: '内消費税等', net_amount: 3, amount: 1 },
+          '税率と分類が不明な税額' => { description: '検証不明', amount: 60 },
+          '明示0%のsummaryラベル' => { description: '内消費税等', rate: 0, amount: 60 },
+          '明示別税率のsummaryラベル' => { description: '内消費税等', rate: 0.1, amount: 60 },
+          '対象額0円のsummaryラベル' => { description: '内消費税等', net_amount: 0, amount: 60 },
+          '税額不明のsummaryラベル' => { description: '内消費税等', amount: 'unknown' }
+        }.each do |description, incomplete_detail|
+          it "#{description}でも税内訳を単一税率とみなしてAI明細税率を上書きしない" do
+            tax_group_receipt[:candidates][:tax_details] << incomplete_detail
+
+            params = described_class.call(ocr_result: tax_group_receipt, ai_result: mixed_rate_ai_result)
+
+            aggregate_failures do
+              expect(params[:receipt_items_attributes].pluck(:tax_rate)).to eq([ BigDecimal('0.08'), BigDecimal('0.1') ])
+              expect(params[:receipt_items_attributes].pluck(:line_total)).to eq([ 810, 3 ])
+              expect(params[:receipt_attributes][:total_amount]).to eq(813)
+              expect(params[:tax_rate_correction]).to be_nil
+            end
+          end
+
+          it "#{description}でも税内訳を単一税率とみなして未設定明細を補完しない" do
+            tax_group_receipt[:candidates][:tax_details] << incomplete_detail
+            tax_group_receipt[:candidates][:total_amount] = 900
+
+            params = described_class.call(ocr_result: tax_group_receipt, ai_result: nil)
+
+            aggregate_failures do
+              expect(params[:receipt_items_attributes].pluck(:tax_rate)).to all(be_nil)
+              expect(params[:tax_rate_correction]).to be_nil
+            end
+          end
+        end
+
+        it '同一税率の不完全な重複内訳だけなら従来の単一税率補正を維持する' do
+          tax_group_receipt[:candidates][:tax_details] << { rate: 0.08, amount: 0 }
+
+          params = described_class.call(ocr_result: tax_group_receipt, ai_result: mixed_rate_ai_result)
+
+          aggregate_failures do
+            expect(params[:receipt_items_attributes].pluck(:tax_rate)).to all(eq(BigDecimal('0.08')))
+            expect(params[:tax_rate_correction]).to include(reason: 'single_tax_detail_total_matches_receipt_total')
+          end
+        end
+
+        it '不完全な税額0円グループを含む解析でも明細税率とReceipt全体の金額を維持する' do
+          tax_group_receipt[:candidates][:subtotal_amount] = 813
+          tax_group_receipt[:candidates][:tax_details].first[:net_amount] = 810
+          tax_group_receipt[:candidates][:tax_details] << { description: '10%対象', rate: 0.1, amount: 0 }
+
+          params = described_class.call(ocr_result: tax_group_receipt, ai_result: mixed_rate_ai_result)
+
+          amount_result = ReceiptAmountService.call(
+            receipt: params[:receipt_attributes],
+            receipt_items: params[:receipt_items_attributes],
+            receipt_tax_details: params[:receipt_tax_details_attributes],
+            receipt_adjustments: params[:receipt_adjustments_attributes],
+            receipt_payments: params[:receipt_payments_attributes],
+            context: :analysis
+          )
+
+          aggregate_failures do
+            expect(params[:receipt_items_attributes].pluck(:tax_rate)).to eq([ BigDecimal('0.08'), BigDecimal('0.1') ])
+            expect(params[:receipt_items_attributes].pluck(:line_total)).to eq([ 810, 3 ])
+            expect(params[:tax_rate_correction]).to be_nil
+            expect(amount_result[:resolved]).to include(subtotal: 753, tax: 60, total: 813, tax_rate: nil)
+            expect(amount_result[:tax_details]).to contain_exactly(
+              include(rate: BigDecimal('0.08'), net_amount: 750, amount: 60),
+              include(rate: BigDecimal('0.1'), net_amount: 3, amount: 0)
+            )
+          end
+        end
+
+        it '同一税率の複数内訳から未設定明細への補完を維持する' do
+          tax_group_receipt[:candidates][:total_amount] = 900
+          tax_group_receipt[:candidates][:tax_details] << { rate: 0.08, amount: 0 }
+
+          params = described_class.call(ocr_result: tax_group_receipt, ai_result: nil)
+
+          aggregate_failures do
+            expect(params[:receipt_items_attributes].pluck(:tax_rate)).to all(eq(BigDecimal('0.08')))
+            expect(params[:tax_rate_correction]).to be_nil
+          end
+        end
+
+        it '税額summaryの金額だけを別の税率内訳の根拠として未設定明細へ補完しない' do
+          tax_group_receipt[:candidates][:total_amount] = 900
+          tax_group_receipt[:candidates][:tax_details] = [
+            { rate: 0.08, amount: 0 },
+            { description: '内消費税等', amount: 60 }
+          ]
+
+          params = described_class.call(ocr_result: tax_group_receipt, ai_result: nil)
+
+          aggregate_failures do
+            expect(params[:receipt_items_attributes].pluck(:tax_rate)).to all(be_nil)
+            expect(params[:tax_rate_correction]).to be_nil
+          end
+        end
+
+        it '税額summaryは別税率とみなさず外税明細の税率補完と金額計算を維持する' do
+          params = described_class.call(ocr_result: ocr_fixture('deposit_total_receipt'), ai_result: nil)
+
+          amount_result = ReceiptAmountService.call(
+            receipt: params[:receipt_attributes],
+            receipt_items: params[:receipt_items_attributes],
+            receipt_tax_details: params[:receipt_tax_details_attributes],
+            receipt_adjustments: params[:receipt_adjustments_attributes],
+            receipt_payments: params[:receipt_payments_attributes],
+            context: :analysis
+          )
+
+          aggregate_failures do
+            expect(params[:receipt_items_attributes].pluck(:tax_rate)).to all(eq(BigDecimal('0.08')))
+            expect(amount_result[:resolved]).to include(subtotal: 601, tax: 48, total: 649)
+            expect(amount_result[:needs_review]).to be(false)
+          end
+        end
+
+        it '税額summaryの分類は注入されたprofile patternを使う' do
+          allow(ReceiptAnalysisProfiles.default).to receive(:amount_tax_detail_tax_only_pattern).and_return(/\A検証税合算\z/)
+          tax_group_receipt[:candidates][:total_amount] = 900
+          tax_group_receipt[:candidates][:tax_details] << { description: '検証税合算', amount: 60 }
+
+          params = described_class.call(ocr_result: tax_group_receipt, ai_result: nil)
+
+          expect(params[:receipt_items_attributes].pluck(:tax_rate)).to all(eq(BigDecimal('0.08')))
+        end
+
+        it 'profile patternの置換後は以前の税額summaryラベルを使わない' do
+          allow(ReceiptAnalysisProfiles.default).to receive(:amount_tax_detail_tax_only_pattern).and_return(/\A検証税合算\z/)
+          tax_group_receipt[:candidates][:total_amount] = 900
+          tax_group_receipt[:candidates][:tax_details] << { description: '内消費税等', amount: 60 }
+
+          params = described_class.call(ocr_result: tax_group_receipt, ai_result: nil)
+
+          expect(params[:receipt_items_attributes].pluck(:tax_rate)).to all(be_nil)
+        end
+
+        it '合計と一致する税率summaryでも既存の別税率を消して単一税率へ復元しない' do
+          tax_group_receipt[:candidates][:tax_details] = [
+            { description: '内消費税', rate: 0.08, amount: 60 },
+            { description: '内消費税', rate: 0.1, amount: 0 }
+          ]
+          tax_group_receipt[:lines] = [ '税率8%', '税込額 813円' ]
+
+          params = described_class.call(ocr_result: tax_group_receipt, ai_result: mixed_rate_ai_result)
+
+          aggregate_failures do
+            expect(params[:receipt_tax_details_attributes]).to contain_exactly(
+              include(rate: BigDecimal('0.08'), amount: 60),
+              include(rate: BigDecimal('0.1'), amount: 0)
+            )
+            expect(params[:receipt_items_attributes].pluck(:tax_rate)).to eq([ BigDecimal('0.08'), BigDecimal('0.1') ])
+            expect(params[:tax_rate_correction]).to be_nil
+          end
+        end
+      end
+
       it '税額0円の有効な第2税率グループを単一税率補正で上書きしない' do
         params = described_class.call(
           ocr_result: {
