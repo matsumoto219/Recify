@@ -6,6 +6,10 @@
 
   "rules": {
     "alpha-value-notation": null,
+    "at-rule-prelude-no-invalid": [
+      true,
+      { "ignoreAtRules": ["media", "apply"] }
+    ],
     "color-hex-length": "long",
     "color-function-alias-notation": null,
     "color-function-notation": null
