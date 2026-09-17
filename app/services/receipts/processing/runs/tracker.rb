@@ -195,11 +195,16 @@ module Receipts::Processing::Runs
 
     def record_final_result(summary, at: Time.current)
       with_mutable_run do |locked_run|
+        summary = summary.to_h.deep_dup
+        previous_summary = locked_run.final_result_summary.to_h
+        if previous_summary.key?("amount_calculation_run_snapshot")
+          summary["amount_calculation_run_snapshot"] = previous_summary.fetch("amount_calculation_run_snapshot")
+        end
         locked_run.update!(
           stage: advanced_stage(locked_run, "completed"),
           status: "running",
           finalized_at: locked_run.finalized_at || at,
-          final_result_summary: summary.to_h
+          final_result_summary: summary
         )
         locked_run
       end

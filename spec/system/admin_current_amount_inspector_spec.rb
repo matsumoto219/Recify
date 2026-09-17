@@ -21,8 +21,8 @@ RSpec.describe "管理者の現在の計算表示", type: :system do
     visit admin_receipt_analysis_run_path(run.run_key)
 
     inspector = find("[data-current-amount-inspector]")
-    expect(inspector).to have_content("現在の計算")
-    expect(inspector).to have_content("解析時点の履歴ではありません")
+    expect(inspector).to have_content("Current Amount Inspector")
+    expect(inspector).to have_content("この解析run当時の履歴ではありません")
     detail = inspector.find("details", match: :first)
     detail.find("summary").click
     expect(inspector).to have_css("details[open]", count: 1)
@@ -39,13 +39,13 @@ RSpec.describe "管理者の現在の計算表示", type: :system do
     updated["context"] = "edit_save"
     receipt.update!(amount_calculation_profile: updated)
     page.refresh
-    expect(find("[data-current-amount-inspector]")).to have_content("編集保存")
+    expect(find("[data-current-amount-inspector]")).to have_content("edit_save")
     page.execute_script("window.currentAmountInspectorNavigation = true")
     find("a[href='#{admin_receipt_analysis_runs_path}']", match: :first).click
     expect(page).to have_current_path(admin_receipt_analysis_runs_path)
     expect(page.evaluate_script("window.currentAmountInspectorNavigation")).to be(true)
     page.go_back
-    expect(find("[data-current-amount-inspector]")).to have_content("現在の計算")
+    expect(find("[data-current-amount-inspector]")).to have_content("Current Amount Inspector")
     page.go_forward
     expect(page).to have_current_path(admin_receipt_analysis_runs_path)
     expect_browser_console_clean
@@ -77,7 +77,7 @@ RSpec.describe "管理者の現在の計算表示", type: :system do
 
       aggregate_failures do
         expect(page).to have_css("html[data-theme='#{theme}']")
-        expect(inspector).to have_content("候補の比較")
+        expect(inspector).to have_content("Candidate comparison")
         expect(inspector).to have_content(long_rate)
         expect(page.evaluate_script("window.innerWidth")).to eq(390)
         expect(page.evaluate_script("document.documentElement.scrollWidth <= window.innerWidth")).to be(true)

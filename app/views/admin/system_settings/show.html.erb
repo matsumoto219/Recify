@@ -18,6 +18,11 @@
     value_class: "sr-only"
   )
   snapshot_limit_keys = %w[limits.snapshot_ocr_items_max limits.snapshot_ai_normalized_items_max]
+  amount_snapshot_limit_keys = %w[
+    limits.snapshot_amount_calculation_max_bytes
+    limits.snapshot_amount_computed_items_max
+    limits.snapshot_amount_evidence_max
+  ]
   amount_limit_keys = SystemSettings::AMOUNT_LIMIT_KEYS
   analysis_run_retention_keys = %w[
     retention.analysis_runs_short_days
@@ -43,6 +48,8 @@
   setting_notice_key =
     if snapshot_limit_keys.include?(@record[:key].to_s)
       "snapshot_limit_note"
+    elsif amount_snapshot_limit_keys.include?(@record[:key].to_s)
+      "amount_snapshot_limit_note"
     elsif @record[:key].to_s == "limits.store_name_casing_context_lines_max"
       "store_name_casing_context_lines_note"
     elsif %w[operations.ocr_enabled operations.ai_enabled].include?(@record[:key].to_s)

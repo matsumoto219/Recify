@@ -218,27 +218,27 @@ module Admin
 
     def value(field)
       return I18n.t("admin.current_amount_inspector.not_recorded") if field.nil?
-      return I18n.t("admin.current_amount_inspector.#{field ? 'yes' : 'no'}") if field == true || field == false
-      return field.to_s unless field.is_a?(String) && translated_value?(field)
 
-      I18n.t("admin.current_amount_inspector.values.#{field}")
+      field.to_s
     end
 
     def reasons(values)
       return [ I18n.t("admin.current_amount_inspector.not_recorded") ] if values.nil?
       return [ I18n.t("admin.current_amount_inspector.none") ] if values.empty?
 
-      values.map { |reason| I18n.t("admin.current_amount_inspector.reasons.#{reason.downcase}") }
+      values.map do |reason|
+        I18n.t(
+          "admin.current_amount_inspector.reason",
+          code: reason,
+          description: I18n.t("admin.current_amount_inspector.reasons.#{reason.downcase}")
+        )
+      end
     end
 
     private
 
     def supported_version?(profile)
       profile.is_a?(Hash) && profile["schema_version"].is_a?(Integer) && profile["schema_version"] == 1
-    end
-
-    def translated_value?(field)
-      ENUMS.values.any? { |values| values.include?(field) } || EVIDENCE_BASES.include?(field)
     end
 
     def sanitize_profile(profile)

@@ -37,6 +37,8 @@ module Receipts::Processing::Runs
           receipt:
         )
         runtime_config_metadata = RuntimeConfigSnapshot.metadata_for_new_run
+        runtime_config_metadata[Receipts::Processing::Contracts::AmountCalculationSnapshotLimits::METADATA_KEY] =
+          Receipts::Processing::Contracts::AmountCalculationSnapshotLimits.capture
         if adoption_gate_snapshot
           runtime_config_metadata = runtime_config_metadata.merge(
             Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGateSnapshot::METADATA_KEY => adoption_gate_snapshot

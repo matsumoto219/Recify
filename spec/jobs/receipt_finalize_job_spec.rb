@@ -80,12 +80,18 @@ RSpec.describe ReceiptFinalizeJob, type: :job do
         receipt_attributes: {}
       )
       Receipts::Processing.record_finalize_decision(run, decision)
-      allow(Receipts::Processing::Pipeline).to receive(:finalize).and_call_original
+      allow(Receipts::Processing).to receive(:record_final_result).and_call_original
 
-      2.times { described_class.perform_now(run_id: run.id) }
+      described_class.perform_now(run_id: run.id)
+      persisted_receipt_attributes = receipt.reload.attributes.deep_dup
+      persisted_run_attributes = run.reload.attributes.deep_dup
+
+      described_class.perform_now(run_id: run.id)
 
       aggregate_failures do
-        expect(Receipts::Processing::Pipeline).to have_received(:finalize).once
+        expect(Receipts::Processing).to have_received(:record_final_result).once
+        expect(receipt.reload.attributes).to eq(persisted_receipt_attributes)
+        expect(run.reload.attributes).to eq(persisted_run_attributes)
         expect(receipt.reload.status).to eq('failed')
         expect(run.reload.status).to eq('succeeded')
       end

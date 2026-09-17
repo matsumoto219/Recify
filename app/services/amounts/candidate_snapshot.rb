@@ -21,15 +21,26 @@ module Amounts
     ].freeze
 
     class << self
-      def call(selected:, candidates:, no_safe_candidate: nil)
-        new(selected: selected, candidates: candidates, no_safe_candidate: no_safe_candidate).call
+      def call(selected:, candidates:, no_safe_candidate: nil, snapshot_candidate_count: nil)
+        new(
+          selected: selected,
+          candidates: candidates,
+          no_safe_candidate: no_safe_candidate,
+          snapshot_candidate_count: snapshot_candidate_count
+        ).call
       end
     end
 
-    def initialize(selected:, candidates:, no_safe_candidate: nil)
+    def initialize(selected:, candidates:, no_safe_candidate: nil, snapshot_candidate_count: nil)
+      unless snapshot_candidate_count.nil? ||
+          (snapshot_candidate_count.is_a?(Integer) && snapshot_candidate_count.between?(MIN_CANDIDATE_COUNT, MAX_CANDIDATE_COUNT))
+        raise ArgumentError, "snapshot candidate count must be an integer between 1 and 20"
+      end
+
       @selected = selected
       @candidates = Array(candidates)
       @no_safe_candidate = no_safe_candidate
+      @snapshot_candidate_count_override = snapshot_candidate_count
     end
 
     def call
@@ -68,6 +79,8 @@ module Amounts
     end
 
     def snapshot_candidate_count
+      return @snapshot_candidate_count_override unless @snapshot_candidate_count_override.nil?
+
       count = SystemSettings.limit_for(SETTING_KEY)
       count.clamp(MIN_CANDIDATE_COUNT, MAX_CANDIDATE_COUNT)
     rescue SystemSettings::UnknownKeyError, SystemSettings::ValidationError, ArgumentError, TypeError

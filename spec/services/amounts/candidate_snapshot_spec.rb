@@ -118,6 +118,42 @@ RSpec.describe Amounts::CandidateSnapshot do
     end
   end
 
+  describe '固定済みの候補保存件数' do
+    [ 1, 3, 20 ].each do |count|
+      it "明示値#{count}でselectedを先頭に保存する" do
+        many_candidates = Array.new(25) { |index| candidate("candidate-#{index}", score: index) }
+        selected = many_candidates.last
+        expect(SystemSettings).not_to receive(:limit_for)
+
+        snapshot = described_class.call(
+          selected: selected,
+          candidates: many_candidates,
+          snapshot_candidate_count: count
+        )
+
+        expect(snapshot_candidate_ids(snapshot)).to eq(
+          [ 'candidate-24', *Array.new(count - 1) { |index| "candidate-#{index}" } ]
+        )
+      end
+    end
+
+    it 'nil指定では現在の設定を使う既存契約を維持する' do
+      allow(SystemSettings).to receive(:limit_for).with(described_class::SETTING_KEY).and_return(1)
+
+      snapshot = described_class.call(selected: selected, candidates: candidates, snapshot_candidate_count: nil)
+
+      expect(snapshot_candidate_ids(snapshot)).to eq(%w[selected])
+    end
+
+    [ 0, -1, 21, '3', 3.0, true, {}, [] ].each do |count|
+      it "不正な明示値#{count.inspect}を補正せず拒否する" do
+        expect do
+          described_class.call(selected: selected, candidates: candidates, snapshot_candidate_count: count)
+        end.to raise_error(ArgumentError, 'snapshot candidate count must be an integer between 1 and 20')
+      end
+    end
+  end
+
   it 'raw textやprovider metadataをsnapshotへ含めない' do
     leaky_candidate = candidate(
       'leaky',

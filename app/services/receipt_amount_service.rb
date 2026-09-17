@@ -75,7 +75,7 @@ class ReceiptAmountService
   ITEM_AMOUNT_BASES = %i[line_total_as_net line_total_as_recorded mixed_by_tax_rate_group].freeze
   TAX_DETAIL_AMOUNT_BASES = %i[gross net unknown].freeze
 
-  def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+  def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, snapshot_candidate_count: nil)
     new(
       receipt: receipt,
       receipt_items: receipt_items,
@@ -85,7 +85,8 @@ class ReceiptAmountService
       context: context,
       rounding_mode: rounding_mode,
       tax_rounding_mode: tax_rounding_mode,
-      discount_rounding_mode: discount_rounding_mode
+      discount_rounding_mode: discount_rounding_mode,
+      snapshot_candidate_count: snapshot_candidate_count
     ).call
   rescue *INVALID_ITEM_SOURCE_ERRORS
     raise InvalidItemSourceError, "Invalid item pricing source"
@@ -393,8 +394,9 @@ class ReceiptAmountService
     )
   end
 
-  def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil)
+  def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, snapshot_candidate_count: nil)
     @context = normalize_context(context)
+    @snapshot_candidate_count = snapshot_candidate_count
     @receipt = normalize_receipt(receipt)
     @items = Array(receipt_items).map { |i| normalize_item(i) }
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
@@ -447,7 +449,8 @@ class ReceiptAmountService
       tax_excluded_price_conversion_enabled: tax_excluded_price_conversion_enabled,
       base_result: base_result,
       calculation_profile_result: profile_estimation,
-      evaluated_candidates: evaluated_candidates_for_engine
+      evaluated_candidates: evaluated_candidates_for_engine,
+      snapshot_candidate_count: @snapshot_candidate_count
     ).call
   rescue *INVALID_ITEM_SOURCE_ERRORS
     raise InvalidItemSourceError, "Invalid item pricing source"

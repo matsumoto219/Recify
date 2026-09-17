@@ -213,6 +213,115 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
     JAVASCRIPT
   end
 
+  it "desktop lightで金額診断の保存容量を本人確認・理由・確認付きで変更し、既定値へ戻す" do
+    admin = create_system_test_user(admin: true, theme_preference: "light")
+    sign_in_through_browser(admin)
+    passkey = create_fake_client_passkey(admin)
+    setting_key = "limits.snapshot_amount_calculation_max_bytes"
+    setting_path = admin_system_setting_path(setting_key)
+
+    visit setting_path
+
+    aggregate_failures do
+      expect(page).to have_css("html[data-theme='light']")
+      expect(page).to have_css("h2", text: setting_key, exact_text: true)
+      expect(page).to have_content(I18n.t("admin.system_settings.show.subtitle"))
+      expect(page).to have_content(I18n.t("admin.system_settings.show.amount_snapshot_limit_note"))
+      expect(page).to have_no_field("value")
+    end
+
+    click_link I18n.t("admin.system_settings.show.update.reauthentication_link")
+    complete_fake_client_browser_reauthentication(passkey: passkey, expected_return_path: setting_path)
+
+    aggregate_failures do
+      expect(page).to have_field("value", with: "131072")
+      expect(find("input[name='value']")[:min]).to eq("131072")
+      expect(find("input[name='value']")[:max]).to eq("1048576")
+      expect(find("textarea[name='reason']")[:required]).to eq("true")
+      expect(find("input[name='confirm']")[:required]).to eq("true")
+      expect(page).to have_unchecked_field("confirm")
+    end
+
+    fill_in "value", with: "262144"
+    find("input[name='value']").send_keys(:tab)
+    expect(page.evaluate_script("document.activeElement.name")).to eq("reason")
+    find("textarea[name='reason']").send_keys(:tab)
+    expect(page.evaluate_script("document.activeElement.name")).to eq("confirm")
+    page.driver.browser.action.key_down(:shift).send_keys(:tab).key_up(:shift).perform
+    expect(page.evaluate_script("document.activeElement.name")).to eq("reason")
+
+    fill_in "reason", with: "system spec amount snapshot capacity"
+    check "confirm"
+    click_button I18n.t("admin.system_settings.show.update.submit")
+
+    expect(page).to have_current_path(setting_path, ignore_query: true)
+    expect(page).to have_content(I18n.t("admin.system_settings.messages.updated"))
+
+    update_audit = AuditLog.find_by!(action: "system_settings.update", target_uid: setting_key)
+    aggregate_failures do
+      expect(SystemSetting.find_by!(key: setting_key).value).to eq(SystemSettings.stored_value(262_144))
+      expect(update_audit).to have_attributes(outcome: "succeeded", actor_user: admin)
+      expect(update_audit.before_state).to include("value" => 131_072, "source" => "default")
+      expect(update_audit.after_state).to include("value" => 262_144, "source" => "db")
+    end
+
+    fill_in "reason", with: "system spec restore amount snapshot capacity"
+    check "confirm"
+    click_button I18n.t("admin.system_settings.show.update.reset")
+
+    expect(page).to have_current_path(setting_path, ignore_query: true)
+    expect(page).to have_content(I18n.t("admin.system_settings.messages.reset"))
+
+    reset_audit = AuditLog.find_by!(action: "system_settings.reset", target_uid: setting_key)
+    aggregate_failures do
+      expect(SystemSetting.find_by(key: setting_key)).to be_nil
+      expect(page).to have_field("value", with: "131072")
+      expect(reset_audit).to have_attributes(outcome: "succeeded", actor_user: admin)
+      expect(reset_audit.before_state).to include("value" => 262_144, "source" => "db")
+      expect(reset_audit.after_state).to include("value" => 131_072, "source" => "default")
+      expect(page.evaluate_script("document.documentElement.scrollWidth <= window.innerWidth")).to be(true)
+    end
+    expect_browser_console_clean
+  end
+
+  it "390px darkで金額診断の3上限を英語キー・許可範囲・新規解析への適用説明付きで表示する", :mobile do
+    with_mobile_viewport do
+      admin = create_system_test_user(admin: true, theme_preference: "dark")
+      sign_in_through_browser(admin)
+      passkey = create_fake_client_passkey(admin)
+      limits = [
+        [ "limits.snapshot_amount_calculation_max_bytes", 131_072, 131_072, 1_048_576 ],
+        [ "limits.snapshot_amount_computed_items_max", 100, 20, 10_000 ],
+        [ "limits.snapshot_amount_evidence_max", 200, 40, 10_000 ]
+      ]
+      reauthenticate_through_browser(
+        passkey: passkey,
+        return_to: admin_system_setting_path(limits.first.first)
+      )
+
+      limits.each do |setting_key, default_value, minimum, maximum|
+        visit admin_system_setting_path(setting_key)
+
+        aggregate_failures do
+          expect(page).to have_css("html[data-theme='dark']")
+          expect(page).to have_css("h2", text: setting_key, exact_text: true)
+          expect(page).to have_content(I18n.t("admin.system_settings.show.subtitle"))
+          expect(page).to have_content(I18n.t("admin.system_settings.show.amount_snapshot_limit_note"))
+          expect(page).to have_field("value", with: default_value.to_s)
+          expect(find("input[name='value']")[:min]).to eq(minimum.to_s)
+          expect(find("input[name='value']")[:max]).to eq(maximum.to_s)
+          expect(page).to have_unchecked_field("confirm")
+        end
+        expect_exact_mobile_viewport_without_overflow
+      end
+
+      page.refresh
+      expect(page).to have_css("h2", text: limits.last.first, exact_text: true)
+      expect_exact_mobile_viewport_without_overflow
+      expect_browser_console_clean
+    end
+  end
+
   it "390px darkで本人確認後にhigh-risk設定を更新し、依存違反の入力を保持してresetする", :mobile do
     with_mobile_viewport do
       admin = create_system_test_user(admin: true, theme_preference: "dark")

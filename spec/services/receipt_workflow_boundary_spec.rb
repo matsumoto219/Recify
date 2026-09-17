@@ -62,6 +62,7 @@ RSpec.describe "Receipt workflow dependency boundary" do
       admin_retry_decision
       admin_retry_eligibility
       admin_retry_types
+      amount_calculation_run_snapshot
       cancel
       claim_stage
       cleanup_expired

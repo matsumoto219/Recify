@@ -43,6 +43,49 @@ RSpec.describe ReceiptAmountService do
     end
   end
 
+  describe '固定済みの候補保存件数' do
+    let(:amount_input) do
+      {
+        receipt: { subtotal_amount: 100, tax_amount: 10, total_amount: 110 },
+        receipt_items: [ { price: 110, quantity: 1, line_total: 110, tax_rate: BigDecimal('0.10') } ],
+        receipt_tax_details: [],
+        context: :analysis
+      }
+    end
+
+    it '保存件数だけを変更し計算結果・winner・評価・reviewを変更しない' do
+      full = described_class.call(**amount_input, snapshot_candidate_count: 20)
+      expect(full.dig(:amount_engine, :candidates).size).to be > 3
+
+      [ 1, 3 ].each do |count|
+        result = described_class.call(**amount_input, snapshot_candidate_count: count)
+
+        aggregate_failures "count=#{count}" do
+          expect(result.except(:amount_engine)).to eq(full.except(:amount_engine))
+          expect(result[:amount_engine].except(:candidates)).to eq(full[:amount_engine].except(:candidates))
+          expect(result.dig(:amount_engine, :candidates)).to eq(full.dig(:amount_engine, :candidates).first(count))
+        end
+      end
+    end
+
+    it '現在設定が変更されても明示された固定件数を維持する' do
+      allow(SystemSettings).to receive(:limit_for).and_call_original
+      allow(SystemSettings).to receive(:limit_for).with('amount_engine.max_candidate_snapshot_count').and_return(1)
+      before_change = described_class.call(**amount_input, snapshot_candidate_count: 3)
+      allow(SystemSettings).to receive(:limit_for).with('amount_engine.max_candidate_snapshot_count').and_return(20)
+      after_change = described_class.call(**amount_input, snapshot_candidate_count: 3)
+
+      expect(after_change).to eq(before_change)
+      expect(after_change.dig(:amount_engine, :candidates).size).to eq(3)
+    end
+
+    it '不正な固定件数を数値へ暗黙変換しない' do
+      expect do
+        described_class.call(**amount_input, snapshot_candidate_count: '3')
+      end.to raise_error(ArgumentError, 'snapshot candidate count must be an integer between 1 and 20')
+    end
+  end
+
   describe '正規化済み税抜対象額のownership' do
     def normalized_tax_target_result(basis: nil, context: :analysis)
       call_service(

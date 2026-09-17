@@ -84,7 +84,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:ok)
-        expect(Admin).to have_received(:receipt_analysis_runs).with(no_args)
+        expect(Admin).to have_received(:receipt_analysis_runs).with(summary_only: true)
         expect(response.body).not_to include('data-current-amount-inspector')
       end
     end
@@ -364,6 +364,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
           }
 
       expect(Admin).to have_received(:receipt_analysis_runs).with(
+        summary_only: true,
         status: 'failed',
         stage: 'completed',
         source: 'upload',
@@ -395,7 +396,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
             user_id: ''
           }
 
-      expect(Admin).to have_received(:receipt_analysis_runs).with(no_args)
+      expect(Admin).to have_received(:receipt_analysis_runs).with(summary_only: true)
     end
 
     it 'paginationのnext/prevがfilter paramsを維持する' do
@@ -782,7 +783,7 @@ RSpec.describe 'Admin receipt analysis runs', type: :request do
         expect(response.body).to include('Short Dated Stock Discount -2160')
         expect(response.body).to include('full_context_lines')
         expect(response.body).to include('アウトレット袋S')
-        expect(analysis_sections).to eq(%w[ocr ai build_params amount finalize])
+        expect(analysis_sections).to eq(%w[ocr ai build_params amount run_amount finalize])
         expect(response.body).to include('Correction summary')
         expect(response.body).to include('purchased_at fallback')
         expect(response.body).to include('applied')

@@ -1,0 +1,26 @@
+<div class="space-y-3" data-run-amount-retention>
+  <% if inspector.partial? %>
+    <p class="rounded-lg border token-border-soft token-bg-warning-soft p-3 text-sm token-text-base"><%= t("admin.run_amount_inspector.partial") %></p>
+  <% end %>
+  <% if inspector.limits.any? %>
+    <h3 class="text-base font-semibold token-text-base"><%= t("admin.run_amount_inspector.applied_limits") %></h3>
+    <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.limit_rows %>
+  <% end %>
+  <% if inspector.omissions.any? %>
+    <details class="min-w-0 rounded-lg border token-border-soft p-3">
+      <summary class="cursor-pointer text-sm font-semibold token-text-base"><%= t("admin.run_amount_inspector.retention_counts") %></summary>
+      <div class="mt-3 space-y-3">
+        <p class="text-sm token-text-muted"><%= t("admin.run_amount_inspector.count_notice") %></p>
+        <% inspector.omissions.each do |entry| %>
+          <div class="min-w-0 space-y-2">
+            <h4 class="break-words text-sm font-semibold token-text-base [overflow-wrap:anywhere]"><%= inspector.omission_label(entry["path"]) %></h4>
+            <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: entry.slice("source_count", "stored_count", "omitted_count").map { |key, count| [t("admin.run_amount_inspector.counts.#{key}"), count] } %>
+            <% if entry["reasons"].any? %>
+              <p class="text-sm token-text-muted"><%= entry["reasons"].map { |reason| t("admin.current_amount_inspector.reason", code: reason, description: t("admin.run_amount_inspector.omission_reasons.#{reason}")) }.join(" / ") %></p>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </details>
+  <% end %>
+</div>

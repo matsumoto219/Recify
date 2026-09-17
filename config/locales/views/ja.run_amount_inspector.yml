@@ -1,0 +1,35 @@
+ja:
+  admin:
+    run_amount_inspector:
+      title: Run-local Amount Inspector
+      notice: この解析runのfinalize時点で保存された計算記録です。後続の編集や別の解析による現在値とは異なる場合があります。
+      unavailable: この解析当時の計算記録は利用できません。記録がないか、対応していない形式または不正なデータです。現在の計算から補完しません。
+      partial: 一部を省略して保存しています。保存時の上限と省略件数を確認してください。
+      applied_limits: Applied limits
+      retention_counts: Retention counts
+      count_notice: 元件数は保存処理が受け取った件数です。上流で保持されなかった候補の総数は含みません。選択候補と同じ詳細は参照を再利用し、情報の省略とは区別します。
+      selected_reference: 選択された候補と同じ記録を参照しています。詳細な根拠はSanitized evidenceの欄に表示します。
+      saved_profile: Saved profile
+      saved_profile_notice: 計算処理の診断とは別に、レシートへ保存した計算記録の要約です。
+      saved_receipt: Saved receipt
+      receipt_status: status
+      snapshot_index: snapshot_index
+      needs_review: needs_review
+      review_reasons: review_reasons
+      warning_reasons: warning_reasons
+      review_notice: 金額計算の判定とレシート全体の状態は別です。警告ごとの確認必須・診断のみの分類は未記録です。
+      evidence_notice: この解析で保存した構造情報と安全な数値だけを表示します。比較候補の根拠はCandidate comparisonの欄に表示します。商品名や原文は含まず、数値から再計算しません。
+      limits:
+        max_bytes: max_bytes
+        computed_items: computed_items
+        evidence: evidence
+        candidates: candidates
+      counts:
+        source_count: source_count
+        stored_count: stored_count
+        omitted_count: omitted_count
+      omission_reasons:
+        count_limit: 件数上限
+        byte_limit: 保存容量の上限
+        invalid_value: 表示できない値
+        comparison_items_not_retained: 比較候補の計算明細は保存対象外

@@ -2,7 +2,7 @@
 
 module Amounts
   class Engine
-    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, base_result:, calculation_profile_result: nil, evaluated_candidates: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, discount_rounding_modes: nil, tax_excluded_price_conversion_enabled: true)
+    def initialize(receipt:, items:, tax_details:, adjustments:, payments:, context:, tax_rounding_modes:, base_result:, calculation_profile_result: nil, evaluated_candidates: nil, discount_rounding_mode: Amounts::Rounding::DISCOUNT_DEFAULT_MODE, discount_rounding_modes: nil, tax_excluded_price_conversion_enabled: true, snapshot_candidate_count: nil)
       @receipt = receipt
       @raw_items = Array(items)
       @tax_details = Array(tax_details)
@@ -16,6 +16,7 @@ module Amounts
       @base_result = base_result
       @calculation_profile_result = Amounts::CalculationProfileResult.wrap(calculation_profile_result)
       @evaluated_candidates = evaluated_candidates.nil? ? nil : Array(evaluated_candidates)
+      @snapshot_candidate_count = snapshot_candidate_count
     end
 
     def call
@@ -28,13 +29,14 @@ module Amounts
         calculation_profile_result: calculation_profile_result,
         selected_candidate: selected,
         candidates: candidates,
-        no_safe_candidate: selector.no_safe_candidate?
+        no_safe_candidate: selector.no_safe_candidate?,
+        snapshot_candidate_count: snapshot_candidate_count
       ).call
     end
 
     private
 
-    attr_reader :receipt, :raw_items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :tax_excluded_price_conversion_enabled, :base_result, :calculation_profile_result, :evaluated_candidates
+    attr_reader :receipt, :raw_items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :tax_excluded_price_conversion_enabled, :base_result, :calculation_profile_result, :evaluated_candidates, :snapshot_candidate_count
 
     def evaluated_generated_candidates
       @evaluated_generated_candidates ||= Amounts::CandidatePipeline.new(

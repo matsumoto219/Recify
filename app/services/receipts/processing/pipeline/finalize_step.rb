@@ -82,6 +82,8 @@ class Receipts::Processing::Pipeline
       @reference_pricing_auto_adoption_applied == true
     end
 
+    attr_reader :final_amount_result
+
     private
 
     attr_reader :receipt, :decision, :run, :reference_pricing_auto_adoption
@@ -117,6 +119,7 @@ class Receipts::Processing::Pipeline
       # === AmountService integration ===
       amount_result = calculate_analysis_amount_result(params)
       params, amount_result = apply_item_calculation_modes(params, amount_result, ocr_result:)
+      @final_amount_result = amount_result
 
       # 金額を補正（通常はresolvedを採用。預り差額から復元したtotalだけは支払一致時に保護する）
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
@@ -207,6 +210,7 @@ class Receipts::Processing::Pipeline
       # === AmountService integration point (OCR only) ===
       amount_result = calculate_analysis_amount_result(params)
       params, amount_result = apply_item_calculation_modes(params, amount_result, ocr_result:)
+      @final_amount_result = amount_result
 
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
 
@@ -274,6 +278,7 @@ class Receipts::Processing::Pipeline
       # === AmountService integration point (fallback) ===
       amount_result = calculate_analysis_amount_result(params)
       params, amount_result = apply_item_calculation_modes(params, amount_result, ocr_result:)
+      @final_amount_result = amount_result
 
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
 
@@ -503,7 +508,8 @@ class Receipts::Processing::Pipeline
         receipt_tax_details: params[:receipt_tax_details_attributes],
         receipt_adjustments: params[:receipt_adjustments_attributes],
         receipt_payments: params[:receipt_payments_attributes],
-        context: :analysis
+        context: :analysis,
+        snapshot_candidate_count: Receipts::Processing::Contracts::AmountCalculationSnapshotLimits.from_metadata(run&.metadata)&.fetch("candidates")
       )
 
       amount_result_with_receipt_amount_overrides(params, result)
