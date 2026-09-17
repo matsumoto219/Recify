@@ -34,10 +34,10 @@ RSpec.describe 'Admin run amount inspector', type: :request do
     aggregate_failures do
       expect(response).to have_http_status(:ok)
       expect(inspector_node.css('[data-amount-inspector-section]').size).to eq(6)
-      expect(inspector_node.text).to include('解析当時の計算', '当時の金額計算による要確認判定', '元件数', '省略件数')
+      expect(inspector_node.text).to include('Run-local Amount Inspector', 'needs_review', 'source_count', 'omitted_count')
       expect(inspector_node.text).to include('警告ごとの確認必須・診断のみの分類は未記録')
-      expect(inspector_node.text).to include('正解の確率やAIの確信度ではありません')
-      expect(inspector_node.text).to include('131072', '最終保存したレシート金額・状態')
+      expect(inspector_node.text).to include('正解の確率やAI confidenceではありません')
+      expect(inspector_node.text).to include('131072', 'Saved receipt', 'review_needed')
       expect(inspector_node.text).not_to match(/translation missing/i)
       expect(inspector_node.css('form, input, button, a[download], pre')).to be_empty
       expect(Nokogiri::HTML(response.body).css('pre').map(&:text).join).not_to include('amount_calculation_run_snapshot')

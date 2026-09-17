@@ -65,11 +65,7 @@ module Admin
     end
 
     def omission_label(path)
-      if (match = /\Acandidates\[([0-9]+)\]\.(evidence|computed_items)\z/.match(path))
-        I18n.t("admin.run_amount_inspector.paths.comparison_#{match[2]}", number: match[1].to_i + 1)
-      else
-        I18n.t("admin.run_amount_inspector.paths.#{path.tr('.', '_')}")
-      end
+      value(path)
     end
 
     def limit_rows
@@ -79,7 +75,7 @@ module Admin
     def receipt_rows
       status = receipt_summary["status"]
       rows(receipt_summary.except("status")) + [
-        [ I18n.t("admin.run_amount_inspector.receipt_status"), status ? I18n.t("admin.run_amount_inspector.statuses.#{status}") : value(nil) ]
+        [ I18n.t("admin.run_amount_inspector.receipt_status"), value(status) ]
       ]
     end
 

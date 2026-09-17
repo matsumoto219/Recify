@@ -42,7 +42,7 @@ RSpec.describe Admin::RunAmountInspectorPresenter do
 
     aggregate_failures do
       expect(presenter.omissions.map { |entry| entry.fetch("path") }).to include("candidates")
-      expect(presenter.omission_label("candidates")).to eq("比較候補")
+      expect(presenter.omission_label("candidates")).to eq("candidates")
       presenter.omissions.each do |entry|
         expect(presenter.omission_label(entry.fetch("path"))).not_to match(/translation missing/i)
       end

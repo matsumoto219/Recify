@@ -17,23 +17,23 @@ RSpec.describe "admin/receipt_analysis_runs/_current_amount_inspector", type: :v
     document = render_inspector
 
     aggregate_failures do
-      expect(document.at_css("h2").text).to eq("現在の計算")
+      expect(document.at_css("h2").text).to eq("Current Amount Inspector")
       expect(document.css("h3").map(&:text)).to eq([
-        "概要",
-        "選択された候補",
-        "候補の比較",
-        "不採用理由",
-        "確認判定",
-        "計算根拠"
+        "Summary",
+        "Selected candidate",
+        "Candidate comparison",
+        "Rejection reasons",
+        "Review outcome",
+        "Sanitized evidence"
       ])
-      expect(document.text).to include("解析時点の履歴ではありません")
+      expect(document.text).to include("この解析run当時の履歴ではありません")
       expect(document.text).to include("相対的なペナルティ・順位付け")
-      expect(document.text).to include("確率やAIの確信度ではありません")
+      expect(document.text).to include("確率やAI confidenceではありません")
       expect(document.css("table")).not_to be_empty
       expect(document.css("details summary")).not_to be_empty
       expect(document.css("pre, form, button, a[download]")).to be_empty
       selected_text = document.at_css("[data-amount-inspector-section='selected']").text
-      expect(selected_text.index("適格性を満たさない理由")).to be < selected_text.index("score")
+      expect(selected_text.index("Hard reject reasons")).to be < selected_text.index("score")
     end
   end
 
@@ -52,7 +52,7 @@ RSpec.describe "admin/receipt_analysis_runs/_current_amount_inspector", type: :v
 
     aggregate_failures do
       expect(document.at_css("[data-amount-inspector-section='summary']").text).not_to include("tax_rate", "=>")
-      expect(document.at_css("[data-amount-inspector-section='evidence']").text).to include("税率別の割当 1")
+      expect(document.at_css("[data-amount-inspector-section='evidence']").text).to include("Tax basis assignment 1", "tax_included")
       expect(document.text).not_to include("=>")
     end
   end
@@ -65,8 +65,8 @@ RSpec.describe "admin/receipt_analysis_runs/_current_amount_inspector", type: :v
     document = render_inspector
 
     aggregate_failures do
-      expect(document.at_css("[data-amount-inspector-section='selected']").text).to include("不採用")
-      expect(document.text).to include("安全な候補なし")
+      expect(document.at_css("[data-amount-inspector-section='selected']").text).to include("rejected")
+      expect(document.text).to include("No safe candidate")
       expect(document.text).not_to include("採用済み")
     end
   end
@@ -78,9 +78,9 @@ RSpec.describe "admin/receipt_analysis_runs/_current_amount_inspector", type: :v
     document = render_inspector
 
     aggregate_failures do
-      expect(document.text).to include("編集保存")
+      expect(document.text).to include("edit_save")
       expect(document.at_css("[data-amount-inspector-section='selected']").text).to include("記録なし")
-      expect(document.text).not_to include("安全な候補なし")
+      expect(document.text).not_to include("No safe candidate")
     end
   end
 
@@ -91,7 +91,7 @@ RSpec.describe "admin/receipt_analysis_runs/_current_amount_inspector", type: :v
     outcome = document.at_css("[data-amount-inspector-section='review']")
 
     aggregate_failures do
-      expect(outcome.text).to include("確認必須の警告", "診断上の警告")
+      expect(outcome.text).to include("Review-required warnings", "Diagnostic warnings")
       expect(outcome.text).to include("個別の区分は保存されていません")
       expect(outcome.text).to include("再判定は行いません")
     end

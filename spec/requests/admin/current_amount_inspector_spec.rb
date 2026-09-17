@@ -63,7 +63,7 @@ RSpec.describe 'Admin current amount inspector', type: :request do
       expect(response).to have_http_status(:ok)
       expect(inspector_node.text).to include('2378')
       expect(inspector_node.text).not_to include('1100')
-      expect(inspector_node.text).to include(I18n.t('admin.current_amount_inspector.values.edit_save'))
+      expect(inspector_node.text).to include('edit_save')
       expect(run.reload.final_result_summary).to be_empty
     end
   end

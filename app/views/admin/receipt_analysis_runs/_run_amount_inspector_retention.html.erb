@@ -16,7 +16,7 @@
             <h4 class="break-words text-sm font-semibold token-text-base [overflow-wrap:anywhere]"><%= inspector.omission_label(entry["path"]) %></h4>
             <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: entry.slice("source_count", "stored_count", "omitted_count").map { |key, count| [t("admin.run_amount_inspector.counts.#{key}"), count] } %>
             <% if entry["reasons"].any? %>
-              <p class="text-sm token-text-muted"><%= entry["reasons"].map { |reason| t("admin.run_amount_inspector.omission_reasons.#{reason}") }.join(" / ") %></p>
+              <p class="text-sm token-text-muted"><%= entry["reasons"].map { |reason| t("admin.current_amount_inspector.reason", code: reason, description: t("admin.run_amount_inspector.omission_reasons.#{reason}")) }.join(" / ") %></p>
             <% end %>
           </div>
         <% end %>

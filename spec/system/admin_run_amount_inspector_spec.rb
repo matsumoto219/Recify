@@ -23,7 +23,7 @@ RSpec.describe "管理者の解析当時の計算表示", type: :system do
     visit admin_receipt_analysis_run_path(run.run_key)
 
     inspector = find("[data-run-amount-inspector]")
-    expect(inspector).to have_content("解析当時の計算")
+    expect(inspector).to have_content("Run-local Amount Inspector")
     expect(inspector).to have_content("一部を省略して保存")
     detail = inspector.find("details", match: :first)
     detail.find("summary").click
@@ -80,7 +80,7 @@ RSpec.describe "管理者の解析当時の計算表示", type: :system do
       backgrounds << page.evaluate_script("getComputedStyle(document.querySelector('[data-run-amount-inspector] .token-bg-card-subtle')).backgroundColor")
       aggregate_failures do
         expect(inspector).to have_content(exact)
-        expect(inspector).to have_content("保存件数と省略内容")
+        expect(inspector).to have_content("Retention counts")
         expect(inspector).to have_content("比較候補の計算明細は保存対象外")
         expect(inspector).not_to have_content(/translation missing/i)
         expect(page.evaluate_script("window.innerWidth")).to eq(390)
