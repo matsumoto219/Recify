@@ -247,7 +247,7 @@ module Receipts::Processing::Runs
         new.build_params_snapshot(build_params)
       end
 
-      def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil)
+      def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil, amount_snapshot_limits: nil)
         new.final_result_summary(
           receipt: receipt,
           receipt_attributes: receipt_attributes,
@@ -255,7 +255,8 @@ module Receipts::Processing::Runs
           payments_attributes: payments_attributes,
           tax_details_attributes: tax_details_attributes,
           adjustments_attributes: adjustments_attributes,
-          amount_result: amount_result
+          amount_result: amount_result,
+          amount_snapshot_limits: amount_snapshot_limits
         )
       end
 
@@ -540,11 +541,11 @@ module Receipts::Processing::Runs
       )
     end
 
-    def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil)
+    def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil, amount_snapshot_limits: nil)
       receipt_attrs = normalized_hash(receipt_attributes)
       amount = normalized_hash(amount_result)
 
-      sanitize_hash(
+      summary = sanitize_hash(
         {
           schema_version: FINAL_RESULT_SCHEMA_VERSION,
           receipt_status: safe_string(receipt_attrs[:status] || receipt&.status),
@@ -560,6 +561,13 @@ module Receipts::Processing::Runs
           amount_warning_mismatch_codes: limited_strings(amount[:warning_mismatch_codes], snapshot_review_reasons_limit)
         }.compact
       )
+      summary["amount_calculation_run_snapshot"] = Receipts::Processing::Contracts::AmountCalculationRunSnapshot.build(
+        amount_result: amount_result,
+        saved_profile: receipt&.amount_calculation_profile,
+        receipt_summary: receipt ? receipt.attributes.slice("status", "total_amount", "subtotal_amount", "tax_amount", "tax_rate") : {},
+        limits: amount_snapshot_limits
+      )
+      summary
     end
 
     private

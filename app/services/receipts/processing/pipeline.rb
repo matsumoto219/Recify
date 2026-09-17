@@ -243,23 +243,16 @@ class Receipts::Processing::Pipeline
   def persist_finalize_result!(decision, run_record: run, receipt_record: receipt, gate_result: nil, existing_items: [])
     adopted = false
     ReceiptAnalysisRun.transaction do
-      if gate_result
-        step = FinalizeStep.new(
-          receipt: receipt_record,
-          decision:,
-          run: run_record,
-          reference_pricing_auto_adoption: {
-            gate_result:,
-            existing_items:
-          }
-        )
-        step.call
-        adopted = step.reference_pricing_auto_adoption_applied?
-      else
-        self.class.finalize(receipt: receipt_record, decision:, run: run_record)
-      end
+      step = FinalizeStep.new(
+        receipt: receipt_record,
+        decision:,
+        run: run_record,
+        reference_pricing_auto_adoption: gate_result ? { gate_result:, existing_items: } : nil
+      )
+      step.call
+      adopted = step.reference_pricing_auto_adoption_applied?
       finalized_receipt = Receipt.find(receipt_record.id)
-      Receipts::Processing.record_final_result(run_record, receipt: finalized_receipt)
+      Receipts::Processing.record_final_result(run_record, receipt: finalized_receipt, amount_result: step.final_amount_result)
       Receipts::Processing.succeed(run_record)
     end
     adopted

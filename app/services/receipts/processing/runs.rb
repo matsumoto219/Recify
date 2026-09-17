@@ -110,7 +110,8 @@ module Receipts::Processing::Runs
           payments_attributes: payments_attributes,
           tax_details_attributes: tax_details_attributes,
           adjustments_attributes: adjustments_attributes,
-          amount_result: amount_result
+          amount_result: amount_result,
+          amount_snapshot_limits: Receipts::Processing::Contracts::AmountCalculationSnapshotLimits.from_metadata(run.metadata)
         ),
         at: at
       )
