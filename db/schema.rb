@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_13_004416) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_17_141145) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -294,6 +294,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_004416) do
     t.datetime "created_at", null: false
     t.bigint "discount_amount"
     t.decimal "discount_rate", precision: 5, scale: 3
+    t.bigint "gross_line_total"
+    t.string "input_tax_inclusion", limit: 5
     t.bigint "line_total"
     t.boolean "needs_review", default: false, null: false
     t.bigint "original_line_total"
@@ -313,10 +315,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_004416) do
     t.string "reference_quantity_unit_raw", limit: 64
     t.jsonb "review_reasons", default: [], null: false
     t.string "suggested_name"
+    t.string "tax_inclusion_origin", limit: 24
     t.decimal "tax_rate", precision: 5, scale: 4
     t.datetime "updated_at", null: false
     t.index ["receipt_id"], name: "index_receipt_items_on_receipt_id"
+    t.check_constraint "COALESCE(\nCASE\n    WHEN input_tax_inclusion IS NULL AND tax_inclusion_origin IS NULL THEN true\n    WHEN pricing_source_kind::text = ANY (ARRAY['count_unit_price'::character varying, 'explicit_line_total'::character varying]::text[]) THEN input_tax_inclusion IS NOT NULL AND tax_inclusion_origin IS NOT NULL\n    WHEN pricing_source_kind::text = 'reference_quantity_price'::text THEN input_tax_inclusion IS NULL AND tax_inclusion_origin IS NOT NULL AND (reference_price_tax_inclusion::text = ANY (ARRAY['gross'::character varying, 'net'::character varying]::text[]))\n    ELSE false\nEND, false)", name: "check_receipt_items_input_tax_inclusion_state"
     t.check_constraint "\nCASE\n    WHEN pricing_source_kind::text = 'reference_quantity_price'::text THEN reference_price_tax_inclusion IS NOT NULL\n    WHEN pricing_source_kind::text = 'count_unit_price'::text THEN reference_price_tax_inclusion IS NULL\n    WHEN pricing_source_kind IS NULL OR pricing_source_kind::text = 'explicit_line_total'::text THEN reference_price_tax_inclusion IS NULL OR reference_price_amount IS NOT NULL AND reference_quantity IS NOT NULL AND (reference_quantity_unit_code IS NOT NULL AND reference_quantity_unit_raw IS NULL OR reference_quantity_unit_code IS NULL AND reference_quantity_unit_raw IS NOT NULL)\n    ELSE false\nEND", name: "check_receipt_items_reference_price_tax_inclusion_state"
+    t.check_constraint "gross_line_total IS NULL OR gross_line_total >= 0 AND gross_line_total <= '999999999999'::bigint", name: "check_receipt_items_gross_line_total"
+    t.check_constraint "input_tax_inclusion IS NULL OR (input_tax_inclusion::text = ANY (ARRAY['gross'::character varying, 'net'::character varying]::text[]))", name: "check_receipt_items_input_tax_inclusion"
     t.check_constraint "pricing_source_kind IS NULL OR (pricing_source_kind::text = ANY (ARRAY['count_unit_price'::character varying, 'explicit_line_total'::character varying, 'reference_quantity_price'::character varying]::text[]))", name: "check_receipt_items_pricing_source_kind"
     t.check_constraint "pricing_source_kind IS NULL OR pricing_source_kind::text = 'count_unit_price'::text AND price IS NOT NULL AND quantity IS NOT NULL AND quantity > 0::numeric AND quantity <= 9999.999 AND quantity = trunc(quantity) AND (quantity_unit_code::text = ANY (ARRAY['each'::character varying, 'item'::character varying, 'piece'::character varying, 'bag'::character varying, 'sheet'::character varying, 'unit'::character varying, 'box'::character varying, 'set'::character varying]::text[])) AND reference_price_amount IS NULL AND reference_quantity IS NULL AND reference_quantity_unit_code IS NULL AND quantity_unit_raw IS NULL AND reference_quantity_unit_raw IS NULL OR pricing_source_kind::text = 'explicit_line_total'::text AND line_total IS NOT NULL OR pricing_source_kind::text = 'reference_quantity_price'::text AND quantity IS NOT NULL AND quantity > 0::numeric AND quantity <= 9999.999 AND ((quantity_unit_code::text <> ALL (ARRAY['each'::character varying, 'item'::character varying, 'piece'::character varying, 'bag'::character varying, 'sheet'::character varying, 'unit'::character varying, 'box'::character varying, 'set'::character varying]::text[])) OR quantity = trunc(quantity)) AND (quantity_unit_code::text = reference_quantity_unit_code::text OR (quantity_unit_code::text = ANY (ARRAY['gram'::character varying, 'kilogram'::character varying, 'milligram'::character varying]::text[])) AND (reference_quantity_unit_code::text = ANY (ARRAY['gram'::character varying, 'kilogram'::character varying, 'milligram'::character varying]::text[])) OR (quantity_unit_code::text = ANY (ARRAY['liter'::character varying, 'milliliter'::character varying, 'cubic_centimeter'::character varying]::text[])) AND (reference_quantity_unit_code::text = ANY (ARRAY['liter'::character varying, 'milliliter'::character varying, 'cubic_centimeter'::character varying]::text[]))) AND reference_price_amount IS NOT NULL AND reference_quantity IS NOT NULL AND reference_quantity_unit_code IS NOT NULL AND quantity_unit_raw IS NULL AND reference_quantity_unit_raw IS NULL", name: "check_receipt_items_pricing_source_state"
     t.check_constraint "quantity_unit_raw IS NULL OR char_length(quantity_unit_raw::text) >= 1 AND char_length(quantity_unit_raw::text) <= 64 AND quantity_unit_raw::text = btrim(quantity_unit_raw::text) AND quantity_unit_raw::text <> ''::text AND quantity_unit_raw::text !~ '[[:cntrl:]]'::text", name: "check_receipt_items_quantity_unit_raw"
@@ -327,6 +333,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_004416) do
     t.check_constraint "reference_quantity IS NULL OR reference_quantity_unit_code IS NULL OR (reference_quantity_unit_code::text <> ALL (ARRAY['each'::character varying, 'item'::character varying, 'piece'::character varying, 'bag'::character varying, 'sheet'::character varying, 'unit'::character varying, 'box'::character varying, 'set'::character varying]::text[])) OR reference_quantity = trunc(reference_quantity)", name: "check_receipt_items_reference_quantity_granularity"
     t.check_constraint "reference_quantity_unit_code IS NULL OR (reference_quantity_unit_code::text = ANY (ARRAY['each'::character varying, 'item'::character varying, 'piece'::character varying, 'bag'::character varying, 'sheet'::character varying, 'unit'::character varying, 'box'::character varying, 'set'::character varying, 'gram'::character varying, 'kilogram'::character varying, 'milligram'::character varying, 'liter'::character varying, 'milliliter'::character varying, 'cubic_centimeter'::character varying]::text[]))", name: "check_receipt_items_reference_unit_code"
     t.check_constraint "reference_quantity_unit_raw IS NULL OR char_length(reference_quantity_unit_raw::text) >= 1 AND char_length(reference_quantity_unit_raw::text) <= 64 AND reference_quantity_unit_raw::text = btrim(reference_quantity_unit_raw::text) AND reference_quantity_unit_raw::text <> ''::text AND reference_quantity_unit_raw::text !~ '[[:cntrl:]]'::text", name: "check_receipt_items_reference_quantity_unit_raw"
+    t.check_constraint "tax_inclusion_origin IS NULL OR (tax_inclusion_origin::text = ANY (ARRAY['manual'::character varying, 'form_default'::character varying, 'application_default'::character varying, 'analysis'::character varying, 'legacy_record'::character varying]::text[]))", name: "check_receipt_items_tax_inclusion_origin"
   end
 
   create_table "receipt_payments", force: :cascade do |t|
@@ -351,6 +358,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_004416) do
 
   create_table "receipts", force: :cascade do |t|
     t.jsonb "amount_calculation_profile", default: {}, null: false
+    t.jsonb "calculation_settings"
     t.string "country_region"
     t.datetime "created_at", null: false
     t.string "currency_code"
@@ -401,6 +409,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_004416) do
     t.index ["user_id", "status", "purchased_at"], name: "index_receipts_on_user_status_purchased_at"
     t.index ["user_id", "status"], name: "index_receipts_on_user_id_and_status"
     t.index ["user_id"], name: "index_receipts_on_user_id"
+    t.check_constraint "calculation_settings IS NULL OR COALESCE(jsonb_typeof(calculation_settings) = 'object'::text AND octet_length(calculation_settings::text) <= 4096 AND (calculation_settings - ARRAY['schema_version'::text, 'tax_rounding_mode'::text, 'discount_rounding_mode'::text, 'tax_rounding_scope'::text, 'purchase_adjustment_tax_inclusion'::text]) = '{}'::jsonb AND jsonb_typeof(calculation_settings -> 'schema_version'::text) = 'number'::text AND (calculation_settings ->> 'schema_version'::text) = '1'::text AND (calculation_settings - 'schema_version'::text) <> '{}'::jsonb AND (NOT calculation_settings ? 'tax_rounding_mode'::text OR jsonb_typeof(calculation_settings -> 'tax_rounding_mode'::text) = 'object'::text AND ((calculation_settings -> 'tax_rounding_mode'::text) - ARRAY['value'::text, 'origin'::text]) = '{}'::jsonb AND jsonb_typeof((calculation_settings -> 'tax_rounding_mode'::text) -> 'value'::text) = 'string'::text AND jsonb_typeof((calculation_settings -> 'tax_rounding_mode'::text) -> 'origin'::text) = 'string'::text AND (((calculation_settings -> 'tax_rounding_mode'::text) ->> 'value'::text) = ANY (ARRAY['floor'::text, 'round'::text, 'ceil'::text])) AND (((calculation_settings -> 'tax_rounding_mode'::text) ->> 'origin'::text) = ANY (ARRAY['manual'::text, 'form_default'::text, 'application_default'::text, 'analysis'::text, 'legacy_record'::text]))) AND (NOT calculation_settings ? 'discount_rounding_mode'::text OR jsonb_typeof(calculation_settings -> 'discount_rounding_mode'::text) = 'object'::text AND ((calculation_settings -> 'discount_rounding_mode'::text) - ARRAY['value'::text, 'origin'::text]) = '{}'::jsonb AND jsonb_typeof((calculation_settings -> 'discount_rounding_mode'::text) -> 'value'::text) = 'string'::text AND jsonb_typeof((calculation_settings -> 'discount_rounding_mode'::text) -> 'origin'::text) = 'string'::text AND (((calculation_settings -> 'discount_rounding_mode'::text) ->> 'value'::text) = ANY (ARRAY['floor'::text, 'round'::text, 'ceil'::text])) AND (((calculation_settings -> 'discount_rounding_mode'::text) ->> 'origin'::text) = ANY (ARRAY['manual'::text, 'form_default'::text, 'application_default'::text, 'analysis'::text, 'legacy_record'::text]))) AND (NOT calculation_settings ? 'tax_rounding_scope'::text OR jsonb_typeof(calculation_settings -> 'tax_rounding_scope'::text) = 'object'::text AND ((calculation_settings -> 'tax_rounding_scope'::text) - ARRAY['value'::text, 'origin'::text]) = '{}'::jsonb AND jsonb_typeof((calculation_settings -> 'tax_rounding_scope'::text) -> 'value'::text) = 'string'::text AND jsonb_typeof((calculation_settings -> 'tax_rounding_scope'::text) -> 'origin'::text) = 'string'::text AND (((calculation_settings -> 'tax_rounding_scope'::text) ->> 'value'::text) = ANY (ARRAY['per_item'::text, 'per_tax_rate_group'::text, 'per_receipt'::text])) AND (((calculation_settings -> 'tax_rounding_scope'::text) ->> 'origin'::text) = ANY (ARRAY['manual'::text, 'form_default'::text, 'application_default'::text, 'analysis'::text, 'legacy_record'::text]))) AND (NOT calculation_settings ? 'purchase_adjustment_tax_inclusion'::text OR jsonb_typeof(calculation_settings -> 'purchase_adjustment_tax_inclusion'::text) = 'object'::text AND ((calculation_settings -> 'purchase_adjustment_tax_inclusion'::text) - ARRAY['value'::text, 'origin'::text]) = '{}'::jsonb AND jsonb_typeof((calculation_settings -> 'purchase_adjustment_tax_inclusion'::text) -> 'value'::text) = 'string'::text AND jsonb_typeof((calculation_settings -> 'purchase_adjustment_tax_inclusion'::text) -> 'origin'::text) = 'string'::text AND (((calculation_settings -> 'purchase_adjustment_tax_inclusion'::text) ->> 'value'::text) = ANY (ARRAY['gross'::text, 'net'::text])) AND (((calculation_settings -> 'purchase_adjustment_tax_inclusion'::text) ->> 'origin'::text) = ANY (ARRAY['manual'::text, 'form_default'::text, 'application_default'::text, 'analysis'::text, 'legacy_record'::text]))), false)", name: "check_receipts_calculation_settings"
     t.check_constraint "image_purged_reason IS NULL OR (image_purged_reason::text = ANY (ARRAY['manual_delete'::character varying::text, 'system_purge'::character varying::text]))", name: "check_receipts_image_purged_reason"
     t.check_constraint "moderation_status::text = ANY (ARRAY['active'::character varying::text, 'quarantined'::character varying::text])", name: "check_receipts_moderation_status"
   end
@@ -586,6 +595,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_004416) do
     t.datetime "created_at", null: false
     t.datetime "current_sign_in_at"
     t.inet "current_sign_in_ip"
+    t.string "default_item_tax_inclusion", limit: 5, default: "gross", null: false
     t.boolean "delete_confirmation_enabled", default: true, null: false
     t.string "discount_rounding_mode", default: "round", null: false
     t.string "email", default: "", null: false
@@ -618,6 +628,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_13_004416) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["unlock_token"], name: "index_users_on_unlock_token", unique: true
     t.index ["webauthn_id"], name: "index_users_on_webauthn_id", unique: true
+    t.check_constraint "default_item_tax_inclusion::text = ANY (ARRAY['gross'::character varying, 'net'::character varying]::text[])", name: "check_users_default_item_tax_inclusion"
   end
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"

@@ -233,6 +233,7 @@ class Receipt < ApplicationRecord
   validate :validate_receipt_payments_count_within_limit
   validate :validate_receipt_tax_details_count_within_limit
   validate :validate_quarantine_state
+  validate :validate_calculation_settings, if: :will_save_change_to_calculation_settings?
 
   before_validation :normalize_country_region
   before_validation :set_default_country_region
@@ -547,6 +548,12 @@ class Receipt < ApplicationRecord
     return if store_address_components.is_a?(Hash)
 
     errors.add(:store_address_components, :invalid)
+  end
+
+  def validate_calculation_settings
+    return if calculation_settings.nil? || ReceiptCalculationSettings.parse(calculation_settings)
+
+    errors.add(:calculation_settings, :invalid)
   end
 
   def validate_receipt_items_count_within_limit
