@@ -2,12 +2,13 @@
 
 module Amounts
   class ResultAdapter
-    def initialize(base_result:, selected_candidate:, candidates:, calculation_profile_result: nil, no_safe_candidate: nil)
+    def initialize(base_result:, selected_candidate:, candidates:, calculation_profile_result: nil, no_safe_candidate: nil, snapshot_candidate_count: nil)
       @base_result = base_result
       @selected_candidate = selected_candidate
       @candidates = Array(candidates)
       @calculation_profile_result = Amounts::CalculationProfileResult.wrap(calculation_profile_result)
       @no_safe_candidate = no_safe_candidate
+      @snapshot_candidate_count = snapshot_candidate_count
     end
 
     def call
@@ -15,7 +16,8 @@ module Amounts
       result[:amount_engine] = Amounts::CandidateSnapshot.call(
         selected: selected_candidate,
         candidates: candidates,
-        no_safe_candidate: no_safe_candidate?
+        no_safe_candidate: no_safe_candidate?,
+        snapshot_candidate_count: snapshot_candidate_count
       )
       result[:selected_candidate_status] = selected_candidate_status if selected_candidate_status
       result[:safe_to_auto_complete] = false
@@ -30,7 +32,7 @@ module Amounts
 
     private
 
-    attr_reader :base_result, :selected_candidate, :candidates, :calculation_profile_result, :no_safe_candidate
+    attr_reader :base_result, :selected_candidate, :candidates, :calculation_profile_result, :no_safe_candidate, :snapshot_candidate_count
 
     def engine_result_template
       inconsistencies = normalized_base_inconsistencies

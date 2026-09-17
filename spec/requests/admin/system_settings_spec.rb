@@ -82,7 +82,59 @@ RSpec.describe 'Admin system settings', type: :request do
     expect(response).to have_http_status(:success)
   end
 
+  describe '金額診断保存上限の操作' do
+    {
+      'limits.snapshot_amount_calculation_max_bytes' => 262_144,
+      'limits.snapshot_amount_computed_items_max' => 250,
+      'limits.snapshot_amount_evidence_max' => 500
+    }.each do |key, value|
+      it "#{key}の理由・確認・再認証・監査とresetを維持する" do
+        admin = create(:user, :admin)
+        sign_in admin
+        patch admin_system_setting_path(key), params: { value: value.to_s, reason: 'change diagnostic limit', confirm: '1' }
+        expect(SystemSetting.find_by(key: key)).to be_nil
+
+        reauthenticate_admin_with_passkey!(admin)
+        patch admin_system_setting_path(key), params: { value: value.to_s, reason: 'change diagnostic limit' }
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(SystemSetting.find_by(key: key)).to be_nil
+        expect(AuditLog.last.outcome).to eq('failed')
+
+        patch admin_system_setting_path(key), params: { value: value.to_s, reason: '', confirm: '1' }
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(SystemSetting.find_by(key: key)).to be_nil
+
+        patch admin_system_setting_path(key), params: { value: value.to_s, reason: 'change diagnostic limit', confirm: '1' }
+        expect(response).to redirect_to(admin_system_setting_path(key))
+        expect(SystemSettings.limit_for(key)).to eq(value)
+        expect(AuditLog.last).to have_attributes(action: 'system_settings.update', outcome: 'succeeded', target_uid: key)
+
+        patch admin_system_setting_reset_path(key), params: { reason: 'restore diagnostic limit', confirm: '1' }
+        expect(response).to redirect_to(admin_system_setting_path(key))
+        expect(SystemSetting.find_by(key: key)).to be_nil
+        expect(SystemSettings.limit_for(key)).to eq(SystemSettings.definition_for(key).default)
+        expect(AuditLog.last).to have_attributes(action: 'system_settings.reset', outcome: 'succeeded', target_uid: key)
+      end
+    end
+  end
+
   describe 'GET /admin/system_settings' do
+    it '金額診断の保存上限を実キーと新規解析への適用説明で表示する' do
+      sign_in create(:user, :admin)
+
+      %w[
+        limits.snapshot_amount_calculation_max_bytes
+        limits.snapshot_amount_computed_items_max
+        limits.snapshot_amount_evidence_max
+      ].each do |key|
+        get admin_system_setting_path(key)
+
+        expect(response).to have_http_status(:success)
+        expect(response.body).to include(key, '新しく作成する解析', '保存容量', 'high')
+        expect(response.body).not_to include('name="reason"')
+      end
+    end
+
     it '非ログインユーザーには既存404と同じbody/headerを返す' do
       get '/__recify_missing_route__'
       expected_body = response.body

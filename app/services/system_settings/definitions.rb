@@ -1044,6 +1044,36 @@ module SystemSettings
         max: 5000
       ),
       Definition.new(
+        key: "limits.snapshot_amount_calculation_max_bytes",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 131_072,
+        editable: true,
+        risk_level: "high",
+        min: 131_072,
+        max: 1_048_576
+      ),
+      Definition.new(
+        key: "limits.snapshot_amount_computed_items_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 100,
+        editable: true,
+        risk_level: "high",
+        min: 20,
+        max: 10_000
+      ),
+      Definition.new(
+        key: "limits.snapshot_amount_evidence_max",
+        category: "snapshot_limit",
+        value_type: "integer",
+        default: 200,
+        editable: true,
+        risk_level: "high",
+        min: 40,
+        max: 10_000
+      ),
+      Definition.new(
         key: "limits.snapshot_ai_input_items_max",
         category: "snapshot_limit",
         value_type: "integer",
