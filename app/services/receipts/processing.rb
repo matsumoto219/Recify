@@ -62,6 +62,10 @@ module Receipts
         Contracts::FinalizeDecision.from_snapshot(snapshot)
       end
 
+      def amount_calculation_run_snapshot(snapshot)
+        Contracts::AmountCalculationRunSnapshot.read(snapshot)
+      end
+
       def run_ocr(...)
         Pipeline.run_ocr(...)
       end

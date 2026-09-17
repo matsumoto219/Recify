@@ -75,6 +75,7 @@ module Admin
       expires_within: nil,
       include_retry_options: false,
       include_amount_profile: false,
+      summary_only: false,
       limit: DEFAULT_LIMIT,
       offset: 0
     )
@@ -94,6 +95,10 @@ module Admin
       @expires_within = expires_within
       @include_retry_options = ActiveModel::Type::Boolean.new.cast(include_retry_options)
       @include_amount_profile = include_amount_profile == true
+      @summary_only = summary_only == true
+      if @summary_only && (@include_retry_options || @include_amount_profile)
+        raise ArgumentError, "summary_only cannot include detail or retry data"
+      end
       @limit = normalize_limit(limit)
       @offset = normalize_offset(offset)
     end
@@ -101,6 +106,7 @@ module Admin
     def call
       relation = filtered_relation
       total_count = relation.count
+      relation = summary_relation(relation) if @summary_only
       runs = relation.order(created_at: :desc, id: :desc).limit(@limit).offset(@offset).to_a
 
       Result.new(
@@ -112,6 +118,22 @@ module Admin
     end
 
     private
+
+    def summary_relation(relation)
+      columns = ReceiptAnalysisRun.column_names.excluding("final_result_summary").map do |name|
+        ReceiptAnalysisRun.arel_table[name]
+      end
+      summary = Arel.sql(
+        %(CASE WHEN jsonb_typeof("receipt_analysis_runs"."final_result_summary") = 'object' ) +
+        %(THEN "receipt_analysis_runs"."final_result_summary" - 'amount_calculation_run_snapshot' ) +
+        %(ELSE '{}'::jsonb END AS final_result_summary)
+      )
+      relation.except(:includes).preload(
+        :requested_by_user,
+        { ocr_response_artifact_attachment: :blob },
+        receipt: :user
+      ).select(*columns, summary).readonly
+    end
 
     def filtered_relation
       relation = ReceiptAnalysisRun.includes(
@@ -226,13 +248,14 @@ module Admin
     def build_record(run)
       receipt = run.receipt
       user = receipt.user
+      final_summary = final_summary_for(run)
       receipt_status = receipt_status_for(run)
       processing_error_code = processing_error_code_for(run)
       summaries = {
         ocr: safe_summary(run.ocr_summary),
         ai_input: safe_summary(run.ai_input_snapshot),
         ai_result: safe_summary(run.ai_result_summary),
-        final_result: safe_summary(run.final_result_summary)
+        final_result: safe_summary(final_summary.except("amount_calculation_run_snapshot"))
       }
       detailed_snapshots = {
         ocr_result_snapshot: safe_summary(run.ocr_result_snapshot),
@@ -292,7 +315,10 @@ module Admin
         snapshot_presence: snapshot_presence(run),
         finalize_decision: safe_summary(run.metadata.to_h["finalize_decision"] || {})
       }
-      record[:amount_calculation_profile] = amount_calculation_profile if @include_amount_profile
+      if @include_amount_profile
+        record[:amount_calculation_profile] = amount_calculation_profile
+        record[:amount_calculation_run_snapshot] = final_summary["amount_calculation_run_snapshot"]
+      end
       record[:retry_options] = Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: run).retry_options if include_retry_options?
       record
     end
@@ -354,12 +380,17 @@ module Admin
     end
 
     def receipt_status_for(run)
-      summary = run.final_result_summary
+      summary = final_summary_for(run)
       summary["receipt_status"].presence || run.receipt.status
     end
 
     def processing_error_code_for(run)
-      run.final_result_summary["processing_error_code"].presence || run.receipt.processing_error_code
+      final_summary_for(run)["processing_error_code"].presence || run.receipt.processing_error_code
+    end
+
+    def final_summary_for(run)
+      value = run.final_result_summary
+      value.is_a?(Hash) ? value : {}
     end
 
     def compact_provider(**values)

@@ -17,7 +17,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
 
   def index
     @filters = filter_params
-    @result = Admin.receipt_analysis_runs(**receipt_analysis_run_query_filters)
+    @result = Admin.receipt_analysis_runs(**receipt_analysis_run_query_filters, summary_only: true)
     @filter_options = Admin.receipt_analysis_run_filter_options
   end
 
@@ -32,6 +32,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     raise_not_found if @record.blank?
 
     @amount_inspector = Admin::CurrentAmountInspectorPresenter.new(@record[:amount_calculation_profile])
+    @run_amount_inspector = Admin::RunAmountInspectorPresenter.new(@record[:amount_calculation_run_snapshot])
   end
 
   def status
@@ -39,7 +40,7 @@ class Admin::ReceiptAnalysisRunsController < Admin::BaseController
     records = if run_keys.empty?
       {}
     else
-      Admin.receipt_analysis_runs(run_key: run_keys, limit: run_keys.size).records.index_by { |record|
+      Admin.receipt_analysis_runs(run_key: run_keys, limit: run_keys.size, summary_only: true).records.index_by { |record|
         record[:run_key]
       }
     end

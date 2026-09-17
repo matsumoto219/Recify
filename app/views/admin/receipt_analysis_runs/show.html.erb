@@ -633,6 +633,10 @@
   <% end %>
 
   <%= render "shared/ui/layout/surface_card", padding: :md do %>
+    <%= render "admin/receipt_analysis_runs/current_amount_inspector", inspector: @run_amount_inspector, run_local: true %>
+  <% end %>
+
+  <%= render "shared/ui/layout/surface_card", padding: :md do %>
     <section class="space-y-4" data-admin-analysis-section="finalize">
       <h2 class="text-lg font-bold token-text-base"><%= t("admin.receipt_analysis_runs.show.sections.finalize") %></h2>
       <div class="grid gap-4 lg:grid-cols-2">

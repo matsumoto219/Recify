@@ -1,0 +1,26 @@
+<div class="space-y-3" data-run-amount-saved>
+  <h4 class="text-sm font-semibold token-text-base"><%= t("admin.run_amount_inspector.saved_profile") %></h4>
+  <p class="text-sm token-text-muted"><%= t("admin.run_amount_inspector.saved_profile_notice") %></p>
+  <% profile = inspector.saved_profile %>
+  <% if profile.empty? %>
+    <p class="text-sm token-text-muted"><%= t("admin.current_amount_inspector.not_recorded") %></p>
+  <% else %>
+    <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.rows(profile.slice("schema_version", "context", "score", "selected_candidate_status", "safe_to_auto_complete")) %>
+    <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.rows((profile["profile"] || {}).except("item_amount_basis_assignments")) %>
+    <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.rows(profile["rounding_mode"] || {}) %>
+    <% %w[computed resolved].each do |kind| %>
+      <h5 class="text-sm font-semibold token-text-base"><%= t("admin.current_amount_inspector.#{kind}") %></h5>
+      <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.rows(profile[kind] || {}) %>
+    <% end %>
+    <% Array(profile.dig("profile", "item_amount_basis_assignments")).each_with_index do |entry, index| %>
+      <details class="min-w-0 rounded-lg border token-border-soft p-3">
+        <summary class="cursor-pointer text-sm font-semibold token-text-base"><%= t("admin.current_amount_inspector.basis_assignment", number: index + 1) %></summary>
+        <div class="mt-3">
+          <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.rows(entry) %>
+        </div>
+      </details>
+    <% end %>
+  <% end %>
+  <h4 class="text-sm font-semibold token-text-base"><%= t("admin.run_amount_inspector.saved_receipt") %></h4>
+  <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.receipt_rows %>
+</div>

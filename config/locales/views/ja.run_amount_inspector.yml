@@ -1,0 +1,49 @@
+ja:
+  admin:
+    run_amount_inspector:
+      title: 解析当時の計算
+      notice: この解析の最終保存に使った計算記録です。後続の編集や再解析では更新されません。現在の計算とは別の記録です。
+      unavailable: この解析当時の計算記録は利用できません。記録がないか、対応していない形式または不正なデータです。現在の計算から補完しません。
+      partial: 一部を省略して保存しています。保存時の上限と省略件数を確認してください。
+      applied_limits: この解析に適用した保存上限
+      retention_counts: 保存件数と省略内容
+      count_notice: 元件数は保存処理が受け取った件数です。上流で保持されなかった候補の総数は含みません。選択候補と同じ詳細は参照を再利用し、情報の省略とは区別します。
+      selected_reference: 選択された候補と同じ記録を参照しています。詳細な根拠は計算根拠の欄に表示します。
+      saved_profile: 保存に使った計算profile
+      saved_profile_notice: 計算処理の診断とは別に、レシートへ保存した計算記録の要約です。
+      saved_receipt: 最終保存したレシート金額・状態
+      receipt_status: 保存時のレシート全体の状態
+      snapshot_index: 保存元の構造上の位置
+      needs_review: 当時の金額計算による要確認判定
+      review_reasons: 当時の金額計算による確認理由
+      warning_reasons: 当時の金額計算による警告理由
+      review_notice: 金額計算の判定とレシート全体の状態は別です。警告ごとの確認必須・診断のみの分類は未記録です。
+      evidence_notice: この解析で保存した構造情報と安全な数値だけを表示します。比較候補の根拠は候補の比較欄に表示します。商品名や原文は含まず、数値から再計算しません。
+      limits:
+        max_bytes: 保存容量（bytes）
+        computed_items: 選択候補の計算明細件数
+        evidence: 全候補の根拠合計件数
+        candidates: 比較候補の保存件数
+      counts:
+        source_count: 元件数
+        stored_count: 保存件数
+        omitted_count: 省略件数
+      paths:
+        candidates: 比較候補
+        selected_computed_items: 選択候補の計算明細
+        selected_evidence: 選択候補の根拠
+        comparison_evidence: "比較候補 %{number} の根拠"
+        comparison_computed_items: "比較候補 %{number} の計算明細"
+        engine_profile_item_amount_basis_assignments: 計算診断の税率別割当
+        saved_profile_profile_item_amount_basis_assignments: 保存profileの税率別割当
+      omission_reasons:
+        count_limit: 件数上限
+        byte_limit: 保存容量の上限
+        invalid_value: 表示できない値
+        comparison_items_not_retained: 比較候補の計算明細は保存対象外
+      statuses:
+        uploaded: アップロード済み
+        processing: 解析中
+        completed: 完了
+        review_needed: 要確認
+        failed: 失敗

@@ -1,14 +1,19 @@
-<section class="min-w-0 space-y-6" data-admin-analysis-section="amount" data-current-amount-inspector>
+<% run_local = local_assigns.fetch(:run_local, false) %>
+<%= tag.section class: "min-w-0 space-y-6", data: { admin_analysis_section: run_local ? "run_amount" : "amount", current_amount_inspector: run_local ? nil : true, run_amount_inspector: run_local ? true : nil } do %>
   <header class="space-y-2">
-    <h2 class="text-lg font-bold token-text-base"><%= t("admin.current_amount_inspector.title") %></h2>
-    <p class="text-sm token-text-muted"><%= t("admin.current_amount_inspector.current_notice") %></p>
+    <h2 class="text-lg font-bold token-text-base"><%= t(run_local ? "admin.run_amount_inspector.title" : "admin.current_amount_inspector.title") %></h2>
+    <p class="text-sm token-text-muted"><%= t(run_local ? "admin.run_amount_inspector.notice" : "admin.current_amount_inspector.current_notice") %></p>
     <% if inspector.omitted? %>
       <p class="rounded-lg border token-border-soft token-bg-warning-soft p-3 text-sm token-text-base"><%= t("admin.current_amount_inspector.omitted") %></p>
     <% end %>
   </header>
 
+  <% if run_local %>
+    <%= render "admin/receipt_analysis_runs/run_amount_inspector_retention", inspector: inspector %>
+  <% end %>
+
   <% if inspector.state != :available %>
-    <p class="text-sm token-text-muted"><%= t("admin.current_amount_inspector.states.#{inspector.state}") %></p>
+    <p class="text-sm token-text-muted"><%= t(run_local ? "admin.run_amount_inspector.unavailable" : "admin.current_amount_inspector.states.#{inspector.state}") %></p>
   <% else %>
     <% data = inspector.data %>
     <% engine = data["amount_engine"] || {} %>
@@ -27,6 +32,9 @@
           </div>
         <% end %>
       </div>
+      <% if run_local %>
+        <%= render "admin/receipt_analysis_runs/run_amount_inspector_saved", inspector: inspector %>
+      <% end %>
     </section>
 
     <section class="space-y-3" data-amount-inspector-section="selected">
@@ -93,6 +101,14 @@
               <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.rows(candidate.except("score_breakdown", "hard_reject_reasons", "warnings", "evidence", "computed_items")) %>
               <h4 class="text-sm font-semibold token-text-base"><%= t("admin.current_amount_inspector.score_breakdown") %></h4>
               <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.rows(candidate["score_breakdown"] || {}) %>
+              <% if run_local && candidate["candidate_id"] == selected["candidate_id"] %>
+                <p class="text-sm token-text-muted"><%= t("admin.run_amount_inspector.selected_reference") %></p>
+              <% elsif run_local %>
+                <% Array(candidate["evidence"]).each_with_index do |entry, index| %>
+                  <h4 class="text-sm font-semibold token-text-base"><%= t("admin.current_amount_inspector.evidence_entry", number: index + 1) %></h4>
+                  <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: inspector.rows(entry) %>
+                <% end %>
+              <% end %>
             </div>
           </details>
         <% end %>
@@ -119,6 +135,12 @@
 
     <section class="space-y-3" data-amount-inspector-section="review">
       <h3 class="text-base font-semibold token-text-base"><%= t("admin.current_amount_inspector.sections.review") %></h3>
+      <% if run_local %>
+        <%= render "admin/receipt_analysis_runs/current_amount_inspector_rows", rows: [[t("admin.run_amount_inspector.needs_review"), inspector.value(inspector.review["needs_review"])]] %>
+        <%= render "admin/receipt_analysis_runs/current_amount_inspector_reasons", inspector: inspector, label: t("admin.run_amount_inspector.review_reasons"), reasons: inspector.review["review_reasons"] %>
+        <%= render "admin/receipt_analysis_runs/current_amount_inspector_reasons", inspector: inspector, label: t("admin.run_amount_inspector.warning_reasons"), reasons: inspector.review["warning_reasons"] %>
+        <p class="text-sm token-text-muted"><%= t("admin.run_amount_inspector.review_notice") %></p>
+      <% end %>
       <%= render "admin/receipt_analysis_runs/current_amount_inspector_reasons", inspector: inspector, label: t("admin.current_amount_inspector.blocking"), reasons: data["blocking_mismatch_codes"] %>
       <div class="space-y-1">
         <h4 class="text-sm font-semibold token-text-base"><%= t("admin.current_amount_inspector.review_required_warning") %> / <%= t("admin.current_amount_inspector.diagnostic_warning") %></h4>
@@ -132,7 +154,7 @@
 
     <section class="space-y-3" data-amount-inspector-section="evidence">
       <h3 class="text-base font-semibold token-text-base"><%= t("admin.current_amount_inspector.sections.evidence") %></h3>
-      <p class="text-sm token-text-muted"><%= t("admin.current_amount_inspector.evidence_notice") %></p>
+      <p class="text-sm token-text-muted"><%= t(run_local ? "admin.run_amount_inspector.evidence_notice" : "admin.current_amount_inspector.evidence_notice") %></p>
       <% assignments = data.dig("profile", "item_amount_basis_assignments") || [] %>
       <% if inspector.evidence.empty? && inspector.computed_items.empty? && assignments.empty? %>
         <p class="text-sm token-text-muted"><%= t("admin.current_amount_inspector.record_missing") %></p>
@@ -149,4 +171,4 @@
       <% end %>
     </section>
   <% end %>
-</section>
+<% end %>
