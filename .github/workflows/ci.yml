@@ -99,7 +99,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@a30dfa457ad68707b8b910ac3a244714b61c0626 # v1
+        uses: ruby/setup-ruby@984c0c890880bbf811283d6f09c4607c62d210a4 # v1
         with:
           bundler-cache: true
 
@@ -121,7 +121,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@a30dfa457ad68707b8b910ac3a244714b61c0626 # v1
+        uses: ruby/setup-ruby@984c0c890880bbf811283d6f09c4607c62d210a4 # v1
         with:
           bundler-cache: true
 
@@ -152,7 +152,7 @@ jobs:
 
       - name: Set up Ruby
         if: needs.classify_changes.outputs.docs_only != 'true'
-        uses: ruby/setup-ruby@a30dfa457ad68707b8b910ac3a244714b61c0626 # v1
+        uses: ruby/setup-ruby@984c0c890880bbf811283d6f09c4607c62d210a4 # v1
         with:
           bundler-cache: true
 
@@ -231,7 +231,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@a30dfa457ad68707b8b910ac3a244714b61c0626 # v1
+        uses: ruby/setup-ruby@984c0c890880bbf811283d6f09c4607c62d210a4 # v1
         with:
           bundler-cache: true
 
