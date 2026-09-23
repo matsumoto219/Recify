@@ -1,0 +1,72 @@
+<%#
+  アイコンから開く補足説明
+
+  必須:
+  - message: 説明の本文テキスト
+  - label: アイコンと説明パネルのアクセシブルラベル
+
+  任意:
+  - id: パネルのID。未指定時はランダム生成
+  - dismissible: 閉じるボタンを表示。未指定時は true
+  - close_button_position: 閉じるボタンの位置。:start / :end。未指定時は :end
+  - auto_dismiss: 自動で閉じる。未指定時は false
+  - auto_dismiss_delay: 自動で閉じるまでのミリ秒。未指定時は 8000
+  - close_on_outside: パネル外の操作で閉じる。未指定時は true
+  - class: 外側ラッパーに追加するCSSクラス
+%>
+
+<%
+  message = local_assigns.fetch(:message)
+  label = local_assigns.fetch(:label)
+  panel_id = local_assigns.fetch(:id, "tip-#{SecureRandom.hex(4)}")
+  dismissible = local_assigns.fetch(:dismissible, true)
+  close_button_position = local_assigns.fetch(:close_button_position, :end).to_s
+  auto_dismiss = local_assigns.fetch(:auto_dismiss, false)
+  auto_dismiss_delay = local_assigns.fetch(:auto_dismiss_delay, 8000)
+  close_on_outside = local_assigns.fetch(:close_on_outside, true)
+  wrapper_classes = ["inline-flex shrink-0 align-middle", local_assigns[:class]].compact.join(" ")
+  close_classes = [
+    "ui-touch-control inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md token-text-muted token-hover-bg-card-subtle token-hover-text-error transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+    ("order-first" if close_button_position == "start")
+  ].compact.join(" ")
+%>
+
+<span
+  class="<%= wrapper_classes %>"
+  data-controller="tip"
+  data-tip-auto-dismiss-value="<%= auto_dismiss %>"
+  data-tip-auto-dismiss-delay-value="<%= auto_dismiss_delay %>"
+  data-tip-close-on-outside-value="<%= close_on_outside %>">
+  <button
+    type="button"
+    class="ui-touch-control inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full opacity-70 transition-opacity hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+    aria-label="<%= label %>"
+    aria-controls="<%= panel_id %>"
+    aria-expanded="false"
+    aria-haspopup="dialog"
+    data-tip-target="trigger">
+    <span class="material-symbols-outlined text-[18px]" aria-hidden="true">info</span>
+  </button>
+  <span
+    id="<%= panel_id %>"
+    class="fixed z-[80] w-80 max-w-[calc(100dvw-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain rounded-xl border token-border-soft token-bg-floating p-3 text-left text-xs leading-relaxed token-text-base shadow-lg [overflow-wrap:anywhere] token-scrollbar-brand"
+    role="dialog"
+    aria-label="<%= label %>"
+    aria-modal="false"
+    tabindex="-1"
+    data-tip-target="panel"
+    hidden>
+    <span class="flex items-start gap-2">
+      <span class="min-w-0 flex-1 whitespace-pre-wrap"><%= message %></span>
+      <% if dismissible %>
+        <button
+          type="button"
+          class="<%= close_classes %>"
+          aria-label="<%= t("shared.tip.close_label") %>"
+          data-tip-close>
+          <span class="material-symbols-outlined text-[18px]" aria-hidden="true">close</span>
+        </button>
+      <% end %>
+    </span>
+  </span>
+</span>
