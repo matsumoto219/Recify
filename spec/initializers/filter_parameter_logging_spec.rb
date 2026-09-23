@@ -3,6 +3,18 @@ require 'rails_helper'
 RSpec.describe 'filter_parameter_logging' do
   let(:filter) { ActiveSupport::ParameterFilter.new(Rails.application.config.filter_parameters) }
 
+  it 'filters signed receipt calculation contexts without hiding calculation choices' do
+    filtered = filter.filter(
+      receipt_calculation_context: 'signed-form-context',
+      receipt_calculation_settings: { tax_rounding_mode: 'floor' }
+    )
+
+    aggregate_failures do
+      expect(filtered[:receipt_calculation_context]).to eq('[FILTERED]')
+      expect(filtered[:receipt_calculation_settings]).to eq(tax_rounding_mode: 'floor')
+    end
+  end
+
   it 'filters passkey registration credential payloads' do
     params = {
       credential: {

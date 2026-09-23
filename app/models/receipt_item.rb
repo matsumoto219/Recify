@@ -116,6 +116,15 @@ class ReceiptItem < ApplicationRecord
     needs_review?
   end
 
+  def gross_amount_for_display(receipt: nil)
+    return gross_line_total if safe_display_amount?(gross_line_total)
+    return unless gross_line_total.nil? && safe_display_amount?(line_total)
+    return line_total if recorded_gross_input?
+
+    stored_receipt = receipt || (association(:receipt).target if association(:receipt).loaded?)
+    line_total if legacy_gross_projection?(stored_receipt)
+  end
+
   def self.category_options
     CATEGORIES.map do |key|
       [ I18n.t("enums.receipt_item.category.#{key}"), key ]
@@ -197,6 +206,26 @@ class ReceiptItem < ApplicationRecord
   end
 
   private
+
+  def safe_display_amount?(amount)
+    amount.is_a?(Integer) && amount.between?(0, GROSS_LINE_TOTAL_MAX)
+  end
+
+  def recorded_gross_input?
+    if pricing_source_kind == "reference_quantity_price"
+      input_tax_inclusion.nil? && reference_price_tax_inclusion == "gross"
+    else
+      %w[count_unit_price explicit_line_total].include?(pricing_source_kind) &&
+        input_tax_inclusion == "gross" &&
+        ReceiptCalculationSettings::ORIGINS.include?(tax_inclusion_origin)
+    end
+  end
+
+  def legacy_gross_projection?(stored_receipt)
+    stored_receipt &&
+      input_tax_inclusion.nil? &&
+      stored_receipt.legacy_gross_item_projection?(pricing_source_kind: pricing_source_kind)
+  end
 
   def measurement_pricing_source_contract
     validate_exact_reference_numeric(

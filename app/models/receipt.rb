@@ -323,10 +323,46 @@ class Receipt < ApplicationRecord
     return {} if snapshot[:selected_candidate_status].to_s == "rejected"
     return {} if snapshot.dig(:amount_engine, :no_safe_candidate) == true
 
+    if legacy_gross_item_projection?(pricing_source_kind: nil) && receipt_items.any? { |item| item.pricing_source_kind.nil? }
+      return {
+        "receipt_tax_basis" => "total_includes_tax",
+        "item_amount_basis" => "line_total_as_recorded"
+      }
+    end
+
     profile_semantics = sanitized_amount_source_semantics(snapshot[:profile])
     return edit_source_semantics_projection(profile_semantics) if profile_semantics.present?
 
     profileless_selected_basis_source_semantics(snapshot)
+  end
+
+  def legacy_gross_item_projection?(pricing_source_kind:)
+    return false unless calculation_settings.nil?
+
+    snapshot = amount_calculation_profile
+    return false unless snapshot.is_a?(Hash) &&
+      snapshot["schema_version"].is_a?(Integer) &&
+      snapshot["schema_version"] == 1 &&
+      snapshot["selected_candidate_status"] == "accepted"
+    return false unless snapshot["context"] == "manual" || snapshot["context"] == "analysis" && pricing_source_kind.nil?
+
+    engine = snapshot["amount_engine"]
+    return false unless engine.is_a?(Hash) &&
+      engine["schema_version"].is_a?(Integer) &&
+      engine["schema_version"] == 1 &&
+      engine["selected_candidate_status"] == "accepted" &&
+      engine["no_safe_candidate"] == false
+    return false unless %w[items_as_tax_included items_as_tax_excluded].include?(engine["selected_basis"])
+
+    candidate = engine["selected_candidate"]
+    return false unless candidate.is_a?(Hash) &&
+      candidate["hard_reject_reasons"] == [] &&
+      candidate["basis"] == engine["selected_basis"] &&
+      candidate["candidate_id"] == engine["selected_candidate_id"]
+    return false unless ReceiptCalculationSettings::ROUNDING_MODES.include?(candidate["rounding_mode"]) &&
+      ReceiptCalculationSettings::ROUNDING_SCOPES.include?(candidate["rounding_scope"])
+
+    candidate["candidate_id"] == [ candidate["basis"], candidate["rounding_mode"], candidate["rounding_scope"] ].join("/")
   end
 
   def receipt_items_limit

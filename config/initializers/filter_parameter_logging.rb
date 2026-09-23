@@ -7,5 +7,6 @@ security_exact_key_filter = /\A(?:credential|raw[_-]?id|attestation[_-]?object|c
 
 Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
+  :receipt_calculation_context,
   security_exact_key_filter
 ]
