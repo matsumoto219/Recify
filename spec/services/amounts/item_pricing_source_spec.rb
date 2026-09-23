@@ -217,23 +217,14 @@ RSpec.describe Amounts::ItemPricingSource do
       end
     end
 
-    it 'manual reference formulaはgrossだけを許可しnet/unknown/欠損から推測しない' do
+    it 'manual reference formulaは明示netを許可しunknown/欠損から推測しない' do
       aggregate_failures do
-        expect do
+        expect(
           described_class.manual_reference(
             quantity_semantics: reference_quantity,
             reference_price_tax_inclusion: :net
           )
-        end.to raise_error(described_class::InvalidContractError)
-        expect do
-          described_class.new(
-            authority_kind: :reference_quantity_price,
-            context: :manual,
-            source_evidence: :confirmed_reference_quantity_price,
-            quantity_semantics: reference_quantity,
-            reference_price_tax_inclusion: :net
-          )
-        end.to raise_error(described_class::InvalidContractError)
+        ).to have_attributes(reference_price_tax_inclusion: :net)
         expect do
           described_class.manual_reference(
             quantity_semantics: reference_quantity,

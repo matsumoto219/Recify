@@ -81,4 +81,40 @@ RSpec.describe Amounts::PaymentAdjustmentSummary do
 
     expect(described_class.call(receipt: receipt)).to be_nil
   end
+
+  it '明示された現在の調整を古いprofileより優先する' do
+    receipt = build(
+      :receipt,
+      total_amount: 220,
+      amount_calculation_profile: {
+        computed: {
+          payment_adjustment_total: -22,
+          final_payment_total: 198
+        }
+      }
+    )
+    adjustments = [ { kind: 'point_usage', sign: 'discount', amount: 10 } ]
+
+    result = described_class.call(receipt: receipt, receipt_adjustments: adjustments)
+
+    aggregate_failures do
+      expect(result.payment_adjustment_total).to eq(-10)
+      expect(result.final_payment_total).to eq(210)
+    end
+  end
+
+  it '明示された空の現在調整を古いprofileで復活させない' do
+    receipt = build(
+      :receipt,
+      total_amount: 220,
+      amount_calculation_profile: {
+        computed: {
+          payment_adjustment_total: -22,
+          final_payment_total: 198
+        }
+      }
+    )
+
+    expect(described_class.call(receipt: receipt, receipt_adjustments: [])).to be_nil
+  end
 end

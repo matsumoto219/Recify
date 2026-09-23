@@ -51,7 +51,7 @@ module Amounts
         confirmed_reference_quantity_price: SourceRule.new(
           authority_kind: :reference_quantity_price,
           validation_states: %i[valid].freeze,
-          reference_price_tax_inclusions: %i[gross].freeze
+          reference_price_tax_inclusions: REFERENCE_PRICE_TAX_INCLUSIONS
         )
       }.freeze,
       edit_save: {

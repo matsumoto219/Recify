@@ -16,6 +16,9 @@ module Amounts
       @adjustments = Array(adjustments)
       @payments = Array(payments)
       @context = context
+      @calculation_settings = if %i[manual edit_save].include?(context.to_s.to_sym)
+        ReceiptCalculationSettings.parse(receipt[:calculation_settings])
+      end
       @tax_rounding_modes = Array(tax_rounding_modes).presence || ROUNDING_MODES
       @discount_rounding_modes = normalize_rounding_modes(discount_rounding_modes || [ Amounts::Rounding::DISCOUNT_DEFAULT_MODE ])
       @tax_excluded_price_conversion_enabled = tax_excluded_price_conversion_enabled != false
@@ -25,18 +28,71 @@ module Amounts
       discount_rounding_modes.flat_map { |rounding_mode| candidates_for_discount_rounding_mode(rounding_mode) }
     end
 
+    def receipt_input_warnings
+      return [] unless calculation_settings
+
+      prepare_items(discount_rounding_modes.first)
+      return [] unless item_data_present?
+
+      candidate = Amounts::CandidateFamilyRegistry.build(:receipt_input, self)
+      return [] unless candidate
+
+      rejected = Amounts::HardRejector.new(
+        receipt: receipt,
+        items: items,
+        tax_details: tax_details,
+        payments: payments
+      ).call(candidate)
+      rejected.hard_reject_reasons & [ :invalid_amount_relation ]
+    end
+
     private
 
-    attr_reader :receipt, :source_items, :items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_modes, :discount_rounding_mode, :tax_excluded_price_conversion_enabled
+    attr_reader :receipt, :source_items, :items, :tax_details, :adjustments, :payments, :context, :calculation_settings, :tax_rounding_modes, :discount_rounding_modes, :discount_rounding_mode, :tax_excluded_price_conversion_enabled
 
     def candidates_for_discount_rounding_mode(rounding_mode)
+      prepare_items(rounding_mode)
+
+      candidate_families.flat_map do |family|
+        Amounts::CandidateFamilyRegistry.build(family, self)
+      end.compact
+    end
+
+    def prepare_items(rounding_mode)
       @discount_rounding_mode = rounding_mode
       @items = normalize_items(rounding_mode)
       reset_item_dependent_cache
+    end
 
-      Amounts::CandidateFamilyRegistry.call.flat_map do |family|
-        Amounts::CandidateFamilyRegistry.build(family, self)
-      end.compact
+    def candidate_families
+      return Amounts::CandidateFamilyRegistry.call unless calculation_settings
+
+      item_data_present? ? [ :item_amounts ] : [ :receipt_input, :item_amounts ]
+    end
+
+    def item_rounding_scopes
+      return Amounts::RoundingScope::SCOPES unless calculation_settings
+
+      [ calculation_settings.value_for("tax_rounding_scope").to_sym ]
+    end
+
+    def managed_item_basis
+      return nil unless calculation_settings
+      return @managed_item_basis if @managed_item_basis
+
+      bases = items.map { |item| reference_price_tax_basis(item) || input_tax_basis(item) }.uniq
+      @managed_item_basis = if bases.present? && !bases.include?(nil)
+        bases.one? ? bases.first : :tax_included
+      else
+        receipt[:item_amount_basis].to_s == "line_total_as_net" ? :tax_excluded : :tax_included
+      end
+    end
+
+    def purchase_adjustment_basis(fallback_basis)
+      basis = calculation_settings&.value_for("purchase_adjustment_tax_inclusion")
+      return fallback_basis unless basis
+
+      basis == "net" ? :tax_excluded : :tax_included
     end
 
     def normalize_items(rounding_mode)
@@ -50,6 +106,7 @@ module Amounts
     def reset_item_dependent_cache
       @item_total = nil
       @fallback_tax_rate = nil
+      @managed_item_basis = nil
     end
 
     def tax_excluded_price_conversion_enabled?
@@ -256,11 +313,25 @@ module Amounts
     end
 
     def fixed_item_tax_basis?(item)
-      reference_quantity_price_item?(item) || explicit_line_total_item?(item)
+      reference_quantity_price_item?(item) || explicit_line_total_item?(item) || input_tax_basis(item).present?
     end
 
     def item_projection_tax_basis(item, fallback_basis)
-      reference_price_tax_basis(item) || (explicit_line_total_item?(item) ? :tax_included : fallback_basis)
+      reference_price_tax_basis(item) || input_tax_basis(item) || (explicit_line_total_item?(item) ? :tax_included : fallback_basis)
+    end
+
+    def input_tax_basis(item)
+      return nil unless %i[manual edit_save].include?(context.to_s.to_sym)
+
+      item = indifferent_hash(item)
+      return nil unless %w[count_unit_price explicit_line_total].include?(item[:pricing_source_kind].to_s)
+
+      case item[:input_tax_inclusion]
+      when "gross"
+        :tax_included
+      when "net"
+        :tax_excluded
+      end
     end
 
     def item_projection_basis_source(item)
@@ -275,6 +346,15 @@ module Amounts
     end
 
     def projection_tax_rate_for(item)
+      if calculation_settings && item_projection_tax_basis(item, managed_item_basis) == :tax_excluded
+        rate = tax_detail_evidence.trusted_explicit_projection_rate(indifferent_hash(item)[:tax_rate])
+        unless rate
+          raise Amounts::ItemPricingSource::InvalidContractError,
+            "net input requires an explicit tax rate"
+        end
+
+        return rate
+      end
       return item_tax_rate(item) unless reference_quantity_price_item?(item)
       return item_tax_rate(item) unless reference_price_tax_basis(item) == :tax_excluded
 
@@ -288,6 +368,8 @@ module Amounts
     end
 
     def normalize_price_for_tax_basis?(item, basis)
+      return false if calculation_settings
+
       basis == :tax_excluded && !reference_quantity_price_item?(item)
     end
 

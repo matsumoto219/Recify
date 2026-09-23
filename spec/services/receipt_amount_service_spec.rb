@@ -4939,14 +4939,6 @@ RSpec.describe ReceiptAmountService do
         expect {
           call_service(
             receipt: {},
-            receipt_items: [ reference_formula_item(reference_price_tax_inclusion: 'net') ],
-            context: :manual
-          )
-        }.to raise_error(ReceiptAmountService::InvalidItemSourceError)
-
-        expect {
-          call_service(
-            receipt: {},
             receipt_items: [ reference_formula_item(pricing_source_kind: 'unsupported') ],
             context: :analysis
           )

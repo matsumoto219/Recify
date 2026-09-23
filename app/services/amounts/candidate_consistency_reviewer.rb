@@ -63,6 +63,9 @@ module Amounts
       return false if candidate.basis == "mixed_by_tax_rate_group"
       return false if discounted_original_line_total_tax_excluded_candidate?(candidate)
       return false if item_derived_candidate?(candidate) && reference_quantity_price_item_present?
+      if managed_item_candidate?(candidate)
+        return Array(candidate.tax_rate_groups).sum { |group| to_i(fetch_value(group, :gross)) } != candidate.purchase_total.to_i
+      end
 
       expected_total = tax_excluded_total_candidate?(candidate) ? candidate.subtotal : candidate.purchase_total
       adjusted_item_total(candidate) != expected_total.to_i
@@ -237,6 +240,12 @@ module Amounts
       Array(candidate.computed_items).sum do |item|
         to_i(fetch_value(item, :line_total))
       end
+    end
+
+    def managed_item_candidate?(candidate)
+      %i[manual edit_save].include?(context) &&
+        item_derived_candidate?(candidate) &&
+        ReceiptCalculationSettings.parse(fetch_value(receipt, :calculation_settings)).present?
     end
 
     def insufficient_data?(candidate)
@@ -599,6 +608,10 @@ module Amounts
     def candidate_item_reference_tax_inclusion(candidate, index, item)
       source_tax_inclusion = fetch_value(item, :reference_price_tax_inclusion).to_s
       return source_tax_inclusion if explicit_zero_tax_rate?(fetch_value(item, :tax_rate))
+      if %i[manual edit_save].include?(context) && pricing_source_kind_for(item) == "explicit_line_total"
+        input_tax_inclusion = fetch_value(item, :input_tax_inclusion)
+        return input_tax_inclusion if %w[gross net].include?(input_tax_inclusion)
+      end
       return "gross" if pricing_source_kind_for(item) == "explicit_line_total"
 
       assignment_basis = candidate_item_amount_basis_assignment(candidate, index)
