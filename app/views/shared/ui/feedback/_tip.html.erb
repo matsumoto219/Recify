@@ -26,7 +26,7 @@
   close_on_outside = local_assigns.fetch(:close_on_outside, true)
   wrapper_classes = ["inline-flex shrink-0 align-middle", local_assigns[:class]].compact.join(" ")
   close_classes = [
-    "ui-touch-control inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md token-text-muted token-hover-bg-card-subtle token-hover-text-error transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+    "ui-touch-control inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md token-text-muted token-hover-text-error transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
     ("order-first" if close_button_position == "start")
   ].compact.join(" ")
 %>
