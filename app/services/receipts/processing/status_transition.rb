@@ -20,7 +20,8 @@ class Receipts::Processing::StatusTransition
         tip_amount: nil,
         total_amount: nil,
         ocr_completed_at: nil,
-        amount_calculation_profile: {}
+        amount_calculation_profile: {},
+        calculation_settings: nil
       )
       mark_processing!(receipt)
     end
