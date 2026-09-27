@@ -42,6 +42,39 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
     end
   end
 
+  it '詳細展開内の小計だけ入力基準額にし、通常表示とホバーの税込投影を維持する' do
+    receipt = build(:receipt)
+    item = receipt.receipt_items.build(
+      pricing_source_kind: 'reference_quantity_price',
+      line_total: 123_456,
+      gross_line_total: 135_801,
+      reference_price_tax_inclusion: 'net',
+      tax_inclusion_origin: 'manual',
+      tax_rate: BigDecimal('0.1')
+    )
+
+    document = render_item(item, new_record: false)
+    reference_result = document.at_css('.receipt-form-pricing-result')
+    detail_result = document.at_css('[data-receipt-form-target="sourceLineTotalDisplay"]')
+    detail_label = document.at_css('[data-receipt-form-target="sourceLineTotalLabel"]')
+    mobile_result = document.at_css('.receipt-form-item-mobile-subtotal')
+    tooltip_result = document.at_css('[data-receipt-form-target="lineTotalTooltip"]')
+
+    aggregate_failures do
+      expect(reference_result.text.squish).to eq('計算金額 ¥135,801')
+      expect(detail_result.text.strip).to eq('¥123,456')
+      expect(detail_label.text.strip).to eq('税抜')
+      expect(mobile_result.text.squish).to eq('小計 ¥135,801')
+      expect(tooltip_result.text.strip).to eq('小計 ¥135,801')
+      expect(detail_result['title']).to eq('¥123,456')
+      expect(detail_result['aria-label']).to eq('税抜')
+      expect(detail_result['data-receipt-form-gross-label']).to eq('税込')
+      expect(detail_result['data-receipt-form-net-label']).to eq('税抜')
+      expect(detail_result['data-receipt-form-subtotal-label']).to eq('小計')
+      expect(document.at_css('[data-receipt-form-target="lineTotalInput"]')['value']).to eq('123456')
+    end
+  end
+
   it '基準価格を通貨prefixなしの中央寄せとし、基準数量に既存のcompact単位表示を使う' do
     receipt = build(:receipt)
     item = receipt.receipt_items.build(pricing_source_kind: 'reference_quantity_price')
@@ -153,21 +186,19 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
     end
   end
 
-  it '税込基準badgeと説明文を同じ中央軸に揃える' do
+  it '計算方式の近くで税込と税抜を切り替え、入力金額を換算しない説明を表示する' do
     receipt = build(:receipt)
     item = receipt.receipt_items.build(pricing_source_kind: 'reference_quantity_price')
 
-    document = render_item(item)
-    tax_note = document.at_css('[data-receipt-reference-tax-note]')
-    badge = tax_note.at_css('[data-receipt-reference-tax-badge]')
-    description = tax_note.at_css('[data-receipt-reference-tax-description]')
+    document = render_item(item, new_record: false)
+    control = document.at_css('[data-receipt-form-target="itemTaxInclusionControl"]')
 
     aggregate_failures do
-      expect(tax_note['class']).to include('items-center')
-      expect(tax_note['class']).not_to include('items-start')
-      expect(badge['class']).to include('inline-flex', 'items-center')
-      expect(badge['class']).not_to include('mt-0.5')
-      expect(description.text.strip).to eq('この基準価格は税込金額として計算します。')
+      expect(control).to be_present
+      expect(control['class'].split).to include('w-full', 'md:w-auto')
+      expect(control.css('input[type="radio"]').map { |input| input['value'] }).to eq(%w[gross net])
+      expect(control.at_css('input[checked]')['name']).to end_with('[reference_price_tax_inclusion]')
+      expect(document.text).to include('切り替えても入力済みの金額は換算しません。')
     end
   end
 
@@ -274,8 +305,8 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
       expect(reference_panel).to have_attribute('hidden')
       expect(reference_panel).to have_attribute('inert')
       expect(document.at_css('[data-receipt-form-target="referencePriceAmountInput"]')['disabled']).to eq('disabled')
-      expect(document.at_css('[data-receipt-form-target="referencePriceTaxInclusionInput"]')['value']).to eq('gross')
-      expect(document.at_css('[data-receipt-form-target="referencePriceTaxInclusionInput"]')['disabled']).to eq('disabled')
+      expect(document.at_css('[data-receipt-form-target="itemTaxInclusionControl"] input[checked]')['value']).to eq('gross')
+      expect(document.at_css('[data-receipt-form-target="itemTaxInclusionControl"] input[checked]')['name']).to end_with('[input_tax_inclusion]')
       expect(document.at_css('[data-receipt-form-target="explicitLineTotalInput"]')['name']).to end_with('[original_line_total]')
       expect(document.at_css('[data-receipt-form-target="explicitLineTotalInput"]')['disabled']).to eq('disabled')
       expect(document.css('input[name$="[original_line_total]"]:not([disabled])').size).to eq(1)
@@ -304,8 +335,7 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
       expect(document.at_css('[data-receipt-form-target="referencePriceAmountInput"]')['value']).to eq('120.5')
       expect(document.at_css('[data-receipt-form-target="referenceQuantityInput"]')['value']).to eq('0.5')
       expect(document.at_css('[data-receipt-form-target="referenceQuantityUnitInput"] option[selected]')['value']).to eq('liter')
-      expect(document.at_css('[data-receipt-form-target="referencePriceTaxInclusionInput"]')['value']).to eq('net')
-      expect(document.text).to include('税抜基準')
+      expect(document.at_css('[data-receipt-form-target="itemTaxInclusionControl"] input[checked]')['value']).to eq('net')
       expect(summary.text.strip).to eq('120.5円 / 0.5L（税抜）')
       expect(document.at_css('[data-receipt-form-target="priceInput"]')['disabled']).to eq('disabled')
     end
@@ -319,6 +349,7 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
       quantity_unit_code: 'each',
       original_line_total: 200,
       line_total: 180,
+      gross_line_total: 180,
       discount_amount: 20
     )
 
@@ -353,6 +384,7 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
       quantity_unit_code: 'each',
       original_line_total: nil,
       line_total: 180,
+      gross_line_total: 180,
       discount_amount: 20
     )
 
@@ -455,7 +487,8 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
     item.update_columns(
       pricing_source_kind: 'explicit_line_total',
       price: nil,
-      original_line_total: nil
+      original_line_total: nil,
+      gross_line_total: 180
     )
 
     document = render_item(

@@ -659,7 +659,7 @@ ja:
           notifications: 通知
         items:
           name: 品名
-          amount: 金額
+          amount: 保存明細金額
           review: 要確認
           empty: 明細はありません。
         adjustments:

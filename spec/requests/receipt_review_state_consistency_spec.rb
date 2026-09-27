@@ -33,6 +33,7 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
 
   def patch_receipt(receipt, attributes)
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: { lock_version: receipt.lock_version }.merge(attributes)
     }
   end
@@ -62,6 +63,7 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
 
   it '手動作成時のblank購入日時・支払方法は通常のitem編集後もcompletedのまま維持する' do
     post receipts_path, params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: Receipt.new(user: user)).token,
       receipt: {
         store_name: '手動作成店舗',
         total_amount: 100,

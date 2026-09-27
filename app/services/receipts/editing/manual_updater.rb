@@ -16,7 +16,7 @@ class Receipts::Editing::ManualUpdater
 
   def initialize(receipt:, attributes:, source_attributes:, items_missing:)
     @receipt = receipt
-    @attributes = attributes
+    @attributes = attributes.deep_dup
     @source_attributes = source_attributes
     @items_missing = items_missing == true
   end
@@ -37,6 +37,7 @@ class Receipts::Editing::ManualUpdater
   attr_reader :receipt, :attributes, :source_attributes, :items_missing
 
   def persist_update
+    preserve_unchanged_item_amounts!
     previous_manual_core_fields_required = receipt.manual_core_fields_required
     receipt.manual_core_fields_required = true if manual_core_field_erased?
 
@@ -52,6 +53,16 @@ class Receipts::Editing::ManualUpdater
     false
   ensure
     receipt.manual_core_fields_required = previous_manual_core_fields_required
+  end
+
+  def preserve_unchanged_item_amounts!
+    return if Receipts::Editing::ChangeSet.call(receipt: receipt, permitted: source_attributes).purchase_amounts_changed?
+
+    attributes["receipt_items_attributes"]&.each_value do |item|
+      next if item["id"].blank?
+
+      item.except!("original_line_total", "line_total")
+    end
   end
 
   def manual_core_field_erased?

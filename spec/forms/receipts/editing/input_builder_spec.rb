@@ -3,6 +3,36 @@ require 'rails_helper'
 RSpec.describe Receipts::Editing::InputBuilder do
   let(:receipt) { create(:receipt) }
 
+  it '保存済みの入力税区分と由来と税込参考額を保持し、同値の由来再送をsource変更にしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '明細', pricing_source_kind: 'count_unit_price', price: 19,
+      quantity: 1, quantity_unit_code: 'each', original_line_total: 19, line_total: 19,
+      input_tax_inclusion: 'net', tax_inclusion_origin: 'manual', gross_line_total: 20
+    )
+
+    unchanged = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => {
+          '0' => { 'id' => item.id.to_s, 'input_tax_inclusion' => 'net', 'tax_inclusion_origin' => 'manual' }
+        }
+      }
+    ).receipt_items.sole
+    changed = described_class.call(
+      receipt: receipt,
+      permitted: {
+        'receipt_items_attributes' => { '0' => { 'id' => item.id.to_s, 'input_tax_inclusion' => 'gross' } }
+      }
+    ).receipt_items.sole
+    retained = described_class.call(receipt: receipt, permitted: {}).receipt_items.sole
+
+    aggregate_failures do
+      expect(unchanged).to include('amount_countable_source_changed' => false, 'gross_line_total' => 20)
+      expect(changed['amount_countable_source_changed']).to be(true)
+      expect(retained).to include('input_tax_inclusion' => 'net', 'tax_inclusion_origin' => 'manual', 'gross_line_total' => 20)
+    end
+  end
+
   it '送信されたitem更新を既存値へ重ね、未送信itemも保存後集合へ残す' do
     untouched = receipt.receipt_items.create!(
       confirmed_name: '未送信商品', price: 50, quantity: 1, quantity_unit_code: 'each', line_total: 50
@@ -307,5 +337,18 @@ RSpec.describe Receipts::Editing::InputBuilder do
       { 'kind' => 'bag_fee', 'amount' => '3' },
       { 'kind' => 'bag_fee', 'amount' => '3' }
     ])
+  end
+
+  it '保存先に属さない既存IDを新規行として扱わない' do
+    foreign_item = create(:receipt).receipt_items.create!(confirmed_name: '別商品', price: 100, quantity: 1, line_total: 100)
+
+    expect do
+      described_class.call(
+        receipt: receipt,
+        permitted: {
+          'receipt_items_attributes' => { '0' => { 'id' => foreign_item.id.to_s, 'confirmed_name' => '変更' } }
+        }
+      )
+    end.to raise_error(ActiveRecord::RecordNotFound)
   end
 end

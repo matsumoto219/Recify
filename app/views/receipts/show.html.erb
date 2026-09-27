@@ -179,14 +179,23 @@
                         <span class="mx-2">/</span>
                         <span><%= t("receipts.show.item_unit_price") %>: <%= receipt_detail_amount_display(item.price) %></span>
                       <% end %>
+                      <% if (input_tax_inclusion = receipt_item_input_tax_inclusion(item)).present? %>
+                        <span class="mx-2">/</span>
+                        <span><%= input_tax_inclusion %></span>
+                      <% end %>
                       <% if (discount_label = receipt_item_discount_label(item)).present? %>
                         <span class="mx-2">/</span>
                         <span><%= discount_label %></span>
                       <% end %>
                     </p>
                   </div>
-                  <% line_total_display = receipt_detail_amount_display(item.line_total) %>
-                  <p class="font-bold token-text-base shrink-0 truncate" title="<%= line_total_display %>"><%= line_total_display %></p>
+                  <% gross_amount = item.gross_amount_for_display(receipt: @receipt) %>
+                  <div class="shrink-0 text-right" data-receipt-item-gross-amount>
+                    <% unless gross_amount.nil? %>
+                      <p class="text-xs token-text-muted"><%= t("receipts.show.item_tax_included") %></p>
+                    <% end %>
+                    <p class="font-bold token-text-base"><%= receipt_detail_amount_display(gross_amount.nil? ? item.line_total : gross_amount) %></p>
+                  </div>
                 </div>
               <% end %>
             </div>

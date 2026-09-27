@@ -111,7 +111,14 @@
 
   <div class="receipt-amount-summary-toolbar">
     <div class="receipt-amount-summary-heading min-w-0">
-      <p <%= tag.attributes(title_attributes) %>><%= title %></p>
+      <div class="flex items-center gap-1">
+        <p <%= tag.attributes(title_attributes) %>><%= title %></p>
+        <%= render "shared/ui/feedback/tip",
+              label: t("receipts.form.amount_summary.tip_label"),
+              message: t("receipts.show.official_total_note"),
+              auto_dismiss: true,
+              class: "mb-2 shrink-0" %>
+      </div>
       <h2 class="receipt-amount-summary-value text-4xl font-black truncate"
           title="<%= amount_display %>"
           data-receipt-form-target="totalAmount">

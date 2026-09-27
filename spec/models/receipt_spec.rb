@@ -607,6 +607,7 @@ RSpec.describe Receipt, type: :model do
         quantity: 1,
         price: line_total,
         line_total: line_total,
+        gross_line_total: line_total,
         position_index: receipt.receipt_items.count + 1
       )
     end

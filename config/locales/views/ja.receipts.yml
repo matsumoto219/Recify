@@ -61,6 +61,10 @@ ja:
       item_category: カテゴリ
       item_quantity: 数量
       item_unit_price: 単価
+      item_tax_included: 税込
+      item_gross_reference_amount: 税込参考額
+      item_gross_amount_unknown: 税込額未確定
+      official_total_note: 合計は保存された丸め単位で正式に集計した金額です。明細の税込参考額の合算とは、丸め方により差が出る場合があります。
       item_empty: 明細はありません
       adjustments_title: 値引き・手数料
       adjustment_needs_review: 要確認
@@ -94,6 +98,20 @@ ja:
       amount_summary:
         open_details: 金額の内訳を表示
         close_details: 金額の内訳を閉じる
+        tip_label: 合計金額の補足
+      calculation_settings:
+        title: レシート計算方式
+        description: 税額と割引額の丸め方を、このレシートに適用します。
+        tax_rounding_mode: 税額の丸め方
+        discount_rounding_mode: 割引額の丸め方
+        tax_rounding_scope: 税額を丸める単位
+        scopes:
+          per_tax_rate_group: 税率ごと
+          per_item: 明細ごと
+          per_receipt: レシート全体
+        scope_fallback: 丸め単位の記録がないため、再計算には税率ごとの初期値を使用します。金額を変更して保存すると確定します。
+        value_fallback: 計算条件の記録がないため、フォームを開いた時点の初期値を表示しています。金額を変更して保存すると確定します。
+        unavailable: 保存済みの計算条件を読み取れません。金額を変更する場合は、計算条件を確認してください。
       review:
         blocking_description: 保存前に以下の内容を確認してください。
         warning_description: 内容を確認してください。
@@ -105,6 +123,10 @@ ja:
         memo: メモ
       adjustments:
         description: レシート全体の値引き、送料、サービス料などを入力します。
+        tax_inclusion: 購入調整の金額区分
+        tax_inclusion_blank: 税込／税抜を確認してください
+        tax_inclusion_note: 値引き・送料・手数料の税区分です。明細の切り替えには連動しません。
+        tax_inclusion_confirmation: 保存済みの購入調整の税区分を復元できません。金額を変更する場合は、ここで税込／税抜を確認してください。
         absence_confirmation:
           title: 値引き・手数料の有無を確認してください
           description: 解析結果から、レシート全体の値引き・送料・サービス料などの有無を確定できませんでした。
@@ -148,6 +170,7 @@ ja:
         stale_edit: 別の画面または処理でレシートが更新されました。最新の内容を確認して、もう一度編集してください。
         invalid_numeric_input: 金額・数量・税率・割引率には有効な数値を入力してください。
         invalid_item_pricing_source: 金額の基準、数量、単位の組み合わせを確認してください。
+        invalid_calculation_settings: 計算条件または明細の税込／税抜を確認してください。
         amount_limit_exceeded: "%{resource}.%{field} は%{limit}以下で入力してください（入力値: %{actual_value}）"
     item_fields:
       name: 品名
@@ -181,6 +204,8 @@ ja:
       reference_price_amount: 基準価格
       reference_quantity: 基準数量
       reference_quantity_unit: 基準単位
+      input_tax_inclusion: 入力金額の区分
+      input_tax_inclusion_note: 切り替えても入力済みの金額は換算しません。
       reference_price_tax_inclusions:
         gross: 税込基準
         net: 税抜基準
@@ -195,6 +220,7 @@ ja:
       explicit_line_total_help: 印字または入力された明細金額を計算の基準にします。
       explicit_line_total_discount_help: 入力値に明細割引を1回適用し、割引後の小計を表示します。
       reference_calculated_amount: 計算金額
+      gross_reference_amount: 税込参考額
       pricing_source_summary_aria: 金額の根拠
       clear_discount_before_explicit_confirm: 現在の明細割引を解除して、明細金額の直接入力に切り替えますか？
       clear_discount_before_explicit_title: 金額の計算方式を切り替え

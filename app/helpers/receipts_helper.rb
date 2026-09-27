@@ -116,6 +116,17 @@ module ReceiptsHelper
     "#{currency_prefix}#{number_with_delimiter(amount)}"
   end
 
+  def receipt_item_input_tax_inclusion(item)
+    value = if item.pricing_source_kind == "reference_quantity_price"
+      item.reference_price_tax_inclusion
+    elsif %w[count_unit_price explicit_line_total].include?(item.pricing_source_kind)
+      item.input_tax_inclusion
+    end
+    return unless ReceiptCalculationSettings::TAX_INCLUSIONS.include?(value)
+
+    t("receipts.item_fields.reference_price_tax_inclusions_short.#{value}")
+  end
+
   def receipt_signed_amount_display(amount, currency_prefix: "¥")
     return t("receipts.common.not_available") if amount.nil?
 
@@ -125,7 +136,7 @@ module ReceiptsHelper
   end
 
   def receipt_payment_adjustment_summary(receipt)
-    ReceiptAmountService.payment_adjustment_summary(receipt: receipt)
+    ReceiptAmountService.payment_adjustment_summary(receipt: receipt, receipt_adjustments: receipt.receipt_adjustments)
   end
 
   def receipt_rate_display(rate)

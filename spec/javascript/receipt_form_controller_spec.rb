@@ -274,12 +274,16 @@ RSpec.describe "Receipt form Stimulus controller" do
     changed_reference_price: nil,
     changed_price_before_discount: nil,
     changed_quantity_unit: nil,
+    changed_tax_inclusion: nil,
     reference_projection_fallback_tax_rate: '',
+    tax_rounding_scope: 'per_tax_rate_group',
+    purchase_adjustment_tax_inclusion: nil,
     item_line_total_max: 999_999_999,
     receipt_total_max: 999_999_999,
     receipt_tax_max: 999_999_999,
     capture_preview_unavailable: false,
     capture_line_displays: false,
+    capture_source_displays: false,
     validate_numeric_inputs: false,
     sync_initial_pricing_previews: false
   )
@@ -306,6 +310,7 @@ RSpec.describe "Receipt form Stimulus controller" do
             value: String(definition.referencePriceTaxInclusion ?? ''),
             dataset: { receiptFormTaxInclusionLabel: String(definition.referencePriceTaxInclusion ?? '') }
           },
+          inputTaxInclusionInput: { value: String(definition.inputTaxInclusion ?? '') },
           explicitLineTotalInput: { value: String(definition.explicitLineTotal ?? '') },
           discountRateInput: {
             value: String(definition.discountRate ?? ''),
@@ -328,6 +333,14 @@ RSpec.describe "Receipt form Stimulus controller" do
               ? (definition.lineTotal === null || definition.lineTotal === undefined ? '' : String(definition.lineTotal))
               : String(definition.originalLineTotal)
           }
+        }
+        if (#{capture_source_displays.to_json}) {
+          inputs.sourceLineTotalDisplay = {
+            ...amountTarget(),
+            dataset: { receiptFormGrossLabel: '税込', receiptFormNetLabel: '税抜', receiptFormSubtotalLabel: '小計' },
+            setAttribute (name, value) { this[name] = value }
+          }
+          inputs.sourceLineTotalLabel = { textContent: '小計' }
         }
         if (Object.prototype.hasOwnProperty.call(definition, 'absoluteDiscountAmount')) {
           inputs.lineTotalInput.dataset.originalDiscountAmount = String(definition.absoluteDiscountAmount)
@@ -374,6 +387,10 @@ RSpec.describe "Receipt form Stimulus controller" do
 
       Object.defineProperties(controller, {
         itemRowTargets: { value: rows },
+        sourceLineTotalDisplayTargets: { value: rows.flatMap((row) => row.inputs.sourceLineTotalDisplay ? [row.inputs.sourceLineTotalDisplay] : []) },
+        lineTotalDisplayTargets: { value: rows.flatMap((row) => row.lineTotalDisplays) },
+        paymentMismatchWarningTargets: { value: [] },
+        syncPaymentAmountButtonTargets: { value: [] },
         adjustmentRowTargets: { value: activeAdjustmentRows },
         paymentRowTargets: { value: [] },
         adjustmentTaxDetailRatesValue: { value: #{adjustment_tax_detail_rates.to_json} },
@@ -385,6 +402,8 @@ RSpec.describe "Receipt form Stimulus controller" do
         multipleTaxRatesLabelValue: { value: 'Multiple tax rates' },
         roundingModeValue: { value: 'floor' },
         discountRoundingModeValue: { value: 'round' },
+        taxRoundingScopeValue: { value: #{tax_rounding_scope.to_json} },
+        purchaseAdjustmentTaxInclusionValue: { value: #{purchase_adjustment_tax_inclusion.to_json} },
         countableQuantityUnitsValue: { value: 'each,piece,item,bottle,bag,box' },
         decimalQuantityUnitsValue: { value: 'gram,kilogram,milligram,liter,milliliter,cubic_centimeter' },
         receiptItemPriceMaxValue: { value: 999999999 },
@@ -410,8 +429,12 @@ RSpec.describe "Receipt form Stimulus controller" do
       controller.shouldRenderAmountImmediately = () => true
       let previewUnavailable = false
       if (#{capture_preview_unavailable.to_json}) {
-        controller.renderUnavailablePreview = () => { previewUnavailable = true }
+        controller.renderUnavailablePreview = () => {
+          previewUnavailable = true
+          if (#{capture_source_displays.to_json}) ReceiptFormController.prototype.renderUnavailablePreview.call(controller)
+        }
       }
+      controller.syncPaymentSummaryLayout = () => {}
       controller.syncAdjustmentSignForRow = () => {}
       controller.adjustmentEffectForRow = (row) => row.definition.effect
       controller.adjustmentSignForRow = (row) => row.definition.sign
@@ -442,6 +465,12 @@ RSpec.describe "Receipt form Stimulus controller" do
             title: target.title,
             amount: target.dataset.amountValue ?? null
           })))
+        }
+        if (#{capture_source_displays.to_json}) {
+          amounts.sourceDisplays = rows.map((row) => ({
+            label: row.inputs.sourceLineTotalLabel.textContent,
+            text: row.inputs.sourceLineTotalDisplay.textContent
+          }))
         }
         if (adjustmentDefinitions.length > 0) {
           amounts.paymentAdjustmentTotal = paymentAdjustmentSnapshot.adjustmentTotal
@@ -536,6 +565,15 @@ RSpec.describe "Receipt form Stimulus controller" do
         rows[0].inputs.taxRateInput.value = String(changedFirstTaxRate)
         controller.recalculate()
         result.changedFirstTaxRate = snapshot()
+      }
+      const changedTaxInclusion = #{changed_tax_inclusion.to_json}
+      if (changedTaxInclusion !== null) {
+        const input = rows[0].inputs.pricingSourceModeInput.value === 'reference_quantity_price'
+          ? rows[0].inputs.referencePriceTaxInclusionInput
+          : rows[0].inputs.inputTaxInclusionInput
+        input.value = changedTaxInclusion
+        controller.recalculate()
+        result.changedTaxInclusion = snapshot()
       }
 
       process.stdout.write(JSON.stringify(result))
@@ -1282,7 +1320,7 @@ RSpec.describe "Receipt form Stimulus controller" do
       const modeInput = { value: 'reference_quantity_price' }
       const row = {
         dataset: {},
-        querySelector: () => modeInput,
+        querySelector: (selector) => selector.includes('pricingSourceModeInput') ? modeInput : null,
         querySelectorAll (selector) { return selector.includes('pricingModePanel') ? [panel] : [] }
       }
       const controller = Object.create(ReceiptFormController.prototype)
@@ -3672,5 +3710,158 @@ RSpec.describe "Receipt form Stimulus controller" do
       { "method" => "removeAdjustment", "display" => "none", "removed" => true },
       { "method" => "removePayment", "display" => "none", "removed" => true }
     )
+  end
+
+  it "uses each mode's explicit input basis without converting the source" do
+    count = { pricingSourceKind: "count_unit_price", inputTaxInclusion: "net", price: 100, quantity: 2, taxRate: 10 }
+    explicit = { pricingSourceKind: "explicit_line_total", inputTaxInclusion: "net", explicitLineTotal: 500, quantity: 4, price: nil, taxRate: 10 }
+
+    expect(run_amount_round_trip(basis: "internal", items: [ count ])["initial"]).to include("total" => 220, "tax" => 20)
+    expect(run_amount_round_trip(basis: "internal", items: [ explicit ])["initial"]).to include("total" => 550, "tax" => 50)
+    expect(run_amount_round_trip(basis: "external", items: [ count.merge(inputTaxInclusion: "gross") ])["initial"]).to include("total" => 200, "tax" => 18)
+  end
+
+  it "shows discounted source totals only in expanded details while retaining gross summaries" do
+    items = [
+      { pricingSourceKind: "count_unit_price", inputTaxInclusion: "net", price: 100, quantity: 2 },
+      { pricingSourceKind: "explicit_line_total", inputTaxInclusion: "net", explicitLineTotal: 200, quantity: 4, price: nil },
+      { pricingSourceKind: "reference_quantity_price", referencePriceTaxInclusion: "net", referencePriceAmount: 100,
+        referenceQuantity: 100, referenceQuantityUnit: "gram", quantity: 200, quantityUnit: "gram", price: nil }
+    ]
+
+    items.each do |item|
+      result = run_amount_round_trip(
+        basis: "internal", items: [ item.merge(taxRate: 10, discountRate: 10) ],
+        capture_line_displays: true, capture_source_displays: true
+      )["initial"]
+
+      expect(result).to include("firstLineTotal" => 180, "total" => 198)
+      expect(result["sourceDisplays"]).to eq([ { "label" => "税抜", "text" => "¥180" } ])
+      expect(result["lineDisplays"][0].map { |display| display["text"] }).to eq([ "¥198", "Subtotal ¥198" ])
+    end
+  end
+
+  it "changes only the detail tax label when the input basis switches without converting source values" do
+    result = run_amount_round_trip(
+      basis: "internal", items: [ { pricingSourceKind: "count_unit_price", inputTaxInclusion: "gross", price: 100, quantity: 2, taxRate: 10 } ],
+      capture_source_displays: true, changed_quantity: 2, changed_tax_inclusion: "net"
+    )
+
+    expect(result["initial"]).to include("total" => 200, "firstLineTotal" => 200,
+      "sourceDisplays" => [ { "label" => "税込", "text" => "¥200" } ])
+    expect(result["changedTaxInclusion"]).to include("total" => 220, "firstLineTotal" => 200,
+      "sourceDisplays" => [ { "label" => "税抜", "text" => "¥200" } ])
+  end
+
+  it "uses a neutral detail label for zero tax and missing tax without confusing valid zero amounts" do
+    item = { pricingSourceKind: "count_unit_price", inputTaxInclusion: "gross", price: 0, quantity: 1, taxRate: 10 }
+    positive_tax = run_amount_round_trip(basis: "internal", items: [ item ], capture_source_displays: true)
+    zero_tax = run_amount_round_trip(basis: "internal", items: [ item.merge(price: 200, taxRate: 0) ], capture_source_displays: true)
+    missing_tax = run_amount_round_trip(basis: "internal", items: [ item.merge(price: 200, taxRate: nil) ], capture_source_displays: true)
+
+    expect(positive_tax["initial"]["sourceDisplays"]).to eq([ { "label" => "税込", "text" => "¥0" } ])
+    expect(zero_tax["initial"]["sourceDisplays"]).to eq([ { "label" => "小計", "text" => "¥200" } ])
+    expect(missing_tax["initial"]["sourceDisplays"]).to eq([ { "label" => "小計", "text" => "¥200" } ])
+  end
+
+  it "clears the detail label and value when a previously valid preview becomes incomplete" do
+    result = run_amount_round_trip(
+      basis: "internal", items: [ { pricingSourceKind: "count_unit_price", inputTaxInclusion: "net", price: 100, quantity: 1, taxRate: 10 } ],
+      capture_source_displays: true, capture_preview_unavailable: true, changed_first_tax_rate: ""
+    )
+
+    expect(result["initial"]["sourceDisplays"]).to eq([ { "label" => "税抜", "text" => "¥100" } ])
+    expect(result["changedFirstTaxRate"]).to include("previewUnavailable" => true,
+      "sourceDisplays" => [ { "label" => "小計", "text" => "Unset" } ])
+  end
+
+  it "uses stored rounding scope and an independent purchase adjustment basis" do
+    item = { pricingSourceKind: "count_unit_price", inputTaxInclusion: "net", price: 19, quantity: 1, taxRate: 10 }
+    per_item = run_amount_round_trip(basis: "internal", items: [ item, item ], tax_rounding_scope: "per_item")
+    per_group = run_amount_round_trip(basis: "internal", items: [ item, item ])
+    adjustment = { amount: 11, taxRate: 10, effect: "purchase_adjustment", sign: "surcharge" }
+    independent = run_amount_round_trip(
+      basis: "external",
+      items: [ item.merge(price: 100) ],
+      adjustments: [ adjustment ],
+      purchase_adjustment_tax_inclusion: "gross"
+    )
+
+    expect(per_item["initial"]).to include("total" => 40, "tax" => 2)
+    expect(per_group["initial"]).to include("total" => 41, "tax" => 3)
+    expect(independent["initial"]).to include("total" => 121, "tax" => 11)
+  end
+
+  it "keeps missing net tax distinct from explicit zero tax" do
+    item = { pricingSourceKind: "count_unit_price", inputTaxInclusion: "net", price: 100, quantity: 1, taxRate: nil }
+    missing = run_amount_round_trip(basis: "internal", items: [ item ], capture_preview_unavailable: true)
+    zero = run_amount_round_trip(basis: "internal", items: [ item.merge(taxRate: 0) ], capture_preview_unavailable: true)
+
+    expect(missing["initial"]["previewUnavailable"]).to be true
+    expect(zero["initial"]).to include("total" => 100, "tax" => 0, "previewUnavailable" => false)
+  end
+
+  it "retains independent tax-basis drafts when switching pricing modes" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const inputs = ['gross', 'net'].map((value) => ({
+        value, checked: value === 'net', name: 'receipt[receipt_items_attributes][0][input_tax_inclusion]'
+      }))
+      const control = {
+        querySelector: () => inputs.find((input) => input.checked),
+        querySelectorAll: () => inputs,
+        style: { setProperty () {} }
+      }
+      const row = {
+        dataset: { receiptFormActivePricingMode: 'count_unit_price' },
+        querySelector: () => control
+      }
+      const controller = Object.create(ReceiptFormController.prototype)
+      controller.syncItemTaxInclusionForMode(row, 'reference_quantity_price')
+      const reference = { value: inputs.find((input) => input.checked).value, names: inputs.map((input) => input.name) }
+      row.dataset.receiptFormActivePricingMode = 'reference_quantity_price'
+      inputs.forEach((input) => { input.checked = input.value === 'gross' })
+      controller.syncItemTaxInclusionForMode(row, 'count_unit_price')
+      const count = inputs.find((input) => input.checked).value
+      row.dataset.receiptFormActivePricingMode = 'count_unit_price'
+      controller.syncItemTaxInclusionForMode(row, 'reference_quantity_price')
+      process.stdout.write(JSON.stringify({ reference, count, restored: inputs.find((input) => input.checked).value }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "reference" => { "value" => "net", "names" => [ "receipt[receipt_items_attributes][0][reference_price_tax_inclusion]" ] * 2 },
+      "count" => "net",
+      "restored" => "gross"
+    )
+  end
+
+  it "does not recalculate a persisted receipt when the form first opens" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperty(controller, 'preserveRecordedAmountsValue', { value: true })
+      controller.purchaseInputsChangedForPreview = () => false
+      let calls = 0
+      controller.recalculate = () => { calls += 1 }
+      controller.syncInitialPricingPreviews()
+      process.stdout.write(JSON.stringify({ calls }))
+    JAVASCRIPT
+
+    expect(result).to eq("calls" => 0)
+  end
+
+  it "recalculates explicit discounts when the receipt discount rounding changes" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      controller.discountRoundingModeValue = 'floor'
+      const args = {
+        originalLineTotal: 19, discountRatePercent: 10, pricingSourceMode: 'explicit_line_total',
+        discountRateInput: { value: '10', dataset: { originalDiscountRate: '10' } },
+        lineTotalInput: { value: '17', dataset: { originalLineTotal: '19', originalSavedLineTotal: '17' } }
+      }
+      const floor = controller.lineTotalFor(args)
+      controller.discountRoundingModeValue = 'ceil'
+      process.stdout.write(JSON.stringify({ floor, ceil: controller.lineTotalFor(args) }))
+    JAVASCRIPT
+
+    expect(result).to eq("floor" => 18, "ceil" => 17)
   end
 end

@@ -74,6 +74,8 @@ export default class extends Controller {
     'referenceQuantityInput',
     'referenceQuantityUnitInput',
     'referencePriceTaxInclusionInput',
+    'itemTaxInclusionControl',
+    'purchaseAdjustmentTaxInclusionControl',
     'explicitLineTotalInput',
     'explicitLineTotalHelp',
     'clearItemDiscountBeforeExplicitInput',
@@ -81,6 +83,8 @@ export default class extends Controller {
     'discountRateInput',
     'taxRateInput',
     'lineTotalDisplay',
+    'sourceLineTotalDisplay',
+    'sourceLineTotalLabel',
     'lineTotalTooltip',
     'lineTotalInput',
     'originalLineTotalInput',
@@ -109,6 +113,9 @@ export default class extends Controller {
     nextPaymentIndex: Number,
     roundingMode: { type: String, default: 'floor' },
     discountRoundingMode: { type: String, default: 'round' },
+    taxRoundingScope: { type: String, default: 'per_tax_rate_group' },
+    purchaseAdjustmentTaxInclusion: String,
+    preserveRecordedAmounts: Boolean,
     deleteConfirmationEnabled: { type: Boolean, default: true },
     deleteConfirmationMessage: { type: String, default: 'Delete this item?' },
     deleteAdjustmentConfirmationMessage: { type: String, default: 'Delete this adjustment?' },
@@ -169,6 +176,7 @@ export default class extends Controller {
     this.syncQuantityInputSteps()
     this.syncAdjustmentSigns()
     this.syncAdjustmentAbsenceConfirmation()
+    this.syncPurchaseAdjustmentTaxInclusion()
     this.captureInitialReceiptAmounts()
     this.captureInitialPurchaseInputFingerprint()
     this.syncInitialPricingPreviews()
@@ -402,6 +410,41 @@ export default class extends Controller {
     this.recalculate()
   }
 
+  calculationSettingChanged (event) {
+    const key = event.currentTarget.dataset.receiptFormCalculationSetting
+    const value = event.target.value
+    if (key === 'tax_rounding_mode') this.roundingModeValue = value
+    if (key === 'discount_rounding_mode') this.discountRoundingModeValue = value
+    if (key === 'purchase_adjustment_tax_inclusion') this.purchaseAdjustmentTaxInclusionValue = value
+    this.recalculate()
+  }
+
+  itemTaxInclusionChanged (event) {
+    const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]')
+    if (!row) return
+
+    const mode = this.pricingSourceModeForRow(row)
+    row.dataset[`receiptFormTaxInclusion_${mode}`] = event.target.value
+    this.recalculate()
+  }
+
+  syncItemTaxInclusionForMode (row, mode) {
+    const control = row.querySelector('[data-receipt-form-target="itemTaxInclusionControl"]')
+    if (!control) return
+
+    const previousMode = this.activePricingSourceModeForRow(row)
+    const checked = control.querySelector('input:checked')
+    if (checked) row.dataset[`receiptFormTaxInclusion_${previousMode}`] = checked.value
+    const selected = row.dataset[`receiptFormTaxInclusion_${mode}`] ?? checked?.value
+    const field = mode === 'reference_quantity_price' ? 'reference_price_tax_inclusion' : 'input_tax_inclusion'
+    const inputs = Array.from(control.querySelectorAll('input[type="radio"]'))
+    inputs.forEach((input, index) => {
+      input.name = input.name.replace(/\[(?:reference_price_tax_inclusion|input_tax_inclusion)\]$/, `[${field}]`)
+      input.checked = input.value === selected
+      if (input.checked) control.style.setProperty('--segmented-active-index', index)
+    })
+  }
+
   discountRateChanged (event) {
     const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]')
     if (row) this.syncPricingSourceSummaryForRow(row)
@@ -429,6 +472,7 @@ export default class extends Controller {
 
   syncPricingSourceModeForRow (row, mode) {
     const normalizedMode = this.pricingSourceModeFromValue(mode)
+    this.syncItemTaxInclusionForMode(row, normalizedMode)
     row.dataset.receiptFormActivePricingMode = normalizedMode
 
     row.querySelectorAll('[data-receipt-form-target~="pricingModePanel"]').forEach((panel) => {
@@ -498,9 +542,7 @@ export default class extends Controller {
         amount: inputValue('referencePriceAmountInput'),
         quantity: inputValue('referenceQuantityInput'),
         unit: optionLabel('referenceQuantityUnitInput'),
-        tax_inclusion: row.querySelector(
-          '[data-receipt-form-target="referencePriceTaxInclusionInput"]'
-        )?.dataset.receiptFormTaxInclusionLabel || ''
+        tax_inclusion: this.itemTaxInclusionLabel(row)
       }
     }
 
@@ -1039,6 +1081,20 @@ export default class extends Controller {
     panel.setAttribute('aria-hidden', String(!visible))
   }
 
+  syncPurchaseAdjustmentTaxInclusion () {
+    if (!this.hasPurchaseAdjustmentTaxInclusionControlTarget) return
+
+    const visible = this.adjustmentRowTargets.some((row) => (
+      !this.previewRowExcluded(row, 'adjustmentDestroyField') && this.adjustmentEffectForRow(row) !== 'payment_adjustment'
+    ))
+    const panel = this.purchaseAdjustmentTaxInclusionControlTarget
+    panel.hidden = !visible
+    panel.toggleAttribute('inert', !visible)
+    panel.querySelectorAll('select').forEach((input) => {
+      input.disabled = !visible
+    })
+  }
+
   scheduleLineTotalTooltip (event) {
     // lg未満は表示しない
     if (window.innerWidth < 1024) return
@@ -1110,6 +1166,7 @@ export default class extends Controller {
   }
 
   recalculate ({ pricingSourceChangedRow } = {}) {
+    this.syncPurchaseAdjustmentTaxInclusion()
     this.itemRowTargets.forEach((row) => {
       this.syncPricingSourceSummaryForRow(row, this.pricingSourceModeForRow(row))
     })
@@ -1124,7 +1181,6 @@ export default class extends Controller {
     let paymentAdjustmentTotal = 0
     const taxRates = new Set()
     const sourceAwareTaxGroups = new Map()
-    const externalTax = this.usesExternalTax()
     const amountBearingItemTaxRates = new Set()
     let amountBearingItemCount = 0
     let hasItemAmountSource = false
@@ -1192,13 +1248,14 @@ export default class extends Controller {
       const itemTaxBasis = this.itemPreviewTaxBasis({ row, pricingSourceMode })
       let itemTaxRateAvailable = itemTaxRateInputPresent
       if (pricingSourceMode === 'reference_quantity_price' && itemTaxBasis === 'net' &&
+        !row.querySelector('[data-receipt-form-target="itemTaxInclusionControl"]') &&
         !itemTaxRateInputPresent && !purchaseInputsChanged) {
         const fallbackTaxRate = String(this.referenceProjectionFallbackTaxRateValue ?? '').trim()
         itemTaxRateAvailable = fallbackTaxRate !== ''
         taxRatePercent = this.clampNumber(this.parseTaxRateInput(fallbackTaxRate), 0, 100)
       }
       if (itemTaxBasis === 'unavailable' || (
-        pricingSourceMode === 'reference_quantity_price' && itemTaxBasis === 'net' && !itemTaxRateAvailable
+        itemTaxBasis === 'net' && !itemTaxRateAvailable
       )) {
         itemPreviewUnavailable = true
         return
@@ -1236,6 +1293,11 @@ export default class extends Controller {
 
         const withLabel = Boolean(lineTotalDisplay.closest('[data-receipt-form-target="lineTotalTooltip"]'))
         this.animateLineTotal(lineTotalDisplay, projectedLineTotal, { withLabel })
+      })
+      this.syncSourceLineTotalDisplay(row, {
+        amount: itemAmountSourcePresent ? lineTotal : null,
+        taxBasis: itemTaxBasis,
+        taxRatePercent: itemTaxRateAvailable ? taxRatePercent : null
       })
 
       this.syncLineTotalState({
@@ -1290,9 +1352,14 @@ export default class extends Controller {
       this.addSourceAwareTaxAmount(sourceAwareTaxGroups, {
         amount: signedAmount,
         taxRatePercent,
-        taxBasis: externalTax ? 'net' : 'gross'
+        taxBasis: this.purchaseAdjustmentTaxBasis()
       })
     })
+
+    if (Array.from(sourceAwareTaxGroups.values()).some((group) => group.taxBasis === 'unavailable')) {
+      this.renderUnavailablePreview()
+      return
+    }
 
     const sourceAwareProjection = this.projectSourceAwareTaxGroups(sourceAwareTaxGroups)
     subtotalSum = sourceAwareProjection.subtotal
@@ -1429,7 +1496,7 @@ export default class extends Controller {
   }
 
   preserveInitialReceiptAmountsForPreview ({ hasItemAmountSource }) {
-    if (hasItemAmountSource) return false
+    if (hasItemAmountSource && !this.preserveRecordedAmountsValue) return false
     if (!this.validReceiptAmounts(this.initialReceiptAmounts)) return false
 
     return !this.purchaseInputsChangedForPreview()
@@ -1467,6 +1534,7 @@ export default class extends Controller {
 
         const common = [
           mode,
+          this.itemPreviewTaxBasis({ row, pricingSourceMode: mode }),
           this.normalizedOptionalDecimalInput(inputValue('quantityInput')),
           String(quantityUnit ?? '').trim(),
           this.normalizedOptionalDecimalInput(inputValue('discountRateInput')),
@@ -1513,7 +1581,14 @@ export default class extends Controller {
       })
       .filter((adjustment) => adjustment !== null)
 
-    return JSON.stringify({ items, adjustments })
+    return JSON.stringify({
+      items,
+      adjustments,
+      roundingMode: this.roundingModeValue,
+      discountRoundingMode: this.discountRoundingModeValue,
+      taxRoundingScope: this.taxRoundingScopeValue,
+      purchaseAdjustmentTaxInclusion: this.purchaseAdjustmentTaxInclusionValue
+    })
   }
 
   normalizedOptionalIntegerInput (value) {
@@ -1823,6 +1898,26 @@ export default class extends Controller {
     target.amountAnimationFrame = requestAnimationFrame(tick)
   }
 
+  syncSourceLineTotalDisplay (row, { amount = null, taxBasis, taxRatePercent } = {}) {
+    const target = row?.querySelector('[data-receipt-form-target="sourceLineTotalDisplay"]')
+    if (!target) return
+
+    const label = row.querySelector('[data-receipt-form-target="sourceLineTotalLabel"]')
+    const taxable = Number.isFinite(amount) && Number.isFinite(taxRatePercent) && taxRatePercent > 0
+    const text = taxable && taxBasis === 'gross'
+      ? target.dataset.receiptFormGrossLabel
+      : taxable && taxBasis === 'net'
+        ? target.dataset.receiptFormNetLabel
+        : target.dataset.receiptFormSubtotalLabel
+    if (label) label.textContent = text
+    target.setAttribute('aria-label', text)
+    if (Number.isFinite(amount)) {
+      this.animateLineTotal(target, amount)
+    } else {
+      this.renderUnavailableAmount(target)
+    }
+  }
+
   normalizeRoundingMode (value) {
     return normalizeRoundingMode(value)
   }
@@ -1936,6 +2031,11 @@ export default class extends Controller {
   }
 
   itemPreviewTaxBasis ({ row, pricingSourceMode }) {
+    const control = row.querySelector('[data-receipt-form-target="itemTaxInclusionControl"]')
+    if (control) {
+      const basis = control.querySelector('input:checked')?.value
+      return ['gross', 'net'].includes(basis) ? basis : 'unavailable'
+    }
     if (pricingSourceMode === 'reference_quantity_price') {
       const taxInclusion = row.querySelector(
         '[data-receipt-form-target="referencePriceTaxInclusionInput"]'
@@ -1945,7 +2045,28 @@ export default class extends Controller {
 
       return 'unavailable'
     }
+    const basis = row.querySelector('[data-receipt-form-target="inputTaxInclusionInput"]')?.value
+    if (basis === 'net' || basis === 'gross') return basis
     if (pricingSourceMode === 'explicit_line_total') return 'gross'
+
+    return this.usesExternalTax() ? 'net' : 'gross'
+  }
+
+  itemTaxInclusionLabel (row) {
+    const control = row.querySelector('[data-receipt-form-target="itemTaxInclusionControl"]')
+    if (control) {
+      const input = control.querySelector('input:checked')
+      return input?.closest('label')?.textContent.trim() || ''
+    }
+
+    return row.querySelector('[data-receipt-form-target="referencePriceTaxInclusionInput"]')
+      ?.dataset.receiptFormTaxInclusionLabel || ''
+  }
+
+  purchaseAdjustmentTaxBasis () {
+    const basis = this.purchaseAdjustmentTaxInclusionValue
+    if (basis === 'net' || basis === 'gross') return basis
+    if (this.hasPurchaseAdjustmentTaxInclusionControlTarget) return 'unavailable'
 
     return this.usesExternalTax() ? 'net' : 'gross'
   }
@@ -1957,7 +2078,7 @@ export default class extends Controller {
   }
 
   addSourceAwareTaxAmount (groups, { amount, taxRatePercent, taxBasis }) {
-    const key = `${taxRatePercent}:${taxBasis}`
+    const key = this.taxRoundingScopeValue === 'per_item' ? groups.size : `${taxRatePercent}:${taxBasis}`
     const group = groups.get(key) || { amount: 0, taxRatePercent, taxBasis }
     group.amount += amount
     groups.set(key, group)
@@ -1998,10 +2119,10 @@ export default class extends Controller {
     pricingSourceMode,
     sourceModeChanged = false
   }) {
-    if (pricingSourceMode === 'reference_quantity_price') {
-      // A stored line total may already include tax. Reference previews use only
-      // the exact extension and discount source before projecting tax again.
-      const absoluteDiscountAmount = this.referenceAbsoluteDiscountAmountFor({
+    if (this.formulaPricingSourceMode(pricingSourceMode) || pricingSourceMode === 'explicit_line_total') {
+      // Stored totals may already include tax. Typed modes use only their
+      // source amount and discount before projecting tax again.
+      const absoluteDiscountAmount = this.absoluteDiscountAmountFor({
         pricingSourceMode, discountRateInput, lineTotalInput
       })
       if (absoluteDiscountAmount !== null) return Math.max(originalLineTotal - absoluteDiscountAmount, 0)
@@ -2020,8 +2141,8 @@ export default class extends Controller {
     return this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
   }
 
-  referenceAbsoluteDiscountAmountFor ({ pricingSourceMode, discountRateInput, lineTotalInput }) {
-    if (pricingSourceMode !== 'reference_quantity_price') return null
+  absoluteDiscountAmountFor ({ pricingSourceMode, discountRateInput, lineTotalInput }) {
+    if (!this.formulaPricingSourceMode(pricingSourceMode) && pricingSourceMode !== 'explicit_line_total') return null
     const originalAmount = lineTotalInput?.dataset.originalDiscountAmount
     if (originalAmount === undefined) return null
 
@@ -2152,6 +2273,9 @@ export default class extends Controller {
   }
 
   syncInitialPricingPreviews () {
+    const invalidSource = this.hasInvalidItemSourceSummaryTarget && !this.invalidItemSourceSummaryTarget.hidden
+    if (this.preserveRecordedAmountsValue && !this.purchaseInputsChangedForPreview() && !invalidSource) return
+
     const activeRows = this.itemRowTargets.filter((row) => !this.previewRowExcluded(row, 'destroyField'))
     const missingExplicitSourceRows = activeRows.filter((row) => this.explicitLineTotalSourceMissingForRow(row))
     if (missingExplicitSourceRows.length > 0) {
@@ -2251,7 +2375,7 @@ export default class extends Controller {
       const lineTotalInput = row.querySelector('[data-receipt-form-target="lineTotalInput"]')
       const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
       const pricingSourceMode = this.pricingSourceModeForRow(row)
-      const absoluteDiscountAmount = this.referenceAbsoluteDiscountAmountFor({
+      const absoluteDiscountAmount = this.absoluteDiscountAmountFor({
         pricingSourceMode, discountRateInput, lineTotalInput
       })
       const discountValid = absoluteDiscountAmount === null
@@ -2363,6 +2487,7 @@ export default class extends Controller {
 
   renderUnavailablePreview () {
     this.lastFinalPaymentTotal = null
+    this.itemRowTargets.forEach((row) => this.syncSourceLineTotalDisplay(row))
     const preservedLineTotalTargets = new Set(
       Array.from(this.itemRowTargets || [])
         .filter((row) => this.explicitLineTotalSourceMissingForRow(row))
@@ -2386,6 +2511,7 @@ export default class extends Controller {
   previewAmountTargets () {
     return [
       ...this.lineTotalDisplayTargets,
+      ...(this.sourceLineTotalDisplayTargets || []),
       ...(this.hasTotalAmountTarget ? [this.totalAmountTarget] : []),
       ...(this.hasSubtotalAmountTarget ? [this.subtotalAmountTarget] : []),
       ...(this.hasTaxAmountTarget ? [this.taxAmountTarget] : []),
@@ -2514,6 +2640,7 @@ export default class extends Controller {
   amountAnimationTargets () {
     return [
       ...this.lineTotalDisplayTargets,
+      ...(this.sourceLineTotalDisplayTargets || []),
       ...(this.hasTotalAmountTarget ? [this.totalAmountTarget] : []),
       ...(this.hasSubtotalAmountTarget ? [this.subtotalAmountTarget] : []),
       ...(this.hasTaxAmountTarget ? [this.taxAmountTarget] : []),

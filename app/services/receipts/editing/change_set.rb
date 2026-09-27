@@ -7,10 +7,11 @@ class Receipts::Editing::ChangeSet
     :payment_adjustments_changed,
     :payments_changed,
     :receipt_amounts_changed,
+    :calculation_settings_changed,
     :amount_inputs_submitted
   ) do
     def derived_purchase_inputs_changed?
-      item_amounts_changed || purchase_adjustments_changed
+      item_amounts_changed || purchase_adjustments_changed || calculation_settings_changed
     end
 
     def purchase_amounts_changed?
@@ -43,6 +44,7 @@ class Receipts::Editing::ChangeSet
     quantity_unit_raw
     reference_quantity_unit_raw
     reference_price_tax_inclusion
+    input_tax_inclusion
   ].freeze
   ITEM_NON_AMOUNT_FIELDS = %w[
     confirmed_name
@@ -90,11 +92,13 @@ class Receipts::Editing::ChangeSet
       PAYMENT_FIELDS
     )
     receipt_amounts_changed = record_changed?(@receipt, @permitted, RECEIPT_AMOUNT_FIELDS)
+    calculation_settings_changed = calculation_settings_changed?
     amount_related_changed = item_amounts_changed ||
       purchase_adjustments_changed ||
       payment_adjustments_changed ||
       payments_changed ||
-      receipt_amounts_changed
+      receipt_amounts_changed ||
+      calculation_settings_changed
 
     Result.new(
       item_amounts_changed: item_amounts_changed,
@@ -102,11 +106,24 @@ class Receipts::Editing::ChangeSet
       payment_adjustments_changed: payment_adjustments_changed,
       payments_changed: payments_changed,
       receipt_amounts_changed: receipt_amounts_changed,
+      calculation_settings_changed: calculation_settings_changed,
       amount_inputs_submitted: amount_related_changed || unchanged_nested_amount_confirmation_submitted?
     )
   end
 
   private
+
+  def calculation_settings_changed?
+    return false unless @permitted.key?("calculation_settings")
+
+    current = ReceiptCalculationSettings.parse(@receipt.calculation_settings)
+    submitted = ReceiptCalculationSettings.parse(@permitted["calculation_settings"])
+    return @receipt.calculation_settings != @permitted["calculation_settings"] unless current && submitted
+
+    ReceiptCalculationSettings::SETTING_VALUES.each_key.any? do |key|
+      current.value_for(key) != submitted.value_for(key)
+    end
+  end
 
   def item_amounts_changed?
     submitted_attributes("receipt_items_attributes").any? do |attributes|

@@ -8,6 +8,10 @@ RSpec.describe 'Manual receipt usage limit pricing state', type: :request do
     create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 50)
   end
 
+  def calculation_context(receipt = Receipt.new(user: user))
+    Receipts::CalculationContext.build(user: user, receipt: receipt).token
+  end
+
   def reference_item_attributes(name:, quantity:, unit:, price:, reference_quantity:, reference_unit:)
     {
       confirmed_name: name,
@@ -158,6 +162,7 @@ RSpec.describe 'Manual receipt usage limit pricing state', type: :request do
 
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '日次上限source保持店',
           payment_method: 'cash',
@@ -215,6 +220,7 @@ RSpec.describe 'Manual receipt usage limit pricing state', type: :request do
 
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '',
           payment_method: 'cash',
@@ -267,6 +273,7 @@ RSpec.describe 'Manual receipt usage limit pricing state', type: :request do
     submitted_adjustments = { '0' => adjustment_attributes }
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: submitted_items,
@@ -314,6 +321,7 @@ RSpec.describe 'Manual receipt usage limit pricing state', type: :request do
     }
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: submitted_items
@@ -338,6 +346,7 @@ RSpec.describe 'Manual receipt usage limit pricing state', type: :request do
 
     submitted_items['1'][:reference_price_amount] = '120.5'
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.reload.lock_version,
         receipt_items_attributes: submitted_items

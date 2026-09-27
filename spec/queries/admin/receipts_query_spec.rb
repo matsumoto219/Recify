@@ -3,6 +3,19 @@
 require 'rails_helper'
 
 RSpec.describe Admin::ReceiptsQuery do
+  it '保存明細金額と税込参考額を区別し、NULL参考額をsourceで代用しない' do
+    receipt = create(:receipt)
+    receipt.receipt_items.create!(confirmed_name: '税抜明細', line_total: 19, gross_line_total: 20)
+    receipt.receipt_items.create!(confirmed_name: '旧明細', line_total: 99)
+
+    record = described_class.find(public_id: receipt.public_id)
+
+    expect(record[:recent_items]).to contain_exactly(
+      hash_including(name: '税抜明細', line_total: 19, gross_amount: 20),
+      hash_including(name: '旧明細', line_total: 99, gross_amount: nil)
+    )
+  end
+
   it 'public_idでreceipt詳細用recordを返し、隔離中receiptも管理者向けに取得する' do
     admin = create(:user, :admin)
     receipt = create(:receipt, :quarantined, quarantined_by: admin, quarantine_reason: 'policy violation')

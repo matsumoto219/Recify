@@ -64,6 +64,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     {
       'schema_version' => 1,
       'context' => 'analysis',
+      'selected_candidate_status' => 'accepted',
       'profile' => {
         'tax_rounding_mode' => 'floor',
         'discount_rounding_mode' => 'round',
@@ -171,6 +172,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     end
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.reload.lock_version,
         receipt_items_attributes: attributes
@@ -427,8 +429,10 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       needs_review: false
     )
     receipt.receipt_payments.create!(method: 'cash', amount: 78)
+    previous_profile = receipt.amount_calculation_profile.deep_dup
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: { '0' => item_attributes(item) },
@@ -454,11 +458,10 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
         'tax_amount' => 0,
         'total_amount' => 100
       )
-      expect(receipt.amount_calculation_profile.fetch('computed')).to include(
-        'total_amount' => 100,
-        'payment_adjustment_total' => -22,
-        'final_payment_total' => 78
-      )
+      expect(receipt.amount_calculation_profile).to eq(previous_profile)
+      summary = ReceiptAmountService.payment_adjustment_summary(receipt: receipt, receipt_adjustments: receipt.receipt_adjustments)
+      expect(summary.payment_adjustment_total).to eq(-22)
+      expect(summary.final_payment_total).to eq(78)
       expect(adjustment.reload.source_text).to eq('キャッシュレス還元額 -22')
     end
   end
@@ -502,6 +505,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     receipt.receipt_payments.create!(method: 'cash', amount: 90)
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: { '0' => item_attributes(item) },
@@ -566,6 +570,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       review_reasons: []
     )
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -576,6 +581,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     discounted = receipt.reload.attributes.slice('subtotal_amount', 'tax_amount', 'total_amount')
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -630,6 +636,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     )
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -691,6 +698,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     )
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -748,6 +756,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     )
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -810,6 +819,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     )
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         memo: '変更後',
@@ -848,7 +858,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     end
   end
 
-  it '保存済みtax detailの数値証拠が不整合ならJSと再計算の双方で除外する' do
+  it '不整合な税内訳はpreviewの根拠にせず同値再送では過去金額を変更しない' do
     receipt = create(
       :receipt,
       user: user,
@@ -884,6 +894,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     form = Nokogiri::HTML(response.body).at_css('[data-controller~="receipt-form"]')
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: { '0' => item_attributes(item) },
@@ -907,8 +918,8 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       expect(response).to have_http_status(:redirect)
       expect(receipt.attributes).to include(
         'subtotal_amount' => 110,
-        'tax_amount' => 11,
-        'total_amount' => 121
+        'tax_amount' => 10,
+        'total_amount' => 120
       )
     end
   end
@@ -924,6 +935,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       amount_calculation_profile: {
         'schema_version' => 1,
         'context' => 'analysis',
+        'selected_candidate_status' => 'accepted',
         'profile' => {
           'tax_rounding_mode' => 'floor',
           'discount_rounding_mode' => 'round',
@@ -970,6 +982,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     }
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: changed_items,
@@ -997,6 +1010,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     end
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: changed_items,
@@ -1018,6 +1032,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     end
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: { '0' => item_attributes(item.reload) },
@@ -1063,6 +1078,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     end
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt_form_initial_purchase_input_fingerprint: initial_purchase_fingerprint,
       receipt: {
         lock_version: receipt.lock_version,
@@ -1112,6 +1128,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     end
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: submitted_items
@@ -1175,6 +1192,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     receipt.receipt_tax_details.create!(rate: BigDecimal('0.08'), net_amount: 101, amount: 9)
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: { '0' => item_attributes(item) },
@@ -1238,6 +1256,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     receipt.receipt_payments.create!(method: 'cash', amount: 15)
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -1344,7 +1363,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       )
     )
 
-    submit_first_quantity(receipt, items, 1)
+    submit_first_quantity(receipt, items, 2)
     first_status = response.status
     first_document = Nokogiri::HTML(response.body)
     first_rendered_items = rendered_item_attributes(first_document)
@@ -1352,6 +1371,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     first_item_values = items.map { |item| item.reload.attributes.slice(*original_item_values.first.keys) }
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.reload.lock_version,
         receipt_items_attributes: first_rendered_items
@@ -1369,7 +1389,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       expect(persistence_attributes).not_to equal(first_source_attributes)
       expect(first_source_attributes).to eq(first_source_snapshot)
       expect(rendered_values_in_item_order(first_rendered_items, items, :price).map(&:to_i)).to eq([ 128, 198, 115, 298, 3 ])
-      expect(rendered_values_in_item_order(first_rendered_items, items, :quantity)).to eq([ '1', '1', '1', '1', '1' ])
+      expect(rendered_values_in_item_order(first_rendered_items, items, :quantity).map(&:to_d)).to eq([ 2, 1, 1, 1, 1 ])
       expect(rendered_values_in_item_order(first_rendered_items, items, :line_total).map(&:to_i)).to eq([ 128, 198, 115, 298, 3 ])
       expect(rendered_values_in_item_order(second_rendered_items, items, :price).map(&:to_i)).to eq([ 128, 198, 115, 298, 3 ])
       expect(rendered_values_in_item_order(second_rendered_items, items, :line_total).map(&:to_i)).to eq([ 128, 198, 115, 298, 3 ])
@@ -1396,6 +1416,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     )
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         store_name: '',
@@ -1430,12 +1451,12 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
       _destroy: '0'
     }
 
-    allow(ReceiptAmountService).to receive(:call).and_return(forced_external_result)
     allow(Receipts::Editing).to receive(:check_consistency).and_return(
       Receipts::Editing::ConsistencyGuard::Result.new(fatal_errors: [], review_reasons: [])
     )
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
       receipt: {
         lock_version: receipt.lock_version,
         store_name: '',
@@ -1449,12 +1470,15 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     )
     invalid_name_input = rows.filter_map { |row| row.at_css('input[name$="[confirmed_name]"]') }
       .find { |input| input['value'] == invalid_name }
+    invalid_item_row = invalid_name_input&.ancestors&.find { |node| node['data-receipt-form-target'] == 'itemRow' }
 
     aggregate_failures do
       expect(response).to have_http_status(:unprocessable_content)
       expect(rows.size).to eq(6)
       expect(invalid_name_input).to be_present
       expect(invalid_name_input['class']).to include('input-field-error')
+      expect(invalid_item_row.at_css('[data-receipt-form-target="priceInput"]')['value']).to eq('50')
+      expect(invalid_item_row.at_css('[data-receipt-form-target="quantityInput"]')['value']).to eq('1')
       expect(receipt.reload.receipt_items.count).to eq(5)
     end
   end

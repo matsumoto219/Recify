@@ -1,5 +1,5 @@
 class ReceiptFormPresenter
-  attr_reader :receipt
+  attr_reader :receipt, :calculation_context_token
 
   def initialize(
     receipt:,
@@ -7,7 +7,11 @@ class ReceiptFormPresenter
     purchase_inputs_changed: false,
     adjustment_tax_detail_evidence_stale: false,
     adjustment_absence_confirmed: false,
-    invalid_item_source: false
+    invalid_item_source: false,
+    calculation_context: nil,
+    calculation_context_token: nil,
+    calculation_settings_form: nil,
+    submitted_calculation_settings: nil
   )
     @receipt = receipt
     @submitted_params = submitted_params.to_h.with_indifferent_access
@@ -18,6 +22,46 @@ class ReceiptFormPresenter
     @adjustment_tax_detail_evidence_stale = adjustment_tax_detail_evidence_stale == true
     @adjustment_absence_confirmed = adjustment_absence_confirmed == true
     @invalid_item_source = invalid_item_source == true
+    @calculation_context_token = calculation_context_token || calculation_context&.token
+    @calculation_context = calculation_context
+    @calculation_settings_form = calculation_settings_form
+    @submitted_calculation_settings = submitted_calculation_settings.to_h
+  end
+
+  def calculation_setting_value(key)
+    return @submitted_calculation_settings[key] if @submitted_calculation_settings.key?(key)
+
+    calculation_settings_form.value_for(key)
+  end
+
+  def calculation_setting_fallback?(key)
+    calculation_settings_form.fallback?(key)
+  end
+
+  def calculation_settings_unavailable?
+    calculation_settings_form.invalid_saved_settings?
+  end
+
+  def tax_rounding_scope_value
+    calculation_settings_form.value_for("tax_rounding_scope")
+  end
+
+  def rounding_mode_options
+    ReceiptCalculationSettings::ROUNDING_MODES.map do |value|
+      { label: I18n.t("settings.index.calculation.rounding_options.#{value}"), value: value }
+    end
+  end
+
+  def tax_inclusion_options
+    ReceiptCalculationSettings::TAX_INCLUSIONS.map do |value|
+      { label: I18n.t("receipts.item_fields.reference_price_tax_inclusions_short.#{value}"), value: value }
+    end
+  end
+
+  def purchase_adjustment_tax_inclusion_visible?
+    visible_receipt_adjustments.any? do |adjustment|
+      adjustment_row(adjustment, new_record: adjustment.new_record?).calculation_effect == "purchase_adjustment"
+    end
   end
 
   def purchase_inputs_changed?
@@ -230,7 +274,10 @@ class ReceiptFormPresenter
     ItemRowState.new(
       item: item,
       new_record: new_record,
-      submitted_values: submitted_child_values(:receipt_items_attributes, item)
+      submitted_values: submitted_child_values(:receipt_items_attributes, item),
+      calculation_settings_form: calculation_settings_form,
+      source_line_total_unavailable: purchase_inputs_changed? || invalid_item_source?,
+      receipt: receipt
     )
   end
 
@@ -253,6 +300,13 @@ class ReceiptFormPresenter
   private
 
   attr_reader :submitted_params, :submitted_values_by_object_id, :submitted_rows_cache, :submitted_rows_by_id_cache
+
+  def calculation_settings_form
+    @calculation_settings_form ||= Receipts::CalculationSettingsForm.new(
+      receipt: receipt,
+      context: @calculation_context
+    )
+  end
 
   def submitted_child_values(collection_key, record)
     transient_values = submitted_values_by_object_id[record.object_id]
@@ -350,10 +404,20 @@ class ReceiptFormPresenter
   class ItemRowState
     attr_reader :item
 
-    def initialize(item:, new_record:, submitted_values: {})
+    def initialize(
+      item:,
+      new_record:,
+      submitted_values: {},
+      calculation_settings_form: nil,
+      source_line_total_unavailable: false,
+      receipt: nil
+    )
       @item = item
       @new_record = new_record
       @submitted_values = submitted_values
+      @calculation_settings_form = calculation_settings_form
+      @source_line_total_unavailable = source_line_total_unavailable
+      @receipt = receipt
     end
 
     def new_record?
@@ -394,6 +458,26 @@ class ReceiptFormPresenter
 
     def line_total_value
       submitted_value(:line_total) { new_record? ? nil : item.line_total }
+    end
+
+    def gross_line_total_value
+      new_record? ? nil : item.gross_amount_for_display(receipt: @receipt)
+    end
+
+    def source_line_total_value
+      return if new_record? || @source_line_total_unavailable || explicit_line_total_source_missing?
+
+      amount = item.line_total
+      amount if amount.is_a?(Integer) && amount.between?(0, ReceiptItem::GROSS_LINE_TOTAL_MAX)
+    end
+
+    def source_line_total_label
+      basis = source_line_total_tax_inclusion
+      if source_line_total_value.nil? || item.tax_rate.nil? || !item.tax_rate.positive? || item.tax_rate > 1 || basis.nil?
+        return I18n.t("receipts.item_fields.subtotal")
+      end
+
+      I18n.t("receipts.item_fields.reference_price_tax_inclusions_short.#{basis}")
     end
 
     def original_line_total_value
@@ -459,6 +543,12 @@ class ReceiptFormPresenter
       return submitted_values[:price] if submitted_values.key?(:price)
       return nil if new_record?
 
+      return item.price if item.input_tax_inclusion.present?
+      if @calculation_settings_form&.item_origin_for(item) == "legacy_record" &&
+        @calculation_settings_form.item_value_for(item) == "net"
+        return item.price
+      end
+
       normalized_tax_included_price || item.price
     end
 
@@ -514,13 +604,40 @@ class ReceiptFormPresenter
     end
 
     def reference_price_tax_inclusion_value
-      submitted_value(:reference_price_tax_inclusion) do
-        if new_record?
-          "gross"
-        else
-          item.reference_price_tax_inclusion.presence || "gross"
-        end
+      submitted_value(:reference_price_tax_inclusion) { effective_tax_inclusion_value }
+    end
+
+    def input_tax_inclusion_value
+      submitted_value(:input_tax_inclusion) { effective_tax_inclusion_value }
+    end
+
+    def active_tax_inclusion_field
+      pricing_source_ui_mode == "reference_quantity_price" ? "reference_price_tax_inclusion" : "input_tax_inclusion"
+    end
+
+    def active_tax_inclusion_value
+      public_send("#{active_tax_inclusion_field}_value")
+    end
+
+    def tax_inclusion_fallback?
+      return false if ReceiptCalculationSettings::TAX_INCLUSIONS.include?(item.public_send(active_tax_inclusion_field))
+
+      !new_record? && @calculation_settings_form &&
+        %w[form_default application_default].include?(@calculation_settings_form.item_origin_for(item))
+    end
+
+    def tax_inclusion_options
+      ReceiptCalculationSettings::TAX_INCLUSIONS.map do |value|
+        { label: I18n.t("receipts.item_fields.reference_price_tax_inclusions_short.#{value}"), value: value }
       end
+    end
+
+    def effective_tax_inclusion_value
+      value = item.public_send(active_tax_inclusion_field)
+      return value if !new_record? && ReceiptCalculationSettings::TAX_INCLUSIONS.include?(value)
+      return @calculation_settings_form.item_value_for(item) if @calculation_settings_form
+
+      ReceiptCalculationSettings::TAX_INCLUSIONS.include?(value) ? value : "gross"
     end
 
     def reference_price_tax_inclusion_label
@@ -795,6 +912,21 @@ class ReceiptFormPresenter
         "receipts.item_fields.reference_price_tax_inclusions_short.#{reference_price_tax_inclusion_value}",
         default: reference_price_tax_inclusion_value
       )
+    end
+
+    def source_line_total_tax_inclusion
+      return unless ReceiptItem::PRICING_SOURCE_KINDS.include?(item.pricing_source_kind)
+      return unless ReceiptCalculationSettings::ORIGINS.include?(item.tax_inclusion_origin)
+
+      field = item.pricing_source_kind == "reference_quantity_price" ? :reference_price_tax_inclusion : :input_tax_inclusion
+      basis = item.public_send(field)
+      return unless ReceiptCalculationSettings::TAX_INCLUSIONS.include?(basis)
+      if basis == "net"
+        gross = item.gross_line_total
+        return unless gross.is_a?(Integer) && gross.between?(0, ReceiptItem::GROSS_LINE_TOTAL_MAX)
+      end
+
+      basis
     end
 
     def decimal_input_value(value)

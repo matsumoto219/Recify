@@ -22,6 +22,9 @@ class Receipts::Editing::InputBuilder
     quantity_unit_raw
     reference_quantity_unit_raw
     reference_price_tax_inclusion
+    input_tax_inclusion
+    tax_inclusion_origin
+    gross_line_total
     product_code
     tax_rate
     discount_rate
@@ -72,6 +75,7 @@ class Receipts::Editing::InputBuilder
     reference_quantity_unit_code
     reference_quantity_unit_raw
     reference_price_tax_inclusion
+    input_tax_inclusion
     discount_rate
     discount_amount
   ].freeze
@@ -115,6 +119,8 @@ class Receipts::Editing::InputBuilder
 
     submitted_records = submitted.filter_map do |attributes|
       id = attributes["id"].to_s.presence
+      raise ActiveRecord::RecordNotFound if id && !existing_by_id.key?(id)
+
       referenced_ids << id if id
       next if destroyed?(attributes)
 

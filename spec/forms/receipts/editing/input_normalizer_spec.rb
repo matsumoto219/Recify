@@ -5,6 +5,36 @@ RSpec.describe Receipts::Editing::InputNormalizer do
 
   let(:receipt) { build(:receipt) }
 
+  [ nil, "", "NET", "tax_excluded", false, [], {} ].each do |basis|
+    it "明示された不正な入力税区分 #{basis.inspect} を既定値やNULLへ変換しない" do
+      expect do
+        described_class.call(
+          receipt: receipt,
+          attributes: {
+            "receipt_items_attributes" => { "0" => { "input_tax_inclusion" => basis } }
+          }
+        )
+      end.to raise_error(Receipts::Editing::InvalidItemSourceError)
+    end
+  end
+
+  it "有効な入力税区分だけを保持し、未送信の税区分を追加しない" do
+    result = described_class.call(
+      receipt: receipt,
+      attributes: {
+        "receipt_items_attributes" => {
+          "0" => { "input_tax_inclusion" => "net" },
+          "1" => { "input_tax_inclusion" => "gross" },
+          "2" => { "confirmed_name" => "明細" }
+        }
+      }
+    ).fetch("receipt_items_attributes")
+
+    expect(result["0"]["input_tax_inclusion"]).to eq("net")
+    expect(result["1"]["input_tax_inclusion"]).to eq("gross")
+    expect(result["2"]).not_to have_key("input_tax_inclusion")
+  end
+
   context "with measurement pricing source input" do
     let(:attributes) do
       {

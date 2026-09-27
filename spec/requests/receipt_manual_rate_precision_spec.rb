@@ -7,6 +7,10 @@ RSpec.describe 'Receipt manual rate precision', type: :request do
     sign_in user
   end
 
+  def calculation_context(receipt = Receipt.new(user: user))
+    Receipts::CalculationContext.build(user: user, receipt: receipt).token
+  end
+
   def capture_presenter_arguments
     arguments = []
     allow(ReceiptFormPresenter).to receive(:new).and_wrap_original do |original, **kwargs|
@@ -73,7 +77,7 @@ RSpec.describe 'Receipt manual rate precision', type: :request do
 
     expect(ReceiptAmountService).not_to receive(:call)
     expect do
-      post receipts_path, params: { receipt: submitted }
+      post receipts_path, params: { receipt_calculation_context: calculation_context, receipt: submitted }
     end.not_to change(Receipt, :count)
 
     presented = presenters.last.fetch(:submitted_params).to_h
@@ -102,6 +106,7 @@ RSpec.describe 'Receipt manual rate precision', type: :request do
     expect(ReceiptAmountService).not_to receive(:call)
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '明細税率精度超過店',
           payment_method: 'cash',
@@ -140,6 +145,7 @@ RSpec.describe 'Receipt manual rate precision', type: :request do
     expect(ReceiptAmountService).not_to receive(:call)
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '調整税率精度超過店',
           payment_method: 'cash',
@@ -176,6 +182,7 @@ RSpec.describe 'Receipt manual rate precision', type: :request do
     expect(ReceiptAmountService).not_to receive(:call)
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           store_name: 'レシート税率精度超過店',
           payment_method: 'cash',
@@ -194,6 +201,7 @@ RSpec.describe 'Receipt manual rate precision', type: :request do
   it '永続scale境界のitemとadjustment rateを計算値と同じ値で保存する' do
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '精度境界店',
           payment_method: 'cash',

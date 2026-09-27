@@ -47,7 +47,7 @@ class Receipts::Editing::ReviewState
   }.freeze
 
   class << self
-    def call(receipt:, permitted:, amount_result:, consistency_review_reasons:, child_review_remaining:, nested_amount_inputs_submitted:, item_inputs_submitted:, adjustment_absence_confirmed: false)
+    def call(receipt:, permitted:, amount_result:, consistency_review_reasons:, child_review_remaining:, nested_amount_inputs_submitted:, item_inputs_submitted:, adjustment_absence_confirmed: false, payment_result: nil)
       new(
         receipt: receipt,
         permitted: permitted,
@@ -56,7 +56,8 @@ class Receipts::Editing::ReviewState
         child_review_remaining: child_review_remaining,
         nested_amount_inputs_submitted: nested_amount_inputs_submitted,
         item_inputs_submitted: item_inputs_submitted,
-        adjustment_absence_confirmed: adjustment_absence_confirmed
+        adjustment_absence_confirmed: adjustment_absence_confirmed,
+        payment_result: payment_result
       ).call
     end
 
@@ -234,7 +235,7 @@ class Receipts::Editing::ReviewState
     end
   end
 
-  def initialize(receipt:, permitted:, amount_result:, consistency_review_reasons:, child_review_remaining:, nested_amount_inputs_submitted:, item_inputs_submitted:, adjustment_absence_confirmed: false)
+  def initialize(receipt:, permitted:, amount_result:, consistency_review_reasons:, child_review_remaining:, nested_amount_inputs_submitted:, item_inputs_submitted:, adjustment_absence_confirmed: false, payment_result: nil)
     @receipt = receipt
     @permitted = permitted
     @amount_result = amount_result
@@ -243,12 +244,17 @@ class Receipts::Editing::ReviewState
     @nested_amount_inputs_submitted = nested_amount_inputs_submitted
     @item_inputs_submitted = item_inputs_submitted
     @adjustment_absence_confirmed = adjustment_absence_confirmed == true
+    @payment_result = payment_result
   end
 
   def call
     reasons = ReviewReasons.review_reasons_for_user(receipt.review_reasons)
     if nested_amount_inputs_submitted
       reasons -= ReviewReasons::AMOUNT_REASONS - [ ADJUSTMENT_REVIEW_REASON, ITEM_PRICING_MODE_REVIEW_REASON ]
+    end
+    if payment_result
+      reasons.delete("payment_amount_mismatch")
+      reasons |= ReviewReasons.review_reasons_for_user(payment_result[:warnings])
     end
     reasons.delete(ADJUSTMENT_REVIEW_REASON) if adjustment_review_reason_resolved?
     if item_inputs_submitted
@@ -270,6 +276,7 @@ class Receipts::Editing::ReviewState
   attr_reader :receipt,
               :permitted,
               :amount_result,
+              :payment_result,
               :consistency_review_reasons,
               :child_review_remaining,
               :nested_amount_inputs_submitted,
@@ -277,6 +284,8 @@ class Receipts::Editing::ReviewState
               :adjustment_absence_confirmed
 
   def current_amount_review_reasons
+    return [] unless amount_result.respond_to?(:key?)
+
     reasons =
       if amount_result.respond_to?(:key?) && amount_result.key?(:review_reasons)
         amount_result[:review_reasons]

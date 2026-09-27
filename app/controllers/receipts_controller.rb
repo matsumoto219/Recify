@@ -146,6 +146,7 @@ class ReceiptsController < ApplicationController
     rebuild_blank_item_row_after_failure = blank_new_receipt_item_rows_submitted?
     rebuild_blank_adjustment_row_after_failure = blank_new_receipt_adjustment_rows_submitted?
     @receipt = current_user.receipts.new
+    prepare_receipt_calculation_context
     begin
       source_params = normalized_receipt_params.to_h
     rescue Receipts::NumericInput::InvalidValue
@@ -165,6 +166,16 @@ class ReceiptsController < ApplicationController
       return
     end
     remember_confirmed_discount_clear_submission
+
+    unless resolve_receipt_calculation_settings(source_params, context: :manual)
+      render_invalid_item_pricing_source(
+        source_params,
+        template: :new,
+        rebuild_blank_item_row_after_failure: rebuild_blank_item_row_after_failure,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
 
     if manual_child_count_limit_exceeded?(source_params)
       render_manual_child_count_limit_exceeded(
@@ -191,7 +202,7 @@ class ReceiptsController < ApplicationController
     persistence_params["image"] = source_params["image"] if source_params.key?("image")
     begin
       amount_result = apply_amount_calculation!(source_params, attributes: persistence_params, context: :manual)
-    rescue ReceiptAmountService::InvalidItemSourceError
+    rescue ReceiptAmountService::InvalidItemSourceError, Receipts::Editing::InvalidItemSourceError
       render_invalid_item_pricing_source(
         source_params,
         template: :new,
@@ -271,6 +282,7 @@ class ReceiptsController < ApplicationController
   end
 
   def update
+    prepare_receipt_calculation_context
     carry_receipt_form_initial_purchase_input_fingerprint
     carry_receipt_form_raw_percentage_inputs
     carry_receipt_form_raw_item_pricing_inputs
@@ -319,6 +331,23 @@ class ReceiptsController < ApplicationController
       )
       return
     end
+    unless resolve_receipt_calculation_settings(update_params, context: :edit_save)
+      render_invalid_item_pricing_source(
+        update_params,
+        template: :edit,
+        rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
+      )
+      return
+    end
+    purchase_amounts_changed = receipt_edit_save_change_set(update_params, :edit_save).purchase_amounts_changed?
+    if !purchase_amounts_changed && receipt_edit_save_change_set(update_params, :edit_save).payment_reconciliation_changed?
+      input = receipt_edit_save_input(update_params)
+      @receipt_payment_result = ReceiptAmountService.reconcile_payments(
+        purchase_total: @receipt.total_amount,
+        receipt_adjustments: input.receipt_adjustments,
+        receipt_payments: input.receipt_payments
+      )
+    end
     @receipt_form_purchase_inputs_changed = receipt_edit_save_change_set(
       update_params,
       :edit_save
@@ -352,8 +381,10 @@ class ReceiptsController < ApplicationController
     end
     clear_review_flags_for_edited_items!(persistence_params)
     begin
-      amount_result = apply_amount_calculation!(source_params, attributes: persistence_params, context: :edit_save)
-    rescue ReceiptAmountService::InvalidItemSourceError
+      amount_result = if purchase_amounts_changed
+        apply_amount_calculation!(source_params, attributes: persistence_params, context: :edit_save)
+      end
+    rescue ReceiptAmountService::InvalidItemSourceError, Receipts::Editing::InvalidItemSourceError
       render_invalid_item_pricing_source(
         source_params,
         template: :edit,
@@ -370,8 +401,8 @@ class ReceiptsController < ApplicationController
       )
       return
     end
-    consistency_guard = receipt_edit_save_consistency_guard(persistence_params, amount_result)
-    unless consistency_guard.consistent?
+    consistency_guard = receipt_edit_save_consistency_guard(persistence_params, amount_result) if amount_result
+    if consistency_guard && !consistency_guard.consistent?
       render_manual_amount_consistency_error!(
         source_params,
         rebuild_blank_adjustment_row_after_failure: rebuild_blank_adjustment_row_after_failure
@@ -444,6 +475,7 @@ class ReceiptsController < ApplicationController
   end
 
   def prepare_receipt_form_presenter(submitted_params: nil)
+    prepare_receipt_calculation_context
     submitted_params ||= @receipt_form_submitted_params
     submitted_params = receipt_form_params_with_confirmed_discount_clear_intents(submitted_params)
     submitted_params = receipt_form_params_with_raw_percentage_inputs(submitted_params)
@@ -454,7 +486,11 @@ class ReceiptsController < ApplicationController
       purchase_inputs_changed: @receipt_form_purchase_inputs_changed,
       adjustment_tax_detail_evidence_stale: receipt_form_adjustment_tax_detail_evidence_stale?,
       adjustment_absence_confirmed: @receipt_form_adjustment_absence_confirmed,
-      invalid_item_source: @receipt_form_invalid_item_source == true
+      invalid_item_source: @receipt_form_invalid_item_source == true,
+      calculation_context: @receipt_calculation_context,
+      calculation_context_token: @receipt_calculation_context_token,
+      calculation_settings_form: @receipt_calculation_settings_form,
+      submitted_calculation_settings: receipt_calculation_controls
     )
   end
 
@@ -466,6 +502,110 @@ class ReceiptsController < ApplicationController
     end
 
     @receipt_form_submitted_params = receipt_params.to_h
+  end
+
+  def prepare_receipt_calculation_context
+    return if defined?(@receipt_calculation_context)
+
+    if request.get? || request.head?
+      @receipt_calculation_context = Receipts::CalculationContext.build(user: current_user, receipt: @receipt)
+      @receipt_calculation_context_token = @receipt_calculation_context&.token
+    else
+      token = params[:receipt_calculation_context]
+      @receipt_calculation_context_token = token if token.is_a?(String) && token.bytesize <= 4_096
+      @receipt_calculation_context = Receipts::CalculationContext.verify(
+        token: token,
+        user: current_user,
+        receipt: @receipt
+      )
+    end
+    @receipt_calculation_settings_form = Receipts::CalculationSettingsForm.new(
+      receipt: @receipt,
+      context: @receipt_calculation_context,
+      existing_purchase_adjustments: purchase_adjustments_present?(@receipt.receipt_adjustments)
+    )
+  end
+
+  def receipt_calculation_controls
+    return @receipt_calculation_controls if defined?(@receipt_calculation_controls)
+
+    raw = params[:receipt_calculation_settings]
+    @receipt_calculation_controls = if raw.nil? && !params.key?(:receipt_calculation_settings)
+      {}
+    elsif raw.is_a?(ActionController::Parameters) && raw.keys.length <= 3
+      raw.each_pair.to_h.transform_values do |value|
+        value if value.is_a?(String) && value.valid_encoding? && value.bytesize <= 32
+      end
+    else
+      { "calculation_settings" => nil }
+    end
+  end
+
+  def resolve_receipt_calculation_settings(permitted, context:)
+    form = @receipt_calculation_settings_form
+    existing_items = @receipt.receipt_items.index_by { |item| item.id.to_s }
+    submitted_items = permitted["receipt_items_attributes"] || {}
+    submitted_items.each_value do |attributes|
+      next if ActiveModel::Type::Boolean.new.cast(attributes["_destroy"])
+
+      item = existing_items[attributes["id"].to_s]
+      controls = item_calculation_controls(attributes, item)
+      validation = form.resolve_item(item: item, submitted: controls, monetary_change: false)
+      return invalid_receipt_calculation_settings unless validation.success?
+
+      if item && item.input_tax_inclusion.nil? && attributes["input_tax_inclusion"] == form.item_value_for(item) &&
+         attributes.fetch("pricing_source_kind", item.pricing_source_kind) == item.pricing_source_kind
+        attributes.delete("input_tax_inclusion")
+      end
+    end
+    reset_receipt_edit_save_input!
+    controls_changed = receipt_calculation_controls.any? { |key, value| value != form.value_for(key) }
+    monetary_change = context == :manual || controls_changed ||
+      receipt_edit_save_change_set(permitted, context)&.purchase_amounts_changed?
+    resolution = form.resolve(
+      submitted: receipt_calculation_controls,
+      monetary_change: monetary_change,
+      purchase_adjustments_present: purchase_adjustments_present?(amount_receipt_adjustments(permitted, context))
+    )
+    return invalid_receipt_calculation_settings unless resolution.success?
+    return true unless monetary_change
+
+    permitted.merge!(resolution.attributes)
+    if context == :edit_save
+      referenced_ids = submitted_items.each_value.map { |attributes| attributes["id"].to_s }
+      existing_items.each do |id, _item|
+        next if referenced_ids.include?(id)
+
+        submitted_items["retained_#{id}"] = { "id" => id }
+      end
+    end
+    submitted_items.each_value do |attributes|
+      next if ActiveModel::Type::Boolean.new.cast(attributes["_destroy"])
+
+      item = existing_items[attributes["id"].to_s]
+      result = form.resolve_item(item: item, submitted: item_calculation_controls(attributes, item), monetary_change: true)
+      return invalid_receipt_calculation_settings unless result.success?
+
+      attributes.merge!(result.attributes)
+    end
+    permitted["receipt_items_attributes"] = submitted_items if submitted_items.present?
+    reset_receipt_edit_save_input!
+    true
+  end
+
+  def item_calculation_controls(attributes, item)
+    kind = attributes.fetch("pricing_source_kind", item&.pricing_source_kind)
+    field = kind == "reference_quantity_price" ? "reference_price_tax_inclusion" : "input_tax_inclusion"
+    attributes.slice("pricing_source_kind", field)
+  end
+
+  def invalid_receipt_calculation_settings
+    @receipt_calculation_settings_invalid = true
+    false
+  end
+
+  def purchase_adjustments_present?(adjustments)
+    adjustments.any? { |adjustment| ReceiptAmountService.adjustment_effect(adjustment) != "payment_adjustment" }
   end
 
   def receipt_form_params_with_confirmed_discount_clear_intents(submitted_params)
@@ -874,7 +1014,8 @@ class ReceiptsController < ApplicationController
 
   def render_invalid_item_pricing_source(permitted, template:, rebuild_blank_item_row_after_failure: false, rebuild_blank_adjustment_row_after_failure: false)
     @receipt_form_invalid_item_source = true
-    @receipt.errors.add(:base, t("receipts.form.errors.invalid_item_pricing_source"))
+    error_key = @receipt_calculation_settings_invalid ? "invalid_calculation_settings" : "invalid_item_pricing_source"
+    @receipt.errors.add(:base, t("receipts.form.errors.#{error_key}"))
     build_receipt_item_row_for_render if rebuild_blank_item_row_after_failure && @receipt.receipt_items.empty?
     build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
     prepare_receipt_form_presenter(submitted_params: permitted)
@@ -919,6 +1060,7 @@ class ReceiptsController < ApplicationController
         :quantity_unit_raw,
         :reference_quantity_unit_raw,
         :reference_price_tax_inclusion,
+        :input_tax_inclusion,
         :clear_item_discount_before_explicit,
         # ProductCode は保存/permit済みだが、UI入力欄はまだ出していない。
         :product_code,
@@ -960,6 +1102,7 @@ class ReceiptsController < ApplicationController
 
   def normalized_receipt_params
     reset_receipt_edit_save_input!
+    validate_receipt_item_tax_controls!
     form_class = @receipt.persisted? ? Receipts::EditForm : Receipts::ManualEntryForm
     permitted = form_class.call(receipt: @receipt, attributes: receipt_params.to_h)
     permitted.delete("remove_image")
@@ -968,6 +1111,26 @@ class ReceiptsController < ApplicationController
     prune_blank_new_receipt_payments!(permitted)
 
     ActionController::Parameters.new(permitted).permit!
+  end
+
+  def validate_receipt_item_tax_controls!
+    items = params.dig(:receipt, :receipt_items_attributes)
+    return unless items.respond_to?(:each_value)
+
+    existing_items = @receipt.receipt_items.index_by { |item| item.id.to_s }
+    items.each_value do |item|
+      next unless item.respond_to?(:key?)
+
+      kind = item.fetch("pricing_source_kind", existing_items[item["id"].to_s]&.pricing_source_kind)
+      active_field = kind == "reference_quantity_price" ? "reference_price_tax_inclusion" : "input_tax_inclusion"
+      %w[input_tax_inclusion reference_price_tax_inclusion].each do |field|
+        next unless item.key?(field)
+        next if field != active_field && (item[field].nil? || item[field] == "")
+        next if item[field].is_a?(String) && ReceiptCalculationSettings::TAX_INCLUSIONS.include?(item[field])
+
+        raise Receipts::Editing::InvalidItemSourceError, "Invalid item tax inclusion"
+      end
+    end
   end
 
   def manual_child_count_limit_exceeded?(permitted)
@@ -1323,7 +1486,9 @@ class ReceiptsController < ApplicationController
   def apply_amount_calculation!(permitted, attributes: permitted, context:)
     change_set = receipt_edit_save_change_set(permitted, context)
     @receipt_form_purchase_inputs_changed = change_set&.derived_purchase_inputs_changed? == true
-    clear_amounts = clear_amounts_for_deleted_receipt_items?(permitted, context) || change_set&.derived_purchase_inputs_changed?
+    clear_amounts = clear_amounts_for_deleted_receipt_items?(permitted, context) ||
+      change_set&.item_amounts_changed || change_set&.purchase_adjustments_changed ||
+      (change_set&.calculation_settings_changed && item_amount_sources_present?(permitted, context))
     receipt_tax_details = clear_amounts ? [] : amount_receipt_tax_details(context)
     result = calculate_receipt_amounts(permitted, context, clear_amounts, receipt_tax_details)
     tax_details_recalculated = false
@@ -1345,6 +1510,12 @@ class ReceiptsController < ApplicationController
     result
   end
 
+  def item_amount_sources_present?(permitted, context)
+    amount_receipt_items(permitted, context).any? do |item|
+      %w[pricing_source_kind price line_total].any? { |field| item[field].present? || item[field.to_sym].present? }
+    end
+  end
+
   def calculate_receipt_amounts(permitted, context, clear_amounts, receipt_tax_details)
     ReceiptAmountService.call(
       receipt: amount_receipt(permitted, context, clear_amounts: clear_amounts),
@@ -1352,9 +1523,7 @@ class ReceiptsController < ApplicationController
       receipt_tax_details: receipt_tax_details,
       receipt_adjustments: amount_receipt_adjustments(permitted, context),
       receipt_payments: amount_receipt_payments(permitted, context),
-      context: context,
-      tax_rounding_mode: current_user.tax_rounding_mode,
-      discount_rounding_mode: current_user.discount_rounding_mode
+      context: context
     )
   end
 
@@ -1371,9 +1540,10 @@ class ReceiptsController < ApplicationController
 
     {
       amount_result: amount_result,
+      payment_result: @receipt_payment_result,
       consistency_review_reasons: consistency_guard&.review_reasons,
       child_review_remaining: manual_update_child_review_remaining?(permitted),
-      nested_amount_inputs_submitted: manual_amount_inputs_submitted?(source_permitted),
+      nested_amount_inputs_submitted: amount_result.present?,
       item_inputs_submitted: item_inputs_submitted?,
       adjustment_absence_confirmed: @receipt_form_adjustment_absence_confirmed == true
     }
@@ -1566,6 +1736,7 @@ class ReceiptsController < ApplicationController
 
     if context == :edit_save && @receipt&.persisted?
       result.merge!(@receipt.amount_source_semantics_for_edit)
+      result["calculation_settings"] = permitted.fetch("calculation_settings", @receipt.calculation_settings)
     end
     result
   end
@@ -1611,7 +1782,7 @@ class ReceiptsController < ApplicationController
 
   def receipt_edit_save_input(permitted)
     if @receipt_edit_save_input_params_id != permitted.object_id
-      @receipt_edit_save_input = Receipts::Editing.build_input(receipt: @receipt, permitted: permitted)
+      @receipt_edit_save_input = Receipts::Editing.build_input(receipt: @receipt, permitted: permitted.deep_dup)
       @receipt_edit_save_input_params_id = permitted.object_id
     end
 
@@ -1637,7 +1808,8 @@ class ReceiptsController < ApplicationController
       receipt_items: input.receipt_items,
       receipt_adjustments: input.receipt_adjustments,
       receipt_payments: input.receipt_payments,
-      amount_result: amount_result
+      amount_result: amount_result,
+      calculation_settings: permitted.fetch("calculation_settings", @receipt.calculation_settings)
     )
   end
 

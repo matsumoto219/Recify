@@ -154,6 +154,7 @@ module Admin
           id: item.id,
           name: item.confirmed_name.presence || item.suggested_name.presence,
           line_total: item.line_total,
+          gross_amount: item.gross_amount_for_display(receipt: receipt),
           needs_review: item.needs_review?
         }
       end
