@@ -86,7 +86,6 @@ RSpec.configure do |config|
       return unless resource.persisted?
       return if resource.guest?
 
-      LegalDocuments::Sync.call
       LegalAcceptances::Recorder.record_current_documents!(
         user: resource,
         acceptance_context: context,
