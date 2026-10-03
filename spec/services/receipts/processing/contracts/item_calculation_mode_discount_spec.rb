@@ -1283,26 +1283,42 @@ RSpec.describe Receipts::Processing::Contracts::ItemCalculationModeProposalSet d
 
     [ [ '1', 50, 14, 36, 39 ], [ '2', 100, 27, 73, 80 ] ].each do |quantity, original, discount, net, gross|
       attributes = { 'receipt_items_attributes' => { '0' => { 'id' => item.id.to_s, 'quantity' => quantity } } }
-      input = Receipts::Editing.build_input(receipt: receipt, permitted: attributes)
       change_set = Receipts::Editing.change_set(receipt: receipt, permitted: attributes)
-      receipt_amounts = receipt.attributes.symbolize_keys.merge(receipt.amount_source_semantics_for_edit)
-      receipt_amounts.merge!(subtotal_amount: nil, tax_amount: nil, total_amount: nil) if change_set.derived_purchase_inputs_changed?
-      amount = ReceiptAmountService.call(
-        receipt: receipt_amounts,
-        receipt_items: input.receipt_items,
-        receipt_tax_details: change_set.derived_purchase_inputs_changed? ? [] : receipt.receipt_tax_details,
-        receipt_adjustments: input.receipt_adjustments,
-        receipt_payments: input.receipt_payments,
-        context: :edit_save
-      )
-      Receipts::Editing.apply_amount_result!(
-        receipt: receipt,
-        attributes: attributes,
-        amount_result: amount,
-        context: :edit_save,
-        change_set: change_set,
-        tax_details_recalculated: false
-      )
+      if change_set.purchase_amounts_changed?
+        form = Receipts::CalculationSettingsForm.new(
+          receipt: receipt,
+          context: Receipts::CalculationContext.build(user: receipt.user, receipt: receipt)
+        )
+        resolution = form.resolve(submitted: {}, monetary_change: true, purchase_adjustments_present: false)
+        item_resolution = form.resolve_item(item: item, submitted: {}, monetary_change: true)
+        expect(resolution).to be_success
+        expect(item_resolution).to be_success
+        attributes.merge!(resolution.attributes)
+        attributes['receipt_items_attributes']['0'].merge!(item_resolution.attributes)
+        input = Receipts::Editing.build_input(receipt: receipt, permitted: attributes)
+        receipt_amounts = receipt.attributes.symbolize_keys.merge(receipt.amount_source_semantics_for_edit).merge(
+          calculation_settings: attributes.fetch('calculation_settings', receipt.calculation_settings),
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil
+        )
+        amount = ReceiptAmountService.call(
+          receipt: receipt_amounts,
+          receipt_items: input.receipt_items,
+          receipt_tax_details: [],
+          receipt_adjustments: input.receipt_adjustments,
+          receipt_payments: input.receipt_payments,
+          context: :edit_save
+        )
+        Receipts::Editing.apply_amount_result!(
+          receipt: receipt,
+          attributes: attributes,
+          amount_result: amount,
+          context: :edit_save,
+          change_set: change_set,
+          tax_details_recalculated: true
+        )
+      end
       expect(Receipts::Editing.update_manual(receipt: receipt, attributes: attributes, items_missing: false)).to be_saved
       expect(item.reload).to have_attributes(
         price: 50,

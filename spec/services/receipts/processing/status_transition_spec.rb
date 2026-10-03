@@ -8,6 +8,10 @@ RSpec.describe Receipts::Processing::StatusTransition do
       :with_image,
       processing_error_code: 'ocr_api_error',
       processing_error_message: 'safe error',
+      calculation_settings: {
+        'schema_version' => 1,
+        'tax_rounding_mode' => { 'value' => 'ceil', 'origin' => 'manual' }
+      },
       review_reasons: [ 'ocr_low_confidence' ]
     )
 
@@ -19,6 +23,7 @@ RSpec.describe Receipts::Processing::StatusTransition do
       processing_error_message: nil,
       review_reasons: []
     )
+    expect(receipt.calculation_settings.dig('tax_rounding_mode', 'value')).to eq('ceil')
   end
 
   it 'raises when the receipt transition cannot be persisted' do
@@ -47,7 +52,11 @@ RSpec.describe Receipts::Processing::StatusTransition do
         store_address: 'テスト住所',
         store_phone_number: '03-0000-0000',
         ocr_completed_at: Time.current,
-        amount_calculation_profile: { 'schema_version' => 'test' }
+        amount_calculation_profile: { 'schema_version' => 'test' },
+        calculation_settings: {
+          'schema_version' => 1,
+          'tax_rounding_mode' => { 'value' => 'ceil', 'origin' => 'manual' }
+        }
       )
     end
 
@@ -91,6 +100,7 @@ RSpec.describe Receipts::Processing::StatusTransition do
           ocr_completed_at: nil,
           store_address_components: {},
           amount_calculation_profile: {},
+          calculation_settings: nil,
           review_reasons: []
         )
         %i[receipt_items receipt_tax_details receipt_payments receipt_adjustments].each do |association_name|

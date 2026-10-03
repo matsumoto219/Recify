@@ -1,6 +1,168 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptFormPresenter do
+  describe 'receipt calculation controls' do
+    let(:receipt) { build(:receipt, calculation_settings: nil) }
+    let(:settings_form) { Receipts::CalculationSettingsForm.new(receipt: receipt, context: nil) }
+
+    it '保存条件と送信済みの表示値を分離する' do
+      presenter = described_class.new(
+        receipt: receipt,
+        calculation_settings_form: settings_form,
+        calculation_context_token: 'invalid-token',
+        submitted_calculation_settings: { 'tax_rounding_mode' => 'ceil' }
+      )
+
+      aggregate_failures do
+        expect(presenter.calculation_setting_value('tax_rounding_mode')).to eq('ceil')
+        expect(presenter.calculation_setting_value('discount_rounding_mode')).to eq('round')
+        expect(presenter.tax_rounding_scope_value).to eq('per_tax_rate_group')
+        expect(presenter.calculation_context_token).to eq('invalid-token')
+        expect(presenter.calculation_setting_fallback?('tax_rounding_scope')).to be(true)
+      end
+    end
+
+    it '新managed明細の元価格を税込へ換算して表示しない' do
+      item = ReceiptItem.new(
+        receipt: receipt,
+        pricing_source_kind: 'count_unit_price',
+        input_tax_inclusion: 'net',
+        tax_inclusion_origin: 'manual',
+        price: 100,
+        quantity: 2,
+        original_line_total: 200,
+        line_total: 220,
+        gross_line_total: 220,
+        tax_rate: 0.1
+      )
+      allow(item).to receive(:persisted?).and_return(true)
+      presenter = described_class.new(receipt: receipt, calculation_settings_form: settings_form)
+      row = presenter.item_row(item, new_record: false)
+
+      expect(row.price_value).to eq(100)
+      expect(row.input_tax_inclusion_value).to eq('net')
+      expect(row.active_tax_inclusion_field).to eq('input_tax_inclusion')
+    end
+
+    it '初期値由来でも保存済み税区分を未記録のfallbackとして案内しない' do
+      item = ReceiptItem.new(receipt: receipt, input_tax_inclusion: 'net', tax_inclusion_origin: 'form_default')
+      presenter = described_class.new(receipt: receipt, calculation_settings_form: settings_form)
+
+      expect(presenter.item_row(item, new_record: false).tax_inclusion_fallback?).to be(false)
+
+      item.input_tax_inclusion = nil
+      item.tax_inclusion_origin = nil
+      expect(presenter.item_row(item, new_record: false).tax_inclusion_fallback?).to be(true)
+    end
+  end
+
+  describe '詳細展開内の入力基準小計' do
+    let(:receipt) { build(:receipt) }
+
+    def source_subtotal_item(receipt, kind:, basis: 'net', tax_rate: BigDecimal('0.1'), amount: 180)
+      receipt.receipt_items.build(
+        pricing_source_kind: kind,
+        input_tax_inclusion: (basis unless kind == 'reference_quantity_price'),
+        reference_price_tax_inclusion: (basis if kind == 'reference_quantity_price'),
+        tax_inclusion_origin: 'manual',
+        price: 100,
+        quantity: 2,
+        quantity_unit_code: (kind == 'reference_quantity_price' ? 'gram' : 'each'),
+        reference_price_amount: 100,
+        reference_quantity: 1,
+        reference_quantity_unit_code: 'gram',
+        original_line_total: 200,
+        discount_amount: 20,
+        line_total: amount,
+        gross_line_total: 198,
+        tax_rate: tax_rate
+      )
+    end
+
+    %w[count_unit_price reference_quantity_price explicit_line_total].each do |kind|
+      it "#{kind}の割引後source額を税込投影や割引前額と分離し、保存済み税区分を表示する" do
+        item = source_subtotal_item(receipt, kind: kind)
+        row = described_class.new(receipt: receipt).item_row(item, new_record: false)
+        expect(ReceiptAmountService).not_to receive(:call)
+
+        aggregate_failures do
+          expect(row.source_line_total_value).to eq(180)
+          expect(row.source_line_total_label).to eq('税抜')
+          expect(row.gross_line_total_value).to eq(198)
+        end
+
+        item.public_send("#{row.active_tax_inclusion_field}=", 'gross')
+        expect(row.source_line_total_value).to eq(180)
+        expect(row.source_line_total_label).to eq('税込')
+      end
+    end
+
+    it '明示0%、税率不明、保存税区分不明は小計にし、0円と未入力を分ける' do
+      item = source_subtotal_item(receipt, kind: 'count_unit_price', amount: 0)
+      row = described_class.new(receipt: receipt).item_row(item, new_record: false)
+
+      [ BigDecimal('0'), BigDecimal('1.1'), nil ].each do |rate|
+        item.tax_rate = rate
+        expect(row.source_line_total_value).to eq(0)
+        expect(row.source_line_total_label).to eq('小計')
+      end
+      item.tax_rate = BigDecimal('0.1')
+      item.input_tax_inclusion = nil
+      expect(row.active_tax_inclusion_value).to eq('gross')
+      expect(row.source_line_total_label).to eq('小計')
+      item.line_total = nil
+      expect(row.source_line_total_value).to be_nil
+      expect(row.source_line_total_label).to eq('小計')
+    end
+
+    it '新規・不正・金額変更の再表示で保存済み小計や送信hidden値を現在の結果にしない' do
+      item = source_subtotal_item(receipt, kind: 'explicit_line_total')
+      [ { invalid_item_source: true }, { purchase_inputs_changed: true } ].each do |options|
+        row = described_class.new(receipt: receipt, **options).item_row(item, new_record: false)
+        expect(row.source_line_total_value).to be_nil
+        expect(row.source_line_total_label).to eq('小計')
+      end
+      new_row = described_class.new(receipt: receipt).item_row(item, new_record: true)
+      expect(new_row.source_line_total_value).to be_nil
+      expect(new_row.source_line_total_label).to eq('小計')
+    end
+
+    it '旧referenceの税込投影済みline_totalを税抜額と誤認せず、中立の保存額として表示する' do
+      item = source_subtotal_item(receipt, kind: 'reference_quantity_price', amount: 198)
+      item.gross_line_total = nil
+      item.tax_inclusion_origin = nil
+      row = described_class.new(receipt: receipt).item_row(item, new_record: false)
+
+      expect(row.source_line_total_value).to eq(198)
+      expect(row.source_line_total_label).to eq('小計')
+    end
+
+    it '非金額の422再表示では保存済みsourceを保ち、送信hidden値で上書きしない' do
+      item = source_subtotal_item(receipt, kind: 'count_unit_price')
+      allow(item).to receive(:persisted?).and_return(true)
+      allow(item).to receive(:id).and_return(42)
+      presenter = described_class.new(
+        receipt: receipt,
+        submitted_params: { receipt_items_attributes: { '0' => { id: 42, confirmed_name: '', line_total: '999' } } }
+      )
+      row = presenter.item_row(item, new_record: false)
+
+      expect(row.source_line_total_value).to eq(180)
+      expect(row.source_line_total_label).to eq('税抜')
+    end
+
+    it '明細金額source欠損や不正な保存額を現在の結果にしない' do
+      item = source_subtotal_item(receipt, kind: 'explicit_line_total')
+      row = described_class.new(receipt: receipt).item_row(item, new_record: false)
+      item.original_line_total = nil
+      expect(row.source_line_total_value).to be_nil
+      item.original_line_total = 200
+      item.line_total = -1
+      expect(row.source_line_total_value).to be_nil
+      expect(row.source_line_total_label).to eq('小計')
+    end
+  end
+
   it '購入入力変更状態をJSへ渡す' do
     presenter = described_class.new(
       receipt: build(:receipt),
@@ -77,6 +239,35 @@ RSpec.describe ReceiptFormPresenter do
       receipt.receipt_tax_details.create!(rate: nil, net_amount: 50, amount: 0)
 
       expect(described_class.new(receipt: receipt).adjustment_tax_detail_rates_value).to eq([ '10', nil ])
+    end
+  end
+
+  describe '#purchase_adjustment_tax_inclusion_visible?' do
+    it '購入調整だけで税区分を表示し、支払調整だけでは表示しない' do
+      receipt = build(:receipt)
+      receipt.receipt_adjustments.build(kind: 'payment_discount', sign: 'discount', amount: 10)
+
+      expect(described_class.new(receipt: receipt).purchase_adjustment_tax_inclusion_visible?).to be(false)
+
+      receipt.receipt_adjustments.build(kind: 'delivery_fee', sign: 'surcharge', amount: 10)
+
+      expect(described_class.new(receipt: receipt).purchase_adjustment_tax_inclusion_visible?).to be(true)
+    end
+
+    it '422で送信された分類と削除状態を反映する' do
+      receipt = create(:receipt)
+      adjustment = create(:receipt_adjustment, receipt: receipt, kind: 'delivery_fee', sign: 'surcharge')
+      submitted = {
+        receipt_adjustments_attributes: {
+          '0' => { id: adjustment.id, kind: 'payment_discount', sign: 'discount' }
+        }
+      }
+
+      expect(described_class.new(receipt: receipt, submitted_params: submitted).purchase_adjustment_tax_inclusion_visible?).to be(false)
+
+      submitted[:receipt_adjustments_attributes]['0'][:_destroy] = '1'
+
+      expect(described_class.new(receipt: receipt, submitted_params: submitted).purchase_adjustment_tax_inclusion_visible?).to be(false)
     end
   end
 
@@ -408,7 +599,7 @@ RSpec.describe ReceiptFormPresenter do
 
         rows.each(&block)
       end
-      receipt = instance_double(Receipt, receipt_items: items)
+      receipt = instance_double(Receipt, receipt_items: items, calculation_settings: nil, amount_calculation_profile: nil)
       presenter = described_class.new(
         receipt: receipt,
         submitted_params: { receipt_items_attributes: submitted_collection }

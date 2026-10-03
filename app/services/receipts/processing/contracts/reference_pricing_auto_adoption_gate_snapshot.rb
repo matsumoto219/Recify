@@ -480,7 +480,9 @@ module Receipts::Processing::Contracts
         blob = attachment&.blob
         return nil unless attachment&.persisted? && blob&.persisted?
 
-        semantic_attributes = deep_canonical_value(receipt.attributes.except("updated_at", "lock_version").as_json)
+        attributes = receipt.attributes.except("updated_at", "lock_version")
+        attributes.delete("calculation_settings") if attributes["calculation_settings"].nil?
+        semantic_attributes = deep_canonical_value(attributes.as_json)
         serialized = JSON.generate(semantic_attributes)
         return nil if serialized.bytesize > MAX_SEMANTIC_RECEIPT_BYTES
 

@@ -48,6 +48,7 @@ class Receipts::Editing::InputNormalizer
   end
 
   def call
+    validate_input_tax_inclusion!
     validate_manual_raw_unit_input!
     validate_authority_free_diagnostic_input!
     normalize_explicit_line_total_submission!
@@ -68,6 +69,15 @@ class Receipts::Editing::InputNormalizer
   private
 
   attr_reader :receipt, :attributes
+
+  def validate_input_tax_inclusion!
+    attributes["receipt_items_attributes"]&.each_value do |item|
+      next unless item.key?("input_tax_inclusion")
+      next if ReceiptCalculationSettings::TAX_INCLUSIONS.include?(item["input_tax_inclusion"])
+
+      raise Receipts::Editing::InvalidItemSourceError, "Invalid item input tax inclusion"
+    end
+  end
 
   def validate_manual_raw_unit_input!
     attributes["receipt_items_attributes"]&.each_value do |item|

@@ -92,6 +92,8 @@ ja:
         error: エラー
         info: 通知
       close_label: 閉じる
+    tip:
+      close_label: 説明を閉じる
     confirm_dialog:
       title: 操作を実行しますか？
       danger_title: 重要な操作を確認してください

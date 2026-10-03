@@ -24,8 +24,11 @@
                   "receipt-form-next-index-value": form_presenter.next_item_index,
                   "receipt-form-next-adjustment-index-value": form_presenter.next_adjustment_index,
                   "receipt-form-next-payment-index-value": form_presenter.next_payment_index,
-                  "receipt-form-rounding-mode-value": current_user.tax_rounding_mode,
-                  "receipt-form-discount-rounding-mode-value": current_user.discount_rounding_mode,
+                  "receipt-form-rounding-mode-value": form_presenter.calculation_setting_value("tax_rounding_mode"),
+                  "receipt-form-discount-rounding-mode-value": form_presenter.calculation_setting_value("discount_rounding_mode"),
+                  "receipt-form-tax-rounding-scope-value": form_presenter.tax_rounding_scope_value,
+                  "receipt-form-purchase-adjustment-tax-inclusion-value": form_presenter.calculation_setting_value("purchase_adjustment_tax_inclusion"),
+                  "receipt-form-preserve-recorded-amounts-value": receipt.persisted?,
                   "receipt-form-delete-confirmation-enabled-value": current_user.delete_confirmation_enabled,
                   "receipt-form-delete-confirmation-message-value": t("receipts.form.delete_item_confirm"),
                   "receipt-form-delete-adjustment-confirmation-message-value": t("receipts.form.delete_adjustment_confirm"),
@@ -71,6 +74,7 @@
               } do |f| %>
 
   <%= f.hidden_field :lock_version if receipt.persisted? %>
+  <%= hidden_field_tag :receipt_calculation_context, form_presenter.calculation_context_token %>
   <%= hidden_field_tag :receipt_form_initial_purchase_input_fingerprint,
         @receipt_form_initial_purchase_input_fingerprint,
         data: { receipt_form_target: "initialPurchaseInputFingerprint" } %>
@@ -300,6 +304,26 @@
           </div>
 
           <div class="p-6 space-y-4" data-receipt-form-target="adjustmentsContainer">
+            <div class="space-y-2" data-receipt-form-target="purchaseAdjustmentTaxInclusionControl"
+                 <% unless form_presenter.purchase_adjustment_tax_inclusion_visible? %> hidden inert<% end %>>
+              <%= fields_for :receipt_calculation_settings do |calculation_form| %>
+                <%= render "shared/ui/form/select_field",
+                           f: calculation_form,
+                           attribute: :purchase_adjustment_tax_inclusion,
+                           label: t("receipts.form.adjustments.tax_inclusion"),
+                           options: [[t("receipts.form.adjustments.tax_inclusion_blank"), "", { disabled: true }]] + form_presenter.tax_inclusion_options.map { |option| [option[:label], option[:value]] },
+                           selected: form_presenter.calculation_setting_value("purchase_adjustment_tax_inclusion"),
+                           size: :dense,
+                           html_options: {
+                             disabled: !form_presenter.purchase_adjustment_tax_inclusion_visible?,
+                             data: {
+                               action: "change->receipt-form#calculationSettingChanged",
+                               receipt_form_calculation_setting: "purchase_adjustment_tax_inclusion"
+                             }
+                           } %>
+              <% end %>
+              <p class="text-xs leading-relaxed token-text-muted"><%= t("receipts.form.adjustments.tax_inclusion_note") %></p>
+            </div>
             <% if form_presenter.adjustment_absence_confirmation_available? %>
               <% adjustment_absence_confirmation_visible = form_presenter.adjustment_absence_confirmation_visible? %>
               <div id="receipt-adjustment-absence-confirmation"
@@ -480,6 +504,8 @@
             </div>
           </div>
         <% end %>
+
+        <%= render "receipts/calculation_settings_fields", receipt: receipt, form_presenter: form_presenter %>
 
         <%= render "shared/ui/layout/surface_card", padding: :md, class: "receipt-form-memo-card" do %>
           <%= render "shared/ui/layout/section_header",

@@ -213,9 +213,9 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     result = amount_cell.find(".receipt-form-pricing-result", visible: true)
     pricing_details = row.find("details[data-receipt-pricing-source-details]", visible: :all)
     pricing_summary = pricing_details.find("summary[data-receipt-pricing-source-summary]", visible: true)
-    tax_note = row.find("[data-receipt-reference-tax-note]", visible: true)
-    tax_badge = tax_note.find("[data-receipt-reference-tax-badge]", visible: true)
-    tax_description = tax_note.find("[data-receipt-reference-tax-description]", visible: true)
+    tax_note = row.find("[data-receipt-tax-inclusion]", visible: true)
+    tax_badge = tax_note.find("[data-receipt-form-target='itemTaxInclusionControl']", visible: true)
+    tax_description = tax_note.find("[data-receipt-tax-inclusion-description]", visible: true)
     reference_price = row.find("[data-receipt-form-target='referencePriceAmountInput']", visible: true)
     reference_quantity = row.find("[data-receipt-form-target='referenceQuantityInput']", visible: true)
     reference_unit = row.find("[data-receipt-form-target='referenceQuantityUnitInput']", visible: true)
@@ -389,6 +389,256 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     page.evaluate_script("arguments[0].getBoundingClientRect().height", control)
   end
 
+  %w[new edit].each do |form_mode|
+    it "#{form_mode}の計算コントロールをモバイル全幅にし、詳細展開内の小計を短い税区分と欠けずに表示する" do
+      user = create_system_test_user
+      receipt = create_editable_receipt(user: user, store_name: "計算表示レスポンシブ確認店")
+
+      sign_in_through_browser(user)
+      visit(form_mode == "new" ? new_receipt_path : edit_receipt_path(receipt))
+      wait_for_stimulus_controller("receipt-form")
+      row = expand_item_row(find("[data-receipt-form-target='itemRow']", match: :first))
+      expand_pricing_source_details(row)
+      row.find("[data-receipt-form-target='quantityInput']", visible: true).set("1")
+      select_option(row, target: "quantityUnitInput", value: "liter")
+      select_option(row, target: "pricingSourceModeInput", value: "reference_quantity_price")
+      row.find("[data-receipt-form-target='referencePriceAmountInput']", visible: true).set("123456")
+      row.find("[data-receipt-form-target='referenceQuantityInput']", visible: true).set("1")
+      select_option(row, target: "referenceQuantityUnitInput", value: "liter")
+      expect(reference_line_total_display(row)).to have_text("¥123,456", exact: true)
+
+      controls = [
+        [ row.find("[data-receipt-form-target='itemTaxInclusionControl']"), 768 ],
+        [ find('[data-receipt-form-calculation-setting="tax_rounding_mode"]'), 768 ],
+        [ find('[data-receipt-form-calculation-setting="discount_rounding_mode"]'), 768 ]
+      ]
+      %w[light dark].each do |theme|
+        page.execute_script("document.documentElement.dataset.theme = arguments[0]", theme)
+        [ 320, 390, 640, 768, 1440, 1536 ].each do |width|
+          set_viewport(width: width, height: 900, mobile: width < 768)
+          wait_for_pricing_layout(row)
+
+          aggregate_failures "#{form_mode}, #{theme}, #{width}px" do
+            controls.each do |control, breakpoint|
+              remaining_width = page.evaluate_script(<<~JAVASCRIPT, control)
+                (() => {
+                  const control = arguments[0]
+                  const parent = control.parentElement
+                  const style = getComputedStyle(parent)
+                  return parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) -
+                    control.getBoundingClientRect().width
+                })()
+              JAVASCRIPT
+              if width < breakpoint
+                expect(remaining_width.abs).to be <= 1
+              else
+                expect(remaining_width).to be > 1
+              end
+            end
+
+            expect(row.find(".receipt-form-pricing-result").text.squish).to eq(
+              "計算金額 ¥123,456"
+            )
+            if width < 768
+              expect(row.find(".receipt-form-item-mobile-subtotal").text.squish).to eq("小計 ¥123,456")
+            end
+            expect(row.find("[data-receipt-form-target='lineTotalTooltip']", visible: :all).text(:all).strip)
+              .to eq("小計 ¥123,456")
+            displays = row.all(
+              ".receipt-form-item-detail-subtotal [data-receipt-form-target='sourceLineTotalDisplay']",
+              visible: true
+            )
+            expect(displays.size).to eq(width < 768 ? 0 : 1)
+            displays.each do |display|
+              expect(display).to have_text("¥123,456", exact: true)
+              expect(display.find(:xpath, "..").text.squish).to match(/\A(?:税込|税抜|小計) ¥123,456\z/)
+              text_metrics = page.evaluate_script(<<~JAVASCRIPT, display, row)
+                (() => {
+                  const display = arguments[0]
+                  const row = arguments[1]
+                  const categoryField = row.querySelector("select[name$='[category]']")
+                  const category = categoryField.getBoundingClientRect()
+                  const resultCell = display.closest(".receipt-form-item-detail-subtotal")
+                  const grid = resultCell.parentElement
+                  const gridStyle = getComputedStyle(grid)
+                  const fields = [
+                    row.querySelector("[data-receipt-form-target='discountRateInput']"),
+                    row.querySelector("[data-receipt-form-target='taxRateInput']"),
+                    categoryField
+                  ].map(field => Array.from(grid.children).find(cell => cell.contains(field)).getBoundingClientRect())
+                  const parent = display.parentElement.getBoundingClientRect()
+                  const range = document.createRange()
+                  range.selectNodeContents(display)
+                  const text = range.getBoundingClientRect()
+                  return {
+                    fits: display.scrollWidth <= display.clientWidth + 1 &&
+                      text.left >= parent.left - 1 && text.right <= parent.right + 1,
+                    nextRow: parent.top >= category.bottom - 1,
+                    sameRow: Math.min(parent.bottom, category.bottom) - Math.max(parent.top, category.top) >=
+                      Math.min(parent.height, category.height) / 2,
+                    boxBottom: parent.bottom,
+                    categoryBottom: category.bottom,
+                    boxWidth: parent.width,
+                    textWidth: text.width,
+                    textRight: text.right,
+                    boxRight: parent.right,
+                    fieldWidths: fields.map(field => field.width),
+                    remainingFieldWidth: grid.getBoundingClientRect().right - parseFloat(gridStyle.paddingRight) -
+                      parseFloat(gridStyle.borderRightWidth) - fields[2].right,
+                    resultWidth: resultCell.getBoundingClientRect().width
+                  }
+                })()
+              JAVASCRIPT
+              expect(text_metrics.fetch("fits")).to be(true), "#{width}px #{theme}: #{text_metrics}"
+              expect(text_metrics.fetch(width < 1536 ? "nextRow" : "sameRow"))
+                .to be(true), "#{width}px #{theme}: #{text_metrics}"
+              field_widths = text_metrics.fetch("fieldWidths")
+              expect(field_widths.max - field_widths.min).to be <= 1
+              if width < 1536
+                expect(text_metrics.fetch("remainingFieldWidth").abs).to be <= 1
+              else
+                expect((field_widths.first - text_metrics.fetch("resultWidth")).abs).to be <= 1
+              end
+            end
+            expect(page.evaluate_script("document.documentElement.scrollWidth <= window.innerWidth")).to be(true)
+          end
+        end
+      end
+      expect_browser_console_clean
+    end
+  end
+
+  it "詳細展開内だけ入力基準の割引後小計と税区分を同期し、税込の通常表示と合計を維持する" do
+    user = create_system_test_user
+    receipt = create_editable_receipt(user: user, store_name: "入力基準小計確認店")
+    receipt.update!(subtotal_amount: 200, tax_amount: 20, total_amount: 220)
+    receipt.receipt_items.first.update!(
+      price: 100, quantity: 2, original_line_total: 200, line_total: 200, gross_line_total: 220,
+      input_tax_inclusion: "net", tax_inclusion_origin: "manual", tax_rate: BigDecimal("0.1")
+    )
+
+    set_viewport(width: 768, height: 900, mobile: false)
+    sign_in_through_browser(user)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    row = expand_item_row(item_row_named("既存商品"))
+    expand_pricing_source_details(row)
+    source_display = row.find("[data-receipt-form-target='sourceLineTotalDisplay']")
+    source_label = row.find("[data-receipt-form-target='sourceLineTotalLabel']")
+    tax_control = row.find("[data-receipt-form-target='itemTaxInclusionControl']")
+    tax_rate = row.find("[data-receipt-form-target='taxRateInput']")
+    discount_rate = row.find("[data-receipt-form-target='discountRateInput']")
+
+    expect_source = lambda do |amount, label|
+      expect(source_display).to have_text(amount, exact: true)
+      expect(source_label).to have_text(label, exact: true)
+      expect(source_display["aria-label"]).to eq(label)
+    end
+    expect_gross = lambda do |amount|
+      row.all("[data-receipt-form-target='lineTotalDisplay']", visible: :all).each do |display|
+        expect(display).to have_text(:all, amount)
+      end
+      expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: amount.delete("¥"))
+    end
+
+    expect_source.call("¥200", "税抜")
+    %w[count_unit_price reference_quantity_price explicit_line_total].each do |mode|
+      discount_rate.set("0")
+      tax_rate.set("10")
+      select_option(row, target: "pricingSourceModeInput", value: mode)
+      if mode == "explicit_line_total"
+        click_button I18n.t("receipts.item_fields.clear_discount_before_explicit_label")
+      end
+      source_input = case mode
+      when "count_unit_price"
+        row.find("[data-receipt-form-target='priceInput']").tap { |input| input.set("100") }
+      when "reference_quantity_price"
+        select_option(row, target: "quantityUnitInput", value: "liter")
+        row.find("[data-receipt-form-target='referenceQuantityInput']").set("1")
+        select_option(row, target: "referenceQuantityUnitInput", value: "liter")
+        row.find("[data-receipt-form-target='referencePriceAmountInput']").tap { |input| input.set("100") }
+      else
+        row.find("[data-receipt-form-target='explicitLineTotalInput']").tap { |input| input.set("200") }
+      end
+      tax_control.find("label", text: "税抜", exact_text: true).click
+      expect_source.call("¥200", "税抜")
+      expect_gross.call("¥220")
+      tax_control.find("label", text: "税込", exact_text: true).click
+      expect_source.call("¥200", "税込")
+      expect_gross.call("¥200")
+      tax_control.find("label", text: "税抜", exact_text: true).click
+      discount_rate.set("10")
+      expect_source.call("¥180", "税抜")
+      expect_gross.call("¥198")
+      tax_rate.set("0")
+      expect_source.call("¥180", "小計")
+      source_input.set("")
+      expect_source.call("—", "小計")
+      source_input.set("0")
+      expect_source.call("¥0", "小計")
+    end
+
+    discount_rate.set("0")
+    maximum_amount = ReceiptAmountService.receipt_item_line_total_max
+    row.find("[data-receipt-form-target='explicitLineTotalInput']").set(maximum_amount.to_s)
+    expect_source.call("¥#{ActiveSupport::NumberHelper.number_to_delimited(maximum_amount)}", "小計")
+    [ 768, 1440, 1536 ].each do |width|
+      set_viewport(width: width, height: 900, mobile: false)
+      wait_for_pricing_layout(row)
+      text_metrics = page.evaluate_script(<<~JAVASCRIPT, source_display, source_label)
+        (() => {
+          const display = arguments[0]
+          const label = arguments[1]
+          const box = display.parentElement.getBoundingClientRect()
+          const amount = display.getBoundingClientRect()
+          const labelRect = label.getBoundingClientRect()
+          const style = getComputedStyle(display)
+          return {
+            fits: amount.left >= box.left - 1 && amount.right <= box.right + 1 &&
+              amount.left >= labelRect.right + 1,
+            ellipsis: style.textOverflow === "ellipsis" && style.overflowX === "hidden",
+            textOverflowing: display.scrollWidth > display.clientWidth + 1,
+            boxFits: display.parentElement.scrollWidth <= display.parentElement.clientWidth + 1,
+            boxWidth: box.width,
+            amountWidth: amount.width,
+            amountRight: amount.right,
+            boxRight: box.right
+          }
+        })()
+      JAVASCRIPT
+      aggregate_failures "maximum amount, #{width}px: #{text_metrics}" do
+        expect(text_metrics.fetch("fits")).to be(true)
+        expect(text_metrics.fetch("ellipsis")).to be(true)
+        expect(text_metrics.fetch("textOverflowing")).to eq(width >= 1536)
+        expect(text_metrics.fetch("boxFits")).to be(true)
+        expect(source_display["title"]).to eq(source_display.text)
+      end
+    end
+
+    full_amount = source_display.text
+    source_value = row.find("[data-receipt-form-target='lineTotalInput']", visible: :all).value
+    page.execute_script("arguments[0].parentElement.style.width = '100px'", source_display)
+    constrained_metrics = page.evaluate_script(<<~JAVASCRIPT, source_display)
+      (() => {
+        const display = arguments[0]
+        const box = display.parentElement
+        const style = getComputedStyle(display)
+        return {
+          ellipsis: style.textOverflow === "ellipsis" && style.overflowX === "hidden",
+          textOverflowing: display.scrollWidth > display.clientWidth,
+          boxFits: box.scrollWidth <= box.clientWidth + 1
+        }
+      })()
+    JAVASCRIPT
+    aggregate_failures do
+      expect(constrained_metrics).to eq("ellipsis" => true, "textOverflowing" => true, "boxFits" => true)
+      expect(source_display.text).to eq(full_amount)
+      expect(source_display["title"]).to eq(full_amount)
+      expect(row.find("[data-receipt-form-target='lineTotalInput']", visible: :all).value).to eq(source_value)
+    end
+    expect_browser_console_clean
+  end
+
   it "基準価格modeを320pxからdesktopまで共通金額セル内で欠けずに表示する" do
     user = create_system_test_user
     receipt = create_editable_receipt(user: user, store_name: "基準価格レスポンシブ確認店")
@@ -457,11 +707,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
         expect(metrics.fetch("pricingToggleDisplay")).to eq("inline-flex")
         expect(metrics.fetch("pricingToggleHeight")).to be >= 40
         expect(metrics.fetch("pricingToggleWidth")).to be <= metrics.fetch("pricingDetailsWidth")
-        expect(metrics.fetch("taxNoteAlignItems")).to eq("center")
-        expect(metrics.fetch("taxBadgeDescriptionCenterDifference")).to be <= 1.5
-        if viewport.fetch(:width) >= 1440
-          expect(metrics.fetch("taxDescriptionLineCount")).to be <= 1.1
-        end
+        expect(metrics.fetch("taxDescriptionLineCount")).to be >= 1
       end
     end
 
@@ -734,9 +980,9 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
         "120円 / 500ml（税込）"
       )
     end
-    tax_inclusion = row.find("[data-receipt-form-target='referencePriceTaxInclusionInput']", visible: :all)
+    tax_inclusion = row.find("[data-receipt-form-target='itemTaxInclusionControl'] input:checked", visible: :all)
     expect(tax_inclusion.value).to eq("gross")
-    expect(tax_inclusion[:type]).to eq("hidden")
+    expect(tax_inclusion[:type]).to eq("radio")
     expect(tax_inclusion).not_to be_disabled
 
     select_option(row, target: "pricingSourceModeInput", value: "explicit_line_total")
@@ -837,7 +1083,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
       expect(reference_quantity.value.to_d).to eq(BigDecimal("500"))
       expect(tax_rate.value).to eq("10")
       expect(row.find("[data-receipt-form-target='referenceQuantityUnitInput']", visible: :all).value).to eq("milliliter")
-      expect(row.find("[data-receipt-form-target='referencePriceTaxInclusionInput']", visible: :all).value).to eq("gross")
+      expect(row.find("[data-receipt-form-target='itemTaxInclusionControl'] input:checked", visible: :all).value).to eq("gross")
     end
 
     select_option(row, target: "quantityUnitInput", value: "liter")
@@ -1176,9 +1422,9 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
       expect(hidden_line_total.value).to eq("180")
       expect(
         missing_row.all("[data-receipt-form-target='lineTotalDisplay']", visible: :all).map { |display| display.text(:all) }
-      ).to all(include("¥180"))
+      ).to all(include(I18n.t("receipts.common.not_available")))
       expect(find("[data-receipt-form-target='totalAmount']", visible: :all)).to have_text(
-        I18n.t("receipts.common.not_available")
+        "¥180"
       )
 
       expect(zero_input.value).to eq("0")
@@ -1191,7 +1437,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     missing_row.find("[data-receipt-form-target='taxRateInput']", visible: :all).set("8")
     expect(
       missing_row.all("[data-receipt-form-target='lineTotalDisplay']", visible: :all).map { |display| display.text(:all) }
-    ).to all(include("¥180"))
+    ).to all(include(I18n.t("receipts.common.not_available")))
 
     missing_row.find("[data-receipt-form-target='discountRateInput']", visible: :all).set("")
     expand_item_row(zero_row)
@@ -1216,7 +1462,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
       expect(missing_row.find("[data-receipt-form-target='lineTotalInput']", visible: :all).value).to eq("180")
       expect(
         missing_row.all("[data-receipt-form-target='lineTotalDisplay']", visible: :all).map { |display| display.text(:all) }
-      ).to all(include("¥180"))
+      ).to all(include(I18n.t("receipts.common.not_available")))
       expect(find("[data-receipt-form-target='totalAmount']", visible: :all)).to have_text(
         I18n.t("receipts.common.not_available")
       )
@@ -1283,7 +1529,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     visit edit_receipt_path(receipt)
     wait_for_stimulus_controller("receipt-form")
     row = expand_item_row(item_row_named("計量確認品"))
-    expect(reference_line_total_display(row)).to have_text("¥648")
+    expect(reference_line_total_display(row)).to have_text(I18n.t("receipts.common.not_available"))
     expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥648")
     expect(item.reload.line_total).to eq(648)
 
@@ -1307,14 +1553,15 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
         reference_quantity_unit_code: "gram",
         reference_price_tax_inclusion: "net",
         original_line_total: 600,
-        line_total: 600
+        line_total: 648,
+        gross_line_total: nil
       )
     end
 
     visit edit_receipt_path(receipt)
     wait_for_stimulus_controller("receipt-form")
     row = expand_item_row(item_row_named("計量確認品"))
-    expect(reference_line_total_display(row)).to have_text("¥648")
+    expect(reference_line_total_display(row)).to have_text(I18n.t("receipts.common.not_available"))
     expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥648")
     expect_mobile_viewport_without_horizontal_overflow
     expect_browser_console_clean
@@ -1417,18 +1664,18 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     row = expand_item_row(item_row_named("税抜基準商品"))
     expand_pricing_source_details(row)
     reference_price = row.find("[data-receipt-form-target='referencePriceAmountInput']", visible: :all)
-    tax_inclusion = row.find("[data-receipt-form-target='referencePriceTaxInclusionInput']", visible: :all)
+    tax_inclusion = row.find("[data-receipt-form-target='itemTaxInclusionControl'] input:checked", visible: :all)
 
-    aggregate_failures "税抜sourceを明示し、切替UIは作らない" do
+    aggregate_failures "保存済み税抜sourceを選択した切替UIで表示する" do
       expect(row.find("[data-receipt-form-target='pricingSourceModeInput']", visible: :all).value).to eq(
         "reference_quantity_price"
       )
       expect(reference_price.value).to eq("110")
       expect(tax_inclusion.value).to eq("net")
-      expect(tax_inclusion[:type]).to eq("hidden")
+      expect(tax_inclusion[:type]).to eq("radio")
       expect(tax_inclusion).not_to be_disabled
-      expect(row).to have_text("税抜基準")
-      expect(reference_line_total_display(row)).to have_text("¥121")
+      expect(row).to have_text("税抜")
+      expect(reference_line_total_display(row)).to have_text(I18n.t("receipts.common.not_available"))
       expect(row.find("[data-receipt-form-target='pricingSourceSummary']", visible: true)).to have_text(
         "110円 / 1L（税抜）"
       )
@@ -1455,7 +1702,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
 
     aggregate_failures "Turbo cacheから復元してもtyped sourceと税区分がdriftしない" do
       expect(row.find("[data-receipt-form-target='referencePriceAmountInput']", visible: :all).value).to eq("130")
-      expect(row.find("[data-receipt-form-target='referencePriceTaxInclusionInput']", visible: :all).value).to eq("net")
+      expect(row.find("[data-receipt-form-target='itemTaxInclusionControl'] input:checked", visible: :all).value).to eq("net")
       expect(row.find("[data-receipt-form-target='pricingSourceModeInput']", visible: :all).value).to eq(
         "reference_quantity_price"
       )
@@ -1480,8 +1727,8 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     wait_for_stimulus_controller("receipt-form")
     row = expand_item_row(item_row_named("税抜基準商品"))
     expand_pricing_source_details(row)
-    expect(row.find("[data-receipt-form-target='referencePriceTaxInclusionInput']", visible: :all).value).to eq("net")
-    expect(row).to have_text("税抜基準")
+    expect(row.find("[data-receipt-form-target='itemTaxInclusionControl'] input:checked", visible: :all).value).to eq("net")
+    expect(row).to have_text("税抜")
     expect_mobile_viewport_without_horizontal_overflow
     expect_browser_console_clean
   end
@@ -1576,7 +1823,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
         expect(row.find("[data-receipt-form-target='referenceQuantityUnitInput']", visible: :all).value).to eq(
           source.fetch(:reference_unit)
         )
-        expect(row.find("[data-receipt-form-target='referencePriceTaxInclusionInput']", visible: :all).value).to eq(
+        expect(row.find("[data-receipt-form-target='itemTaxInclusionControl'] input:checked", visible: :all).value).to eq(
           "gross"
         )
       end

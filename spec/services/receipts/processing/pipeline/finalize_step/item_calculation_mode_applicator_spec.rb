@@ -20,14 +20,15 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     }
   end
 
-  def amount_for(params)
+  def amount_for(params, **rounding)
     ReceiptAmountService.call(
       receipt: params[:receipt_attributes],
       receipt_items: params[:receipt_items_attributes],
       receipt_tax_details: params[:receipt_tax_details_attributes],
       receipt_adjustments: params[:receipt_adjustments_attributes],
       receipt_payments: params[:receipt_payments_attributes],
-      context: :analysis
+      context: :analysis,
+      **rounding
     )
   end
 
@@ -36,6 +37,26 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     params = context.fetch(:params)
     params[:receipt_attributes].merge!(subtotal_amount: 770, tax_amount: 77, total_amount: 847)
     params[:receipt_tax_details_attributes] = tax_details ? [ { description: '外税10%', net_amount: 770, amount: 77, rate: BigDecimal('0.1') } ] : []
+    params[:receipt_payments_attributes] = []
+    context[:amount_result] = amount_for(params)
+    context
+  end
+
+  def mixed_basis_context(explicit_only: false)
+    mutate_raw = lambda do |raw|
+      next unless explicit_only
+
+      raw.dig('analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray').each do |item|
+        item.fetch('valueObject').delete('Quantity')
+      end
+    end
+
+    context = fixture_context('single_tax_receipt', mutate_raw: mutate_raw)
+    params = context.fetch(:params)
+    params[:receipt_attributes].merge!(subtotal_amount: 732, tax_amount: 73, total_amount: 805)
+    params[:receipt_tax_details_attributes] = [
+      { description: '内消費税10%', net_amount: 805, amount: 73, rate: BigDecimal('0.1') }
+    ]
     params[:receipt_payments_attributes] = []
     context[:amount_result] = amount_for(params)
     context
@@ -146,6 +167,197 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     aggregate_failures do
       expect(result).to be_applied
       expect(described_class::PROPOSAL_CONTRACT).to have_received(:from_snapshot).once
+    end
+  end
+
+  it '採用された混在候補の明細別証拠を検証してsource税区分を接続する' do
+    context = mixed_basis_context
+    result = result_for(context)
+
+    aggregate_failures do
+      expect(context.dig(:amount_result, :amount_engine, :selected_basis)).to eq('mixed_by_tax_rate_group')
+      expect(result).to be_applied
+      expect(result.decisions).to all(be_confirmed)
+      expect(result.selections.map(&:input_tax_inclusion)).to eq(%w[net net gross gross])
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+      expect(result.params.fetch(:receipt_items_attributes).map { |item| item[:price] }).to eq([ 220, 132, 110, 308 ])
+      expect(result.params.fetch(:receipt_items_attributes).map { |item| item[:line_total] }).to eq([ 220, 132, 110, 308 ])
+    end
+  end
+
+  it '数量sourceのない混在明細は印字額をexplicit入力に保持して税込projectionと分離する' do
+    context = mixed_basis_context(explicit_only: true)
+    result = result_for(context)
+
+    aggregate_failures do
+      expect(result).to be_applied
+      expect(result.selections).to all(have_attributes(pricing_source_kind: 'explicit_line_total'))
+      expect(result.selections.map(&:input_tax_inclusion)).to eq(%w[net net gross gross])
+      expect(result.params.fetch(:receipt_items_attributes).map { |item| item[:line_total] }).to eq([ 220, 132, 110, 308 ])
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+      expect(result.amount_result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 242, 145, 110, 308 ])
+    end
+  end
+
+  it '全明細が税抜のexplicit sourceも元金額と税区分を保持して同じ税込結果へ接続する' do
+    context = mixed_basis_context(explicit_only: true)
+    params = context.fetch(:params)
+    params[:receipt_attributes].merge!(subtotal_amount: 770, tax_amount: 77, total_amount: 847)
+    params[:receipt_tax_details_attributes] = []
+    context[:amount_result] = amount_for(params)
+
+    result = result_for(context)
+
+    aggregate_failures do
+      expect(context.dig(:amount_result, :amount_engine, :selected_basis)).to eq('items_as_tax_excluded')
+      expect(result).to be_applied
+      expect(result.selections.map(&:input_tax_inclusion)).to eq(%w[net net net net])
+      expect(result.selections).to all(have_attributes(pricing_source_kind: 'explicit_line_total'))
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+      expect(result.params[:receipt_items_attributes].map { |item| item[:line_total] }).to eq([ 220, 132, 110, 308 ])
+    end
+  end
+
+  it '混在証拠の欠損・重複・型違い・sourceやprojectionとの不一致は部分適用しない' do
+    mutations = [
+      ->(result) { result[:amount_engine][:selected_candidate_id] = 'other' },
+      ->(result) { result[:computed][:amount_engine_candidate_id] = 'other' },
+      ->(result) { result[:amount_engine][:selected_candidate][:computed_items].first[:line_total] += 1 },
+      lambda do |result|
+        result[:amount_engine][:selected_candidate][:evidence].delete_if { |entry| entry[:source] == 'receipt_items' && entry[:index] == 0 }
+      end,
+      lambda do |result|
+        entries = result[:amount_engine][:selected_candidate][:evidence]
+        entries << entries.find { |entry| entry[:source] == 'receipt_items' }.deep_dup
+      end,
+      lambda do |result|
+        result[:amount_engine][:selected_candidate][:evidence].find { |entry| entry[:source] == 'receipt_items' }[:basis] = 'unknown'
+      end,
+      lambda do |result|
+        result[:amount_engine][:selected_candidate][:evidence].find { |entry| entry[:source] == 'receipt_items' }[:index] = '0'
+      end,
+      lambda do |result|
+        result[:amount_engine][:selected_candidate][:evidence].find { |entry| entry[:source] == 'receipt_items' }[:rate] = BigDecimal('0.08')
+      end,
+      lambda do |result|
+        result[:amount_engine][:selected_candidate][:evidence].find { |entry| entry[:source] == 'receipt_items' }[:gross_amount] += 1
+      end
+    ]
+
+    mutations.each_with_index do |mutation, index|
+      context = mixed_basis_context(explicit_only: true)
+      mutation.call(context.fetch(:amount_result))
+      result = result_for(context)
+
+      aggregate_failures(index) do
+        expect(result).not_to be_applied
+        expect(result.params).to equal(context.fetch(:params))
+        expect(result.amount_result).to equal(context.fetch(:amount_result))
+      end
+    end
+  end
+
+  it '混在する明示0%明細はsourceとprojectionが同額の場合だけ非換算のgross入力にする' do
+    context = mixed_basis_context(explicit_only: true)
+    params = context.fetch(:params)
+    params[:receipt_items_attributes].last[:tax_rate] = BigDecimal('0')
+    params[:receipt_attributes].merge!(subtotal_amount: 760, tax_amount: 45, total_amount: 805)
+    params[:receipt_tax_details_attributes] = [
+      { description: '内消費税10%', net_amount: 497, amount: 45, rate: BigDecimal('0.1') }
+    ]
+    context[:amount_result] = amount_for(params)
+
+    result = result_for(context)
+
+    aggregate_failures do
+      expect(result).to be_applied
+      expect(result.selections.map(&:input_tax_inclusion)).to eq(%w[net net gross gross])
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+      expect(result.amount_result.dig(:computed, :items).last[:line_total]).to eq(308)
+    end
+  end
+
+  it '混在候補の最終再計算で個別明細か税率が変われば適用しない' do
+    context = mixed_basis_context(explicit_only: true)
+
+    result = result_for(context) do |candidate_params|
+      amount_for(candidate_params).deep_dup.tap do |final|
+        final[:computed][:items].first[:tax_rate] = BigDecimal('0.08')
+      end
+    end
+
+    expect(result).not_to be_applied
+  end
+
+  it '採用済みの非換算0%projectionは欠損税率から新しい税額を作らず接続し、逆の証拠は拒否する' do
+    context = mixed_basis_context(explicit_only: true)
+    params = context.fetch(:params)
+    params[:receipt_items_attributes].last[:tax_rate] = BigDecimal('0')
+    params[:receipt_attributes].merge!(subtotal_amount: 760, tax_amount: 45, total_amount: 805, tax_rate: nil)
+    params[:receipt_tax_details_attributes] = [
+      { description: '内消費税10%', net_amount: 497, amount: 45, rate: BigDecimal('0.1') }
+    ]
+    context[:amount_result] = amount_for(params)
+    params[:receipt_items_attributes].last[:tax_rate] = nil
+
+    result = result_for(context)
+
+    aggregate_failures do
+      expect(context.dig(:amount_result, :computed, :items).last[:tax_rate]).to eq(BigDecimal('0'))
+      expect(result).to be_applied
+      expect(result.selections.last.input_tax_inclusion).to eq('gross')
+      expect(result.amount_result[:resolved]).to eq(context.dig(:amount_result, :resolved))
+    end
+
+    params[:receipt_items_attributes].last[:tax_rate] = BigDecimal('0.1')
+    expect(result_for(context)).not_to be_applied
+  end
+
+  it '混在source接続は再計算で消えた既存reviewと独立profileを再判定せず元の診断を保持する' do
+    context = mixed_basis_context(explicit_only: true)
+    original = context.fetch(:amount_result)
+    original[:needs_review] = true
+    original[:warning_inconsistencies] = [ :price_tax_inclusion_uncertain ]
+    original[:inconsistencies] = [ :price_tax_inclusion_uncertain ]
+    original[:review_reasons] = [ 'price_tax_inclusion_uncertain' ]
+
+    result = result_for(context)
+
+    aggregate_failures do
+      expect(result).to be_applied
+      expect(result.amount_result[:needs_review]).to be(true)
+      expect(result.amount_result[:review_reasons]).to eq(original[:review_reasons])
+      expect(result.amount_result[:calculation_profile]).to eq(original[:calculation_profile])
+      expect(result.amount_result[:amount_engine]).to eq(original[:amount_engine])
+    end
+  end
+
+  it '混在sourceの再計算に新しいwarningやblockingが増えた場合は元診断で隠さず適用しない' do
+    context = mixed_basis_context(explicit_only: true)
+
+    result = result_for(context) do |params|
+      amount_for(params).deep_dup.tap do |result|
+        result[:review_reasons] |= [ 'tax_amount_mismatch' ]
+        result[:needs_review] = true
+      end
+    end
+
+    expect(result).not_to be_applied
+  end
+
+  it '金額が同じでも再検証candidateのidentityまたは丸め単位が一致しなければ適用しない' do
+    context = mixed_basis_context(explicit_only: true)
+    mutations = [
+      ->(result) { result[:amount_engine][:selected_candidate_id] = 'other' },
+      ->(result) { result[:amount_engine][:selected_candidate][:rounding_scope] = :per_item }
+    ]
+
+    mutations.each do |mutation|
+      result = result_for(context) do |params, **rounding|
+        amount_for(params, **rounding).deep_dup.tap(&mutation)
+      end
+
+      expect(result).not_to be_applied
     end
   end
 

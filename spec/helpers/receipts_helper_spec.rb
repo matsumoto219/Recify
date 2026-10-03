@@ -1,6 +1,24 @@
 require 'rails_helper'
 
 RSpec.describe ReceiptsHelper, type: :helper do
+  describe '#receipt_item_input_tax_inclusion' do
+    it '選択中の方式の税区分だけを表示し、explicitのreference診断を流用しない' do
+      item = ReceiptItem.new(
+        pricing_source_kind: 'explicit_line_total',
+        input_tax_inclusion: 'net',
+        reference_price_tax_inclusion: 'gross'
+      )
+      expect(helper.receipt_item_input_tax_inclusion(item)).to eq('税抜')
+      item.input_tax_inclusion = nil
+      expect(helper.receipt_item_input_tax_inclusion(item)).to be_nil
+
+      item.pricing_source_kind = 'reference_quantity_price'
+      expect(helper.receipt_item_input_tax_inclusion(item)).to eq('税込')
+      item.reference_price_tax_inclusion = 'unknown'
+      expect(helper.receipt_item_input_tax_inclusion(item)).to be_nil
+    end
+  end
+
   describe '#receipt_rate_display' do
     it '税率を最大2桁で表示し、不要な末尾0を除く' do
       aggregate_failures do

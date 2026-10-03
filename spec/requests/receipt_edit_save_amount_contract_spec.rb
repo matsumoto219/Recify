@@ -75,11 +75,15 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
     }.merge(overrides)
   end
 
-  def patch_receipt(receipt, attributes = nil, include_lock_version: true, **keyword_attributes)
+  def patch_receipt(receipt, attributes = nil, include_lock_version: true, calculation_controls: {}, **keyword_attributes)
     attributes = attributes ? attributes.merge(keyword_attributes) : keyword_attributes
     submitted_attributes = include_lock_version ? { lock_version: receipt.lock_version }.merge(attributes) : attributes
 
-    patch receipt_path(receipt), params: { receipt: submitted_attributes }
+    patch receipt_path(receipt), params: {
+      receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: receipt).token,
+      receipt_calculation_settings: calculation_controls,
+      receipt: submitted_attributes
+    }
   end
 
   describe 'post-update calculation input' do
@@ -252,8 +256,7 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
         expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
         expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
-        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
-        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+        expect(receipt.amount_calculation_profile).to eq({})
       end
 
       patch_receipt(
@@ -292,8 +295,7 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(receipt.review_reasons).to eq([ 'insufficient_data' ])
         expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
         expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
-        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
-        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
+        expect(receipt.amount_calculation_profile).to eq({})
       end
     end
 
@@ -392,9 +394,7 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
         expect(receipt.receipt_tax_details).to contain_exactly(tax_detail)
         expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
-        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
-        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
-        expect(receipt.amount_calculation_profile['warning_mismatch_codes']).to include('TAX_DETAIL_INCOMPLETE')
+        expect(receipt.amount_calculation_profile).to eq({})
       end
 
       patch_receipt(
@@ -434,13 +434,11 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
         expect(item).to have_attributes(price: nil, original_line_total: nil, line_total: nil)
         expect(receipt.receipt_tax_details).to contain_exactly(tax_detail)
         expect(receipt.amount_calculation_profile.dig('resolved', 'total_amount')).to be_nil
-        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate_id')).to eq('edit_saved_input')
-        expect(receipt.amount_calculation_profile['blocking_mismatch_codes']).to include('INSUFFICIENT_DATA')
-        expect(receipt.amount_calculation_profile['warning_mismatch_codes']).to include('TAX_DETAIL_INCOMPLETE')
+        expect(receipt.amount_calculation_profile).to eq({})
       end
     end
 
-    it '保存済みの明示0円itemは全項目保存でも購入金額の根拠として維持する' do
+    it '保存済み0円itemの同値再送では未確定のReceipt金額を勝手に確定しない' do
       receipt = create(
         :receipt,
         :review_needed,
@@ -476,11 +474,11 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt).to have_attributes(
-          subtotal_amount: 0,
-          tax_amount: 0,
-          total_amount: 0,
-          status: 'completed',
-          review_reasons: []
+          subtotal_amount: nil,
+          tax_amount: nil,
+          total_amount: nil,
+          status: 'review_needed',
+          review_reasons: [ 'insufficient_data' ]
         )
         expect(item).to have_attributes(price: 0, line_total: 0)
       end
@@ -498,6 +496,7 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
 
       patch_receipt(
         receipt,
+        calculation_controls: { purchase_adjustment_tax_inclusion: 'gross' },
         receipt_adjustments_attributes: {
           '0' => adjustment_attributes(edited, amount: '20')
         }
@@ -528,6 +527,7 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
 
       patch_receipt(
         receipt,
+        calculation_controls: { purchase_adjustment_tax_inclusion: 'gross' },
         receipt_items_attributes: {
           '0' => item_attributes(item)
         },
@@ -566,6 +566,7 @@ RSpec.describe 'Receipt edit-save amount contract', type: :request do
 
       patch_receipt(
         receipt,
+        calculation_controls: { purchase_adjustment_tax_inclusion: 'gross' },
         receipt_items_attributes: {
           '0' => item_attributes(item)
         },

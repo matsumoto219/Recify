@@ -153,6 +153,36 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
     end
   end
 
+  it '追加列がNULLのReceiptは列追加前と同じv4 semantic checksumを維持する' do
+    receipt = receipt_with_image
+    run_key = SecureRandom.uuid
+    old_attributes = receipt.attributes.except('calculation_settings')
+    allow(receipt).to receive(:attributes).and_return(old_attributes)
+    old_snapshot = described_class.capture_start(run_key:, run_source: 'upload', receipt:)
+    allow(receipt).to receive(:attributes).and_call_original
+
+    current_snapshot = described_class.capture_start(run_key:, run_source: 'upload', receipt:)
+
+    expect(current_snapshot.fetch('schema_version')).to eq('reference_pricing_auto_adoption_gate_v4')
+    expect(current_snapshot.fetch('receipt_state_at_start')).to eq(old_snapshot.fetch('receipt_state_at_start'))
+  end
+
+  it 'NULLでないReceipt固有条件はsemantic checksumの変更として検出する' do
+    receipt = receipt_with_image
+    run_key = SecureRandom.uuid
+    start_snapshot = described_class.capture_start(run_key:, run_source: 'upload', receipt:)
+    receipt.calculation_settings = {
+      'schema_version' => 1,
+      'tax_rounding_mode' => { 'value' => 'ceil', 'origin' => 'manual' }
+    }
+
+    changed_snapshot = described_class.capture_start(run_key:, run_source: 'upload', receipt:)
+
+    expect(changed_snapshot.dig('receipt_state_at_start', 'semantic_checksum')).not_to eq(
+      start_snapshot.dig('receipt_state_at_start', 'semantic_checksum')
+    )
+  end
+
   it '同じ画像世代と未解析から解析済みへの単一遷移だけを有効なReceipt stateにする' do
     receipt = receipt_with_image
     _run, bound = bound_gate_for(receipt)

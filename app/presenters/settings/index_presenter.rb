@@ -55,6 +55,13 @@ module Settings
       ]
     end
 
+    def item_tax_inclusion_options
+      [
+        { label: t("settings.index.calculation.tax_inclusion_options.gross"), value: "gross" },
+        { label: t("settings.index.calculation.tax_inclusion_options.net"), value: "net" }
+      ]
+    end
+
     private
 
     attr_reader :user

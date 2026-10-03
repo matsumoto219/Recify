@@ -75,7 +75,7 @@ class ReceiptAmountService
   ITEM_AMOUNT_BASES = %i[line_total_as_net line_total_as_recorded mixed_by_tax_rate_group].freeze
   TAX_DETAIL_AMOUNT_BASES = %i[gross net unknown].freeze
 
-  def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, snapshot_candidate_count: nil)
+  def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, tax_rounding_scope: nil, snapshot_candidate_count: nil)
     new(
       receipt: receipt,
       receipt_items: receipt_items,
@@ -86,6 +86,7 @@ class ReceiptAmountService
       rounding_mode: rounding_mode,
       tax_rounding_mode: tax_rounding_mode,
       discount_rounding_mode: discount_rounding_mode,
+      tax_rounding_scope: tax_rounding_scope,
       snapshot_candidate_count: snapshot_candidate_count
     ).call
   rescue *INVALID_ITEM_SOURCE_ERRORS
@@ -165,6 +166,18 @@ class ReceiptAmountService
       receipt: receipt,
       receipt_adjustments: receipt_adjustments
     )
+  end
+
+  def self.reconcile_payments(purchase_total:, receipt_adjustments:, receipt_payments:)
+    payment_adjustment_total = receipt_adjustments.sum do |adjustment|
+      classification = Amounts::AdjustmentClassifier.call(adjustment)
+      classification[:effect] == :payment_adjustment ? classification[:signed_amount].to_i : 0
+    end
+    Amounts::PaymentReconciler.new(
+      payments: receipt_payments,
+      purchase_total: purchase_total,
+      payment_adjustment_total: payment_adjustment_total
+    ).call
   end
 
   def self.reference_projection_fallback_tax_rate(receipt_tax_rate:, receipt_tax_details:)
@@ -394,21 +407,23 @@ class ReceiptAmountService
     )
   end
 
-  def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, snapshot_candidate_count: nil)
+  def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, tax_rounding_scope: nil, snapshot_candidate_count: nil)
     @context = normalize_context(context)
+    @analysis_tax_rounding_scope = normalized_analysis_tax_rounding_scope(tax_rounding_scope)
     @snapshot_candidate_count = snapshot_candidate_count
     @receipt = normalize_receipt(receipt)
+    @calculation_settings = normalized_calculation_settings
     @items = Array(receipt_items).map { |i| normalize_item(i) }
     @tax_details = Array(receipt_tax_details).map { |t| normalize_tax_detail(t) }
     @adjustments = Array(receipt_adjustments).map { |adjustment| normalize_adjustment(adjustment) }
     @payments = Array(receipt_payments).map { |payment| normalize_payment(payment) }
-    @tax_rounding_mode_explicit = !rounding_mode.nil? || !tax_rounding_mode.nil?
-    @discount_rounding_mode_explicit = !discount_rounding_mode.nil?
+    @tax_rounding_mode_explicit = @calculation_settings.present? || !rounding_mode.nil? || !tax_rounding_mode.nil?
+    @discount_rounding_mode_explicit = @calculation_settings.present? || !discount_rounding_mode.nil?
     @tax_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
-      tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
+      @calculation_settings&.value_for("tax_rounding_mode") || tax_rounding_mode || rounding_mode || Amounts::Rounding::TAX_DEFAULT_MODE
     )
     @discount_rounding_mode = Amounts::Rounding.normalize_rounding_mode(
-      discount_rounding_mode || Amounts::Rounding::DISCOUNT_DEFAULT_MODE
+      @calculation_settings&.value_for("discount_rounding_mode") || discount_rounding_mode || Amounts::Rounding::DISCOUNT_DEFAULT_MODE
     )
     adjustment_rate_items = adjustment_tax_rate_items
     @adjustments = Amounts::AdjustmentTaxRateResolver.call(
@@ -417,6 +432,7 @@ class ReceiptAmountService
       tax_details: @tax_details
     )
     @adjustments = canonical_adjustments(@adjustments, @payments)
+    validate_managed_adjustment_basis!
     @payments = canonical_payments(@payments, @adjustments)
     @edit_source_semantics = normalized_edit_source_semantics
   rescue *INVALID_ITEM_SOURCE_ERRORS
@@ -496,7 +512,7 @@ class ReceiptAmountService
       adjusted_item_total: [ item_total + adjustment_summary[:receipt_total_delta].to_i, 0 ].max,
       items: items
     }
-    computed[:source_items] = items if @context == :edit_save
+    computed[:source_items] = items if @context == :edit_save || @calculation_settings
 
     {
       context: @context,
@@ -509,11 +525,13 @@ class ReceiptAmountService
       tax_details: [],
       inconsistencies: [],
       mismatch_codes: [],
-      mismatch_messages: []
+      mismatch_messages: [],
+      calculation_settings: @calculation_settings&.to_h
     }
   end
 
   def active_calculation_profile
+    return empty_calculation_profile if @calculation_settings
     return trusted_edit_calculation_profile if @edit_source_semantics.present?
 
     applicable_calculation_profile(estimate_calculation_profile)
@@ -532,6 +550,10 @@ class ReceiptAmountService
   end
 
   def evaluated_candidates_for_engine
+    if @analysis_tax_rounding_scope
+      return native_profile_candidates.select { |candidate| candidate.rounding_scope == @analysis_tax_rounding_scope }
+    end
+    return native_profile_candidates if @calculation_settings
     return @estimated_candidates if @edit_source_semantics.blank?
 
     native_profile_candidates.select do |candidate|
@@ -877,7 +899,7 @@ class ReceiptAmountService
   # Normalizers (accept Hash/AR)
   # -----------------------------
   def normalize_receipt(r)
-    {
+    normalized = {
       total_amount: to_i_or_nil(fetch_value(r, :total_amount)),
       subtotal_amount: to_i_or_nil(fetch_value(r, :subtotal_amount)),
       tax_amount: to_i_or_nil(fetch_value(r, :tax_amount)),
@@ -890,6 +912,43 @@ class ReceiptAmountService
       item_amount_basis: fetch_value(r, :item_amount_basis),
       tax_detail_amount_basis: fetch_value(r, :tax_detail_amount_basis)
     }
+    normalized[:calculation_settings] = fetch_value(r, :calculation_settings) if manual_input_context?
+    normalized
+  end
+
+  def normalized_analysis_tax_rounding_scope(value)
+    return nil if value.nil?
+
+    scope = Amounts::RoundingScope::SCOPES.find { |entry| value == entry || value == entry.to_s }
+    unless @context == :analysis && scope
+      raise InvalidItemSourceError, "Invalid analysis tax rounding scope"
+    end
+
+    scope
+  end
+
+  def normalized_calculation_settings
+    return nil if @receipt[:calculation_settings].nil?
+
+    settings = ReceiptCalculationSettings.parse(@receipt[:calculation_settings])
+    required = %w[tax_rounding_mode discount_rounding_mode tax_rounding_scope]
+    unless settings && required.all? { |key| settings.value_for(key) }
+      raise InvalidItemSourceError, "Invalid receipt calculation settings"
+    end
+
+    @receipt[:calculation_settings] = settings.to_h
+    settings
+  end
+
+  def validate_managed_adjustment_basis!
+    return unless @calculation_settings
+    return if @calculation_settings.value_for("purchase_adjustment_tax_inclusion")
+    return unless @adjustments.any? do |adjustment|
+      classification = Amounts::AdjustmentClassifier.call(adjustment)
+      classification[:effect] != :payment_adjustment && classification[:signed_amount].nonzero?
+    end
+
+    raise InvalidItemSourceError, "Purchase adjustments require an explicit tax basis"
   end
 
   def normalized_edit_source_semantics
@@ -940,6 +999,8 @@ class ReceiptAmountService
     validate_reference_formula_input!(i) if reference_formula
     validate_count_formula_input!(i) if count_formula
     validate_manual_explicit_quantity_input!(quantity) if explicit_line_total && manual_input_context?
+    input_tax_inclusion = normalized_item_tax_inclusion(i, pricing_source_kind)
+    item_id = normalized_item_id(i)
     quantity_unit_value = fetch_value(i, :quantity_unit_code)
     quantity_unit_code = if reference_formula || count_formula
       quantity_unit_value
@@ -947,7 +1008,7 @@ class ReceiptAmountService
       ReceiptQuantityUnit.normalize(quantity_unit_value)
     end
 
-    {
+    normalized = {
       price: authority_free_diagnostic ? nil : to_i_or_nil(price),
       quantity: reference_formula ? quantity : to_decimal_or_nil(quantity),
       original_line_total: to_i_or_nil(original_line_total),
@@ -979,6 +1040,39 @@ class ReceiptAmountService
         discount_amount
       )
     }
+    normalized[:input_tax_inclusion] = input_tax_inclusion unless input_tax_inclusion.nil?
+    normalized[:tax_inclusion_origin] = "analysis" if @context == :analysis && !input_tax_inclusion.nil?
+    normalized[:id] = item_id unless item_id.nil?
+    normalized
+  end
+
+  def normalized_item_tax_inclusion(item, pricing_source_kind)
+    analysis_source = @context == :analysis && fetch_value(item, :tax_inclusion_origin) == "analysis"
+    return nil unless manual_input_context? || analysis_source
+
+    value = fetch_value(item, :input_tax_inclusion)
+    typed_input = %w[count_unit_price explicit_line_total].include?(pricing_source_kind)
+    return nil if value.nil? && pricing_source_kind == "reference_quantity_price"
+    return nil if value.nil? && !analysis_source && !(@calculation_settings && typed_input)
+    unless %w[count_unit_price explicit_line_total].include?(pricing_source_kind) && %w[gross net].include?(value)
+      raise InvalidItemSourceError, "Invalid item input tax inclusion"
+    end
+
+    value
+  end
+
+  def normalized_item_id(item)
+    return nil unless manual_input_context?
+
+    value = fetch_value(item, :id)
+    return nil if value.nil?
+    if value.is_a?(String) && value.bytesize <= 19 && value.valid_encoding? &&
+        value.encoding.ascii_compatible? && value.match?(/\A[1-9][0-9]*\z/)
+      value = value.to_i
+    end
+    return value if value.is_a?(Integer) && value.positive? && value.bit_length <= 63
+
+    raise InvalidItemSourceError, "Invalid item identity"
   end
 
   def item_pricing_diagnostic_evidence_present?(item)
@@ -1025,7 +1119,7 @@ class ReceiptAmountService
     )
     tax_inclusion = fetch_value(item, :reference_price_tax_inclusion).to_s
 
-    unless %w[gross net].include?(tax_inclusion) && (@context != :manual || tax_inclusion == "gross")
+    unless %w[gross net].include?(tax_inclusion)
       raise Amounts::ItemPricingSource::InvalidContractError,
         "reference price tax inclusion is invalid for the amount context"
     end
@@ -1313,6 +1407,9 @@ class ReceiptAmountService
 
   def adjustment_totals_for(receipt_tax_basis, rounding_mode: @tax_rounding_mode)
     @adjustment_totals_by_basis ||= {}
+    if @calculation_settings&.value_for("purchase_adjustment_tax_inclusion")
+      receipt_tax_basis = @calculation_settings.value_for("purchase_adjustment_tax_inclusion") == "net" ? :tax_added_to_subtotal : :total_includes_tax
+    end
     key = [ receipt_tax_basis.to_s.to_sym, rounding_mode.to_s.to_sym ]
     @adjustment_totals_by_basis[key] ||= Amounts::AdjustmentTotalAggregator.new(
       adjustments: @adjustments,

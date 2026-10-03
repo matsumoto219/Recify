@@ -21,6 +21,7 @@ class ReceiptItem < ApplicationRecord
   REFERENCE_PRICE_AMOUNT_MAX_SCALE = 6
   REFERENCE_QUANTITY_MAX = BigDecimal("9999.999")
   REFERENCE_QUANTITY_MAX_SCALE = 3
+  GROSS_LINE_TOTAL_MAX = 999_999_999_999
   RAW_UNIT_MAX_LENGTH = 64
 
   belongs_to :receipt
@@ -48,6 +49,13 @@ class ReceiptItem < ApplicationRecord
               less_than_or_equal_to: ->(_item) { ReceiptAmountService.receipt_item_line_total_max }
             },
             allow_blank: true
+  validates :gross_line_total,
+            numericality: {
+              only_integer: true,
+              greater_than_or_equal_to: 0,
+              less_than_or_equal_to: ->(_item) { [ GROSS_LINE_TOTAL_MAX, ReceiptAmountService.receipt_item_line_total_max ].min }
+            },
+            unless: ->(item) { item.gross_line_total_before_type_cast.nil? }
 
   validates :quantity,
             numericality: { greater_than: 0, less_than_or_equal_to: 9_999.999 },
@@ -87,6 +95,12 @@ class ReceiptItem < ApplicationRecord
   validates :reference_price_tax_inclusion,
             inclusion: { in: REFERENCE_PRICE_TAX_INCLUSIONS },
             allow_nil: true
+  validates :input_tax_inclusion,
+            inclusion: { in: ReceiptCalculationSettings::TAX_INCLUSIONS },
+            allow_nil: true
+  validates :tax_inclusion_origin,
+            inclusion: { in: ReceiptCalculationSettings::ORIGINS },
+            allow_nil: true
   validates :product_code, length: { maximum: 100 }, allow_blank: true    # 商品コード(MAX100文字)
 
   # AI関連(信頼度 0.0~1.0)
@@ -95,9 +109,20 @@ class ReceiptItem < ApplicationRecord
             allow_blank: true
   validate :items_per_receipt_within_limit, on: :create
   validate :measurement_pricing_source_contract
+  validate :input_tax_inclusion_contract
+  validate :gross_line_total_must_be_integer
 
   def review_required?
     needs_review?
+  end
+
+  def gross_amount_for_display(receipt: nil)
+    return gross_line_total if safe_display_amount?(gross_line_total)
+    return unless gross_line_total.nil? && safe_display_amount?(line_total)
+    return line_total if recorded_gross_input?
+
+    stored_receipt = receipt || (association(:receipt).target if association(:receipt).loaded?)
+    line_total if legacy_gross_projection?(stored_receipt)
   end
 
   def self.category_options
@@ -182,6 +207,26 @@ class ReceiptItem < ApplicationRecord
 
   private
 
+  def safe_display_amount?(amount)
+    amount.is_a?(Integer) && amount.between?(0, GROSS_LINE_TOTAL_MAX)
+  end
+
+  def recorded_gross_input?
+    if pricing_source_kind == "reference_quantity_price"
+      input_tax_inclusion.nil? && reference_price_tax_inclusion == "gross"
+    else
+      %w[count_unit_price explicit_line_total].include?(pricing_source_kind) &&
+        input_tax_inclusion == "gross" &&
+        ReceiptCalculationSettings::ORIGINS.include?(tax_inclusion_origin)
+    end
+  end
+
+  def legacy_gross_projection?(stored_receipt)
+    stored_receipt &&
+      input_tax_inclusion.nil? &&
+      stored_receipt.legacy_gross_item_projection?(pricing_source_kind: pricing_source_kind)
+  end
+
   def measurement_pricing_source_contract
     validate_exact_reference_numeric(
       :reference_price_amount,
@@ -202,6 +247,28 @@ class ReceiptItem < ApplicationRecord
     validate_raw_unit_token(:reference_quantity_unit_raw)
     validate_reference_evidence_shape
     validate_pricing_source_integrity
+  end
+
+  def input_tax_inclusion_contract
+    unless input_tax_inclusion.nil?
+      unless %w[count_unit_price explicit_line_total].include?(pricing_source_kind)
+        errors.add(:input_tax_inclusion, :invalid)
+      end
+      errors.add(:tax_inclusion_origin, :blank) if tax_inclusion_origin.nil?
+      return
+    end
+    return if tax_inclusion_origin.nil?
+    return if pricing_source_kind == "reference_quantity_price" && REFERENCE_PRICE_TAX_INCLUSIONS.include?(reference_price_tax_inclusion)
+
+    errors.add(:tax_inclusion_origin, :invalid)
+  end
+
+  def gross_line_total_must_be_integer
+    raw_value = source_value_before_type_cast(:gross_line_total)
+    return if raw_value.nil?
+
+    exact_value = exact_decimal_rational(raw_value)
+    errors.add(:gross_line_total, :not_an_integer) unless exact_value && exact_value.denominator == 1
   end
 
   def validate_exact_reference_numeric(attribute, minimum:, maximum:, maximum_scale:, minimum_inclusive:)

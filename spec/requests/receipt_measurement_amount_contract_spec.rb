@@ -7,6 +7,10 @@ RSpec.describe 'Receipt measurement amount contract', type: :request do
     sign_in user
   end
 
+  def calculation_context(receipt = Receipt.new(user: user))
+    Receipts::CalculationContext.build(user: user, receipt: receipt).token
+  end
+
   def create_measurement_receipt
     receipt = create(
       :receipt,
@@ -58,6 +62,7 @@ RSpec.describe 'Receipt measurement amount contract', type: :request do
     item.reload
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -166,6 +171,7 @@ RSpec.describe 'Receipt measurement amount contract', type: :request do
 
   it 'JSが空hidden小計を0へ同期した手動measurementを0円で保存する' do
     post receipts_path, params: {
+      receipt_calculation_context: calculation_context,
       receipt: {
         store_name: '手動計量0円店',
         payment_method: 'cash',
@@ -207,6 +213,7 @@ RSpec.describe 'Receipt measurement amount contract', type: :request do
   it 'JSを通さない空hidden小計の手動measurementを保存しない' do
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '手動計量空欄店',
           payment_method: 'cash',

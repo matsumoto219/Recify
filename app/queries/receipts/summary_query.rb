@@ -52,6 +52,8 @@ module Receipts
     def categories
       scoped_receipts = receipts.where(user_id: user.id).reorder(nil)
       category_expression = normalized_category_expression
+      gross_amount = Arel.sql(trusted_gross_amount_sql)
+      item_count = ReceiptItem.arel_table[:id].count
 
       rows = scoped_receipts
         .where(status: AMOUNT_STATUSES)
@@ -59,23 +61,69 @@ module Receipts
         .group(category_expression)
         .pluck(
           category_expression,
-          Arel.sql("COALESCE(SUM(receipt_items.line_total), 0)"),
-          Arel.sql("COUNT(receipt_items.id)")
+          gross_amount.sum,
+          item_count,
+          item_count - gross_amount.count
         )
 
-      rows.map do |category, total_amount, item_count|
+      rows.map do |category, total_amount, item_count, unknown_amount_count|
         {
           category: category,
           label: category_label(category),
-          total_amount: total_amount.to_i,
-          item_count: item_count.to_i
+          total_amount: total_amount&.to_i,
+          item_count: item_count.to_i,
+          unknown_amount_count: unknown_amount_count.to_i
         }
-      end.sort_by { |entry| [ -entry[:total_amount], entry[:label] ] }
+      end.sort_by { |entry| [ entry[:total_amount].nil? ? 1 : 0, -entry[:total_amount].to_i, entry[:label] ] }
     end
 
     private
 
     attr_reader :user, :scope
+
+    def trusted_gross_amount_sql
+      maximum = ReceiptItem::GROSS_LINE_TOTAL_MAX
+      origins = ReceiptCalculationSettings::ORIGINS.map { |value| Receipt.connection.quote(value) }.join(", ")
+      <<~SQL.squish
+        CASE
+          WHEN receipt_items.gross_line_total IS NOT NULL THEN
+            CASE WHEN receipt_items.gross_line_total BETWEEN 0 AND #{maximum} THEN receipt_items.gross_line_total END
+          WHEN receipt_items.line_total BETWEEN 0 AND #{maximum} AND (
+            (receipt_items.pricing_source_kind IN ('count_unit_price', 'explicit_line_total')
+              AND receipt_items.input_tax_inclusion = 'gross' AND receipt_items.tax_inclusion_origin IN (#{origins}))
+            OR (receipt_items.pricing_source_kind = 'reference_quantity_price'
+              AND receipt_items.input_tax_inclusion IS NULL AND receipt_items.reference_price_tax_inclusion = 'gross')
+            OR (#{legacy_gross_projection_sql})
+          ) THEN receipt_items.line_total
+        END
+      SQL
+    end
+
+    def legacy_gross_projection_sql
+      profile = "receipts.amount_calculation_profile"
+      engine = "#{profile} -> 'amount_engine'"
+      candidate = "#{engine} -> 'selected_candidate'"
+      <<~SQL.squish
+        receipts.calculation_settings IS NULL AND receipt_items.input_tax_inclusion IS NULL
+        AND #{profile} -> 'schema_version' = '1'::jsonb
+        AND #{profile} ->> 'schema_version' = '1'
+        AND #{profile} ->> 'selected_candidate_status' = 'accepted'
+        AND (#{profile} ->> 'context' = 'manual'
+          OR (#{profile} ->> 'context' = 'analysis' AND receipt_items.pricing_source_kind IS NULL))
+        AND #{engine} -> 'schema_version' = '1'::jsonb
+        AND #{engine} ->> 'schema_version' = '1'
+        AND #{engine} ->> 'selected_candidate_status' = 'accepted'
+        AND #{engine} -> 'no_safe_candidate' = 'false'::jsonb
+        AND #{engine} ->> 'selected_basis' IN ('items_as_tax_included', 'items_as_tax_excluded')
+        AND #{candidate} -> 'hard_reject_reasons' = '[]'::jsonb
+        AND #{candidate} ->> 'basis' = #{engine} ->> 'selected_basis'
+        AND #{candidate} ->> 'candidate_id' = #{engine} ->> 'selected_candidate_id'
+        AND #{candidate} ->> 'rounding_mode' IN ('floor', 'round', 'ceil')
+        AND #{candidate} ->> 'rounding_scope' IN ('per_item', 'per_tax_rate_group', 'per_receipt')
+        AND #{candidate} ->> 'candidate_id' = CONCAT(
+          #{candidate} ->> 'basis', '/', #{candidate} ->> 'rounding_mode', '/', #{candidate} ->> 'rounding_scope')
+      SQL
+    end
 
     def receipts
       scope || user.receipts

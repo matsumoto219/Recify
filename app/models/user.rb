@@ -48,6 +48,8 @@ class User < ApplicationRecord
   validates :tax_rounding_mode,
             :discount_rounding_mode,
             inclusion: { in: ROUNDING_MODES }
+  validates :default_item_tax_inclusion,
+            inclusion: { in: ReceiptCalculationSettings::TAX_INCLUSIONS }
 
   validate :pending_email_must_be_available, if: -> { pending_email_candidate.present? }
   validate :legal_agreement_must_be_accepted, if: :legal_agreement_required?

@@ -247,6 +247,28 @@
                 wrapper_class: "md:w-auto",
                 options: settings_presenter.rounding_mode_options %>
         </div>
+
+        <%= render "shared/ui/layout/section_divider" %>
+
+        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-1">
+            <h3 class="text-sm font-semibold token-text-base"><%= t("settings.index.calculation.item_tax_inclusion.label") %></h3>
+            <p class="text-xs token-text-muted leading-relaxed">
+              <%= t("settings.index.calculation.item_tax_inclusion.description") %>
+            </p>
+          </div>
+
+          <%= render "shared/ui/form/segmented_control",
+                name: "default_item_tax_inclusion",
+                value: current_user.default_item_tax_inclusion,
+                url: settings_path,
+                method: :patch,
+                remote: true,
+                size: :sm,
+                full_width: true,
+                wrapper_class: "md:w-auto",
+                options: settings_presenter.item_tax_inclusion_options %>
+        </div>
       </div>
 
       <p class="text-[11px] token-text-subtle leading-relaxed mt-4">

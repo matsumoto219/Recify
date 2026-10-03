@@ -37,6 +37,20 @@ RSpec.describe 'Admin receipts', type: :request do
   end
 
   describe 'GET /admin/receipts/:public_id' do
+    it '管理者にも保存明細金額・税込参考額・未確定を区別して表示する' do
+      admin = create(:user, :admin)
+      receipt = create(:receipt)
+      receipt.receipt_items.create!(confirmed_name: '税抜明細', line_total: 19, gross_line_total: 20)
+      receipt.receipt_items.create!(confirmed_name: '旧明細', line_total: 99)
+      sign_in admin
+
+      expect(ReceiptAmountService).not_to receive(:call)
+      get admin_receipt_path(receipt)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('保存明細金額', '税込参考額', '税込額未確定', '¥19', '¥20')
+    end
+
     it '非ログインユーザーには既存404と同じbody/headerを返す' do
       receipt = create(:receipt)
 

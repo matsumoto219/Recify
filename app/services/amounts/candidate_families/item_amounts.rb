@@ -5,7 +5,7 @@ module Amounts
     class ItemAmounts < Base
       def call
         tax_rounding_modes.flat_map do |rounding_mode|
-          Amounts::RoundingScope::SCOPES.flat_map do |rounding_scope|
+          item_rounding_scopes.flat_map do |rounding_scope|
             [
               items_as_tax_included_candidate(rounding_mode, rounding_scope),
               items_as_tax_excluded_candidate(rounding_mode, rounding_scope),
@@ -18,6 +18,8 @@ module Amounts
       private
 
       def items_as_tax_included_candidate(rounding_mode, rounding_scope)
+        return nil if managed_item_basis == :tax_excluded
+
         build_item_candidate(
           candidate_id: "items_as_tax_included/#{rounding_mode}/#{rounding_scope}",
           basis: "items_as_tax_included",
@@ -28,6 +30,7 @@ module Amounts
       end
 
       def items_as_tax_excluded_candidate(rounding_mode, rounding_scope)
+        return nil if managed_item_basis == :tax_included
         return nil unless tax_excluded_price_conversion_enabled?
 
         build_item_candidate(
@@ -173,6 +176,7 @@ module Amounts
       end
 
       def apply_purchase_adjustments_to_groups!(groups, item_basis:, rounding_mode:)
+        item_basis = purchase_adjustment_basis(item_basis)
         classified_adjustments.each do |entry|
           classification = entry[:classification]
           next if classification[:effect] == :payment_adjustment

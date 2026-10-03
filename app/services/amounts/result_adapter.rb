@@ -25,6 +25,8 @@ module Amounts
       return result unless selected_candidate
 
       apply_candidate_result!(result)
+      settings = applied_calculation_settings
+      result[:applied_calculation_settings] = settings if settings
       result[:safe_to_auto_complete] = safe_to_auto_complete?(result)
 
       result
@@ -60,6 +62,41 @@ module Amounts
 
     def normalized_base_inconsistencies
       Array(base_value(:inconsistencies, [])).map(&:to_sym)
+    end
+
+    def applied_calculation_settings
+      return nil unless base_context == :analysis && selected_candidate.accepted?
+
+      profile = selected_candidate.calculation_profile
+      profile = profile.respond_to?(:to_h) ? profile.to_h.symbolize_keys : {}
+      values = {
+        "tax_rounding_mode" => selected_candidate.rounding_mode,
+        "discount_rounding_mode" => profile[:discount_rounding_mode],
+        "tax_rounding_scope" => selected_candidate.rounding_scope,
+        "purchase_adjustment_tax_inclusion" => applied_purchase_adjustment_basis
+      }
+      settings = values.each_with_object({ "schema_version" => 1 }) do |(key, value), attributes|
+        next unless value.is_a?(String) || value.is_a?(Symbol)
+        next unless ReceiptCalculationSettings::SETTING_VALUES.fetch(key).include?(value.to_s)
+
+        attributes[key] = { "value" => value.to_s, "origin" => "analysis" }
+      end
+
+      ReceiptCalculationSettings.parse(settings)&.to_h
+    end
+
+    def applied_purchase_adjustment_basis
+      return nil unless selected_candidate.evidence.any? do |entry|
+        entry.is_a?(Hash) && entry[:source].to_s == "receipt_adjustment" &&
+          entry[:effect].to_s == "purchase_adjustment"
+      end
+
+      case selected_candidate.basis
+      when "items_as_tax_included"
+        "gross"
+      when "items_as_tax_excluded"
+        "net"
+      end
     end
 
     def selected_candidate_status
@@ -128,7 +165,21 @@ module Amounts
       apply_profile_warning_projection!(result)
       result[:review_reasons] = policy[:review_reasons]
       result[:needs_review] = policy[:needs_review]
+      if managed_item_source_profile?
+        result[:calculation_profile] = {
+          tax_rounding_mode: selected_candidate.rounding_mode,
+          discount_rounding_mode: base_value(:rounding_mode, {})[:discount],
+          receipt_tax_basis: result[:computed][:receipt_tax_basis],
+          item_amount_basis: result[:computed][:item_amount_basis],
+          tax_detail_amount_basis: result[:computed][:tax_detail_amount_basis]
+        }
+      end
       result[:calculation_profile_score] = selected_candidate.score unless preserve_calculation_profile_output?
+    end
+
+    def managed_item_source_profile?
+      preserve_calculation_profile_output? && base_value(:calculation_settings) &&
+        selected_candidate.accepted? && %w[items_as_tax_included items_as_tax_excluded].include?(selected_candidate.basis)
     end
 
     def apply_profile_warning_projection!(result)
@@ -207,6 +258,7 @@ module Amounts
 
     def computed_basis_value(key, fallback)
       return fallback unless preserve_calculation_profile_output?
+      return fallback if base_value(:calculation_settings)
       profile_value = calculation_profile_value(key)
       if key == :item_amount_basis
         return :line_total_as_net if profile_value.to_s == "line_total_as_net"

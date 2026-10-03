@@ -363,6 +363,9 @@ class Receipts::Processing::Pipeline
       )
 
       Receipt.transaction do
+        receipt_attributes = receipt_attributes.except(:calculation_settings, "calculation_settings")
+        settings = final_calculation_settings_for(receipt_attributes)
+        receipt_attributes = receipt_attributes.merge(calculation_settings: settings) if settings
         receipt.update!(receipt_attributes)
 
         replace_receipt_items!(items_attributes)
@@ -391,11 +394,104 @@ class Receipts::Processing::Pipeline
 
       # item-level needs_review は ReceiptBuildParamsService で最終決定済みの前提。
       # FinalizeStep では保存用の整形に留め、true/false の再判定は行わない。
-      normalize_items_attributes(items_attributes).each_with_index do |item_attributes, index|
+      normalized_items = normalize_items_attributes(items_attributes)
+      items = final_item_calculation_attributes(normalized_items, source_count: Array(items_attributes).size)
+      items.each_with_index do |item_attributes, index|
         receipt.receipt_items.create!(
           item_attributes.merge(position_index: item_attributes[:position_index] || index + 1)
         )
       end
+    end
+
+    def final_calculation_settings_for(receipt_attributes)
+      return unless receipt.calculation_settings.nil?
+      return unless accepted_final_amount_result?
+
+      result = normalized_hash(final_amount_result)
+      resolved = normalized_hash(result[:resolved])
+      selected = normalized_hash(result.dig(:amount_engine, :selected_candidate))
+      return unless { subtotal_amount: :subtotal, tax_amount: :tax, total_amount: :purchase_total }.all? do |field, key|
+        value = normalize_amount(receipt_attributes[field])
+        resolved_key = key == :purchase_total ? :total : key
+        !value.nil? && value == normalize_amount(resolved[resolved_key]) && value == normalize_amount(selected[key])
+      end
+
+      settings = ReceiptCalculationSettings.parse(result[:applied_calculation_settings])
+      return unless settings
+      return unless settings.to_h.except("schema_version").values.all? { |entry| entry["origin"] == "analysis" }
+
+      settings.to_h
+    end
+
+    def accepted_final_amount_result?
+      result = normalized_hash(final_amount_result)
+      engine = normalized_hash(result[:amount_engine])
+      selected = normalized_hash(engine[:selected_candidate])
+      computed = normalized_hash(result[:computed])
+
+      result[:selected_candidate_status] == "accepted" &&
+        engine[:selected_candidate_status] == "accepted" &&
+        engine[:no_safe_candidate] == false &&
+        selected[:candidate_id].present? &&
+        engine[:selected_candidate_id] == selected[:candidate_id] &&
+        computed[:amount_engine_candidate_id] == selected[:candidate_id] &&
+        engine[:selected_basis] == selected[:basis] &&
+        computed[:amount_engine_basis] == selected[:basis] &&
+        selected[:hard_reject_reasons] == []
+    end
+
+    def final_item_calculation_attributes(items, source_count:)
+      return items unless accepted_final_amount_result?
+      calculated_items = Array(final_amount_result.dig(:computed, :items))
+      return items unless items.size == source_count && items.size == calculated_items.size
+      item_bases = ItemTaxBasis.call(amount_result: final_amount_result, items:)
+
+      items.map.with_index do |item, index|
+        calculated = normalized_hash(calculated_items[index])
+        basis = item[:input_tax_inclusion] || item_bases&.fetch(index)
+        next item unless basis || proven_gross_projection?(item)
+        next item unless final_item_projection_matches?(item, calculated)
+        gross_total = calculated[:line_total]
+        next item unless gross_total.is_a?(Integer) && gross_total.between?(0, ReceiptItem::GROSS_LINE_TOTAL_MAX)
+
+        attributes = item.merge(gross_line_total: gross_total)
+        case item[:pricing_source_kind]
+        when "count_unit_price"
+          basis ||= final_amount_result.dig(:amount_engine, :selected_basis) == "items_as_tax_excluded" ? "net" : "gross"
+          attributes.merge(input_tax_inclusion: basis, tax_inclusion_origin: "analysis")
+        when "explicit_line_total"
+          attributes.merge(input_tax_inclusion: basis || "gross", tax_inclusion_origin: "analysis")
+        when "reference_quantity_price"
+          attributes.merge(tax_inclusion_origin: "analysis")
+        else
+          attributes
+        end
+      end
+    end
+
+    def proven_gross_projection?(item)
+      basis = final_amount_result.dig(:amount_engine, :selected_basis)
+      return true if %w[items_as_tax_included items_as_tax_excluded].include?(basis)
+      return false unless %w[reference_quantity_price explicit_line_total].include?(item[:pricing_source_kind])
+
+      %w[
+        printed_tax_details_gross
+        printed_tax_details_net
+        printed_tax_details_raw_sum
+        external_tax_from_receipt
+        receipt_input_preserved
+        incomplete_tax_details_receipt_tax
+      ].include?(basis)
+    end
+
+    def final_item_projection_matches?(item, calculated)
+      return false if item[:pricing_source_kind].present? && item[:pricing_source_kind] != calculated[:pricing_source_kind]
+      return false unless item[:quantity] == calculated[:quantity]
+      return false unless item[:quantity_unit_code] == calculated[:quantity_unit_code]
+      return false unless item[:tax_rate] == calculated[:tax_rate]
+      return false unless item[:original_line_total] == calculated[:original_line_total]
+
+      %i[discount_amount discount_rate].all? { |key| item[key] == calculated[key] }
     end
 
     def replace_receipt_adjustments!(adjustments_attributes)
@@ -417,6 +513,9 @@ class Receipts::Processing::Pipeline
       reference_sources = selections.select do |selection|
         selection.pricing_source_kind == "reference_quantity_price"
       end.index_by(&:item_identity)
+      explicit_sources = selections.select do |selection|
+        selection.pricing_source_kind == "explicit_line_total" && selection.input_tax_inclusion
+      end.index_by(&:item_identity)
 
       Array(items_attributes).map.with_index do |item_attributes, index|
         calculated_item = calculated_items[index]
@@ -433,6 +532,11 @@ class Receipts::Processing::Pipeline
           source_item,
           normalized_calculated_item,
           reference_sources[source_item[:ocr_item_identity]]
+        )
+        normalized_calculated_item = explicit_source_persistence_item(
+          source_item,
+          normalized_calculated_item,
+          explicit_sources[source_item[:ocr_item_identity]]
         )
         calculated_tax_rate = normalize_tax_rate(normalized_calculated_item[:tax_rate])
         preserve_missing_amount = preserve_missing_ocr_item_amount?(source_item, normalized_calculated_item)
@@ -483,6 +587,20 @@ class Receipts::Processing::Pipeline
       )
     end
 
+    def explicit_source_persistence_item(source_item, calculated_item, selection)
+      return calculated_item unless selection
+      return calculated_item unless source_item[:pricing_source_kind] == "explicit_line_total"
+      return calculated_item unless source_item[:position_index] == selection.position_index
+      return calculated_item unless source_item[:original_line_total] == selection.original_line_total
+      return calculated_item unless source_item[:line_total] == selection.projected_line_total
+
+      calculated_item.merge(
+        price: nil,
+        original_line_total: selection.original_line_total,
+        line_total: selection.projected_line_total
+      )
+    end
+
     def preserve_missing_ocr_item_amount?(source_item, calculated_item)
       return false unless source_item[:original_line_total].nil? && source_item[:line_total].nil?
       return false unless calculated_item[:amount_line_total_present] == false
@@ -497,7 +615,7 @@ class Receipts::Processing::Pipeline
       normalized_hash(item)[:pricing_source_kind].to_s == "reference_quantity_price"
     end
 
-    def calculate_analysis_amount_result(params)
+    def calculate_analysis_amount_result(params, tax_rounding_mode: nil, tax_rounding_scope: nil, discount_rounding_mode: nil)
       receipt_attributes = params[:receipt_attributes]
       if normalized_hash(params[:amount_hints])[:tax_detail_amount_basis] == "net"
         receipt_attributes = receipt_attributes.merge(tax_detail_amount_basis: "net")
@@ -509,6 +627,9 @@ class Receipts::Processing::Pipeline
         receipt_adjustments: params[:receipt_adjustments_attributes],
         receipt_payments: params[:receipt_payments_attributes],
         context: :analysis,
+        tax_rounding_mode:,
+        tax_rounding_scope:,
+        discount_rounding_mode:,
         snapshot_candidate_count: Receipts::Processing::Contracts::AmountCalculationSnapshotLimits.from_metadata(run&.metadata)&.fetch("candidates")
       )
 
@@ -532,8 +653,8 @@ class Receipts::Processing::Pipeline
         reference_pricing_gate_result: reference_pricing_auto_adoption_gate_result,
         item_price_limit:,
         item_line_total_limit:
-      ) do |candidate_params|
-        calculate_analysis_amount_result(candidate_params)
+      ) do |candidate_params, **rounding|
+        calculate_analysis_amount_result(candidate_params, **rounding)
       end
       return [ params, preliminary_amount_result ] unless result.applied?
       return [ params, preliminary_amount_result ] unless item_calculation_mode_normalization_valid?(
@@ -691,6 +812,12 @@ class Receipts::Processing::Pipeline
       return false unless item_calculation_mode_discount_matches?(item, selection)
       return false unless item.original_line_total == (selection.original_line_total || selection.projected_line_total)
       return false unless item.line_total == selection.projected_line_total
+      if selection.input_tax_inclusion
+        projection = Array(final_amount_result.dig(:computed, :items))[selection.item_index]
+        return false unless item.input_tax_inclusion == selection.input_tax_inclusion
+        return false unless item.tax_inclusion_origin == "analysis"
+        return false unless item.gross_line_total == normalized_hash(projection)[:line_total]
+      end
 
       case selection.pricing_source_kind
       when "count_unit_price"

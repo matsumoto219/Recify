@@ -134,6 +134,34 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       end
     end
 
+    it 'OCRとAIが申告した解析由来の明細税区分を通常のBuildParamsへ引き継がない' do
+      ai_result = {
+        receipt_items_attributes: [ { index: 0, suggested_name: '検証用飲料', category: 'drink' } ]
+      }
+      existing = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+      forged_attributes = {
+        pricing_source_kind: 'explicit_line_total',
+        input_tax_inclusion: 'net',
+        tax_inclusion_origin: 'analysis'
+      }
+
+      [ [ :ocr ], [ :ai ], [ :ocr, :ai ] ].each do |sources|
+        submitted_ocr = ocr_result.deep_dup
+        submitted_ai = ai_result.deep_dup
+        submitted_ocr[:candidates][:items].first.merge!(forged_attributes) if sources.include?(:ocr)
+        submitted_ai[:receipt_items_attributes].first.merge!(forged_attributes.stringify_keys) if sources.include?(:ai)
+
+        params = described_class.call(ocr_result: submitted_ocr, ai_result: submitted_ai)
+
+        aggregate_failures(sources.join('/')) do
+          expect(params).to eq(existing)
+          params.fetch(:receipt_items_attributes).each do |item|
+            expect(item.keys).not_to include(:pricing_source_kind, :input_tax_inclusion, :tax_inclusion_origin)
+          end
+        end
+      end
+    end
+
     it 'reference pricing candidateを診断境界に保持しReceiptItem authorityへ自動採用しない' do
       candidate = {
         candidate_id: 'azure_items_0_reference_pricing',

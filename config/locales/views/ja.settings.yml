@@ -39,7 +39,7 @@ ja:
         theme_hint: ※ 「自動」を選択すると、OSのシステム設定に応じてテーマが切り替わります。
       calculation:
         description: 手動入力・編集時の自動計算に適用します
-        hint: ※ OCR/AI解析結果の端数処理には適用されません。
+        hint: ※ 保存済みの計算条件を優先し、記録がない場合はこちらの設定が適用されます。
         rounding_options:
           floor: 切り捨て
           round: 四捨五入
@@ -50,6 +50,12 @@ ja:
         discount_rounding:
           label: 割引額の端数処理
           description: 手動入力・編集時に割引率から割引額を自動計算する際の丸め方です。
+        item_tax_inclusion:
+          label: 明細入力の税区分
+          description: 新しく入力する明細の初期値です。明細ごとに変更できます。
+        tax_inclusion_options:
+          gross: 税込
+          net: 税抜
       usage:
         push_notification:
           label: レシートの通知

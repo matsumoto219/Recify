@@ -7,6 +7,10 @@ RSpec.describe 'Manual explicit quantity contract', type: :request do
     sign_in user
   end
 
+  def calculation_context(receipt = Receipt.new(user: user))
+    Receipts::CalculationContext.build(user: user, receipt: receipt).token
+  end
+
   def explicit_item(quantity:, name: 'explicit quantity商品')
     {
       confirmed_name: name,
@@ -21,6 +25,7 @@ RSpec.describe 'Manual explicit quantity contract', type: :request do
 
   def post_explicit_receipt(quantity:, name: 'explicit quantity商品')
     post receipts_path, params: {
+      receipt_calculation_context: calculation_context,
       receipt: {
         store_name: "explicit quantity #{quantity.inspect}",
         payment_method: 'cash',
@@ -92,6 +97,7 @@ RSpec.describe 'Manual explicit quantity contract', type: :request do
     )
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -136,6 +142,7 @@ RSpec.describe 'Manual explicit quantity contract', type: :request do
       before = item.attributes.deep_dup
 
       patch receipt_path(receipt), params: {
+        receipt_calculation_context: calculation_context(receipt),
         receipt: {
           lock_version: receipt.lock_version,
           receipt_items_attributes: {

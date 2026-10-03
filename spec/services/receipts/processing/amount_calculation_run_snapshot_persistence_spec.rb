@@ -74,6 +74,11 @@ RSpec.describe 'Amount calculation run snapshot persistence' do
         expect(snapshot.dig('engine', 'review', 'warning_classification')).to eq('unrecorded')
         expect(snapshot.dig('receipt_summary', 'status')).to eq(receipt.reload.status)
         expect(snapshot.dig('receipt_summary', 'total_amount')).to eq(receipt.total_amount.to_i)
+        expect(receipt.calculation_settings).to eq(results.last.fetch(:applied_calculation_settings))
+        expect(results.last.dig(:amount_engine, :selected_basis)).to eq('printed_tax_details_net')
+        expect(receipt.receipt_items).to all(
+          have_attributes(input_tax_inclusion: nil, tax_inclusion_origin: nil, gross_line_total: nil)
+        )
         expect(run.final_result_summary.fetch('schema_version')).to eq('receipt_analysis_run_final_result_v1')
         expect(Receipts::Processing::Contracts::AmountCalculationRunSnapshot.read(snapshot)).to eq(snapshot)
       end
@@ -140,7 +145,8 @@ RSpec.describe 'Amount calculation run snapshot persistence' do
     Receipts::Processing.run_finalize(run)
     snapshot = run.reload.final_result_summary.fetch(snapshot_key).deep_dup
     expect(snapshot.fetch('state')).not_to eq('unavailable')
-    receipt.reload.update!(total_amount: 999, amount_calculation_profile: { context: 'edit_save' })
+    edited_settings = { 'schema_version' => 1, 'tax_rounding_mode' => { 'value' => 'ceil', 'origin' => 'manual' } }
+    receipt.reload.update!(total_amount: 999, amount_calculation_profile: { context: 'edit_save' }, calculation_settings: edited_settings)
 
     result = Receipts::Processing.run_finalize(run)
 
@@ -148,6 +154,7 @@ RSpec.describe 'Amount calculation run snapshot persistence' do
       expect(result.next_step).to eq(:skipped)
       expect(run.reload.final_result_summary.fetch(snapshot_key)).to eq(snapshot)
       expect(receipt.reload.total_amount).to eq(999)
+      expect(receipt.calculation_settings).to eq(edited_settings)
     end
   end
 
@@ -240,6 +247,7 @@ RSpec.describe 'Amount calculation run snapshot persistence' do
 
     aggregate_failures do
       expect(receipt.reload.total_amount).to eq(total)
+      expect(receipt.calculation_settings).to be_nil
       expect(receipt.receipt_items).to be_empty
       expect(run.reload.final_result_summary).to eq({})
     end

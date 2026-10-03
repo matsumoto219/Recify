@@ -12,6 +12,7 @@ RSpec.describe Receipts::SummaryQuery do
       quantity_unit_code: 'each',
       price: line_total,
       line_total: line_total,
+      gross_line_total: line_total,
       position_index: receipt.receipt_items.count + 1
     )
   end
@@ -25,6 +26,87 @@ RSpec.describe Receipts::SummaryQuery do
 
     ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { yield }
     queries
+  end
+
+  it 'カテゴリでは入力sourceではなく既知の税込参考額だけを合算し、未確定件数を区別する' do
+    user = create(:user)
+    receipt = create(:receipt, :completed, user: user, total_amount: 41)
+    2.times do
+      receipt.receipt_items.create!(confirmed_name: '明細', category: 'food', line_total: 19, gross_line_total: 20)
+    end
+    receipt.receipt_items.create!(confirmed_name: '未確定', category: 'food', line_total: 19)
+    receipt.receipt_items.create!(confirmed_name: '未確定のみ', category: 'drink', line_total: 99)
+    receipt.receipt_items.create!(confirmed_name: '無料', category: 'other', line_total: 0, gross_line_total: 0)
+
+    result = nil
+    queries = count_sql_queries { result = described_class.categories(user: user) }
+
+    aggregate_failures do
+      expect(result).to contain_exactly(
+        hash_including(category: 'food', total_amount: 40, item_count: 3, unknown_amount_count: 1),
+        hash_including(category: 'drink', total_amount: nil, item_count: 1, unknown_amount_count: 1),
+        hash_including(category: 'other', total_amount: 0, item_count: 1, unknown_amount_count: 0)
+      )
+      expect(queries.count { |sql| sql.include?('FROM "receipts"') }).to eq(1)
+      expect(receipt.reload.total_amount).to eq(41)
+    end
+  end
+
+  it '集計SQLと明細readerで旧snapshot・税区分・未知形式の解釈が一致する' do
+    user = create(:user)
+    profile = {
+      'schema_version' => 1,
+      'context' => 'manual',
+      'selected_candidate_status' => 'accepted',
+      'amount_engine' => {
+        'schema_version' => 1,
+        'selected_candidate_status' => 'accepted',
+        'no_safe_candidate' => false,
+        'selected_basis' => 'items_as_tax_included',
+        'selected_candidate_id' => 'items_as_tax_included/floor/per_item',
+        'selected_candidate' => {
+          'candidate_id' => 'items_as_tax_included/floor/per_item',
+          'basis' => 'items_as_tax_included',
+          'rounding_mode' => 'floor',
+          'rounding_scope' => 'per_item',
+          'hard_reject_reasons' => []
+        }
+      }
+    }
+    profile_variants = [ {}, [], { 'schema_version' => 99 }, profile ]
+    %w[analysis edit_save].each { |context| profile_variants << profile.merge('context' => context) }
+    [ 1.0, '1' ].each { |version| profile_variants << profile.merge('schema_version' => version) }
+    [ 1.0, '1' ].each do |version|
+      variant = profile.deep_dup
+      variant['amount_engine']['schema_version'] = version
+      profile_variants << variant
+    end
+    malformed = profile.deep_dup
+    malformed['amount_engine']['selected_candidate'] = 'invalid'
+    profile_variants << malformed
+    conflicted = profile.deep_dup
+    conflicted['amount_engine']['no_safe_candidate'] = true
+    profile_variants << conflicted
+    rejected = profile.deep_dup
+    rejected['amount_engine']['selected_candidate']['hard_reject_reasons'] = [ 'item_total_mismatch' ]
+    profile_variants << rejected
+
+    profile_variants.each do |variant|
+      receipt = create(:receipt, :completed, user: user, amount_calculation_profile: variant)
+      [ {}, { gross_line_total: 20 }, { input_tax_inclusion: 'gross' }, { input_tax_inclusion: 'net' } ].each do |attributes|
+        attributes = attributes.merge(pricing_source_kind: 'explicit_line_total', tax_inclusion_origin: 'manual') if attributes.key?(:input_tax_inclusion)
+        item = receipt.receipt_items.create!(attributes.merge(confirmed_name: '明細', category: 'food', line_total: 19))
+        entry = described_class.categories(user: user, scope: Receipt.where(id: receipt.id)).sole
+        all_items = receipt.receipt_items.reload.to_a
+        known = all_items.filter_map { |saved| saved.gross_amount_for_display(receipt: receipt) }
+
+        expect(entry).to include(
+          total_amount: known.empty? ? nil : known.sum,
+          unknown_amount_count: all_items.size - known.size
+        )
+        expect(item.gross_line_total).to eq(attributes[:gross_line_total])
+      end
+    end
   end
 
   it 'returns immutable headline counts scoped to the user by default' do

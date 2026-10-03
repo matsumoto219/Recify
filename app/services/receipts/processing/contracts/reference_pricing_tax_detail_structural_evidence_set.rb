@@ -69,6 +69,9 @@ module Receipts::Processing::Contracts
         }
         return nil unless proposal_valid?(proposal, context:)
 
+        proposal["tax_details"].each do |detail|
+          detail.delete("tax_inclusion_evidence") if detail["tax_inclusion_evidence"].nil?
+        end
         proposal["integrity_checksum"] = integrity_checksum(proposal, context:)
         from_snapshot(proposal, ocr_snapshot:)
       rescue ArgumentError, EncodingError, JSON::GeneratorError, KeyError, TypeError

@@ -7,20 +7,52 @@ class Receipts::Editing::ConsistencyGuard
     end
   end
 
-  def self.call(receipt_items:, receipt_adjustments:, receipt_payments:, amount_result:)
+  ITEM_SOURCE_FIELDS = %i[
+    pricing_source_kind
+    price
+    quantity
+    quantity_unit_code
+    quantity_unit_raw
+    input_tax_inclusion
+    reference_price_amount
+    reference_quantity
+    reference_quantity_unit_code
+    reference_quantity_unit_raw
+    reference_price_tax_inclusion
+    tax_rate
+    discount_rate
+    discount_amount
+    original_line_total
+    line_total
+  ].freeze
+  ITEM_NUMERIC_SOURCE_FIELDS = %i[
+    price
+    quantity
+    reference_price_amount
+    reference_quantity
+    tax_rate
+    discount_rate
+    discount_amount
+    original_line_total
+    line_total
+  ].freeze
+
+  def self.call(receipt_items:, receipt_adjustments:, receipt_payments:, amount_result:, calculation_settings: nil)
     new(
       receipt_items: receipt_items,
       receipt_adjustments: receipt_adjustments,
       receipt_payments: receipt_payments,
-      amount_result: amount_result
+      amount_result: amount_result,
+      calculation_settings: calculation_settings
     ).call
   end
 
-  def initialize(receipt_items:, receipt_adjustments:, receipt_payments:, amount_result:)
+  def initialize(receipt_items:, receipt_adjustments:, receipt_payments:, amount_result:, calculation_settings: nil)
     @receipt_items = Array(receipt_items)
     @receipt_adjustments = Array(receipt_adjustments)
     @receipt_payments = Array(receipt_payments)
     @amount_result = amount_result
+    @calculation_settings = calculation_settings
   end
 
   def call
@@ -63,6 +95,9 @@ class Receipts::Editing::ConsistencyGuard
   def child_purchase_total_mismatch?
     return false if @receipt_items.empty?
     return false if receipt_input_without_item_amounts?
+    if !@calculation_settings.nil? && !legacy_receipt_input?
+      return managed_child_purchase_total_mismatch?
+    end
 
     computed_adjusted_item_total = amount_result_value(:computed, :adjusted_item_total)
     resolved_total = amount_result_value(:resolved, :total)
@@ -78,6 +113,123 @@ class Receipts::Editing::ConsistencyGuard
       end
 
     expected_purchase_total != resolved_total
+  end
+
+  def legacy_receipt_input?
+    computed = fetch_value(@amount_result, :computed)
+    return false unless fetch_value(computed, :amount_engine_basis).to_s == "receipt_input_preserved"
+
+    @receipt_items.none? do |item|
+      fetch_value(item, :pricing_source_kind).present? || fetch_value(item, :input_tax_inclusion).present?
+    end
+  end
+
+  def managed_child_purchase_total_mismatch?
+    return true unless ReceiptCalculationSettings.parse(@calculation_settings)
+    status = fetch_value(@amount_result, :selected_candidate_status)
+    return true unless %w[accepted rejected].include?(status) &&
+      fetch_value(fetch_value(@amount_result, :amount_engine), :selected_candidate_status) == status
+
+    computed = fetch_value(@amount_result, :computed)
+    basis = fetch_value(computed, :amount_engine_basis).to_s
+    return true unless %w[items_as_tax_included items_as_tax_excluded].include?(basis)
+
+    sources = fetch_value(computed, :source_items)
+    projections = fetch_value(computed, :items)
+    triplets = managed_item_triplets(sources, projections)
+    return true unless triplets
+    return true if triplets.any? { |item, source, projection| managed_item_mismatch?(item, source, projection) }
+    return true if purchase_adjustment_total != amount_result_value(:computed, :purchase_adjustment_total)
+
+    managed_tax_groups_mismatch?(fetch_value(computed, :tax_rate_groups))
+  end
+
+  def managed_item_triplets(sources, projections)
+    return unless sources.is_a?(Array) && projections.is_a?(Array)
+    return unless sources.size == @receipt_items.size && projections.size == sources.size
+
+    saved_ids = @receipt_items.filter_map { |item| fetch_value(item, :id).to_s.presence }
+    source_ids = sources.filter_map { |item| fetch_value(item, :id).to_s.presence }
+    return unless saved_ids.uniq.size == saved_ids.size && source_ids.uniq.size == source_ids.size
+    return unless saved_ids.to_set == source_ids.to_set
+
+    sources_by_id = {}
+    new_sources = []
+    sources.each_with_index do |source, index|
+      projection = projections[index]
+      id = fetch_value(source, :id).to_s.presence
+      return unless id == fetch_value(projection, :id).to_s.presence
+
+      pair = [ source, projection ]
+      if id
+        sources_by_id[id] = pair
+      else
+        new_sources << pair
+      end
+    end
+    @receipt_items.map do |item|
+      id = fetch_value(item, :id).to_s.presence
+      source, projection = id ? sources_by_id[id] : new_sources.shift
+      [ item, source, projection ]
+    end
+  end
+
+  def managed_item_mismatch?(item, source, projection)
+    source_mismatch = ITEM_SOURCE_FIELDS.any? do |field|
+      next false if field == :price && fetch_value(source, :pricing_source_kind) == "reference_quantity_price"
+
+      actual = fetch_value(item, field)
+      expected = fetch_value(source, field)
+      if ITEM_NUMERIC_SOURCE_FIELDS.include?(field)
+        !exact_numeric_match?(actual, expected)
+      else
+        actual != expected
+      end
+    end
+    gross = fetch_value(item, :gross_line_total)
+    projected_gross = fetch_value(projection, :line_total)
+    source_mismatch || gross.nil? || projected_gross.nil? || !exact_numeric_match?(gross, projected_gross)
+  end
+
+  def managed_tax_groups_mismatch?(groups)
+    return true unless groups.is_a?(Array) && groups.present?
+
+    totals = { gross: 0, net: 0, tax: 0 }
+    rates = Set.new
+    groups.each do |group|
+      rate = exact_decimal(fetch_value(group, :rate))
+      return true unless rate && rate.between?(0, 1) && !rates.include?(rate)
+
+      rates.add(rate)
+      amounts = totals.keys.to_h { |key| [ key, exact_decimal(fetch_value(group, key)) ] }
+      return true unless amounts.values.all? { |value| value && value >= 0 && value.frac.zero? }
+      return true unless amounts[:net] + amounts[:tax] == amounts[:gross]
+
+      totals.each_key { |key| totals[key] += amounts[key] }
+    end
+
+    { gross: :total, net: :subtotal, tax: :tax }.any? do |key, resolved_key|
+      !exact_numeric_match?(totals[key], fetch_value(fetch_value(@amount_result, :resolved), resolved_key))
+    end
+  end
+
+  def exact_numeric_match?(actual, expected)
+    return actual.nil? if expected.nil?
+
+    actual_number = exact_decimal(actual)
+    expected_number = exact_decimal(expected)
+    actual_number && expected_number && actual_number == expected_number
+  end
+
+  def exact_decimal(value)
+    return unless value.is_a?(Numeric) || value.is_a?(String)
+
+    text = value.to_s
+    return unless text.bytesize <= 128 && text.valid_encoding? &&
+      text.match?(/\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\z/)
+
+    decimal = BigDecimal(text, exception: false)
+    decimal if decimal&.finite? && decimal.exponent.abs <= 128
   end
 
   def receipt_input_without_item_amounts?

@@ -31,7 +31,8 @@ class SettingsController < ApplicationController
             keep_receipt_images: current_user.keep_receipt_images,
             theme_preference: current_user.theme_preference,
             tax_rounding_mode: current_user.tax_rounding_mode,
-            discount_rounding_mode: current_user.discount_rounding_mode
+            discount_rounding_mode: current_user.discount_rounding_mode,
+            default_item_tax_inclusion: current_user.default_item_tax_inclusion
           }
         end
 
@@ -77,15 +78,22 @@ class SettingsController < ApplicationController
   end
 
   def settings_params
-    params.require(:user).permit(
+    submitted = params.require(:user)
+    permitted = submitted.permit(
       :push_notification_enabled,
       :product_name_ai_completion_enabled,
       :delete_confirmation_enabled,
       :keep_receipt_images,
       :theme_preference,
       :tax_rounding_mode,
-      :discount_rounding_mode
+      :discount_rounding_mode,
+      :default_item_tax_inclusion
     )
+    if submitted.key?(:default_item_tax_inclusion) && !permitted.key?(:default_item_tax_inclusion)
+      permitted[:default_item_tax_inclusion] = nil
+    end
+
+    permitted
   end
 
   def settings_update_streams

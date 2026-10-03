@@ -14,6 +14,11 @@ RSpec.describe 'Receipts', type: :request do
     Rack::Test::UploadedFile.new(Rails.root.join('spec/fixtures/files', filename), content_type)
   end
 
+  def post_manual_receipt(params:, as_user: user)
+    context = Receipts::CalculationContext.build(user: as_user, receipt: Receipt.new(user: as_user))
+    post receipts_path, params: { receipt_calculation_context: context.token }.merge(params)
+  end
+
   def png_bytes(width:, height:, minimum_byte_size: nil)
     chunk = lambda do |type, data|
       [ data.bytesize ].pack('N') + type + data + [ Zlib.crc32(type + data) ].pack('N')
@@ -2963,7 +2968,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'レシートを作成できる' do
       expect do
-        post receipts_path, params: valid_params
+        post_manual_receipt params: valid_params
       end.to change(Receipt, :count).by(1)
 
       expect(response).to have_http_status(:redirect)
@@ -2975,7 +2980,7 @@ RSpec.describe 'Receipts', type: :request do
       params[:receipt][:receipt_items_attributes]['0'][:category] = 'medical'
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.to change(ReceiptItem, :count).by(1)
 
       aggregate_failures do
@@ -2988,7 +2993,7 @@ RSpec.describe 'Receipts', type: :request do
       create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 49)
 
       expect do
-        post receipts_path, params: valid_params
+        post_manual_receipt params: valid_params
       end.to change(Receipt, :count).by(1)
 
       expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(50)
@@ -2998,7 +3003,7 @@ RSpec.describe 'Receipts', type: :request do
       create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 50)
 
       expect do
-        post receipts_path, params: valid_params
+        post_manual_receipt params: valid_params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3014,7 +3019,7 @@ RSpec.describe 'Receipts', type: :request do
       create(:usage_counter, user: guest, key: 'manual_receipts_per_day', used_count: 5)
 
       expect do
-        post receipts_path, params: valid_params
+        post_manual_receipt params: valid_params, as_user: guest
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3029,7 +3034,7 @@ RSpec.describe 'Receipts', type: :request do
       create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 50)
 
       expect do
-        post receipts_path, params: valid_params
+        post_manual_receipt params: valid_params
       end.to change(Receipt, :count).by(1)
 
       expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(51)
@@ -3039,7 +3044,7 @@ RSpec.describe 'Receipts', type: :request do
       create(:usage_counter, user: user, key: 'manual_receipts_per_day', used_count: 10)
 
       expect do
-        post receipts_path, params: invalid_params
+        post_manual_receipt params: invalid_params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3076,7 +3081,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3093,7 +3098,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3109,7 +3114,7 @@ RSpec.describe 'Receipts', type: :request do
       params[:receipt][:receipt_items_attributes] = manual_items_params(150)
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.to change(Receipt, :count).by(1)
 
       aggregate_failures do
@@ -3126,7 +3131,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3142,7 +3147,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3162,7 +3167,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3182,7 +3187,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3202,7 +3207,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3219,7 +3224,7 @@ RSpec.describe 'Receipts', type: :request do
       expect(ReceiptAmountService).not_to receive(:call)
 
       expect do
-        post receipts_path, params: params
+        post_manual_receipt params: params
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -3230,7 +3235,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'redirect flashをnotice_surfaceのtoastとして描画する' do
-      post receipts_path, params: valid_params
+      post_manual_receipt params: valid_params
 
       follow_redirect!
 
@@ -3256,7 +3261,7 @@ RSpec.describe 'Receipts', type: :request do
     it '通知OFFなら手動作成成功のredirect flashを表示しない' do
       user.update!(push_notification_enabled: false)
 
-      post receipts_path, params: valid_params
+      post_manual_receipt params: valid_params
 
       follow_redirect!
       document = Nokogiri::HTML(response.body)
@@ -3269,7 +3274,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'ログインユーザーに紐づいて作成される' do
-      post receipts_path, params: valid_params
+      post_manual_receipt params: valid_params
 
       receipt = Receipt.order(:id).last
 
@@ -3286,7 +3291,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '画像なし作成時にstatusが入る' do
-      post receipts_path, params: valid_params
+      post_manual_receipt params: valid_params
 
       receipt = Receipt.order(:id).last
       expect(receipt.status).to eq('completed')
@@ -3296,7 +3301,7 @@ RSpec.describe 'Receipts', type: :request do
       allow(ReceiptOcrJob).to receive(:perform_later)
 
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '画像付きレシート',
             total_amount: 1500,
@@ -3328,7 +3333,7 @@ RSpec.describe 'Receipts', type: :request do
     it '画像あり手動登録はuserの画像保持設定をsnapshotし、OFFならpurge候補化する' do
       user.update!(keep_receipt_images: false)
 
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '画像保持OFF手動登録',
           total_amount: 1500,
@@ -3361,7 +3366,7 @@ RSpec.describe 'Receipts', type: :request do
     it '画像あり手動登録時は解析失敗処理も実行しない' do
       allow(ReceiptOcrJob).to receive(:perform_later)
 
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '解析しない画像付きレシート',
           total_amount: 1800,
@@ -3393,14 +3398,14 @@ RSpec.describe 'Receipts', type: :request do
     it '画像なし作成時は解析を実行しない' do
       allow(ReceiptOcrJob).to receive(:perform_later)
 
-      post receipts_path, params: valid_params
+      post_manual_receipt params: valid_params
 
       expect(ReceiptOcrJob).not_to have_received(:perform_later)
     end
 
     it '不正なパラメータでは作成できない' do
       expect do
-        post receipts_path, params: invalid_params
+        post_manual_receipt params: invalid_params
       end.not_to change(Receipt, :count)
 
       expect([ 200, 422 ]).to include(response.status)
@@ -3408,7 +3413,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '手動新規のvalidation失敗時は未入力金額を未設定表示のまま維持する' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '',
             payment_method: 'cash'
@@ -3428,7 +3433,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '空の初期明細行だけで手動保存した場合は明細向けエラーを表示し明細行を再表示する' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '',
             payment_method: 'cash',
@@ -3465,7 +3470,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '明細行を意図的に全削除して手動保存した場合は空状態を維持する' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '',
             payment_method: 'cash',
@@ -3497,7 +3502,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '入力済み明細があるvalidation失敗では入力内容を保持する' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '',
             payment_method: 'cash',
@@ -3534,7 +3539,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '手動新規のvalidation失敗時も明示0入力は0円表示を維持する' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '',
             payment_method: 'cash',
@@ -3557,7 +3562,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '画像のみの手動登録失敗時はsigned_id errorにならず新規フォームに戻る' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             image: uploaded_image
           }
@@ -3578,7 +3583,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'flash.now alertの複数エラーをlist表示する' do
-      post receipts_path, params: invalid_params
+      post_manual_receipt params: invalid_params
 
       document = Nokogiri::HTML(response.body)
       notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
@@ -3616,7 +3621,7 @@ RSpec.describe 'Receipts', type: :request do
     it '通知OFFでもvalidation errorは表示する' do
       user.update!(push_notification_enabled: false)
 
-      post receipts_path, params: invalid_params
+      post_manual_receipt params: invalid_params
 
       document = Nokogiri::HTML(response.body)
       notice_surface = document.at_css('#flash [data-controller~="notice-surface"]')
@@ -3630,7 +3635,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '明細あり作成時にsubtotal/tax/totalを再計算して保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '明細あり作成',
           payment_method: 'cash',
@@ -3665,7 +3670,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'native engineでも明細あり作成時は税込明細入力を正として保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'native engine 明細あり作成',
           payment_method: 'cash',
@@ -3702,7 +3707,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'direct paramsでmanual service_chargeを作成できる' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '手動調整作成',
             payment_method: 'cash',
@@ -3750,7 +3755,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'delivery_feeとbag_feeを手動加算として合計へ反映する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '送料袋代作成',
           payment_method: 'cash',
@@ -3797,7 +3802,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'service_chargeとlate_night_chargeを税率別サマリーへ反映する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'サービス深夜作成',
           payment_method: 'cash',
@@ -3844,7 +3849,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'couponを手動減算として合計へ反映する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'クーポン作成',
           payment_method: 'cash',
@@ -3888,7 +3893,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'receipt_discountを手動減算として合計へ反映する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'レシート値引き作成',
           payment_method: 'cash',
@@ -3925,7 +3930,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'return_refundを負値itemではなくadjustmentとして保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '返品作成',
           payment_method: 'cash',
@@ -3963,7 +3968,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'manual other + surchargeは通常のadjustmentとして保存しcompletedになる' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'その他加算作成',
           payment_method: 'cash',
@@ -4004,7 +4009,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'manual other + discountは通常のadjustmentとして保存しcompletedになる' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'その他減算作成',
           payment_method: 'cash',
@@ -4045,7 +4050,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'point_usageを税額計算から外して支払調整として保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'ポイント利用作成',
           payment_method: 'cash',
@@ -4092,7 +4097,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'blank adjustment rowは保存されない' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '空調整除外',
             payment_method: 'cash',
@@ -4129,7 +4134,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'validation error後にadjustment行を復元する' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '',
             payment_method: 'cash',
@@ -4175,7 +4180,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '空のadjustment行を追加したvalidation error後は空行を再表示する' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '',
             payment_method: 'cash',
@@ -4220,7 +4225,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'adjustment未追加のvalidation errorでは空adjustment行を出さない' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '',
             payment_method: 'cash',
@@ -4250,7 +4255,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '手動作成時にcurrent_userのrounding modeをReceiptAmountServiceへ渡す' do
+    it '手動作成時にフォーム開始時のrounding modeをReceiptAmountServiceへ渡す' do
       user.update!(tax_rounding_mode: 'ceil', discount_rounding_mode: 'floor')
       observed_kwargs = nil
       allow(ReceiptAmountService).to receive(:call).and_wrap_original do |original, **kwargs|
@@ -4258,7 +4263,7 @@ RSpec.describe 'Receipts', type: :request do
         original.call(**kwargs)
       end
 
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '丸め設定作成',
           payment_method: 'cash',
@@ -4283,15 +4288,15 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipts_path)
         expect(observed_kwargs[:context]).to eq(:manual)
-        expect(observed_kwargs[:tax_rounding_mode]).to eq('ceil')
-        expect(observed_kwargs[:discount_rounding_mode]).to eq('floor')
+        expect(observed_kwargs.dig(:receipt, 'calculation_settings', 'tax_rounding_mode', 'value')).to eq('ceil')
+        expect(observed_kwargs.dig(:receipt, 'calculation_settings', 'discount_rounding_mode', 'value')).to eq('floor')
         expect(item.discount_amount).to eq(104)
         expect(receipt.tax_amount).to eq(82)
       end
     end
 
     it '作成時のdiscount_rate入力をdiscount_amountへ変換しdiscount_rateも保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '割引率作成',
           payment_method: 'cash',
@@ -4325,7 +4330,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '空の新規明細行だけでは保存せずline_total 0の明細も作らない' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '空明細除外',
             payment_method: 'cash',
@@ -4360,7 +4365,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '空欄quantityは1として保存し、price/tax_rate/discount_rateの空欄はnilを維持する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '数量空欄作成',
           payment_method: 'cash',
@@ -4395,7 +4400,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '明示的な0円明細は保存できる' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '0円明細作成',
           payment_method: 'cash',
@@ -4426,7 +4431,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '0円明細作成時はhidden line_totalが古くても単価0から0円で保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '0円明細作成 stale total',
           payment_method: 'cash',
@@ -4460,7 +4465,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '明示的な0のtax_rateとdiscount_rateは0として保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '0率明細作成',
           payment_method: 'cash',
@@ -4492,7 +4497,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'discount_rate 100% はline_totalを0として保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '全額割引作成',
           payment_method: 'cash',
@@ -4525,7 +4530,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'discount_rate と discount_amount の空欄はdiscount_amount nilとして保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '割引なし作成',
           payment_method: 'cash',
@@ -4558,7 +4563,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '100%を超えるdiscount_rateは保存しない' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '不正割引率作成',
             payment_method: 'cash',
@@ -4582,7 +4587,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'measurement unitの小数quantityとquantity_unit_codeを保存し、明示line_totalを維持する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '量り売り作成',
           payment_method: 'cash',
@@ -4614,7 +4619,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'decimal comma quantityとcomma区切り金額を保存時に正しく扱う' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'decimal comma 作成',
           payment_method: 'cash',
@@ -4656,7 +4661,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'integer-only unitの小数quantityはJSなしでも保存しない' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '不正数量作成',
             payment_method: 'cash',
@@ -4682,7 +4687,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'measurement unitのline_total nilはprice multiplied by quantityで自動補完しない' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'measurement line_total nil 作成',
           payment_method: 'cash',
@@ -4718,7 +4723,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '明細なし手動作成時は入力金額があっても保存しない' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '明細なし作成',
             payment_method: 'cash',
@@ -4743,7 +4748,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '明細なし手動作成時はcomma区切り入力金額があっても保存しない' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: 'comma金額作成',
             payment_method: 'cash',
@@ -4766,7 +4771,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '複数税率の明細作成時はreceipt.tax_rateをnilで保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '複数税率作成',
           payment_method: 'cash',
@@ -4807,7 +4812,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it '税率別内訳を保存する' do
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '税率別内訳あり',
             payment_method: 'cash',
@@ -4838,7 +4843,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it 'floor丸めで税額を保存する' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: 'floor丸め作成',
           payment_method: 'cash',
@@ -4866,7 +4871,7 @@ RSpec.describe 'Receipts', type: :request do
     end
 
     it '整合している明細はreview_neededにしない' do
-      post receipts_path, params: {
+      post_manual_receipt params: {
         receipt: {
           store_name: '整合明細',
           payment_method: 'cash',
@@ -4905,7 +4910,7 @@ RSpec.describe 'Receipts', type: :request do
       allow(Analysis).to receive(:processing_error_mapping).and_return({ error_category: 'ocr_error' })
 
       expect do
-        post receipts_path, params: {
+        post_manual_receipt params: {
           receipt: {
             store_name: '不正画像',
             total_amount: 1000,
@@ -4924,7 +4929,7 @@ RSpec.describe 'Receipts', type: :request do
       end
 
       it 'ログイン画面へリダイレクトされる' do
-        post receipts_path, params: valid_params
+        post_manual_receipt params: valid_params
 
         expect(response).to redirect_to(new_user_session_path)
       end
@@ -5453,7 +5458,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '割引明細では割引額と割引率を表示し、右端は割引後小計を維持する' do
+    it '割引明細では割引額と割引率を表示し、右端は割引後の税込額を表示する' do
       receipt.receipt_items.create!(
         confirmed_name: '割引商品',
         price: 310,
@@ -5462,6 +5467,7 @@ RSpec.describe 'Receipts', type: :request do
         original_line_total: 310,
         discount_amount: 155,
         line_total: 155,
+        gross_line_total: 155,
         needs_review: false
       )
 
@@ -5471,7 +5477,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('単価: ¥310')
         expect(response.body).to include('割引: -¥155（50%）')
-        expect(response.body).to include('title="¥155"')
+        amount = Nokogiri::HTML(response.body).at_css('[data-receipt-item-gross-amount]')
+        expect(amount.text.squish).to eq('税込 ¥155')
       end
     end
 
@@ -6793,6 +6800,8 @@ RSpec.describe 'Receipts', type: :request do
           taxRateInput
           lineTotalInput
           lineTotalDisplay
+          sourceLineTotalDisplay
+          sourceLineTotalLabel
           lineTotalTooltip
           destroyField
           itemDetailsPanel
@@ -6808,8 +6817,8 @@ RSpec.describe 'Receipts', type: :request do
         tax_rate_wrapper = item_details_panel.at_css('[data-receipt-form-target="taxRateInput"]').ancestors.find { |node| node['class'].to_s.include?('md:col-span-') }
         category_wrapper = item_details_panel.at_css('select[name$="[category]"]').ancestors.find { |node| node['class'].to_s.include?('md:col-span-') }
         subtotal_wrapper = item_details_panel.at_css('.receipt-form-item-detail-subtotal')
-        subtotal_inner = subtotal_wrapper.at_css('.space-y-2')
-        subtotal_box = subtotal_wrapper.at_css('[data-receipt-form-target="lineTotalDisplay"]').ancestors.find { |node| node['class'].to_s.include?('h-10') }
+        subtotal_inner = subtotal_wrapper.element_children.first
+        subtotal_box = subtotal_wrapper.at_css('[data-receipt-form-target="sourceLineTotalDisplay"]').ancestors.find { |node| node['class'].to_s.include?('h-10') }
         mobile_summary = item_row.at_css('.receipt-form-item-mobile-summary')
         swipe_wrapper = item_row.ancestors.find { |node| node['data-controller'].to_s.include?('swipe-action') }
 
@@ -6821,12 +6830,14 @@ RSpec.describe 'Receipts', type: :request do
         expect(item_details_panel.has_attribute?('inert')).to be(true)
         expect(item_details_panel.at_css('[data-receipt-form-target="discountRateInput"]')).to be_present
         expect(item_details_panel.at_css('[data-receipt-form-target="taxRateInput"]')).to be_present
-        expect(item_details_panel.at_css('[data-receipt-form-target="lineTotalDisplay"]')).to be_present
+        expect(item_details_panel.at_css('[data-receipt-form-target="sourceLineTotalDisplay"]')).to be_present
+        expect(item_details_panel.at_css('[data-receipt-form-target="sourceLineTotalLabel"]')).to be_present
+        expect(item_details_panel.at_css('[data-receipt-form-target="lineTotalDisplay"]')).to be_nil
         expect(item_details_panel.at_css('select[name$="[category]"]')).to be_present
-        expect(discount_rate_wrapper['class']).to include('md:col-span-3')
-        expect(tax_rate_wrapper['class']).to include('md:col-span-3')
-        expect(category_wrapper['class']).to include('md:col-span-3')
-        expect(subtotal_wrapper['class']).to include('md:col-span-3')
+        expect(discount_rate_wrapper['class']).to include('md:col-span-4', '2xl:col-span-3')
+        expect(tax_rate_wrapper['class']).to include('md:col-span-4', '2xl:col-span-3')
+        expect(category_wrapper['class']).to include('md:col-span-4', '2xl:col-span-3')
+        expect(subtotal_wrapper['class']).to include('md:col-span-full', '2xl:col-span-3')
         expect(subtotal_wrapper['class']).to include('md:items-start')
         expect(subtotal_inner['class']).to include('w-full')
         expect(subtotal_box['class']).to include('h-10')
@@ -6834,6 +6845,8 @@ RSpec.describe 'Receipts', type: :request do
         expect(template_html).to include('data-receipt-form-target="itemDetailsToggle"')
         expect(template_html).to include('data-receipt-form-target="itemDetailsPanel"')
         expect(template_html).to include('data-receipt-form-target="itemDetailsIcon"')
+        expect(template_html).to include('data-receipt-form-target="sourceLineTotalDisplay"')
+        expect(template_html).to include('data-receipt-form-target="sourceLineTotalLabel"')
         expect(template_html).to include('click-&gt;receipt-form#toggleItemDetails')
 
         expect(mobile_summary).to be_present
@@ -7268,6 +7281,7 @@ RSpec.describe 'Receipts', type: :request do
 
     def patch_receipt(receipt, params:)
       submitted_params = params.deep_dup
+      submitted_params[:receipt_calculation_context] ||= Receipts::CalculationContext.build(user: user, receipt: receipt)&.token
       receipt_params = submitted_params[:receipt] || submitted_params['receipt']
       if receipt_params && !receipt_params.key?(:lock_version) && !receipt_params.key?('lock_version')
         receipt_params[:lock_version] = receipt.lock_version
@@ -7550,6 +7564,7 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       patch_receipt receipt, params: {
+        receipt_calculation_settings: { purchase_adjustment_tax_inclusion: 'gross' },
         receipt: {
           store_name: '更新後',
           receipt_items_attributes: {
@@ -7657,7 +7672,9 @@ RSpec.describe 'Receipts', type: :request do
         needs_review: false
       )
 
-      patch_receipt receipt, params: valid_update_params
+      patch_receipt receipt, params: valid_update_params.merge(
+        receipt_calculation_settings: { purchase_adjustment_tax_inclusion: 'gross' }
+      )
 
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
@@ -7667,6 +7684,7 @@ RSpec.describe 'Receipts', type: :request do
 
     it 'direct paramsでpayment rowsを更新・追加・削除できる' do
       receipt.update!(total_amount: 1_200, subtotal_amount: 1_100, tax_amount: 100)
+      previous_profile = receipt.amount_calculation_profile.deep_dup
       cash = receipt.receipt_payments.create!(method: '現金', amount: 1_000)
       old_payment = receipt.receipt_payments.create!(method: '旧支払', amount: 200)
 
@@ -7700,7 +7718,8 @@ RSpec.describe 'Receipts', type: :request do
           [ '現金', 500 ],
           [ '電子マネー', 700 ]
         ])
-        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to eq(1_200)
+        expect(receipt.amount_calculation_profile).to eq(previous_profile)
+        expect(receipt.total_amount).to eq(1_200)
         expect(receipt.review_reasons).not_to include('payment_amount_mismatch')
       end
     end
@@ -8345,11 +8364,11 @@ RSpec.describe 'Receipts', type: :request do
       )
       item = receipt.receipt_items.create!(
         confirmed_name: '修正済み商品',
-        price: 110,
+        price: 100,
         quantity: 1,
         quantity_unit_code: 'each',
         tax_rate: BigDecimal('0.1'),
-        line_total: 110,
+        line_total: 100,
         needs_review: false
       )
 
@@ -8431,7 +8450,7 @@ RSpec.describe 'Receipts', type: :request do
         price: 108,
         quantity: 1,
         quantity_unit_code: 'each',
-        tax_rate: BigDecimal('0.08'),
+        tax_rate: BigDecimal('0.1'),
         line_total: 108,
         needs_review: false
       )
@@ -8478,7 +8497,7 @@ RSpec.describe 'Receipts', type: :request do
         price: 108,
         quantity: 1,
         quantity_unit_code: 'each',
-        tax_rate: BigDecimal('0.08'),
+        tax_rate: BigDecimal('0.1'),
         line_total: 108,
         needs_review: false
       )
@@ -8520,7 +8539,7 @@ RSpec.describe 'Receipts', type: :request do
         price: nil,
         quantity: nil,
         quantity_unit_code: 'each',
-        line_total: 0,
+        line_total: 10,
         needs_review: false
       )
 
@@ -8949,7 +8968,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '手動更新時にcurrent_userのrounding modeをReceiptAmountServiceへ渡す' do
+    it '金額変更時にフォーム開始時のrounding modeをReceiptAmountServiceへ渡す' do
       user.update!(tax_rounding_mode: 'ceil', discount_rounding_mode: 'floor')
       item = receipt.receipt_items.create!(
         confirmed_name: '丸め設定更新前',
@@ -8975,7 +8994,7 @@ RSpec.describe 'Receipts', type: :request do
               id: item.id,
               confirmed_name: '丸め設定更新後商品',
               price: 108,
-              quantity: 1,
+              quantity: 2,
               quantity_unit_code: 'each',
               tax_rate: 10,
               line_total: nil,
@@ -8990,9 +9009,9 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(observed_kwargs[:context]).to eq(:edit_save)
-        expect(observed_kwargs[:tax_rounding_mode]).to eq('ceil')
-        expect(observed_kwargs[:discount_rounding_mode]).to eq('floor')
-        expect(receipt.tax_amount).to eq(10)
+        expect(observed_kwargs.dig(:receipt, 'calculation_settings', 'tax_rounding_mode', 'value')).to eq('ceil')
+        expect(observed_kwargs.dig(:receipt, 'calculation_settings', 'discount_rounding_mode', 'value')).to eq('floor')
+        expect(receipt.tax_amount).to eq(20)
       end
     end
 
@@ -9029,6 +9048,7 @@ RSpec.describe 'Receipts', type: :request do
         position_index: 0
       )
       receipt.receipt_payments.create!(method: 'nanaco支払', amount: 1_139)
+      previous_profile = receipt.amount_calculation_profile.deep_dup
 
       patch_receipt receipt, params: {
         receipt: {
@@ -9067,7 +9087,6 @@ RSpec.describe 'Receipts', type: :request do
       receipt.reload
       payment_summary = ReceiptAmountService.payment_adjustment_summary(receipt: receipt)
       saved_items = receipt.receipt_items.order(:position_index)
-      selected_candidate = receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate')
 
       aggregate_failures do
         # 検算: 税込明細 140 + 151 + 330 + 490 + 50 = 1,161。支払調整 -22 で実支払額 1,139。
@@ -9079,8 +9098,7 @@ RSpec.describe 'Receipts', type: :request do
         expect(payment_summary.final_payment_total).to eq(1_139)
         expect(saved_items.pluck(:price)).to eq([ 140, 151, 330, 490, 50 ])
         expect(saved_items.pluck(:line_total)).to eq([ 140, 151, 330, 490, 50 ])
-        expect(selected_candidate['purchase_total']).to eq(1_161)
-        expect(selected_candidate['final_payment_total']).to eq(1_139)
+        expect(receipt.amount_calculation_profile).to eq(previous_profile)
       end
     end
 

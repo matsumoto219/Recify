@@ -33,6 +33,12 @@ RSpec.describe User, type: :model do
       end
     end
 
+    it '明細入力の税区分はgrossを初期値にする' do
+      user = build(:user)
+
+      expect(user.default_item_tax_inclusion).to eq('gross')
+    end
+
     it 'admin は初期値falseにする' do
       user = create(:user)
 
@@ -554,6 +560,23 @@ RSpec.describe User, type: :model do
       user = build(:user, discount_rounding_mode: 'bankers')
 
       expect(user).not_to be_valid
+    end
+  end
+
+  describe 'default item tax inclusion validation' do
+    it 'grossとnetだけを明細入力の初期値として許可する' do
+      %w[gross net].each do |value|
+        expect(build(:user, default_item_tax_inclusion: value)).to be_valid
+      end
+    end
+
+    it 'nil・blank・未知code・型違いを既定値へ補正しない' do
+      [ nil, '', 'GROSS', 'gross ', 'tax_included', false, 0, [] ].each do |value|
+        user = build(:user, default_item_tax_inclusion: value)
+
+        expect(user).not_to be_valid
+        expect(user.errors.of_kind?(:default_item_tax_inclusion, :inclusion)).to be(true)
+      end
     end
   end
 

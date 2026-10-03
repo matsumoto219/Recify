@@ -23,6 +23,10 @@ module Amounts
       candidates = evaluated_candidates || evaluated_generated_candidates
       selector = Amounts::WinnerSelector.new(candidates)
       selected = selector.call
+      if selected
+        warnings = receipt_input_warnings
+        selected = selected.with_warnings(warnings) if warnings.present?
+      end
 
       Amounts::ResultAdapter.new(
         base_result: base_result,
@@ -37,6 +41,22 @@ module Amounts
     private
 
     attr_reader :receipt, :raw_items, :tax_details, :adjustments, :payments, :context, :tax_rounding_modes, :discount_rounding_mode, :discount_rounding_modes, :tax_excluded_price_conversion_enabled, :base_result, :calculation_profile_result, :evaluated_candidates, :snapshot_candidate_count
+
+    def receipt_input_warnings
+      return [] unless %i[manual edit_save].include?(context.to_s.to_sym) && receipt[:calculation_settings].present?
+
+      Amounts::CandidateGenerator.new(
+        receipt: receipt,
+        items: raw_items,
+        tax_details: tax_details,
+        adjustments: adjustments,
+        payments: payments,
+        context: context,
+        tax_rounding_modes: tax_rounding_modes,
+        discount_rounding_modes: [ discount_rounding_mode ],
+        tax_excluded_price_conversion_enabled: tax_excluded_price_conversion_enabled
+      ).receipt_input_warnings
+    end
 
     def evaluated_generated_candidates
       @evaluated_generated_candidates ||= Amounts::CandidatePipeline.new(

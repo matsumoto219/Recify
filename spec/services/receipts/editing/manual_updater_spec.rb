@@ -33,6 +33,31 @@ RSpec.describe Receipts::Editing::ManualUpdater do
     end
   end
 
+  it 'sourceが同値ならhiddenの派生額を保存済み明細へ上書きしない' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '商品',
+      price: 130,
+      quantity: 3,
+      quantity_unit_code: 'each',
+      original_line_total: 390,
+      line_total: 421,
+      tax_rate: '0.08'
+    )
+    submitted = {
+      'memo' => '確認済み',
+      'receipt_items_attributes' => {
+        '0' => { 'id' => item.id.to_s, 'original_line_total' => 390, 'line_total' => 390 }
+      }
+    }
+    before_attributes = submitted.deep_dup
+
+    result = described_class.call(receipt: receipt, attributes: submitted, items_missing: false)
+
+    expect(result).to be_saved
+    expect(item.reload).to have_attributes(price: 130, original_line_total: 390, line_total: 421)
+    expect(submitted).to eq(before_attributes)
+  end
+
   it '画像付き要確認データの入力済み店舗名を空へ戻す更新を保存しない' do
     review_receipt = create(
       :receipt,

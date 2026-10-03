@@ -192,6 +192,7 @@
             <tr class="border-b token-border-soft">
               <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :long_text) %>"><%= t("admin.receipts.show.items.name") %></th>
               <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipts.show.items.amount") %></th>
+              <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("receipts.show.item_gross_reference_amount") %></th>
               <th class="px-3 py-2 font-semibold <%= admin_table_cell_classes(type: :status) %>"><%= t("admin.receipts.show.items.review") %></th>
             </tr>
           </thead>
@@ -200,11 +201,12 @@
               <tr class="border-b token-border-soft">
                 <td class="px-3 py-3 <%= admin_table_cell_classes(type: :long_text) %>"><%= item[:name].presence || "-" %></td>
                 <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= amount_label.call(item[:line_total]) %></td>
+                <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= item[:gross_amount].nil? ? t("receipts.show.item_gross_amount_unknown") : amount_label.call(item[:gross_amount]) %></td>
                 <td class="px-3 py-3 <%= admin_table_cell_classes(type: :status) %>"><%= boolean_label.call(item[:needs_review]) %></td>
               </tr>
             <% end %>
             <% if record[:recent_items].empty? %>
-              <tr><td colspan="3" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipts.show.items.empty") %></td></tr>
+              <tr><td colspan="4" class="px-3 py-10 text-center text-sm token-text-muted"><%= t("admin.receipts.show.items.empty") %></td></tr>
             <% end %>
           </tbody>
         <% end %>

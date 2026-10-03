@@ -220,22 +220,9 @@ RSpec.describe Amounts::ItemTotalAggregator do
       end
     end
 
-    it 'manualはgrossのみ、edit_save・analysisはgross/netを受理する' do
-      manual_gross = aggregate(
-        [ reference_item(reference_price_tax_inclusion: 'gross') ],
-        context: :manual
-      )
-
+    it 'manual・edit_save・analysisは明示されたgross/netのsourceを維持する' do
       aggregate_failures do
-        expect(manual_gross[:total]).to eq(360)
-        expect {
-          aggregate(
-            [ reference_item(reference_price_tax_inclusion: 'net') ],
-            context: :manual
-          )
-        }.to raise_error(Amounts::ItemPricingSource::InvalidContractError)
-
-        %i[edit_save analysis].product(%w[gross net]).each do |context, tax_inclusion|
+        %i[manual edit_save analysis].product(%w[gross net]).each do |context, tax_inclusion|
           result = aggregate(
             [ reference_item(reference_price_tax_inclusion: tax_inclusion) ],
             context: context

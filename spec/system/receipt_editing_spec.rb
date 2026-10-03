@@ -1454,6 +1454,8 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     wait_for_stimulus_controller("receipt-form")
     wait_for_stimulus_controller("mobile-amount-summary")
 
+    expect(page).not_to have_text(I18n.t("receipts.show.official_total_note"))
+
     maximum_amount_text = "¥#{SystemSettings::AMOUNT_LIMIT_CONFIGURABLE_MAX.to_s.reverse.scan(/.{1,3}/).join(",").reverse}"
     viewports = [
       { width: 320, height: 568, mobile: true },
@@ -1605,6 +1607,7 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
       expect(open_metrics.fetch("detailsScrollbarColor")).not_to eq("auto")
       expect(details).to have_text(I18n.t("shared.amount_summary_card.subtotal"))
       expect(details).to have_text(I18n.t("shared.amount_summary_card.tax_amount"))
+      expect(details).not_to have_text(I18n.t("receipts.show.official_total_note"))
       expect(page.evaluate_script("document.activeElement === arguments[0]", toggle)).to be(true)
       expect(open_metrics.fetch("dividerBelowDetails")).to be(true)
       expect(open_metrics.fetch("dividerBeforeToolbar")).to be(true)

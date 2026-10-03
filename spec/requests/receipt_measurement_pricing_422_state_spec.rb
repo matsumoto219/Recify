@@ -13,6 +13,10 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     sign_in user
   end
 
+  def calculation_context(receipt = Receipt.new(user: user))
+    Receipts::CalculationContext.build(user: user, receipt: receipt).token
+  end
+
   def create_receipt_with_reference_item
     receipt = create(
       :receipt,
@@ -90,6 +94,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     user.update!(storage_limit_bytes: 1)
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         image: uploaded_image,
@@ -119,6 +124,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     presenters = capture_presenter_arguments
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -145,6 +151,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     presenters = capture_presenter_arguments
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -166,6 +173,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     allow(ReceiptAmountService).to receive(:call).and_raise(ReceiptAmountService::InvalidItemSourceError)
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         receipt_items_attributes: {
@@ -210,7 +218,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     }
 
     expect do
-      post receipts_path, params: { receipt: submitted_receipt }
+      post receipts_path, params: { receipt_calculation_context: calculation_context, receipt: submitted_receipt }
     end.not_to change(Receipt, :count)
 
     document = Nokogiri::HTML(response.body)
@@ -234,7 +242,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     corrected_receipt[:receipt_items_attributes]['0'][:discount_rate] = rendered_discount_rate
 
     expect do
-      post receipts_path, params: { receipt: corrected_receipt }
+      post receipts_path, params: { receipt_calculation_context: calculation_context, receipt: corrected_receipt }
     end.to change(Receipt, :count).by(1)
 
     saved_item = user.receipts.find_by!(store_name: '百分率再送店').receipt_items.sole
@@ -269,6 +277,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
       presenters = capture_presenter_arguments
 
       patch receipt_path(receipt), params: {
+        receipt_calculation_context: calculation_context(receipt),
         receipt: {
           lock_version: submitted_lock_version,
           tax_rate: '0.10',
@@ -323,6 +332,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     user.update!(storage_limit_bytes: 1)
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         image: uploaded_image,
@@ -351,6 +361,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     receipt.update!(memo: '別保存')
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: stale_lock_version,
         receipt_items_attributes: {
@@ -391,6 +402,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     end
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.reload.lock_version,
         receipt_items_attributes: {
@@ -435,6 +447,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     receipt.update!(memo: '別保存')
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: stale_lock_version,
         receipt_items_attributes: {
@@ -503,6 +516,7 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
       before = receipt.reload.attributes.deep_dup
 
       patch receipt_path(receipt), params: {
+        receipt_calculation_context: calculation_context(receipt),
         receipt: {
           lock_version: submitted_lock_version,
           receipt_items_attributes: {

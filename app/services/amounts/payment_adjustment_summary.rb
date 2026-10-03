@@ -14,6 +14,8 @@ module Amounts
     end
 
     def call
+      return summary_from_adjustments unless receipt_adjustments.nil?
+
       profile_summary = summary_from_profile
       return profile_summary if profile_summary
 

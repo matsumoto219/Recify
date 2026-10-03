@@ -30,6 +30,49 @@ RSpec.describe Receipts::Editing::ChangeSet do
     )
   end
 
+  it 'レシート条件の値変更を購入金額変更とし、同値や由来だけの変更を再計算にしない' do
+    settings = {
+      'schema_version' => 1,
+      'tax_rounding_mode' => { 'value' => 'floor', 'origin' => 'analysis' }
+    }
+    receipt.calculation_settings = settings
+    changed = settings.deep_dup
+    changed['tax_rounding_mode']['value'] = 'ceil'
+    origin_only = settings.deep_dup
+    origin_only['tax_rounding_mode']['origin'] = 'manual'
+
+    aggregate_failures do
+      change = described_class.call(receipt: receipt, permitted: { 'calculation_settings' => changed })
+      expect(change).to be_derived_purchase_inputs_changed
+      expect(change).to be_amount_related_changed
+      expect(change).to be_amount_inputs_submitted
+      [ settings, origin_only ].each do |same_values|
+        result = described_class.call(receipt: receipt, permitted: { 'calculation_settings' => same_values })
+        expect(result).not_to be_amount_related_changed
+        expect(result).not_to be_amount_inputs_submitted
+      end
+      expect(described_class.call(receipt: receipt, permitted: {})).not_to be_amount_related_changed
+    end
+  end
+
+  it '入力税区分の実変更だけを購入金額変更として扱う' do
+    item = receipt.receipt_items.create!(
+      confirmed_name: '明細', pricing_source_kind: 'count_unit_price', price: 100,
+      quantity: 1, quantity_unit_code: 'each', line_total: 100,
+      input_tax_inclusion: 'gross', tax_inclusion_origin: 'manual'
+    )
+
+    %w[gross net].each do |basis|
+      result = described_class.call(
+        receipt: receipt,
+        permitted: {
+          'receipt_items_attributes' => { '0' => { 'id' => item.id.to_s, 'input_tax_inclusion' => basis } }
+        }
+      )
+      expect(result.purchase_amounts_changed?).to eq(basis == 'net')
+    end
+  end
+
   it 'itemの表示項目だけの変更をpurchase amount変更にしない' do
     item = receipt.receipt_items.create!(
       confirmed_name: '変更前', price: 100, quantity: 1, quantity_unit_code: 'each', line_total: 100

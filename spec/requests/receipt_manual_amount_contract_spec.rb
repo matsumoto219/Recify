@@ -7,6 +7,10 @@ RSpec.describe 'Receipt manual amount contract', type: :request do
     sign_in user
   end
 
+  def calculation_context(receipt = Receipt.new(user: user))
+    Receipts::CalculationContext.build(user: user, receipt: receipt).token
+  end
+
   def manual_item_attributes
     {
       '0' => {
@@ -22,6 +26,7 @@ RSpec.describe 'Receipt manual amount contract', type: :request do
 
   it 'total-only入力でも課税明細から税額を再計算してreview_neededにする' do
     post receipts_path, params: {
+      receipt_calculation_context: calculation_context,
       receipt: {
         store_name: '手動金額契約店',
         payment_method: 'cash',
@@ -44,6 +49,7 @@ RSpec.describe 'Receipt manual amount contract', type: :request do
 
   it '不整合なsubtotal tax totalをcompletedで保存しない' do
     post receipts_path, params: {
+      receipt_calculation_context: calculation_context,
       receipt: {
         store_name: '手動不整合入力店',
         payment_method: 'cash',
@@ -69,6 +75,7 @@ RSpec.describe 'Receipt manual amount contract', type: :request do
   it '購入合計を超えるcouponを保存しない' do
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '過大クーポン入力店',
           payment_method: 'cash',
@@ -91,6 +98,7 @@ RSpec.describe 'Receipt manual amount contract', type: :request do
 
   it '購入合計を超えるpoint usageをreview_neededで保存する' do
     post receipts_path, params: {
+      receipt_calculation_context: calculation_context,
       receipt: {
         store_name: '過大ポイント入力店',
         payment_method: 'e_money',

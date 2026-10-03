@@ -7,6 +7,10 @@ RSpec.describe 'Receipt manual core validation', type: :request do
     sign_in user
   end
 
+  def calculation_context(receipt = Receipt.new(user: user))
+    Receipts::CalculationContext.build(user: user, receipt: receipt).token
+  end
+
   def uploaded_image
     Rack::Test::UploadedFile.new(
       Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
@@ -48,6 +52,7 @@ RSpec.describe 'Receipt manual core validation', type: :request do
 
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           image: uploaded_image,
           store_name: '',
@@ -70,6 +75,7 @@ RSpec.describe 'Receipt manual core validation', type: :request do
   it '店舗名・合計金額が揃った画像付き要確認データは手動作成できる' do
     expect do
       post receipts_path, params: {
+        receipt_calculation_context: calculation_context,
         receipt: {
           image: uploaded_image,
           store_name: '画像付き要確認店舗',
@@ -121,6 +127,7 @@ RSpec.describe 'Receipt manual core validation', type: :request do
     receipt.receipt_payments.create!(method: '現金', amount: 50)
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         store_name: ''
@@ -156,6 +163,7 @@ RSpec.describe 'Receipt manual core validation', type: :request do
     )
 
     patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
       receipt: {
         lock_version: receipt.lock_version,
         memo: '部分データのメモ更新'

@@ -14,7 +14,7 @@ module Receipts::Processing::Contracts
       source_out_of_bounds
       proposal_invalid
     ].freeze
-    COUNT_TAX_SEMANTICS = %w[reproducible_as_recorded reproducible_uniform_net unknown].freeze
+    COUNT_TAX_SEMANTICS = %w[reproducible_as_recorded reproducible_uniform_net reproducible_mixed unknown].freeze
     EXACT_INTEGER_PATTERN = PROPOSAL_CONTRACT::EXACT_INTEGER_PATTERN
 
     Result = Data.define(
@@ -396,7 +396,7 @@ module Receipts::Processing::Contracts
           )
         end
         uniform_net = count_tax_semantics == "reproducible_uniform_net"
-        if count_tax_semantics == "reproducible_as_recorded" || uniform_net
+        if %w[reproducible_as_recorded reproducible_mixed].include?(count_tax_semantics) || uniform_net
           return selected_result(
             proposal,
             formula,

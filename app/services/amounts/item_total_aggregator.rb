@@ -49,7 +49,7 @@ module Amounts
         end
         submitted_discount_rate = normalize_discount_rate(fetch_value(item, :discount_rate))
         discount_amount = discount_amount_for(item, original_line_total, submitted_discount_rate)
-        discount_rate = if %w[explicit_line_total reference_quantity_price].include?(pricing_source_kind) &&
+        discount_rate = if preserves_absolute_discount_source?(item, pricing_source_kind) &&
           submitted_discount_rate.nil?
           nil
         else
@@ -69,8 +69,6 @@ module Amounts
     end
 
     def reference_item_extension_for(item)
-      validate_reference_tax_inclusion_for_context!(item)
-
       Amounts::ReferenceItemExtension.call(
         reference_price_amount: fetch_value(item, :reference_price_amount),
         reference_quantity: fetch_value(item, :reference_quantity),
@@ -89,6 +87,12 @@ module Amounts
       )
     end
 
+    def preserves_absolute_discount_source?(item, pricing_source_kind)
+      %w[explicit_line_total reference_quantity_price].include?(pricing_source_kind) ||
+        manual_input_context? && pricing_source_kind == "count_unit_price" &&
+          %w[gross net].include?(fetch_value(item, :input_tax_inclusion))
+    end
+
     def canonical_reference_unit_code!(item, code_attribute:, raw_attribute:)
       code = fetch_value(item, code_attribute)
       unit = ReceiptQuantityUnit.unit_for(code)
@@ -97,16 +101,6 @@ module Amounts
 
       raise Amounts::ItemQuantitySemantics::InvalidFormulaSourceError,
         "reference formula requires canonical unit codes without raw unit evidence"
-    end
-
-    def validate_reference_tax_inclusion_for_context!(item)
-      return unless @context == :manual
-
-      tax_inclusion = fetch_value(item, :reference_price_tax_inclusion)
-      return if tax_inclusion == :gross || tax_inclusion == "gross"
-
-      raise Amounts::ItemPricingSource::InvalidContractError,
-        "manual reference formula requires gross tax inclusion"
     end
 
     def reference_quantity_price_source?(item)
