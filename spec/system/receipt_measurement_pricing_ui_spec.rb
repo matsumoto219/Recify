@@ -446,6 +446,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
               .to eq("小計 ¥123,456")
             displays = row.all(
               ".receipt-form-item-detail-subtotal [data-receipt-form-target='sourceLineTotalDisplay']",
+              count: width < 768 ? 0 : 1,
               visible: true
             )
             expect(displays.size).to eq(width < 768 ? 0 : 1)
