@@ -147,11 +147,15 @@ RSpec.describe "Service layer child implementation boundary" do
   let(:scanner) { @scanner }
 
   it "app/services直下の全namespaceをregistryへ明示登録する" do
-    expect(scanner.registry_issues).to be_empty, scanner.registry_issues.join("\n")
+    issues = scanner.registry_issues
+
+    expect(issues).to be_empty, issues.join("\n")
   end
 
   it "Zeitwerkの期待定数とservice childの実定義を一致させる" do
-    expect(scanner.catalog_issues).to be_empty, scanner.catalog_issues.join("\n")
+    issues = scanner.catalog_issues
+
+    expect(issues).to be_empty, issues.join("\n")
   end
 
   it "production scan対象をPrismで解析できる" do
@@ -162,6 +166,8 @@ RSpec.describe "Service layer child implementation boundary" do
   end
 
   it "facadeと同一private root以外からchild実装を直接参照しない" do
-    expect(scanner.violations).to be_empty, scanner.format_violations
+    violations = scanner.violations
+
+    expect(violations).to be_empty, scanner.format_violations(violations)
   end
 end

@@ -114,7 +114,9 @@ RSpec.describe "Receipt workflow dependency boundary" do
   end
 
   it "workflow間の許可依存だけを認める" do
-    expect(scanner.violations).to be_empty, scanner.format_violations
+    violations = scanner.violations
+
+    expect(violations).to be_empty, scanner.format_violations(violations)
   end
 
   it "production sourceをPrismで解析できる" do

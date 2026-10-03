@@ -173,11 +173,15 @@ RSpec.describe "root service and lifecycle status boundary" do
   let(:scanner) { @scanner }
 
   it "app/services rootの全ファイルを役割とowner付きで登録する" do
-    expect(scanner.registry_issues).to be_empty, scanner.registry_issues.join("\n")
+    issues = scanner.registry_issues
+
+    expect(issues).to be_empty, issues.join("\n")
   end
 
   it "宣言済みpublic APIを増減させない" do
-    expect(scanner.declared_api_issues).to be_empty, scanner.declared_api_issues.join("\n")
+    issues = scanner.declared_api_issues
+
+    expect(issues).to be_empty, issues.join("\n")
   end
 
   it "外部公開するroot facadeのnested Errorをconstant単位で固定する" do
@@ -200,7 +204,9 @@ RSpec.describe "root service and lifecycle status boundary" do
   end
 
   it "production callerが利用するroot public APIを増減させない" do
-    expect(scanner.external_api_issues).to be_empty, scanner.external_api_issues.join("\n")
+    issues = scanner.external_api_issues
+
+    expect(issues).to be_empty, issues.join("\n")
   end
 
   it "root APIとstatus writerのproduction sourceをPrismで解析できる" do
