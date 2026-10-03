@@ -1,12 +1,11 @@
 # frozen_string_literal: true
 
 require "base64"
+require "json"
 require "open3"
-require "rails_helper"
 
 RSpec.describe "Email address copy Stimulus controller" do
-  let(:source_path) { Rails.root.join("app/javascript/controllers/email_address_copy_controller.js") }
-  let(:source) { source_path.read }
+  let(:source) { File.read(File.expand_path("../../app/javascript/controllers/email_address_copy_controller.js", __dir__)) }
 
   def run_controller_script(script)
     encoded_source = Base64.strict_encode64(source)
