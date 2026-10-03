@@ -319,9 +319,9 @@ RSpec.describe Receipts::Processing::Pipeline do
     Ocr::ResponseParser.new(response: raw_json, provider: :fixture).call
   end
 
-  def run_finalize_ocr_fixture(name, ai_result: nil)
+  def run_finalize_ocr_fixture(name, ai_result: nil, ocr_result: nil)
     receipt = create(:receipt, :processing, :with_image)
-    ocr_result = ocr_fixture(name)
+    ocr_result = ocr_result ? ocr_result.deep_dup : ocr_fixture(name)
     ai_result ||= ai_success_result_for(ocr_result)
     captured_amount_result = nil
 
@@ -3226,7 +3226,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         ]
       )
 
-      receipt, = run_finalize_ocr_fixture('return_receipt', ai_result: ai_result)
+      receipt, = run_finalize_ocr_fixture('return_receipt', ai_result: ai_result, ocr_result: ocr_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('review_needed')
@@ -3261,7 +3261,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         ]
       )
 
-      receipt, amount = run_finalize_ocr_fixture('delivery_and_bag_fee_receipt', ai_result: ai_result)
+      receipt, amount = run_finalize_ocr_fixture('delivery_and_bag_fee_receipt', ai_result: ai_result, ocr_result: ocr_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
@@ -3396,7 +3396,8 @@ RSpec.describe Receipts::Processing::Pipeline do
 
       receipt, amount = run_finalize_ocr_fixture(
         'item_owned_bag_quantity_receipt',
-        ai_result: ai_result
+        ai_result: ai_result,
+        ocr_result: ocr_result
       )
 
       aggregate_failures do
@@ -3489,7 +3490,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         ]
       )
 
-      receipt, = run_finalize_ocr_fixture('delivery_and_bag_fee_receipt', ai_result: ai_result)
+      receipt, = run_finalize_ocr_fixture('delivery_and_bag_fee_receipt', ai_result: ai_result, ocr_result: ocr_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
@@ -3836,7 +3837,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         ]
       )
 
-      receipt, = run_finalize_ocr_fixture('return_receipt', ai_result: ai_result)
+      receipt, = run_finalize_ocr_fixture('return_receipt', ai_result: ai_result, ocr_result: ocr_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('review_needed')
@@ -4014,7 +4015,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         ]
       )
 
-      receipt, amount = run_finalize_ocr_fixture('service_and_late_night_receipt', ai_result: ai_result)
+      receipt, amount = run_finalize_ocr_fixture('service_and_late_night_receipt', ai_result: ai_result, ocr_result: ocr_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
@@ -6902,7 +6903,7 @@ RSpec.describe Receipts::Processing::Pipeline do
 
     it 'OCRノイズがあっても印字税詳細を復元して税額を安定保存する' do
       ocr_result = ocr_fixture('ocr_noise_receipt')
-      receipt, amount = run_finalize_ocr_fixture('ocr_noise_receipt', ai_result: ai_success_result_for(ocr_result))
+      receipt, amount = run_finalize_ocr_fixture('ocr_noise_receipt', ai_result: ai_success_result_for(ocr_result), ocr_result: ocr_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
@@ -6930,7 +6931,7 @@ RSpec.describe Receipts::Processing::Pipeline do
           { index: index, category: 'other', tax_rate: 0.08, needs_review: false }
         end
       )
-      receipt, amount = run_finalize_ocr_fixture('ocr_noise_receipt', ai_result: ai_result)
+      receipt, amount = run_finalize_ocr_fixture('ocr_noise_receipt', ai_result: ai_result, ocr_result: ocr_result)
 
       aggregate_failures do
         expect(receipt.subtotal_amount).to eq(819)
@@ -6959,7 +6960,7 @@ RSpec.describe Receipts::Processing::Pipeline do
           { index: index, category: 'other', needs_review: false }
         end
       )
-      receipt, amount = run_finalize_ocr_fixture('ocr_low_quality_receipt', ai_result: ai_result)
+      receipt, amount = run_finalize_ocr_fixture('ocr_low_quality_receipt', ai_result: ai_result, ocr_result: ocr_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('review_needed')
@@ -6991,7 +6992,7 @@ RSpec.describe Receipts::Processing::Pipeline do
           payment_method: 'qr_payment'
         }
       )
-      receipt, amount = run_finalize_ocr_fixture('tax_detail_item_conflict_receipt', ai_result: ai_result)
+      receipt, amount = run_finalize_ocr_fixture('tax_detail_item_conflict_receipt', ai_result: ai_result, ocr_result: ocr_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('review_needed')
