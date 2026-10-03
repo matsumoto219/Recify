@@ -34,7 +34,7 @@ gem "rqrcode", "~> 3.2"
 # Sentry Ruby SDK [https://github.com/getsentry/sentry-ruby]
 gem "sentry-ruby", "~> 7.0"
 # Sentry Rails連携 [https://github.com/getsentry/sentry-ruby]
-gem "sentry-rails", "~> 7.0"
+gem "sentry-rails", "~> 7.1"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
