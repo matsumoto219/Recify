@@ -11,10 +11,10 @@ RSpec.describe "Receipt form Stimulus controller" do
   end
 
   def run_controller_script(script)
-    module_source = %w[numeric_input amount_preview review_targets].map do |name|
+    module_source = %w[numeric_input amount_preview review_targets review_navigation].map do |name|
       Rails.root.join("app/javascript/receipts/#{name}.js").read.gsub(/^export /, "")
     end.join("\n")
-    controller_source = source.gsub(%r!import \{[^}]*\} from 'receipts/(?:numeric_input|amount_preview|review_targets)'\n!m, "")
+    controller_source = source.gsub(%r!import \{[^}]*\} from 'receipts/(?:numeric_input|amount_preview|review_targets|review_navigation)'\n!m, "")
     encoded_module_source = Base64.strict_encode64(module_source)
     encoded_source = Base64.strict_encode64(controller_source)
     encoded_reference_pricing_contract = Base64.strict_encode64(reference_pricing_contract.to_json)
