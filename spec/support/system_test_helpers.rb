@@ -101,6 +101,8 @@ RSpec.configure do |config|
       )
       options.add_option("goog:loggingPrefs", { browser: "ALL" })
     end
+
+    page.current_window.resize_to(*screen_size)
   end
 
   config.before(type: :system) do
