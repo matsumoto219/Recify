@@ -34,6 +34,42 @@ RSpec.describe ReceiptAmountService do
   end
 
   describe '明示されたレシート条件と明細税区分' do
+    it '解析sourceの再現確認では指定された丸め単位を維持する' do
+      items = Array.new(2) do
+        {
+          pricing_source_kind: 'explicit_line_total',
+          input_tax_inclusion: 'net',
+          tax_inclusion_origin: 'analysis',
+          quantity: 1,
+          quantity_unit_code: 'each',
+          original_line_total: 15,
+          line_total: 15,
+          tax_rate: '0.1'
+        }
+      end
+
+      { per_item: 32, per_tax_rate_group: 33 }.each do |scope, total|
+        result = calculate(items:, settings: nil, context: :analysis, tax_rounding_mode: :floor, tax_rounding_scope: scope)
+
+        expect(result[:resolved][:total]).to eq(total)
+        expect(result.dig(:amount_engine, :selected_candidate, :rounding_scope)).to eq(scope)
+      end
+    end
+
+    it '解析再現用の丸め単位は未知値と手動保存への指定を拒否し未指定の解析は変えない' do
+      items = [ count_item(tax_inclusion_origin: 'analysis') ]
+      options = { items:, settings: nil, context: :analysis }
+      ordinary = calculate(**options)
+
+      expect(calculate(**options, tax_rounding_scope: nil)).to eq(ordinary)
+      [ '', 'unknown', 1, [], {}, 'per_item' * 1000 ].each do |invalid|
+        expect { calculate(**options, tax_rounding_scope: invalid) }.to raise_error(ReceiptAmountService::InvalidItemSourceError)
+      end
+      %i[manual edit_save].each do |context|
+        expect { calculate(items:, context:, tax_rounding_scope: :per_item) }.to raise_error(ReceiptAmountService::InvalidItemSourceError)
+      end
+    end
+
     %i[manual edit_save].product(%w[gross net]).each do |context, basis|
       it "#{context}のcount #{basis}は入力sourceと税込投影を分離する" do
         result = calculate(items: [ count_item(basis: basis) ], context: context)
@@ -308,6 +344,126 @@ RSpec.describe ReceiptAmountService do
       added = calculate(items: [ count_item(basis: 'net') ], settings: calculation_settings(tax: 'ceil'), receipt: input, context: :analysis)
 
       expect(added).to eq(existing)
+    end
+
+    it 'analysisで検証済みの明細別税区分はexplicit sourceを変えず税込へ投影する' do
+      items = [
+        {
+          pricing_source_kind: 'explicit_line_total',
+          input_tax_inclusion: 'net',
+          tax_inclusion_origin: 'analysis',
+          original_line_total: 300,
+          line_total: 300,
+          quantity: 1,
+          tax_rate: '0.10'
+        },
+        {
+          pricing_source_kind: 'explicit_line_total',
+          input_tax_inclusion: 'gross',
+          tax_inclusion_origin: 'analysis',
+          original_line_total: 220,
+          line_total: 220,
+          quantity: 1,
+          tax_rate: '0.10'
+        }
+      ]
+      original = items.deep_dup
+      result = calculate(
+        items: items,
+        settings: nil,
+        context: :analysis,
+        receipt: { subtotal_amount: 500, tax_amount: 50, total_amount: 550 }
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 500, tax: 50, total: 550)
+        expect(result.dig(:computed, :items).map { |item| item[:line_total] }).to eq([ 330, 220 ])
+        expect(result.dig(:computed, :items).map { |item| item[:original_line_total] }).to eq([ 300, 220 ])
+        expect(result.dig(:computed, :items).map { |item| item[:input_tax_inclusion] }).to eq(%w[net gross])
+        expect(items).to eq(original)
+      end
+    end
+
+    it 'analysis由来のcount netは数量と割引を一度だけ適用して税込へ投影する' do
+      item = count_item(
+        basis: 'net',
+        price: 125,
+        quantity: 3,
+        original_line_total: 375,
+        line_total: 300,
+        discount_amount: 75,
+        discount_rate: '0.2',
+        tax_inclusion_origin: 'analysis'
+      )
+      original = item.deep_dup
+
+      result = calculate(
+        items: [ item ],
+        settings: nil,
+        context: :analysis,
+        receipt: { subtotal_amount: 300, tax_amount: 30, total_amount: 330 }
+      )
+
+      aggregate_failures do
+        expect(result[:resolved]).to include(subtotal: 300, tax: 30, total: 330)
+        expect(result[:selected_candidate_status]).to eq('accepted')
+        expect(result.dig(:computed, :items).sole).to include(
+          pricing_source_kind: 'count_unit_price',
+          quantity: 3,
+          original_line_total: 375,
+          discount_amount: 75,
+          line_total: 330,
+          input_tax_inclusion: 'net',
+          tax_inclusion_origin: 'analysis'
+        )
+        expect(item).to eq(original)
+      end
+    end
+
+    it 'analysis由来を伴わない明細税区分は入力条件へ昇格しない' do
+      item = { pricing_source_kind: 'explicit_line_total', line_total: 300, quantity: 1, tax_rate: '0.10' }
+      existing = calculate(items: [ item ], settings: nil, context: :analysis)
+
+      [ nil, 'manual', 'form_default', 'legacy_record', 'unknown' ].each do |origin|
+        added = calculate(
+          items: [ item.merge(input_tax_inclusion: 'net', tax_inclusion_origin: origin) ],
+          settings: nil,
+          context: :analysis
+        )
+        expect(added).to eq(existing)
+      end
+    end
+
+    it 'analysis由来でも型不正・未分類sourceの税区分を受け入れない' do
+      item = { pricing_source_kind: 'explicit_line_total', line_total: 300, quantity: 1, tax_rate: '0.10', tax_inclusion_origin: 'analysis' }
+
+      [ '', 'unknown', :net, [ 'net' ], nil ].each do |value|
+        expect do
+          calculate(items: [ item.merge(input_tax_inclusion: value) ], settings: nil, context: :analysis)
+        end.to raise_error(ReceiptAmountService::InvalidItemSourceError)
+      end
+      expect do
+        calculate(items: [ item.merge(pricing_source_kind: nil, input_tax_inclusion: 'net') ], settings: nil, context: :analysis)
+      end.to raise_error(ReceiptAmountService::InvalidItemSourceError)
+    end
+
+    it 'analysis由来のreferenceは専用税区分を使いcount用の税区分を要求しない' do
+      item = {
+        pricing_source_kind: 'reference_quantity_price',
+        tax_inclusion_origin: 'analysis',
+        reference_price_amount: '100',
+        reference_quantity: '100',
+        reference_quantity_unit_code: 'gram',
+        reference_price_tax_inclusion: 'net',
+        quantity: '200',
+        quantity_unit_code: 'gram',
+        tax_rate: '0.10'
+      }
+
+      result = calculate(items: [ item ], settings: nil, context: :analysis)
+
+      expect(result.dig(:computed, :items).sole[:line_total]).to eq(220)
+      expect(result.dig(:computed, :items).sole[:input_tax_inclusion]).to be_nil
     end
 
     it '計算で入力sourceと設定を変更しない' do

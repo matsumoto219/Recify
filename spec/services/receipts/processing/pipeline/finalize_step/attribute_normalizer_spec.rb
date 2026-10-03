@@ -339,6 +339,41 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       )
     end
 
+    it '明細税区分はexact sourceが一致するSelectionからだけ保持しraw値や不正区分を採用しない' do
+      source = {
+        raw_text: '検証明細',
+        ocr_item_identity: 'azure_structured_item_i0_s100_e115',
+        pricing_source_kind: 'count_unit_price',
+        price: 120,
+        quantity: BigDecimal('2'),
+        quantity_unit_code: 'item',
+        original_line_total: 240,
+        line_total: 240,
+        discount_amount: nil,
+        discount_rate: nil,
+        position_index: 1,
+        input_tax_inclusion: 'raw-value',
+        tax_inclusion_origin: 'analysis'
+      }
+
+      %w[gross net].each do |basis|
+        selection = count_selection.with(input_tax_inclusion: basis)
+        expect(trusted_items([ source ], [ selection ]).sole).to include(
+          input_tax_inclusion: basis,
+          tax_inclusion_origin: 'analysis'
+        )
+      end
+
+      aggregate_failures do
+        expect(trusted_items([ source ], [ count_selection ]).sole).not_to have_key(:input_tax_inclusion)
+        invalid = count_selection.with(input_tax_inclusion: 'unknown')
+        expect(trusted_items([ source ], [ invalid ]).sole).not_to have_key(:pricing_source_kind)
+        forged = trusted_items([ source.except(:ocr_item_identity) ], [ count_selection.with(input_tax_inclusion: 'net') ]).sole
+        expect(forged).not_to have_key(:input_tax_inclusion)
+        expect(forged).not_to have_key(:tax_inclusion_origin)
+      end
+    end
+
     it 'layout sourceとstructured destinationを結ぶFence後のexact reference sourceを保持する' do
       identity = 'azure_structured_item_i0_s7_e38'
       proposal_id =

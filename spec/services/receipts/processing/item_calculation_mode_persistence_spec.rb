@@ -30,6 +30,25 @@ RSpec.describe 'OCR item calculation mode persistence' do
     result
   end
 
+  def mixed_explicit_ocr_result
+    raw = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
+    raw.dig('analyzeResult', 'documents', 0, 'fields', 'Items', 'valueArray').each do |item|
+      item.fetch('valueObject').delete('Quantity')
+    end
+
+    result = Ocr::ResponseParser.new(response: raw, provider: :fixture).call
+    result.fetch(:candidates).merge!(
+      subtotal_amount: 732,
+      tax_amount: 73,
+      total_amount: 805,
+      tax_rate: BigDecimal('0.1'),
+      tax_details: [ { description: '内消費税10%', net_amount: 805, amount: 73, rate: BigDecimal('0.1') } ],
+      payments: []
+    )
+    result.dig(:candidates, :items).each { |item| item[:tax_rate] = BigDecimal('0.1') }
+    result
+  end
+
   def save_count_source_edit(receipt, quantity:)
     items = receipt.receipt_items.order(:position_index)
     attributes = {
@@ -452,6 +471,121 @@ RSpec.describe 'OCR item calculation mode persistence' do
         original_line_total: 440,
         line_total: 440
       )
+    end
+  end
+
+  it '混在explicitの元金額・明細税区分・税込参考額を保存して編集初期値へ引き継ぐ' do
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(receipt, ocr_result: mixed_explicit_ocr_result, strategy: :ai_success)
+
+    result = Receipts::Processing.run_finalize(run)
+    items = receipt.reload.receipt_items.order(:position_index)
+    form = Receipts::CalculationSettingsForm.new(receipt:, context: nil)
+
+    aggregate_failures do
+      expect(result.next_step).to eq(:done)
+      expect(receipt).to have_attributes(subtotal_amount: 732, tax_amount: 73, total_amount: 805)
+      expect(items.pluck(:pricing_source_kind)).to all(eq('explicit_line_total'))
+      expect(items.pluck(:price)).to all(be_nil)
+      expect(items.pluck(:original_line_total, :line_total)).to eq(
+        [ 220, 132, 110, 308 ].map { |value| [ value, value ] }
+      )
+      expect(items.pluck(:input_tax_inclusion)).to eq(%w[net net gross gross])
+      expect(items.pluck(:tax_inclusion_origin)).to all(eq('analysis'))
+      expect(items.pluck(:gross_line_total)).to eq([ 242, 145, 110, 308 ])
+      expect(items.map { |item| form.item_value_for(item) }).to eq(%w[net net gross gross])
+      expect(run.reload.status).to eq('succeeded')
+    end
+
+    saved_items = items.map(&:attributes)
+    Receipts::Processing.run_finalize(run)
+    expect(receipt.reload.receipt_items.order(:position_index).map(&:attributes)).to eq(saved_items)
+  end
+
+  it '混在sourceの保存税区分または税込参考額が変われば同じtransactionをrollbackする' do
+    %i[input_tax_inclusion gross_line_total].each do |field|
+      receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+      run = build_ready_run(receipt, ocr_result: mixed_explicit_ocr_result, strategy: :ai_success)
+      step = Receipts::Processing::Pipeline::FinalizeStep.new(
+        receipt:,
+        decision: finalize_decision(:ai_success),
+        run:
+      )
+      allow(step).to receive(:final_item_calculation_attributes).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap do |items|
+          items.first[field] = field == :input_tax_inclusion ? 'gross' : 999
+        end
+      end
+
+      expect { step.call }.to raise_error(
+        Receipts::Processing::AnalysisError,
+        'item_calculation_mode_persistence_mismatch'
+      )
+      expect(receipt.reload.receipt_items).to be_empty
+      expect(receipt.calculation_settings).to be_nil
+    end
+  end
+
+  [ [ 0, 'net' ], [ 2, 'gross' ] ].each do |selected_index, basis|
+    it "混在明細の一部だけ#{basis} sourceが確定しても未選択の税抜明細を変更せず保存する" do
+      ocr_result = mixed_explicit_ocr_result
+      ocr_result[:candidates][:item_calculation_mode_candidates].select! do |candidate|
+        candidate.with_indifferent_access[:item_index] == selected_index
+      end
+      receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+      run = build_ready_run(receipt, ocr_result:, strategy: :ai_success)
+
+      result = Receipts::Processing.run_finalize(run)
+      items = receipt.reload.receipt_items.order(:position_index).to_a
+      source_totals = [ 220, 132, 110, 308 ]
+      gross_totals = [ 242, 145, 110, 308 ]
+
+      aggregate_failures do
+        expect(result.next_step).to eq(:done)
+        expect(run.reload.status).to eq('succeeded')
+        expect(receipt).to have_attributes(subtotal_amount: 732, tax_amount: 73, total_amount: 805)
+        expect(items[selected_index]).to have_attributes(
+          pricing_source_kind: 'explicit_line_total',
+          input_tax_inclusion: basis,
+          tax_inclusion_origin: 'analysis',
+          line_total: source_totals[selected_index],
+          gross_line_total: gross_totals[selected_index]
+        )
+        items.each_with_index do |item, index|
+          next if index == selected_index
+
+          expect(item).to have_attributes(
+            pricing_source_kind: nil,
+            input_tax_inclusion: nil,
+            tax_inclusion_origin: nil,
+            line_total: gross_totals[index]
+          )
+        end
+      end
+    end
+  end
+
+  it '全明細が税抜のexplicitでも入力元金額と正式な税率単位合計を別々に保存する' do
+    ocr_result = mixed_explicit_ocr_result
+    ocr_result.fetch(:candidates).merge!(subtotal_amount: 770, tax_amount: 77, total_amount: 847, tax_details: [])
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(receipt, ocr_result:, strategy: :ai_success)
+
+    result = Receipts::Processing.run_finalize(run)
+    items = receipt.reload.receipt_items.order(:position_index)
+    form = Receipts::CalculationSettingsForm.new(receipt:, context: nil)
+
+    aggregate_failures do
+      expect(result.next_step).to eq(:done)
+      expect(receipt).to have_attributes(subtotal_amount: 770, tax_amount: 77, total_amount: 847)
+      expect(items.pluck(:pricing_source_kind)).to all(eq('explicit_line_total'))
+      expect(items.pluck(:price)).to all(be_nil)
+      expect(items.pluck(:original_line_total, :line_total)).to eq(
+        [ 220, 132, 110, 308 ].map { |value| [ value, value ] }
+      )
+      expect(items.pluck(:input_tax_inclusion)).to eq(%w[net net net net])
+      expect(items.pluck(:gross_line_total)).to eq([ 242, 145, 121, 338 ])
+      expect(items.map { |item| form.item_value_for(item) }).to eq(%w[net net net net])
     end
   end
 

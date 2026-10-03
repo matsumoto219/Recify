@@ -2,6 +2,65 @@ require "rails_helper"
 require_relative "../support/system_test_helpers"
 
 RSpec.describe "レシート固有の計算条件", type: :system do
+  it "解析保存した混在明細の税区分と元金額を編集開始・無変更保存で維持する" do
+    user = create_system_test_user(password: "password", default_item_tax_inclusion: "net")
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      subtotal_amount: 500,
+      tax_amount: 50,
+      total_amount: 550,
+      payment_method: "cash",
+      calculation_settings: {
+        "schema_version" => 1,
+        "tax_rounding_mode" => { "value" => "floor", "origin" => "analysis" },
+        "discount_rounding_mode" => { "value" => "round", "origin" => "analysis" },
+        "tax_rounding_scope" => { "value" => "per_tax_rate_group", "origin" => "analysis" }
+      }
+    )
+    items = [ [ "net", 300, 330 ], [ "gross", 220, 220 ] ].each_with_index.map do |(basis, source, gross), index|
+      receipt.receipt_items.create!(
+        confirmed_name: "混在確認品#{index + 1}",
+        position_index: index,
+        pricing_source_kind: "explicit_line_total",
+        quantity: 1,
+        quantity_unit_code: "each",
+        tax_rate: BigDecimal("0.1"),
+        original_line_total: source,
+        line_total: source,
+        gross_line_total: gross,
+        input_tax_inclusion: basis,
+        tax_inclusion_origin: "analysis"
+      )
+    end
+    source_fields = %w[original_line_total line_total gross_line_total input_tax_inclusion tax_inclusion_origin]
+    before_sources = items.map { |item| item.attributes.slice(*source_fields) }
+    visit new_user_session_path
+    fill_in "user_email", with: user.email
+    fill_in "user_password", with: "password"
+    click_button I18n.t("auth.sessions.submit")
+    expect(page).to have_current_path(receipts_path, ignore_query: true)
+
+    2.times do
+      visit edit_receipt_path(receipt)
+      wait_for_stimulus_controller("receipt-form")
+      rows = all('[data-receipt-form-target="itemRow"]', visible: :all)
+      %w[net gross].each_with_index do |basis, index|
+        expect(rows[index]).to have_css(
+          "[data-receipt-form-target='itemTaxInclusionControl'] input[value='#{basis}']:checked",
+          visible: :all
+        )
+      end
+      expect(page).to have_css('[data-receipt-form-target="totalAmount"]', text: "550")
+      click_button I18n.t("receipts.form.buttons.save"), match: :first
+      expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
+      expect(receipt.reload.total_amount).to eq(550)
+      expect(items.map { |item| item.reload.attributes.slice(*source_fields) }).to eq(before_sources)
+    end
+    expect_browser_console_clean
+  end
+
   it "保存済み条件を維持し、税込と税抜の切替では単価を換算せず保存する" do
     user = create_system_test_user(password: "password", tax_rounding_mode: "ceil", default_item_tax_inclusion: "net")
     settings = {

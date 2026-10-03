@@ -223,6 +223,10 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
       return false unless selection.projected_line_total.between?(0, item_line_total_limit)
       return false unless trusted_item_calculation_mode_review_valid?(item, selection)
       return false unless item[:pricing_source_kind] == selection.pricing_source_kind
+      unless selection.input_tax_inclusion.nil?
+        return false unless %w[count_unit_price explicit_line_total].include?(selection.pricing_source_kind)
+        return false unless %w[gross net].include?(selection.input_tax_inclusion)
+      end
 
       case selection.pricing_source_kind
       when "count_unit_price"
@@ -555,6 +559,12 @@ class Receipts::Processing::Pipeline::FinalizeStep::AttributeNormalizer
         reference_quantity_unit_raw: nil,
         reference_price_tax_inclusion: nil
       }
+      if selection.input_tax_inclusion
+        attributes.merge!(
+          input_tax_inclusion: selection.input_tax_inclusion,
+          tax_inclusion_origin: "analysis"
+        )
+      end
       case selection.pricing_source_kind
       when "count_unit_price"
         attributes.merge!(

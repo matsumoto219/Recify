@@ -321,9 +321,9 @@ module Amounts
     end
 
     def input_tax_basis(item)
-      return nil unless %i[manual edit_save].include?(context.to_s.to_sym)
-
       item = indifferent_hash(item)
+      analysis_source = context.to_s.to_sym == :analysis && item[:tax_inclusion_origin] == "analysis"
+      return nil unless %i[manual edit_save].include?(context.to_s.to_sym) || analysis_source
       return nil unless %w[count_unit_price explicit_line_total].include?(item[:pricing_source_kind].to_s)
 
       case item[:input_tax_inclusion]

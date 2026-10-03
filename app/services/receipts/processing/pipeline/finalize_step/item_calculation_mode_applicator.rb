@@ -106,6 +106,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     :original_line_total,
     :discount_amount,
     :discount_rate,
+    :input_tax_inclusion,
     :projected_line_total,
     :review_reason
   ) do
@@ -128,6 +129,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       original_line_total: nil,
       discount_amount: nil,
       discount_rate: nil,
+      input_tax_inclusion: nil,
       projected_line_total:,
       review_reason: nil
     )
@@ -150,6 +152,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
         original_line_total: original_line_total,
         discount_amount: discount_amount,
         discount_rate: discount_rate,
+        input_tax_inclusion: input_tax_inclusion&.dup&.freeze,
         projected_line_total: projected_line_total,
         review_reason: review_reason&.dup&.freeze
       )
@@ -225,7 +228,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
 
     candidate_params = params.deep_dup
     apply_selections!(candidate_params, selections)
-    final_amount_result = amount_calculator.call(candidate_params)
+    final_amount_result = amount_calculator.call(candidate_params, **source_connection_rounding(selections))
+    final_amount_result = preserve_selected_amount_result(final_amount_result, selections)
     return unchanged_result(decisions:) unless final_result_valid?(
       candidate_params,
       final_amount_result,
@@ -270,6 +274,10 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
   end
 
   def count_tax_semantics
+    if preliminary_amount_result.dig(:amount_engine, :selected_basis) == "mixed_by_tax_rate_group"
+      return item_tax_bases ? "reproducible_mixed" : "unknown"
+    end
+
     profile = normalized_hash(preliminary_amount_result[:calculation_profile])
     computed = normalized_hash(preliminary_amount_result[:computed])
     amount_engine = normalized_hash(preliminary_amount_result[:amount_engine])
@@ -283,6 +291,15 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     return "unknown" unless computed[:item_amount_basis].to_s == "line_total_as_recorded"
 
     "reproducible_as_recorded"
+  end
+
+  def item_tax_bases
+    return @item_tax_bases if defined?(@item_tax_bases)
+
+    @item_tax_bases = Receipts::Processing::Pipeline::FinalizeStep::ItemTaxBasis.call(
+      amount_result: preliminary_amount_result,
+      items: params[:receipt_items_attributes]
+    )
   end
 
   def uniform_net_profile?(amount_result)
@@ -569,6 +586,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       original_line_total:,
       discount_amount: option.key?("discount") ? exact_integer(discount["amount"]) : nil,
       discount_rate: option.key?("discount") ? BigDecimal(discount["rate"]) : nil,
+      input_tax_inclusion: count_tax_semantics == "reproducible_mixed" ? item_tax_bases&.fetch(item_index) : nil,
       projected_line_total: decision.projected_line_total,
       review_reason:
     )
@@ -617,6 +635,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       original_line_total: line_total,
       discount_amount: option.key?("discount") ? exact_integer(discount["amount"]) : nil,
       discount_rate:,
+      input_tax_inclusion: item_tax_bases&.fetch(item_index),
       projected_line_total: decision.projected_line_total,
       review_reason:
     )
@@ -637,6 +656,13 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
       item = items.fetch(selection.item_index)
       clear_reference_source_fields!(item)
       item[:pricing_source_kind] = selection.pricing_source_kind
+      if selection.input_tax_inclusion
+        item[:input_tax_inclusion] = selection.input_tax_inclusion
+        item[:tax_inclusion_origin] = "analysis"
+        item[:tax_rate] = normalized_hash(
+          Array(preliminary_amount_result.dig(:computed, :items))[selection.item_index]
+        )[:tax_rate]
+      end
       if selection.pricing_source_kind == "count_unit_price"
         item[:price] = selection.price
         item[:quantity] = selection.quantity
@@ -681,9 +707,14 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     return false unless unselected_computed_items_unchanged?(final_amount_result, selections)
 
     computed_items = Array(final_amount_result.dig(:computed, :items))
+    final_bases = validated_final_item_bases(final_amount_result)
     selections.all? do |selection|
       item = normalized_hash(computed_items[selection.item_index])
-      if uniform_net_count_selection?(selection, final_amount_result)
+      if selection.input_tax_inclusion
+        next false unless proved_tax_selection?(selection, final_bases)
+
+        next mixed_computed_item_valid?(item, selection)
+      elsif uniform_net_count_selection?(selection, final_amount_result)
         next uniform_net_count_computed_item_valid?(item, selection)
       end
       original_line_total = selection.original_line_total || selection.projected_line_total
@@ -704,10 +735,115 @@ class Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationModeApplicato
     end
   end
 
+  def preserve_selected_amount_result(final_amount_result, selections)
+    return final_amount_result unless item_tax_bases && selections.any?(&:input_tax_inclusion)
+    return unless reproducible_selected_amount_result?(final_amount_result, selections)
+
+    preserved = preliminary_amount_result.deep_dup
+    final_items = Array(final_amount_result.dig(:computed, :items))
+    selections.each do |selection|
+      final_item = normalized_hash(final_items[selection.item_index])
+      preserved[:computed][:items][selection.item_index] =
+        normalized_hash(preserved[:computed][:items][selection.item_index]).merge(
+          final_item.slice(:pricing_source_kind, :input_tax_inclusion, :tax_inclusion_origin)
+        )
+    end
+    preserved
+  end
+
+  def source_connection_rounding(selections)
+    return {} unless item_tax_bases && selections.any?(&:input_tax_inclusion)
+
+    selected = normalized_hash(preliminary_amount_result.dig(:amount_engine, :selected_candidate))
+    {
+      tax_rounding_mode: selected[:rounding_mode],
+      tax_rounding_scope: selected[:rounding_scope],
+      discount_rounding_mode: normalized_hash(preliminary_amount_result[:rounding_mode])[:discount]
+    }
+  end
+
+  def reproducible_selected_amount_result?(final_amount_result, selections)
+    return false unless final_amount_result.is_a?(Hash)
+
+    original_selected = normalized_hash(preliminary_amount_result.dig(:amount_engine, :selected_candidate))
+    engine = normalized_hash(final_amount_result[:amount_engine])
+    final_selected = normalized_hash(engine[:selected_candidate])
+    return false unless final_amount_result[:selected_candidate_status] == "accepted" &&
+      engine[:selected_candidate_status] == "accepted" &&
+      engine[:no_safe_candidate] == false &&
+      final_selected[:hard_reject_reasons] == []
+    return false unless engine[:selected_candidate_id] == final_selected[:candidate_id] &&
+      final_amount_result.dig(:computed, :amount_engine_candidate_id) == final_selected[:candidate_id]
+    return false unless %i[rounding_mode rounding_scope].all? do |key|
+      original_selected[key] == final_selected[key]
+    end
+    return false unless assigned_tax_sources_match?(final_amount_result, selections)
+    return false unless normalized_hash(preliminary_amount_result[:rounding_mode])[:discount] ==
+      normalized_hash(final_amount_result[:rounding_mode])[:discount]
+    return false unless source_connection_financial_signature(preliminary_amount_result) ==
+      source_connection_financial_signature(final_amount_result)
+
+    AMOUNT_REVIEW_FIELDS.all? do |field|
+      if field == :needs_review
+        final_amount_result[field] != true || preliminary_amount_result[field] == true
+      else
+        (Array(final_amount_result[field]).map(&:to_s) - Array(preliminary_amount_result[field]).map(&:to_s)).empty?
+      end
+    end
+  end
+
+  def assigned_tax_sources_match?(final_amount_result, selections)
+    items = Array(final_amount_result.dig(:computed, :items))
+    selections.all? do |selection|
+      next true unless selection.input_tax_inclusion
+
+      item = normalized_hash(items[selection.item_index])
+      item[:pricing_source_kind] == selection.pricing_source_kind &&
+        item[:input_tax_inclusion] == selection.input_tax_inclusion &&
+        item[:tax_inclusion_origin] == "analysis"
+    end
+  end
+
+  def source_connection_financial_signature(result)
+    signature = financial_value_signature(result).except(:calculation_profile)
+    signature[:computed_receipt] = signature[:computed_receipt].except(:item_amount_basis, :tax_detail_amount_basis)
+    signature
+  end
+
   def uniform_net_count_selection?(selection, final_amount_result)
     selection.pricing_source_kind == "count_unit_price" &&
       count_tax_semantics == "reproducible_uniform_net" &&
       uniform_net_profile?(final_amount_result)
+  end
+
+  def validated_final_item_bases(final_amount_result)
+    return unless item_tax_bases
+
+    final_bases = Receipts::Processing::Pipeline::FinalizeStep::ItemTaxBasis.call(
+      amount_result: final_amount_result,
+      items: params[:receipt_items_attributes]
+    )
+    final_bases if final_bases == item_tax_bases
+  end
+
+  def proved_tax_selection?(selection, final_bases)
+    selection.input_tax_inclusion &&
+      final_bases &&
+      final_bases[selection.item_index] == selection.input_tax_inclusion
+  end
+
+  def mixed_computed_item_valid?(item, selection)
+    preliminary_item = Array(preliminary_amount_result.dig(:computed, :items))[selection.item_index]
+    expected = computed_item_signature(preliminary_item)
+    actual = computed_item_signature(item)
+    if selection.pricing_source_kind == "explicit_line_total"
+      expected = expected.except(:price)
+      actual = actual.except(:price)
+    end
+
+    actual == expected &&
+      exact_integer_matches?(item[:original_line_total], selection.original_line_total || selection.projected_line_total) &&
+      computed_discount_valid?(item, selection)
   end
 
   def uniform_net_count_computed_item_valid?(item, selection)

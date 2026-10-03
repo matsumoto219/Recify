@@ -75,7 +75,7 @@ class ReceiptAmountService
   ITEM_AMOUNT_BASES = %i[line_total_as_net line_total_as_recorded mixed_by_tax_rate_group].freeze
   TAX_DETAIL_AMOUNT_BASES = %i[gross net unknown].freeze
 
-  def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, snapshot_candidate_count: nil)
+  def self.call(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, tax_rounding_scope: nil, snapshot_candidate_count: nil)
     new(
       receipt: receipt,
       receipt_items: receipt_items,
@@ -86,6 +86,7 @@ class ReceiptAmountService
       rounding_mode: rounding_mode,
       tax_rounding_mode: tax_rounding_mode,
       discount_rounding_mode: discount_rounding_mode,
+      tax_rounding_scope: tax_rounding_scope,
       snapshot_candidate_count: snapshot_candidate_count
     ).call
   rescue *INVALID_ITEM_SOURCE_ERRORS
@@ -406,8 +407,9 @@ class ReceiptAmountService
     )
   end
 
-  def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, snapshot_candidate_count: nil)
+  def initialize(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [], context:, rounding_mode: nil, tax_rounding_mode: nil, discount_rounding_mode: nil, tax_rounding_scope: nil, snapshot_candidate_count: nil)
     @context = normalize_context(context)
+    @analysis_tax_rounding_scope = normalized_analysis_tax_rounding_scope(tax_rounding_scope)
     @snapshot_candidate_count = snapshot_candidate_count
     @receipt = normalize_receipt(receipt)
     @calculation_settings = normalized_calculation_settings
@@ -548,6 +550,9 @@ class ReceiptAmountService
   end
 
   def evaluated_candidates_for_engine
+    if @analysis_tax_rounding_scope
+      return native_profile_candidates.select { |candidate| candidate.rounding_scope == @analysis_tax_rounding_scope }
+    end
     return native_profile_candidates if @calculation_settings
     return @estimated_candidates if @edit_source_semantics.blank?
 
@@ -911,6 +916,17 @@ class ReceiptAmountService
     normalized
   end
 
+  def normalized_analysis_tax_rounding_scope(value)
+    return nil if value.nil?
+
+    scope = Amounts::RoundingScope::SCOPES.find { |entry| value == entry || value == entry.to_s }
+    unless @context == :analysis && scope
+      raise InvalidItemSourceError, "Invalid analysis tax rounding scope"
+    end
+
+    scope
+  end
+
   def normalized_calculation_settings
     return nil if @receipt[:calculation_settings].nil?
 
@@ -1025,16 +1041,19 @@ class ReceiptAmountService
       )
     }
     normalized[:input_tax_inclusion] = input_tax_inclusion unless input_tax_inclusion.nil?
+    normalized[:tax_inclusion_origin] = "analysis" if @context == :analysis && !input_tax_inclusion.nil?
     normalized[:id] = item_id unless item_id.nil?
     normalized
   end
 
   def normalized_item_tax_inclusion(item, pricing_source_kind)
-    return nil unless manual_input_context?
+    analysis_source = @context == :analysis && fetch_value(item, :tax_inclusion_origin) == "analysis"
+    return nil unless manual_input_context? || analysis_source
 
     value = fetch_value(item, :input_tax_inclusion)
     typed_input = %w[count_unit_price explicit_line_total].include?(pricing_source_kind)
-    return nil if value.nil? && !(@calculation_settings && typed_input)
+    return nil if value.nil? && pricing_source_kind == "reference_quantity_price"
+    return nil if value.nil? && !analysis_source && !(@calculation_settings && typed_input)
     unless %w[count_unit_price explicit_line_total].include?(pricing_source_kind) && %w[gross net].include?(value)
       raise InvalidItemSourceError, "Invalid item input tax inclusion"
     end
