@@ -60,6 +60,9 @@ RSpec.configure do |config|
   # Persist example results for `--only-failures` and `--next-failure`.
   config.example_status_persistence_file_path = "tmp/rspec/examples.txt"
 
+  # Fail the suite when no examples are found.
+  config.fail_if_no_examples = true
+
   # Use the reported seed for both example ordering and Ruby's global randomization.
   config.order = :random
   Kernel.srand config.seed
