@@ -1,6 +1,9 @@
-require 'rails_helper'
+require 'spec_helper'
+require_relative '../support/stylesheet_source_helpers'
 
 RSpec.describe 'Public layout stylesheet' do
+  include StylesheetSourceHelpers
+
   let(:source) { expanded_tailwind_source }
 
   it '認証ページ本体を実ビューポート基準の高さに保つ' do
