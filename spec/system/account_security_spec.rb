@@ -72,7 +72,25 @@ RSpec.describe "アカウントとsecurityの実Chrome回帰", type: :system do
     page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
   end
 
-  it "signupで法務同意を記録し、confirmation後にsettings更新とlogoutができる" do
+  def defer_terms_close_event_until_email_input
+    page.execute_script(<<~JAVASCRIPT)
+      const dialog = document.getElementById('registration-terms-dialog')
+      const emailInput = document.getElementById('user_email')
+
+      // close通知を入力開始時に届け、ブラウザのイベント順に依存せず競合を再現する。
+      dialog.addEventListener('close', (event) => {
+        event.stopImmediatePropagation()
+        dialog.dataset.closeEventDeferred = 'true'
+      }, { capture: true, once: true })
+
+      emailInput.addEventListener('keydown', () => {
+        dialog.dispatchEvent(new Event('close'))
+        dialog.dataset.closeEventDelivered = 'true'
+      }, { once: true })
+    JAVASCRIPT
+  end
+
+  it "signupで法務dialogのclose通知が入力中に届いても同意・confirmation・settings更新・logoutができる" do
     email = "chrome-signup@example.com"
 
     visit new_user_registration_path
@@ -81,12 +99,16 @@ RSpec.describe "アカウントとsecurityの実Chrome回帰", type: :system do
       click_link I18n.t("auth.registrations.new.terms.terms")
     end
     expect(page).to have_css("dialog#registration-terms-dialog[open]")
+    defer_terms_close_event_until_email_input
     within("dialog#registration-terms-dialog") do
       click_button I18n.t("legal.dialog.close")
     end
     expect(page).to have_no_css("dialog#registration-terms-dialog[open]")
+    expect(page).to have_css("#registration-terms-dialog[data-close-event-deferred='true']", visible: :all)
 
     fill_in "user_email", with: email
+    expect(page).to have_css("#registration-terms-dialog[data-close-event-delivered='true']", visible: :all)
+    expect(page).to have_field("user_email", with: email, focused: true)
     fill_in "user_password", with: "password"
     fill_in "user_password_confirmation", with: "password"
     check "registration_legal_agreement"
