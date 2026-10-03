@@ -59,9 +59,15 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
   end
 
   def expand_item_row(row)
+    wait_for_pricing_layout(row)
     toggle = row.find("[data-receipt-form-target='itemDetailsToggle']", visible: true, match: :first)
     panel = row.find("[data-receipt-form-target='itemDetailsPanel']", visible: :all)
     toggle.click unless toggle["aria-expanded"] == "true"
+
+    expect(row).to have_css(
+      "[data-receipt-form-target='itemDetailsToggle'][aria-expanded='true']",
+      visible: true
+    )
 
     aggregate_failures do
       expect(toggle["aria-expanded"]).to eq("true")
@@ -74,9 +80,15 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
   end
 
   def collapse_item_row(row)
+    wait_for_pricing_layout(row)
     toggle = row.find("[data-receipt-form-target='itemDetailsToggle']", visible: true, match: :first)
     panel = row.find("[data-receipt-form-target='itemDetailsPanel']", visible: :all)
     toggle.click if toggle["aria-expanded"] == "true"
+
+    expect(row).to have_css(
+      "[data-receipt-form-target='itemDetailsToggle'][aria-expanded='false']",
+      visible: true
+    )
 
     aggregate_failures do
       expect(toggle["aria-expanded"]).to eq("false")
