@@ -116,4 +116,22 @@ RSpec.describe 'Reference pricing tax detail structural evidence persistence' do
       )
     end
   end
+
+  it '任意の税区分証拠がnilでも保存・JSON復元・retryでchecksumを維持する' do
+    input = ocr_result
+    input.dig(:candidates, :tax_detail_structural_metadata, :tax_details).sole[:tax_inclusion_evidence] = nil
+    initial = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(input)
+    restored = JSON.parse(JSON.generate(initial))
+    copied = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(restored)
+    rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(copied)
+    proposal = initial.dig('adoption_proposals', 'reference_pricing_tax_details')
+
+    aggregate_failures do
+      expect(proposal).to be_present
+      expect(proposal.fetch('tax_details').sole).not_to have_key('tax_inclusion_evidence')
+      expect(copied.dig('adoption_proposals', 'reference_pricing_tax_details')).to eq(proposal)
+      expect(rehydrated.dig(:adoption_proposals, 'reference_pricing_tax_details')).to eq(proposal)
+      expect(input.dig(:candidates, :tax_detail_structural_metadata, :tax_details).sole).to have_key(:tax_inclusion_evidence)
+    end
+  end
 end
