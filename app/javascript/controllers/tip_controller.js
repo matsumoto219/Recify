@@ -97,7 +97,8 @@ export default class extends Controller {
   }
 
   handlePointerEnter (event) {
-    if (event.pointerType === 'touch' || !window.matchMedia('(hover: hover)').matches) return
+    if (event.pointerType === 'touch') return
+    if (event.pointerType !== 'mouse' && !window.matchMedia('(hover: hover)').matches) return
 
     this.triggerHovered = true
     this.open()

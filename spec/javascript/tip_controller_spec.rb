@@ -107,6 +107,25 @@ RSpec.describe "Tip Stimulus controller" do
     )
   end
 
+  it "opens for a mouse when the primary input does not support hover and still ignores touch" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      window.matchMedia = () => ({ matches: false })
+      controller.handlePointerEnter({ pointerType: 'touch' })
+      const touchHidden = panel.hidden
+      controller.handlePointerEnter({ pointerType: 'pen' })
+      const penHidden = panel.hidden
+      controller.handlePointerEnter({ pointerType: 'mouse' })
+      process.stdout.write(JSON.stringify({
+        touchHidden,
+        penHidden,
+        hidden: panel.hidden,
+        expanded: trigger.attributes['aria-expanded']
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq("touchHidden" => true, "penHidden" => true, "hidden" => false, "expanded" => "true")
+  end
+
   it "pins a hovered tip on tap and closes it on a second tap" do
     result = run_controller_script(<<~JAVASCRIPT)
       controller.handlePointerEnter({ pointerType: 'mouse' })

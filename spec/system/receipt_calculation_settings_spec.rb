@@ -151,6 +151,27 @@ RSpec.describe "レシート固有の計算条件", type: :system do
     expect_browser_console_clean
   end
 
+  it "主入力がタッチ扱いでも実際のマウスホバーで合計金額の補足を開ける" do
+    page.driver.browser.execute_cdp("Emulation.setTouchEmulationEnabled", enabled: true, maxTouchPoints: 1)
+    user = create_system_test_user(password: "password")
+    visit new_user_session_path
+    fill_in "user_email", with: user.email
+    fill_in "user_password", with: "password"
+    click_button I18n.t("auth.sessions.submit")
+    expect(page).to have_current_path(receipts_path, ignore_query: true)
+    visit new_receipt_path
+    wait_for_stimulus_controller("receipt-form")
+    wait_for_stimulus_controller("tip")
+    expect(page.evaluate_script("window.matchMedia('(hover: hover)').matches")).to be(false)
+    expect(page).to have_no_css('[data-tip-target="panel"]', visible: true)
+
+    find_button("合計金額の補足").hover
+    expect(page).to have_css('[data-tip-target="panel"]', text: I18n.t("receipts.show.official_total_note"))
+    expect_browser_console_clean
+  ensure
+    page.driver.browser.execute_cdp("Emulation.setTouchEmulationEnabled", enabled: false)
+  end
+
   it "詳細と編集を戻る・進むで往復しても合計金額の補足を開ける" do
     user = create_system_test_user(password: "password")
     receipt = create(
