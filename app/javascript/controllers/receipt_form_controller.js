@@ -32,6 +32,11 @@ import {
   reviewTargetUrl,
   samePageReviewTargetUrl
 } from 'receipts/review_targets'
+import {
+  pushReviewNavigationHash,
+  registerReviewNavigation,
+  unregisterReviewNavigation
+} from 'receipts/review_navigation'
 
 const DEFAULT_AMOUNT_MAX = 999999999
 const LINE_TOTAL_TOOLTIP_DELAY_MS = 500
@@ -170,6 +175,7 @@ export default class extends Controller {
     this.element.addEventListener('click', this.handleReviewTargetClick)
     this.element.addEventListener('invalid', this.handleInvalidItemField, true)
     window.addEventListener('hashchange', this.handleHashChange)
+    this.reviewNavigation = registerReviewNavigation(this.element)
     this.syncPricingSourceModes()
     this.syncItemDetailsPanels()
     this.syncAdjustmentDetailsPanels()
@@ -191,6 +197,7 @@ export default class extends Controller {
     this.element.removeEventListener('click', this.handleReviewTargetClick)
     this.element.removeEventListener('invalid', this.handleInvalidItemField, true)
     window.removeEventListener('hashchange', this.handleHashChange)
+    unregisterReviewNavigation(this.reviewNavigation)
     this.clearReviewTargetScrollTimer()
     this.itemRowTargets.forEach((row) => this.clearLineTotalTooltipTimer(row))
     this.amountAnimationTargets().forEach((target) => this.cancelAmountAnimation(target))
@@ -886,12 +893,7 @@ export default class extends Controller {
   }
 
   pushReviewTargetHash (targetId) {
-    if (!targetId || typeof window.history?.pushState !== 'function') return
-
-    const hash = reviewTargetHash(targetId)
-    if (window.location.hash === hash) return
-
-    window.history.pushState(null, '', hash)
+    this.navigateReviewTargetHash(targetId)
   }
 
   navigateReviewTargetHash (targetId) {
@@ -899,6 +901,7 @@ export default class extends Controller {
 
     const hash = reviewTargetHash(targetId)
     if (window.location.hash === hash) return
+    if (pushReviewNavigationHash(hash)) return
 
     if (typeof window.history?.pushState === 'function') {
       window.history.pushState(window.history.state, '', hash)

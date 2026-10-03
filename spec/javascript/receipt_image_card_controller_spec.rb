@@ -8,12 +8,15 @@ RSpec.describe "Receipt image card Stimulus controller" do
   let(:source) { Rails.root.join("app/javascript/controllers/receipt_image_card_controller.js").read }
 
   def review_link_result(href:, current_hash: "")
-    targets = Rails.root.join("app/javascript/receipts/review_targets.js").read.gsub(/^export /, "")
+    module_source = %w[review_targets review_navigation].map do |name|
+      Rails.root.join("app/javascript/receipts/#{name}.js").read.gsub(/^export /, "")
+    end.join("\n")
     controller = source
       .sub("import { Controller } from '@hotwired/stimulus'", "class Controller {}")
       .sub(/import \{.*?\} from 'receipts\/review_targets'/m, "")
+      .sub(/import \{.*?\} from 'receipts\/review_navigation'/m, "")
       .sub("export default class extends Controller", "class ImageCardController extends Controller")
-    encoded = Base64.strict_encode64("#{targets}\n#{controller}")
+    encoded = Base64.strict_encode64("#{module_source}\n#{controller}")
     script = <<~JAVASCRIPT
       eval(Buffer.from(#{encoded.inspect}, 'base64').toString('utf8') + '\\nglobalThis.ImageCardController = ImageCardController')
       let location = new URL('https://example.test/receipts/example/edit#{current_hash}')

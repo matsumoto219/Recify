@@ -44,9 +44,8 @@ export default class extends Controller {
     if (!dialog) return
     if (dialog.open) {
       dialog.close()
-    } else {
-      this.handleDialogClosed(dialog)
     }
+    this.handleDialogClosed(dialog)
   }
 
   closeBackdrop (event) {
@@ -55,8 +54,8 @@ export default class extends Controller {
     this.close(event)
   }
 
-  handleCancel () {
-    this.unlockBodyScroll()
+  handleCancel (event) {
+    this.close(event)
   }
 
   handleClose (event) {
@@ -120,7 +119,7 @@ export default class extends Controller {
   }
 
   handleDialogClosed (dialog) {
-    if (this.activeDialog !== dialog) return
+    if (this.activeDialog !== dialog || dialog.open) return
 
     this.activeDialog = null
     this.unlockBodyScroll()
@@ -128,13 +127,7 @@ export default class extends Controller {
   }
 
   closeActiveDialog () {
-    if (!this.activeDialog) return
-
-    if (this.activeDialog.open) {
-      this.activeDialog.close()
-    } else {
-      this.handleDialogClosed(this.activeDialog)
-    }
+    this.close()
   }
 
   lockBodyScroll () {

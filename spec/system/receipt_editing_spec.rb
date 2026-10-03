@@ -24,6 +24,42 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect(page).to have_current_path(receipts_path, ignore_query: true)
   end
 
+  def navigate_review_history(direction, target_id)
+    result = page.evaluate_async_script(<<~JAVASCRIPT, direction, Capybara.default_max_wait_time * 1000)
+      const direction = arguments[0]
+      const timeoutMilliseconds = arguments[1]
+      const done = arguments[arguments.length - 1]
+      const form = document.querySelector('[data-controller~="receipt-form"]')
+      let restoreVisits = 0
+      const onVisit = (event) => {
+        if (event.detail.action === 'restore') restoreVisits += 1
+      }
+      const finish = (timedOut) => {
+        window.clearTimeout(timer)
+        document.removeEventListener('turbo:visit', onVisit)
+        window.removeEventListener('hashchange', onHashChange)
+        done({
+          timedOut,
+          hash: window.location.hash,
+          sameForm: form === document.querySelector('[data-controller~="receipt-form"]'),
+          restoreVisits
+        })
+      }
+      const onHashChange = () => finish(false)
+      const timer = window.setTimeout(() => finish(true), timeoutMilliseconds)
+      document.addEventListener('turbo:visit', onVisit)
+      window.addEventListener('hashchange', onHashChange, { once: true })
+      window.history.go(direction)
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "timedOut" => false,
+      "hash" => target_id ? "##{target_id}" : "",
+      "sameForm" => true,
+      "restoreVisits" => 0
+    )
+  end
+
   def receipt_item_row
     find("[data-receipt-form-target='itemRow']", match: :first)
   end
@@ -732,6 +768,11 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     tax_rate_input.set("8")
     expect(tax_rate_input.value).to eq("8")
 
+    navigate_review_history(-1, nil)
+    expect(tax_rate_input.value).to eq("8")
+    navigate_review_history(1, target_id)
+    expect(tax_rate_input.value).to eq("8")
+
     expect_mobile_viewport_without_horizontal_overflow
     expect_browser_console_clean
   end
@@ -844,17 +885,27 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect(page.evaluate_script("window.location.hash")).to eq("##{second_target_id}")
     expect_visible_adjustment_toggle_focused(second_row)
 
+    fill_in "receipt_store_name", with: "履歴移動中の未保存店名"
     page.execute_script("document.activeElement?.blur()")
-    page.go_back
-    expect(page.evaluate_script("window.location.hash")).to eq("##{first_target_id}")
+    navigate_review_history(-1, first_target_id)
     expect_adjustment_row_expanded(first_row, first_target_id)
     expect_adjustment_row_expanded(second_row, second_target_id)
+    expect_adjustment_row_expanded(already_open_row, already_open_target_id)
+    expect(page).to have_field("receipt_store_name", with: "履歴移動中の未保存店名")
     expect(element_has_focus?(visible_adjustment_toggle(first_row))).to be(false)
 
-    page.go_forward
-    expect(page.evaluate_script("window.location.hash")).to eq("##{second_target_id}")
+    navigate_review_history(-1, nil)
     expect_adjustment_row_expanded(first_row, first_target_id)
     expect_adjustment_row_expanded(second_row, second_target_id)
+    expect_adjustment_row_expanded(already_open_row, already_open_target_id)
+    expect(page).to have_field("receipt_store_name", with: "履歴移動中の未保存店名")
+    navigate_review_history(1, first_target_id)
+
+    navigate_review_history(1, second_target_id)
+    expect_adjustment_row_expanded(first_row, first_target_id)
+    expect_adjustment_row_expanded(second_row, second_target_id)
+    expect_adjustment_row_expanded(already_open_row, already_open_target_id)
+    expect(page).to have_field("receipt_store_name", with: "履歴移動中の未保存店名")
     expect(element_has_focus?(visible_adjustment_toggle(second_row))).to be(false)
     expect_mobile_viewport_without_horizontal_overflow
     expect_browser_console_clean
@@ -1118,6 +1169,8 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect(page.evaluate_script("window.location.hash")).to eq("##{target_id}")
     expect(page.evaluate_script("Boolean(window.history.state?.turbo)")).to be(true)
 
+    fill_in "receipt_store_name", with: "別画面から復元する未保存店名"
+
     find("a[href='#{settings_path}']", visible: true).click
     expect(page).to have_current_path(settings_path)
 
@@ -1127,7 +1180,14 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
 
     row = receipt_adjustment_row(adjustment)
     expect_adjustment_row_expanded(row, target_id)
+    expect(page).to have_field("receipt_store_name", with: "別画面から復元する未保存店名")
     expect(element_has_focus?(visible_adjustment_toggle(row))).to be(false)
+
+    navigate_review_history(-1, second_target_id)
+    expect(page).to have_field("receipt_store_name", with: "別画面から復元する未保存店名")
+    expect_adjustment_row_expanded(receipt_adjustment_row(second_adjustment), second_target_id)
+    navigate_review_history(1, target_id)
+    expect(page).to have_field("receipt_store_name", with: "別画面から復元する未保存店名")
     expect_mobile_viewport_without_horizontal_overflow
     expect_browser_console_clean
   end

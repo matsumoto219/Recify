@@ -6,6 +6,7 @@ import {
   reviewTargetUrl,
   samePageReviewTargetUrl
 } from 'receipts/review_targets'
+import { pushReviewNavigationHash } from 'receipts/review_navigation'
 
 const ALLOWED_RECEIPT_IMAGE_TYPES = [
   'image/jpeg',
@@ -340,8 +341,9 @@ export default class extends Controller {
     if (!this.containsImagePreviewReviewTarget(targetId)) return
 
     event.preventDefault()
-    if (window.location.hash !== this.reviewTargetHash(targetId)) {
-      window.history.pushState(window.history.state, '', this.reviewTargetHash(targetId))
+    const hash = this.reviewTargetHash(targetId)
+    if (window.location.hash !== hash && !pushReviewNavigationHash(hash)) {
+      window.history.pushState(window.history.state, '', hash)
     }
     this.openFromReviewTarget({ scroll: true })
   }
