@@ -303,13 +303,7 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
   end
 
   def click_mobile_save_button
-    focus_released = page.evaluate_async_script(<<~JAVASCRIPT)
-      const done = arguments[arguments.length - 1]
-      document.activeElement?.blur()
-
-      window.setTimeout(() => done(true), 200)
-    JAVASCRIPT
-    expect(focus_released).to be(true)
+    page.execute_script("document.activeElement?.blur()")
     expect(page).to have_css(
       "[data-controller~='mobile-amount-summary']" \
       "[data-mobile-amount-summary-keyboard-visible='false'] " \
