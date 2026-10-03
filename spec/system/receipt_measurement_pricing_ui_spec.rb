@@ -59,9 +59,15 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
   end
 
   def expand_item_row(row)
+    wait_for_pricing_layout(row)
     toggle = row.find("[data-receipt-form-target='itemDetailsToggle']", visible: true, match: :first)
     panel = row.find("[data-receipt-form-target='itemDetailsPanel']", visible: :all)
     toggle.click unless toggle["aria-expanded"] == "true"
+
+    expect(row).to have_css(
+      "[data-receipt-form-target='itemDetailsToggle'][aria-expanded='true']",
+      visible: true
+    )
 
     aggregate_failures do
       expect(toggle["aria-expanded"]).to eq("true")
@@ -74,9 +80,15 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
   end
 
   def collapse_item_row(row)
+    wait_for_pricing_layout(row)
     toggle = row.find("[data-receipt-form-target='itemDetailsToggle']", visible: true, match: :first)
     panel = row.find("[data-receipt-form-target='itemDetailsPanel']", visible: :all)
     toggle.click if toggle["aria-expanded"] == "true"
+
+    expect(row).to have_css(
+      "[data-receipt-form-target='itemDetailsToggle'][aria-expanded='false']",
+      visible: true
+    )
 
     aggregate_failures do
       expect(toggle["aria-expanded"]).to eq("false")
@@ -392,7 +404,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
   %w[new edit].each do |form_mode|
     it "#{form_mode}の計算コントロールをモバイル全幅にし、詳細展開内の小計を短い税区分と欠けずに表示する" do
       user = create_system_test_user
-      receipt = create_editable_receipt(user: user, store_name: "計算表示レスポンシブ確認店")
+      receipt = create_editable_receipt(user: user, store_name: "計算表示レスポンシブ確認店") if form_mode == "edit"
 
       sign_in_through_browser(user)
       visit(form_mode == "new" ? new_receipt_path : edit_receipt_path(receipt))
@@ -418,17 +430,17 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
           set_viewport(width: width, height: 900, mobile: width < 768)
           wait_for_pricing_layout(row)
 
+          remaining_widths = page.evaluate_script(<<~JAVASCRIPT, *controls.map(&:first))
+            Array.from(arguments).map((control) => {
+              const parent = control.parentElement
+              const style = getComputedStyle(parent)
+              return parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) -
+                control.getBoundingClientRect().width
+            })
+          JAVASCRIPT
+
           aggregate_failures "#{form_mode}, #{theme}, #{width}px" do
-            controls.each do |control, breakpoint|
-              remaining_width = page.evaluate_script(<<~JAVASCRIPT, control)
-                (() => {
-                  const control = arguments[0]
-                  const parent = control.parentElement
-                  const style = getComputedStyle(parent)
-                  return parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) -
-                    control.getBoundingClientRect().width
-                })()
-              JAVASCRIPT
+            controls.zip(remaining_widths) do |(_control, breakpoint), remaining_width|
               if width < breakpoint
                 expect(remaining_width.abs).to be <= 1
               else
@@ -446,6 +458,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
               .to eq("小計 ¥123,456")
             displays = row.all(
               ".receipt-form-item-detail-subtotal [data-receipt-form-target='sourceLineTotalDisplay']",
+              count: width < 768 ? 0 : 1,
               visible: true
             )
             expect(displays.size).to eq(width < 768 ? 0 : 1)

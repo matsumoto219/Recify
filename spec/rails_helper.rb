@@ -9,6 +9,7 @@ abort("The Rails environment is running in production mode!") if Rails.env.produ
 # return unless Rails.env.test?
 require 'rspec/rails'
 # Add additional requires below this line. Rails is not loaded until this point!
+require_relative 'support/stylesheet_source_helpers'
 
 # Requires supporting ruby files with custom matchers and macros, etc, in
 # spec/support/ and its subdirectories. Files matching `spec/**/*_spec.rb` are
@@ -33,24 +34,6 @@ begin
   ActiveRecord::Migration.maintain_test_schema!
 rescue ActiveRecord::PendingMigrationError => e
   abort e.to_s.strip
-end
-
-module StylesheetSourceHelpers
-  def expanded_tailwind_source
-    root = Rails.root.join('app/assets/tailwind')
-    seen = {}
-    read_stylesheet = lambda do |path|
-      expanded_path = Pathname(path).expand_path
-      return "" if seen[expanded_path.to_s]
-
-      seen[expanded_path.to_s] = true
-      expanded_path.read.gsub(%r{^@import "\./([^"]+)";}) do
-        read_stylesheet.call(root.join(Regexp.last_match(1)))
-      end
-    end
-
-    read_stylesheet.call(root.join('application.css'))
-  end
 end
 
 RSpec.configure do |config|
@@ -86,7 +69,6 @@ RSpec.configure do |config|
       return unless resource.persisted?
       return if resource.guest?
 
-      LegalDocuments::Sync.call
       LegalAcceptances::Recorder.record_current_documents!(
         user: resource,
         acceptance_context: context,

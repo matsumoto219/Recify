@@ -188,7 +188,7 @@ jobs:
 
       - name: Check JavaScript syntax
         if: needs.classify_changes.outputs.docs_only != 'true'
-        run: node --check app/javascript/controllers/*.js
+        run: for file in app/javascript/controllers/*.js; do node --check "$file" || exit 1; done
 
       - name: Lint CSS
         if: needs.classify_changes.outputs.docs_only != 'true'
@@ -198,10 +198,18 @@ jobs:
         if: needs.classify_changes.outputs.docs_only != 'true'
         run: npm run test:stylelint
 
-  test:
+  rspec:
     needs: classify_changes
     if: needs.classify_changes.result == 'success' && needs.classify_changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - 1
+          - 2
+          - 3
+          - 4
 
     services:
       postgres:
@@ -223,6 +231,9 @@ jobs:
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: postgres
+      RSPEC_SHARD: ${{ matrix.shard }}
+      RSPEC_SHARD_COUNT: 4
+      RSPEC_SEED: ${{ github.run_number }}
 
     steps:
       - name: Checkout code
@@ -259,4 +270,53 @@ jobs:
         run: ruby bin/generated_receipts_validate
 
       - name: Run RSpec including system specs
-        run: bundle exec rspec
+        run: bundle exec ruby bin/rspec_shard --index "$RSPEC_SHARD" --total "$RSPEC_SHARD_COUNT" --seed "$RSPEC_SEED"
+
+      - name: Run Minitest
+        if: matrix.shard == 1
+        run: bin/rails test
+
+      - name: Record RSpec metrics
+        if: always()
+        shell: bash
+        run: |
+          report="tmp/rspec/shard-${RSPEC_SHARD}.json"
+          if [[ -f "$report" ]]; then
+            ruby -rjson -e '
+              metrics = JSON.parse(File.read(ARGV.fetch(0)))
+              puts "### RSpec shard #{metrics.fetch("shard")}/#{metrics.fetch("shard_count")}"
+              puts "| Metric | Value |", "| --- | ---: |"
+              %w[file_count example_count failure_count pending_count errors_outside_of_examples_count seed duration wall_time user_time system_time].each do |key|
+                puts "| #{key} | #{metrics.fetch(key)} |"
+              end
+            ' "$report" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  test:
+    needs:
+      - classify_changes
+      - rspec
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify complete test results
+        shell: bash
+        env:
+          CLASSIFICATION_RESULT: ${{ needs.classify_changes.result }}
+          DOCS_ONLY: ${{ needs.classify_changes.outputs.docs_only }}
+          RSPEC_RESULT: ${{ needs.rspec.result }}
+        run: |
+          set -euo pipefail
+          test "$CLASSIFICATION_RESULT" = "success"
+
+          if [[ "$DOCS_ONLY" == "true" ]]; then
+            test "$RSPEC_RESULT" = "skipped"
+            echo "Documentation-only scope and whitespace checks passed."
+          elif [[ "$DOCS_ONLY" == "false" ]]; then
+            test "$RSPEC_RESULT" = "success"
+            echo "Every RSpec shard and the Minitest suite passed."
+          else
+            echo "Change classification is missing or invalid."
+            exit 1
+          fi

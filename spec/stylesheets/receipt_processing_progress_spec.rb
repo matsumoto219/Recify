@@ -1,6 +1,9 @@
-require 'rails_helper'
+require 'spec_helper'
+require_relative '../support/stylesheet_source_helpers'
 
 RSpec.describe 'Receipt processing progress stylesheet' do
+  include StylesheetSourceHelpers
+
   let(:source) { expanded_tailwind_source }
 
   it 'keeps pending and active interval bases neutral while completed intervals use the brand token' do

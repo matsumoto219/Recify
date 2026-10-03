@@ -83,6 +83,31 @@ RSpec.describe ServiceLayerBoundary::Scanner do
     end
   end
 
+  it "private childの名前がprefixとして一致するだけのconstantを検知しない" do
+    with_scanner(
+      files: {
+        "app/controllers/reports_controller.rb" => "Analysis::PrivateWorkerExtra.call\n"
+      }
+    ) do |scanner|
+      expect(scanner.violations).to be_empty
+    end
+  end
+
+  it "未定義の子孫constantもprivate ancestorへの参照として完全な名前を報告する" do
+    with_scanner(
+      files: {
+        "app/controllers/reports_controller.rb" => "Analysis::PrivateWorker::Nested::Leaf.call\n"
+      }
+    ) do |scanner|
+      violation = scanner.violations.sole
+      expect(violation.to_h).to include(
+        source_path: "app/controllers/reports_controller.rb",
+        referenced_constant: "Analysis::PrivateWorker::Nested::Leaf",
+        private_owner: "analysis"
+      )
+    end
+  end
+
   it "静的文字列のdynamic constant lookupでprivate childを隠せない" do
     with_scanner(
       files: {
@@ -188,6 +213,35 @@ RSpec.describe ServiceLayerBoundary::Scanner do
     end
   end
 
+  it "絶対constant参照はlexical namespace内の同名constantを解決しない" do
+    registry = analysis_registry.merge(
+      "outer" => registry_entry("outer", "Outer")
+    )
+    with_scanner(
+      registry: registry,
+      files: {
+        "app/services/outer/analysis/private_worker.rb" => <<~RUBY,
+          module Outer
+            module Analysis
+              class PrivateWorker; end
+            end
+          end
+        RUBY
+        "app/controllers/reports_controller.rb" => <<~RUBY
+          module Outer
+            ::Analysis::PrivateWorker.call
+          end
+        RUBY
+      }
+    ) do |scanner|
+      violation = scanner.violations.sole
+      expect(violation.to_h).to include(
+        referenced_constant: "Analysis::PrivateWorker",
+        private_owner: "analysis"
+      )
+    end
+  end
+
   it "同一private root内部のchild参照を許可する" do
     with_scanner(
       files: {
@@ -284,6 +338,35 @@ RSpec.describe ServiceLayerBoundary::Scanner do
       }
     ) do |scanner|
       expect(scanner.violations.map(&:referenced_constant)).to eq([ "Analysis::Error" ])
+    end
+  end
+
+  it "private child内のpublic Resultを許可しても未登録の子孫constantは許可しない" do
+    with_scanner(
+      registry: analysis_registry(public_constants: [ "Analysis::PrivateWorker::Result" ]),
+      files: {
+        "app/services/analysis/private_worker.rb" => <<~RUBY,
+          module Analysis
+            class PrivateWorker
+              Result = Data.define(:value)
+              def self.call; end
+            end
+          end
+        RUBY
+        "app/controllers/reports_controller.rb" => <<~RUBY
+          class ReportsController
+            def show
+              [Analysis::PrivateWorker::Result.new(1), Analysis::PrivateWorker::Result::Hidden]
+            end
+          end
+        RUBY
+      }
+    ) do |scanner|
+      violation = scanner.violations.sole
+      expect(violation.to_h).to include(
+        referenced_constant: "Analysis::PrivateWorker::Result::Hidden",
+        private_owner: "analysis"
+      )
     end
   end
 

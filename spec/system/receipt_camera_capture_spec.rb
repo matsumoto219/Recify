@@ -90,8 +90,13 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
       (() => {
         const rect = (selector) => {
           const box = document.querySelector(selector).getBoundingClientRect()
-          return { x: box.x, y: box.y, width: box.width, height: box.height, bottom: box.bottom, right: box.right }
+          return { x: box.x, y: box.y, top: box.top, width: box.width, height: box.height, bottom: box.bottom, right: box.right }
         }
+        const live = document.querySelector('[data-receipt-upload-target=cameraLive]')
+        const panel = document.querySelector('[data-receipt-upload-target=cameraPanel]')
+        const actions = getComputedStyle(document.querySelector('[data-camera-actions]'))
+        const video = document.querySelector('[data-receipt-upload-target=cameraVideo]')
+        const rotated = Math.abs(Number.parseFloat(video.style.getPropertyValue('--receipt-camera-rotation')) || 0) % 180 !== 0
         return {
           guide: rect('[data-camera-guide]'),
           frame: rect('[data-camera-guide-frame]'),
@@ -100,7 +105,17 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
           cancel: rect('[data-receipt-upload-target=cameraCancel]'),
           toolbar: rect('[data-camera-toolbar]'),
           actions: rect('[data-camera-actions]'),
-          video: rect('[data-receipt-upload-target=cameraVideo]')
+          video: rect('[data-receipt-upload-target=cameraVideo]'),
+          gridRows: getComputedStyle(live).gridTemplateRows.split(' ').length,
+          panelGap: Number.parseFloat(getComputedStyle(panel).rowGap),
+          actionRightInset: Number.parseFloat(actions.paddingRight) + Number.parseFloat(actions.borderRightWidth),
+          videoDimensions: rotated ? [video.videoHeight, video.videoWidth] : [video.videoWidth, video.videoHeight],
+          strokes: ['.receipt-camera-guide-outline', '[data-camera-guide]'].map((selector) => {
+            const element = document.querySelector(selector)
+            if (!element) return null
+            const style = getComputedStyle(element)
+            return { color: style.stroke, width: Number.parseFloat(style.strokeWidth) }
+          })
         }
       })()
     JAVASCRIPT
@@ -111,27 +126,12 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     expect(page).to have_css("[data-camera-guide-frame] > [data-receipt-upload-target=cameraHint]", visible: :all)
     expect(find("svg.receipt-camera-guide")).to match_style(position: "absolute")
     expect(find("[data-receipt-upload-target=cameraHint]", visible: :all)).to match_style(position: "absolute", bottom: "0px")
-    rows, panel_gap, action_right_inset = page.evaluate_script(<<~JAVASCRIPT)
-      (() => {
-        const live = document.querySelector('[data-receipt-upload-target=cameraLive]')
-        const panel = document.querySelector('[data-receipt-upload-target=cameraPanel]')
-        const actions = getComputedStyle(document.querySelector('[data-camera-actions]'))
-        return [
-          getComputedStyle(live).gridTemplateRows.split(' ').length,
-          Number.parseFloat(getComputedStyle(panel).rowGap),
-          Number.parseFloat(actions.paddingRight) + Number.parseFloat(actions.borderRightWidth)
-        ]
-      })()
-    JAVASCRIPT
-    expect(rows).to eq(2)
+    panel_gap = geometry.fetch("panelGap")
+    action_right_inset = geometry.fetch("actionRightInset")
+    expect(geometry.fetch("gridRows")).to eq(2)
     frame = find("[data-camera-guide-frame]")
     expect(frame).to match_style(position: "relative", "min-height" => "0px")
-    frame_box = page.evaluate_script(<<~JAVASCRIPT, frame)
-      (() => {
-        const box = arguments[0].getBoundingClientRect()
-        return { top: box.top, bottom: box.bottom, width: box.width, height: box.height }
-      })()
-    JAVASCRIPT
+    frame_box = geometry.fetch("frame")
     guide = geometry.fetch("guide")
     expect(guide.fetch("y")).to be >= frame_box.fetch("top")
     expect(guide.fetch("bottom")).to be <= frame_box.fetch("bottom")
@@ -149,13 +149,7 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     expect(geometry.fetch("hint").fetch("bottom")).to be <= geometry.fetch("actions").fetch("y")
     expect(geometry.fetch("video").fetch("y")).to be <= geometry.fetch("hint").fetch("y")
     expect(geometry.fetch("video").fetch("bottom")).to be >= geometry.fetch("hint").fetch("bottom")
-    video_width, video_height = page.evaluate_script(<<~JAVASCRIPT)
-      (() => {
-        const video = document.querySelector('[data-receipt-upload-target=cameraVideo]')
-        const rotated = Math.abs(Number.parseFloat(video.style.getPropertyValue('--receipt-camera-rotation')) || 0) % 180 !== 0
-        return rotated ? [video.videoHeight, video.videoWidth] : [video.videoWidth, video.videoHeight]
-      })()
-    JAVASCRIPT
+    video_width, video_height = geometry.fetch("videoDimensions")
     video = geometry.fetch("video")
     capture = geometry.fetch("capture")
     cancel = geometry.fetch("cancel")
@@ -168,14 +162,7 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     scale = [ video.fetch("width").fdiv(video_width), video.fetch("height").fdiv(video_height) ].min
     painted_left = video.fetch("x") + (video.fetch("width") - video_width * scale) / 2
     painted_top = video.fetch("y") + (video.fetch("height") - video_height * scale) / 2
-    strokes = page.evaluate_script(<<~JAVASCRIPT)
-      ['.receipt-camera-guide-outline', '[data-camera-guide]'].map((selector) => {
-        const element = document.querySelector(selector)
-        if (!element) return null
-        const style = getComputedStyle(element)
-        return { color: style.stroke, width: Number.parseFloat(style.strokeWidth) }
-      })
-    JAVASCRIPT
+    strokes = geometry.fetch("strokes")
     expect(strokes.first).to be_present
     expect(strokes.first.fetch("color")).not_to eq(strokes.last.fetch("color"))
     expect(strokes.first.fetch("width")).to be > strokes.last.fetch("width")

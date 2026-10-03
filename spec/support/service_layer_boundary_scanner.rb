@@ -362,14 +362,17 @@ module ServiceLayerBoundary
     end
 
     def resolve_private_reference(reference)
+      owners = private_constant_owners
       reference_candidates(reference).each do |candidate|
-        owner_constant = private_constant_owners.keys
-          .select do |constant|
-            resolved_constant?(candidate, constant) &&
-              (constant == candidate.resolution_root || constant.start_with?("#{candidate.resolution_root}::"))
-          end
-          .max_by(&:length)
-        return [ candidate.constant_name, private_constant_owners.fetch(owner_constant) ] if owner_constant
+        constant = candidate.constant_name
+        root_prefix = "#{candidate.resolution_root}::"
+        while constant == candidate.resolution_root || constant.start_with?(root_prefix)
+          owner = owners[constant]
+          return [ candidate.constant_name, owner ] if owner
+          break if constant == candidate.resolution_root
+
+          constant = constant.rpartition("::").first
+        end
       end
       nil
     end
@@ -391,11 +394,6 @@ module ServiceLayerBoundary
         )
       end
       (lexical_candidates + [ top_level ]).uniq
-    end
-
-    def resolved_constant?(candidate, private_constant)
-      candidate.constant_name == private_constant ||
-        candidate.constant_name.start_with?("#{private_constant}::")
     end
 
     def allowed_reference?(source_path, referenced_constant, private_owner)

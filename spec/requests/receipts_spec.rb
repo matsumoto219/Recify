@@ -211,12 +211,6 @@ RSpec.describe 'Receipts', type: :request do
       create(:receipt, user: other_user, store_name: '他人のレシート', total_amount: 999, payment_method: 'cash', status: 'completed')
     end
 
-    it '一覧を取得できる' do
-      get receipts_path
-
-      expect(response).to have_http_status(:success)
-    end
-
     it 'ヘッダーのログアウト導線はJSなしでもDELETE送信できるformを描画する' do
       get receipts_path
 
@@ -274,6 +268,7 @@ RSpec.describe 'Receipts', type: :request do
       get receipts_path
 
       aggregate_failures do
+        expect(response).to have_http_status(:success)
         expect(response.body).to include('自分のレシート')
         expect(response.body).not_to include('他人のレシート')
       end
@@ -4948,15 +4943,6 @@ RSpec.describe 'Receipts', type: :request do
       )
     end
 
-    it '詳細を取得できる' do
-      get receipt_path(receipt)
-
-      aggregate_failures do
-        expect(receipt_path(receipt)).to eq("/receipts/#{receipt.public_id}")
-        expect(response).to have_http_status(:success)
-      end
-    end
-
     it '内部IDのURLでは取得できない' do
       get "/receipts/#{receipt.id}"
 
@@ -4975,6 +4961,7 @@ RSpec.describe 'Receipts', type: :request do
       get receipt_path(receipt)
 
       aggregate_failures do
+        expect(receipt_path(receipt)).to eq("/receipts/#{receipt.public_id}")
         expect(response).to have_http_status(:success)
         expect(response.body).not_to match(/translation missing/i)
         expect(response.body).to include(I18n.t('receipts.show.title'))

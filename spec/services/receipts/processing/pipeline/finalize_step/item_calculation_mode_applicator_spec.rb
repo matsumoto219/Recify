@@ -12,6 +12,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
     params = Analysis.enforce_ownership_consistency(
       params: Analysis.build_receipt_params(ocr_result: ocr_result, ai_result: nil)
     )
+    yield params if block_given?
 
     {
       ocr_result: ocr_result,
@@ -33,13 +34,11 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
   end
 
   def uniform_net_context(tax_details:)
-    context = fixture_context('single_tax_receipt')
-    params = context.fetch(:params)
-    params[:receipt_attributes].merge!(subtotal_amount: 770, tax_amount: 77, total_amount: 847)
-    params[:receipt_tax_details_attributes] = tax_details ? [ { description: '外税10%', net_amount: 770, amount: 77, rate: BigDecimal('0.1') } ] : []
-    params[:receipt_payments_attributes] = []
-    context[:amount_result] = amount_for(params)
-    context
+    fixture_context('single_tax_receipt') do |params|
+      params[:receipt_attributes].merge!(subtotal_amount: 770, tax_amount: 77, total_amount: 847)
+      params[:receipt_tax_details_attributes] = tax_details ? [ { description: '外税10%', net_amount: 770, amount: 77, rate: BigDecimal('0.1') } ] : []
+      params[:receipt_payments_attributes] = []
+    end
   end
 
   def mixed_basis_context(explicit_only: false)
@@ -51,15 +50,13 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
       end
     end
 
-    context = fixture_context('single_tax_receipt', mutate_raw: mutate_raw)
-    params = context.fetch(:params)
-    params[:receipt_attributes].merge!(subtotal_amount: 732, tax_amount: 73, total_amount: 805)
-    params[:receipt_tax_details_attributes] = [
-      { description: '内消費税10%', net_amount: 805, amount: 73, rate: BigDecimal('0.1') }
-    ]
-    params[:receipt_payments_attributes] = []
-    context[:amount_result] = amount_for(params)
-    context
+    fixture_context('single_tax_receipt', mutate_raw: mutate_raw) do |params|
+      params[:receipt_attributes].merge!(subtotal_amount: 732, tax_amount: 73, total_amount: 805)
+      params[:receipt_tax_details_attributes] = [
+        { description: '内消費税10%', net_amount: 805, amount: 73, rate: BigDecimal('0.1') }
+      ]
+      params[:receipt_payments_attributes] = []
+    end
   end
 
   def result_for(context, **overrides, &amount_calculator)
@@ -244,8 +241,10 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
       end
     ]
 
+    base_context = mixed_basis_context(explicit_only: true)
+
     mutations.each_with_index do |mutation, index|
-      context = mixed_basis_context(explicit_only: true)
+      context = base_context.deep_dup
       mutation.call(context.fetch(:amount_result))
       result = result_for(context)
 
@@ -395,8 +394,10 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
   end
 
   it '税抜profileとcomputedの税基準が一部でも矛盾するcountはconfirmedにしない' do
+    base_context = uniform_net_context(tax_details: false)
+
     [ :receipt_tax_basis, :item_amount_basis, :tax_detail_amount_basis ].each do |field|
-      context = uniform_net_context(tax_details: false)
+      context = base_context.deep_dup
       context[:amount_result][:computed][field] = :unknown
 
       result = result_for(context)
@@ -560,10 +561,12 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
       ->(result) { result[:resolved][:total] += 1 }
     ]
 
+    base_context = fixture_context('receipt_sample') do |params|
+      params.fetch(:receipt_items_attributes).first[:price] = 581
+    end
+
     mutations.each do |mutation|
-      context = fixture_context('receipt_sample')
-      context.fetch(:params).fetch(:receipt_items_attributes).first[:price] = 581
-      context[:amount_result] = amount_for(context.fetch(:params))
+      context = base_context.deep_dup
 
       result = result_for(context) do |candidate_params|
         amount_for(candidate_params).deep_dup.tap { |final_amount| mutation.call(final_amount) }
@@ -735,8 +738,10 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
       selected_basis: ->(amount) { amount[:amount_engine][:selected_basis] = 'external_tax_from_receipt' }
     }
 
+    base_context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+
     mutations.each do |name, mutation|
-      context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+      context = base_context.deep_dup
       gate_result = structured_reference_gate_result(context)
 
       result = result_for(context, reference_pricing_gate_result: gate_result) do |candidate_params|
@@ -758,8 +763,10 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
       unsafe_to_auto_complete: ->(amount) { amount[:safe_to_auto_complete] = false }
     }
 
+    base_context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+
     mutations.each do |name, mutation|
-      context = fixture_context('ocr_azure_item_calculation_reference_summary_net_anonymized')
+      context = base_context.deep_dup
       gate_result = structured_reference_gate_result(context)
       context[:amount_result] = context.fetch(:amount_result).deep_dup.tap { |amount| mutation.call(amount) }
 
@@ -1051,6 +1058,8 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
   end
 
   it '保存先positionは0と既存上限を許可し範囲外や型違いをfail-neutralにする' do
+    base_context = fixture_context('single_tax_receipt')
+
     [
       { position: 0, applied: true },
       { position: described_class::PROPOSAL_CONTRACT::MAX_SETS, applied: true },
@@ -1059,7 +1068,7 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::ItemCalculationMode
       { position: nil, applied: false },
       { position: '0', applied: false }
     ].each do |example|
-      context = fixture_context('single_tax_receipt')
+      context = base_context.deep_dup
       params = context.fetch(:params).deep_dup
       params.fetch(:receipt_items_attributes).first[:position_index] = example[:position]
 

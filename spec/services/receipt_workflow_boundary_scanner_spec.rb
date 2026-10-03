@@ -58,7 +58,9 @@ RSpec.describe ReceiptWorkflowBoundary::Scanner do
       end
     RUBY
 
-    expect(scanner.violations).to be_empty, scanner.format_violations
+    violations = scanner.violations
+
+    expect(violations).to be_empty, scanner.format_violations(violations)
   end
 
   it "別workflowのprivate child直接参照を検知する" do

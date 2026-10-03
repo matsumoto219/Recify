@@ -76,7 +76,7 @@ RSpec.describe "管理者の解析当時の計算表示", type: :system do
     %w[light dark].each do |theme|
       page.execute_script("document.documentElement.dataset.theme = arguments[0]", theme)
       inspector = find("[data-run-amount-inspector]")
-      inspector.all("details:not([open])").each { |detail| detail.find("summary").click }
+      inspector.all("details:not([open])", minimum: 0).each { |detail| detail.find("summary").click }
       backgrounds << page.evaluate_script("getComputedStyle(document.querySelector('[data-run-amount-inspector] .token-bg-card-subtle')).backgroundColor")
       aggregate_failures do
         expect(inspector).to have_content(exact)

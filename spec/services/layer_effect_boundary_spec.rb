@@ -40,7 +40,9 @@ RSpec.describe "Query, Form, Admin, and rendering effect boundary" do
   let(:scanner) { @scanner }
 
   it "QueryとFormからDB write・enqueue・provider・audit mutationを行わない" do
-    expect(scanner.layer_effects).to be_empty, scanner.layer_effects.map(&:to_h).join("\n")
+    effects = scanner.layer_effects
+
+    expect(effects).to be_empty, effects.map(&:to_h).join("\n")
   end
 
   it "QueryとFormのResultをimmutable Data contractに限定する" do
