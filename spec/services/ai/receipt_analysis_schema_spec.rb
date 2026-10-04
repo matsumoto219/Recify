@@ -71,6 +71,19 @@ RSpec.describe Ai::ReceiptAnalysisSchema do
       end
     end
 
+    it '店舗名の選択はnullableなID選択だけを既存schemaへ追加する' do
+      selection = schema.dig('properties', 'store', 'properties', 'store_name_selection')
+
+      expect(selection).to include(
+        'type' => [ 'object', 'null' ],
+        'additionalProperties' => false,
+        'required' => %w[decision option_id]
+      )
+      expect(selection.dig('properties', 'decision', 'enum')).to eq(%w[select ambiguous reject])
+      expect(selection.dig('properties', 'option_id', 'type')).to eq([ 'string', 'null' ])
+      expect(selection.fetch('properties').keys).to eq(%w[decision option_id])
+    end
+
     it '調整行金額maximumはdefaultの金額上限を使う' do
       expect(schema.dig('properties', 'receipt_adjustments', 'items', 'properties', 'amount', 'maximum')).to eq(999_999_999)
     end

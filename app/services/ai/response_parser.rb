@@ -245,6 +245,11 @@ module Ai
       confidence = normalize_is_receipt_confidence(normalized_payload&.fetch("is_receipt_confidence", nil))
       normalized_meta[:is_receipt_confidence] = confidence unless confidence.nil?
 
+      store = normalize_section(normalized_payload&.fetch("store", nil))
+      if store.key?("store_name_selection")
+        normalized_meta[:store_name_selection] = Analysis.store_name_selection(store["store_name_selection"])
+      end
+
       normalized_meta.compact
     end
 

@@ -93,6 +93,35 @@ RSpec.describe Ai::ResponseParser do
         end
       end
 
+      it '店舗名のID選択を正規化し、他のAI補助結果と分離する' do
+        payload['store']['store_name_selection'] = {
+          'decision' => 'select', 'option_id' => 'store_option_0123456789abcdef0123456789abcdef'
+        }
+
+        result = described_class.parse(payload, provider: provider)
+
+        expect(result[:success]).to be(true)
+        expect(result.dig(:meta, :store_name_selection)).to eq(
+          decision: 'select', option_id: 'store_option_0123456789abcdef0123456789abcdef'
+        )
+        expect(result[:receipt_attributes]).not_to have_key('store_name_selection')
+        expect(result[:receipt_items_attributes].size).to eq(2)
+      end
+
+      it '店舗選択部分だけの不正な値は通常AI結果を失敗させず破棄する' do
+        payload['store']['store_name_selection'] = {
+          'decision' => 'select', 'option_id' => 'private name', 'raw_text' => 'private text'
+        }
+
+        result = described_class.parse(payload, provider: provider)
+
+        expect(result[:success]).to be(true)
+        expect(result.dig(:meta, :store_name_selection)).to eq(decision: 'invalid')
+        expect(result[:review_reasons]).to eq([ 'item_name_uncertain' ])
+        expect(result.dig(:receipt_attributes, 'payment_method')).to eq('credit_card')
+        expect(result[:meta].to_json).not_to include('private')
+      end
+
       it '未知categoryを結果やsnapshot候補へ残さず未分類の確認対象にする' do
         payload['items'].first['category'] = 'unknown_category'
         payload['items'].first['needs_review'] = false
