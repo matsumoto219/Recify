@@ -32,7 +32,7 @@ gem "rotp", "~> 6.3"
 # QRコード生成 [https://github.com/whomwah/rqrcode]
 gem "rqrcode", "~> 3.2"
 # Sentry Ruby SDK [https://github.com/getsentry/sentry-ruby]
-gem "sentry-ruby", "~> 7.0"
+gem "sentry-ruby", "~> 7.1"
 # Sentry Rails連携 [https://github.com/getsentry/sentry-ruby]
 gem "sentry-rails", "~> 7.0"
 
