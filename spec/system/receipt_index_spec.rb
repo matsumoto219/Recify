@@ -343,7 +343,7 @@ RSpec.describe "レシート一覧の実Chrome検索と並び替え", type: :sys
     page.go_back
 
     expect(page).to have_current_path(%r{\A/receipts\?.*sort=purchased_at_desc})
-    expect(find("#receipts-sort-control").value).to eq("purchased_at_desc")
+    expect(page).to have_css("#receipts-sort-control option[value='purchased_at_desc']:checked")
     expect(receipt_card_ids).to eq([ newer.public_id, older.public_id, nil_purchased_at.public_id ])
     expect_browser_console_clean
   end
