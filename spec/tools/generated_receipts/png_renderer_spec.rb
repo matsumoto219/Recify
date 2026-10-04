@@ -8,7 +8,10 @@ require_relative "../../../tools/generated_receipts"
 RSpec.describe GeneratedReceipts::PngRenderer do
   around do |example|
     original_network_config = %i[
-      allow_net_connect allow_localhost allow net_http_connect_on_start
+      allow_net_connect
+      allow_localhost
+      allow
+      net_http_connect_on_start
     ].to_h { |key| [ key, WebMock::Config.instance.public_send(key) ] }
 
     WebMock.disable_net_connect!(allow_localhost: true)
