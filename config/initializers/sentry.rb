@@ -181,6 +181,7 @@ if Rails.env.production? && ENV["SENTRY_DSN"].present?
     config.before_send_metric = ->(_metric) { nil }
     config.sample_rate = Recify::SentrySanitizer.float_env("SENTRY_SAMPLE_RATE", 1.0)
     config.traces_sample_rate = Recify::SentrySanitizer.float_env("SENTRY_TRACES_SAMPLE_RATE", 0.0)
+    config.trace_ignore_status_codes = [ 301..303, 305..399, 401..404 ]
     Recify::SentrySanitizer.configure_event_callbacks(config)
   end
 end

@@ -209,6 +209,44 @@ RSpec.describe 'Sentry SDK integration' do
     end
   end
 
+  context 'transaction samplingを有効にした場合' do
+    before do
+      allow(ENV).to receive(:fetch).with('SENTRY_TRACES_SAMPLE_RATE', 0.0).and_return(1.0)
+      load_initializer
+    end
+
+    [ 302, 303, 404 ].each do |status|
+      it "HTTP #{status}のtransactionを送信しない" do
+        app = Sentry::Rails::CaptureExceptions.new(->(_env) { [ status, {}, [] ] })
+        env = Rack::MockRequest.env_for('https://example.test/receipts')
+
+        response = app.call(env)
+
+        aggregate_failures do
+          expect(response.first).to eq(status)
+          expect(transport.events).to be_empty
+        end
+      end
+    end
+
+    it 'HTTP 200のtransactionは既存の秘匿化を適用して送信する' do
+      app = Sentry::Rails::CaptureExceptions.new(lambda do |_env|
+        Sentry.set_extras(signed_stream_name: 'transaction-capability')
+        [ 200, {}, [] ]
+      end)
+      env = Rack::MockRequest.env_for('https://example.test/receipts')
+
+      response = app.call(env)
+
+      aggregate_failures do
+        expect(response.first).to eq(200)
+        expect(transport.events.size).to eq(1)
+        expect(transport.events.first.type).to eq('transaction')
+        expect(transport.events.first.extra[:signed_stream_name]).to eq(Recify::SentrySanitizer::FILTERED)
+      end
+    end
+  end
+
   def load_initializer
     silence_warnings { load initializer_path }
   end
