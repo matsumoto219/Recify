@@ -14,9 +14,10 @@ RSpec.describe "レシート処理カードの実Chrome同期", type: :system do
     "##{receipt.dom_target_id}"
   end
 
-  def force_processing_card_sync
-    result = page.evaluate_async_script(<<~JAVASCRIPT, Capybara.default_max_wait_time * 1000)
+  def force_processing_card_sync(require_poll: true)
+    result = page.evaluate_async_script(<<~JAVASCRIPT, Capybara.default_max_wait_time * 1000, require_poll)
       const timeoutMilliseconds = arguments[0]
+      const requirePoll = arguments[1]
       const done = arguments[arguments.length - 1]
       const deadline = window.performance.now() + timeoutMilliseconds
 
@@ -43,7 +44,7 @@ RSpec.describe "レシート処理カードの実Chrome同期", type: :system do
           const completedBefore = controller.completedPollCount
           await controller.syncNow()
           done({
-            ok: controller.completedPollCount > completedBefore,
+            ok: !requirePoll || controller.completedPollCount > completedBefore,
             completedPollCount: controller.completedPollCount
           })
         })
@@ -153,7 +154,7 @@ RSpec.describe "レシート処理カードの実Chrome同期", type: :system do
       updated_at: terminal_at
     )
     receipt.update_columns(status: "completed", updated_at: terminal_at)
-    force_processing_card_sync
+    force_processing_card_sync(require_poll: false)
 
     expect(page).to have_css("#{card_selector}[data-receipt-card-phase='completed']")
     terminal_card = find(card_selector)
