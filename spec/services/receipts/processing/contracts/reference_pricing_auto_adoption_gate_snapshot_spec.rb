@@ -392,7 +392,11 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
   end
 
   it 'layout sourceとstructured destinationのreference optionをexact identity pairでbindする' do
-    run = analysis_run
+    run = create(
+      :receipt_analysis_run,
+      receipt: receipt_with_image,
+      run_key: '00000498-0000-4000-8000-000000000342'
+    )
     start_snapshot = described_class.capture_start(
       run_key: run.run_key,
       run_source: run.source,
@@ -419,6 +423,9 @@ RSpec.describe Receipts::Processing::Contracts::ReferencePricingAutoAdoptionGate
       expect(proposal.fetch('candidate_id')).to start_with('azure_item_layout_')
       expect(proposal.fetch('item_identity')).to start_with('azure_structured_item_')
       redacted_bound = bound.deep_dup
+      redacted_bound['run_key'] = '[RUN_KEY]'
+      redacted_bound.dig('receipt_state_at_start')['image_attachment_id'] = '[ATTACHMENT_ID]'
+      redacted_bound.dig('receipt_state_at_start')['image_blob_id'] = '[BLOB_ID]'
       redacted_bound.dig('proposal_binding')['proposal_checksum'] = '[CHECKSUM]'
       redacted_bound.dig('receipt_state_at_start')['semantic_checksum'] = '[CHECKSUM]'
       expect(redacted_bound.to_json).not_to include(
