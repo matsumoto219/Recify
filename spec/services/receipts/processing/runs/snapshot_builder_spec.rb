@@ -1,6 +1,26 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
+  it 'AI店舗選択のIDと候補集合checksumを汎用文字列短縮せず保持する' do
+    selection = {
+      decision: 'select', option_id: 'store_option_0123456789abcdef0123456789abcdef', options_checksum: 'a' * 64
+    }
+    allow(described_class).to receive(:snapshot_string_max_bytes).and_return(16)
+
+    snapshot = described_class.ai_normalized_result_snapshot(success: true, meta: { store_name_selection: selection })
+
+    expect(snapshot.dig('meta', 'store_name_selection')).to eq(selection.deep_stringify_keys)
+  end
+
+  it 'AI店舗選択の不正な自由payloadをsnapshotへ保存しない' do
+    snapshot = described_class.ai_normalized_result_snapshot(
+      success: true, meta: { store_name_selection: { decision: 'select', raw_text: 'private text' } }
+    )
+
+    expect(snapshot.dig('meta', 'store_name_selection')).to eq('decision' => 'invalid')
+    expect(snapshot.to_json).not_to include('private text')
+  end
+
   describe 'store name source evidence' do
     let(:store_evidence) do
       {

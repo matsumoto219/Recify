@@ -181,7 +181,18 @@ RSpec.describe Receipts::Processing::Pipeline do
     }
   end
 
-  def ai_success_result_for(ocr_result, review_reasons: [], needs_review: false)
+  def ai_success_result_for(ocr_result, review_reasons: [], needs_review: false, store_name: nil)
+    options = Analysis.store_name_options(ocr_result: ocr_result)
+    expected_store_name = Analysis.normalize_compact_store_name_candidate(store_name || ocr_result.dig(:candidates, :store_name)).to_s.downcase
+    matching_options = options[:options].select do |option|
+      Analysis.normalize_compact_store_name_candidate(option[:value]).to_s.downcase == expected_store_name
+    end
+    expect(matching_options.size).to eq(1) if store_name
+    # 金額・所有権fixtureでは、印字済みの期待店舗名を選んだ既存AI呼出しを再現する。
+    # 店舗名選択自身の統合例はこのhelperを使わず、成功・不成立の応答を明示する。
+    store_selection = if matching_options.one?
+      { decision: 'select', option_id: matching_options.first[:option_id], options_checksum: options[:checksum] }
+    end
     {
       success: true,
       needs_review: needs_review,
@@ -189,6 +200,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt_attributes: {
         payment_method: 'cash'
       },
+      meta: { store_name_selection: store_selection }.compact,
       receipt_items_attributes: Array(ocr_result.dig(:candidates, :items)).each_with_index.map do |_item, index|
         {
           index: index,
@@ -5595,6 +5607,27 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
+    it '不正なAI店舗名でもOCRの有効な店舗名とその確認判定を保存する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ai_result = successful_ai_result.deep_merge(
+        needs_review: true,
+        review_reasons: [ 'store_name_missing', 'store_name_uncertain' ],
+        receipt_attributes: { store_name: '領収書' }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ai_success, ocr_result: successful_ocr_result, ai_result: ai_result)
+      )
+
+      aggregate_failures do
+        expect(receipt.reload.store_name).to eq('テストストア')
+        expect(receipt.status).to eq('completed')
+        expect(receipt.review_reasons).not_to include('store_name_missing', 'store_name_uncertain')
+        expect(receipt.total_amount).to eq(180)
+      end
+    end
+
     it '最終保存店舗名がOCR根拠のあるclean名ならAIのstore_name_uncertainを落とす' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = {
@@ -7009,11 +7042,14 @@ RSpec.describe Receipts::Processing::Pipeline do
     end
 
     it 'subtotal欠損レシートはwarningのみでsubtotal/taxを補完する' do
-      receipt, amount = run_finalize_ocr_fixture('missing_subtotal_receipt')
+      ocr_result = ocr_fixture('missing_subtotal_receipt')
+      ai_result = ai_success_result_for(ocr_result, store_name: 'ドラッグストア 梅田店')
+      receipt, amount = run_finalize_ocr_fixture('missing_subtotal_receipt', ocr_result: ocr_result, ai_result: ai_result)
 
       aggregate_failures do
         expect(receipt.status).to eq('completed')
         expect(receipt.review_reasons).to be_blank
+        expect(receipt.store_name).to eq('ドラッグストア 梅田店')
         expect(receipt.total_amount).to eq(2998)
         expect(receipt.subtotal_amount).to eq(2776)
         expect(receipt.tax_amount).to eq(222)

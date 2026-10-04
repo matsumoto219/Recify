@@ -107,5 +107,13 @@ module Analysis
     def store_name_evidence(...)
       StoreNameEvidence.call(...)
     end
+
+    def store_name_options(...)
+      ReceiptStoreNameResolver.options(...)
+    end
+
+    def store_name_selection(...)
+      StoreNameSelection.call(...)
+    end
   end
 end

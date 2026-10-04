@@ -495,7 +495,7 @@ module Receipts::Processing::Runs
       end
       review_reasons |= [ "item_category_uncertain" ] if item_category_uncertain
 
-      sanitize_hash(
+      snapshot = sanitize_hash(
         {
           schema_version: AI_NORMALIZED_RESULT_SCHEMA_VERSION,
           success: result[:success] == true,
@@ -518,6 +518,9 @@ module Receipts::Processing::Runs
           }
         }.compact
       )
+      selection = Analysis.store_name_selection(normalized_hash(result[:meta])[:store_name_selection])
+      snapshot["meta"]["store_name_selection"] = selection.deep_stringify_keys if selection
+      snapshot
     end
 
     def ai_result_summary(ai_result)

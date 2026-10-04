@@ -31,7 +31,11 @@ module Analysis
         normalized_ai_result = normalize_ai_result(ai_result)
         skipped_negative_items = []
         ai_receipt_attributes = normalized_ai_result[:receipt_attributes]
-        receipt_attributes = build_receipt_attributes(candidates, ai_receipt_attributes, lines, case_preserved_lines)
+        store_name_resolution = ReceiptStoreNameResolver.resolve(
+          ocr_result: normalized_ocr_result.merge(lines: lines, case_preserved_lines: case_preserved_lines),
+          ai_result: normalized_ai_result
+        )
+        receipt_attributes = build_receipt_attributes(candidates, ai_receipt_attributes, lines, store_name_resolution[:value])
         receipt_items_attributes = build_receipt_items_attributes(
           candidates,
           lines,
@@ -142,7 +146,7 @@ module Analysis
         ownership_contract = OwnershipConsistencyGuard.contract_for(tax_allocation_result)
         review_reasons = (
           skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes) +
-          invalid_adjustment_review_reasons + payment_review_reasons
+          invalid_adjustment_review_reasons + payment_review_reasons + store_name_resolution[:reason_codes]
         ).uniq
         corrections = build_params_corrections(
           purchased_at_fallback: ReceiptPurchasedAtResolver.fallback_snapshot(
@@ -169,6 +173,7 @@ module Analysis
           tax_rate_correction: tax_rate_correction,
           ownership_contract: ownership_contract,
           corrections: corrections,
+          store_name_resolution: store_name_resolution.except(:value),
           # OCRで検証したbounded candidateは診断専用。ReceiptItem authorityへは書き込まない。
           reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).map do |candidate|
             candidate.respond_to?(:deep_symbolize_keys) ? candidate.deep_symbolize_keys : candidate
@@ -230,24 +235,13 @@ module Analysis
           receipt_attributes: symbolized[:receipt_attributes] || {},
           receipt_items_attributes: Array(symbolized[:receipt_items_attributes]),
           receipt_adjustments_attributes: Array(symbolized[:receipt_adjustments_attributes]),
+          review_reasons: Array(symbolized[:review_reasons]),
           meta: symbolized[:meta] || {}
         }
       end
 
-      def build_receipt_attributes(candidates, ai_receipt_attributes, lines, case_preserved_lines)
+      def build_receipt_attributes(candidates, ai_receipt_attributes, lines, store_name)
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
-        ai_store_name = ai_attrs[:store_name].presence
-        item_names = Array(candidates[:items]).filter_map do |item|
-          normalized_item = item.respond_to?(:with_indifferent_access) ? item.with_indifferent_access : {}
-          normalized_item[:raw_text].presence || normalized_item[:description].presence
-        end
-        store_name = ReceiptStoreNameResolver.call(
-          store_name: ai_store_name || candidates[:store_name],
-          lines: lines,
-          case_preserved_lines: case_preserved_lines,
-          ai_store_name: ai_store_name.present?,
-          item_names: item_names
-        )
         purchased_at = ReceiptPurchasedAtResolver.call(ai_attrs:, candidates:, lines:, profile: profile)
 
         {
