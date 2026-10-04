@@ -103,5 +103,9 @@ module Analysis
     def store_name_candidate_valid?(...)
       StoreNameCandidateClassifier.valid_candidate?(...)
     end
+
+    def store_name_evidence(...)
+      StoreNameEvidence.call(...)
+    end
   end
 end

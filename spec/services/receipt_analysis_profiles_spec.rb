@@ -51,6 +51,34 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile store name evidence' do
+    let(:profile) { described_class.fetch('JPN') }
+
+    it '店舗名classifierの地域語彙とscriptを所有する' do
+      expect('500円').to match(profile.store_money_or_numeric_pattern)
+      expect('プ').to match(profile.store_isolated_logo_fragment_pattern)
+      expect('サンプル').to match(profile.store_name_letter_pattern)
+      expect('サンプル').to match(profile.store_local_name_prefix_pattern)
+      expect('ショコラ').to match(profile.store_local_descriptor_prefix_pattern)
+      expect('T1234567890123').to match(profile.store_registration_id_pattern)
+      expect('1名').to match(profile.store_operator_number_noise_pattern)
+      expect('サンプル').to match(profile.store_local_script_pattern)
+      expect('Sample Inc.').to match(profile.store_english_legal_designator_suffix_pattern)
+      expect('Sample Company').to match(profile.store_english_company_suffix_pattern)
+    end
+
+    it '識別番号と販促を店舗候補から区別し、正式な支店名を一律除外しない' do
+      %w[注文番号123 伝票番号123 会計番号123 No.123].each do |text|
+        expect(text).to match(profile.store_context_noise_pattern)
+      end
+      [ '火曜日は感謝デー', '会員限定の特典', '毎日の暮らしに、便利をお届け' ].each do |text|
+        expect(text).to match(profile.store_message_line_pattern)
+      end
+      expect('サンプル北町店').not_to match(profile.store_context_noise_pattern)
+      expect('サンプル北町店').not_to match(profile.store_message_line_pattern)
+    end
+  end
+
   describe 'JPN profile analysis fallback amount candidates' do
     it '識別子内の数字を除外し独立した金額と桁区切りを保持する' do
       pattern = described_class.fetch('JPN').analysis_fallback_amount_candidate_pattern

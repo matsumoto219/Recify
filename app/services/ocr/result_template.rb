@@ -22,6 +22,7 @@ module Ocr
     def empty_candidates
       {
         store_name: nil,
+        store_name_evidence: nil,
         store_address: nil,
         store_address_components: {},
         store_phone_number: nil,

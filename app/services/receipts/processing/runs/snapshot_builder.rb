@@ -441,7 +441,15 @@ module Receipts::Processing::Runs
         candidates_snapshot[:tax_detail_amount_basis] = "net"
       end
 
-      sanitize_hash(snapshot.compact)
+      snapshot = sanitize_hash(snapshot.compact)
+      if candidates.key?(:store_name_evidence)
+        evidence = Analysis.store_name_evidence(
+          candidates[:store_name_evidence],
+          max_candidates: snapshot_store_candidates_limit
+        )
+        snapshot["candidates"]["store_name_evidence"] = evidence.deep_stringify_keys if evidence
+      end
+      snapshot
     end
 
     def ai_input_snapshot(ai_input)

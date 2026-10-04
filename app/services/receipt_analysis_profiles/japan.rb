@@ -494,6 +494,16 @@ module ReceiptAnalysisProfiles
       /ai/i,
       /ファイル/
     ].freeze
+    STORE_MONEY_OR_NUMERIC_PATTERN = /\A[\d\s\-\/:().,*＊¥￥$€£%円]+\z/.freeze
+    STORE_ISOLATED_LOGO_FRAGMENT_PATTERN = /\A(?:\p{Katakana}|[[:punct:]])\z/u.freeze
+    STORE_NAME_LETTER_PATTERN = /[一-龠ぁ-んァ-ヶA-Za-z]/.freeze
+    STORE_LOCAL_NAME_PREFIX_PATTERN = /\A[ァ-ヶー]{2,}/.freeze
+    STORE_LOCAL_DESCRIPTOR_PREFIX_PATTERN = /\A[ァ-ヶー]{2,8}\z/.freeze
+    STORE_REGISTRATION_ID_PATTERN = /\bT\d{13}\b/i.freeze
+    STORE_OPERATOR_NUMBER_NOISE_PATTERN = /\A\d+[[:alpha:]一-龠ぁ-んァ-ヶ]{0,2}\z/.freeze
+    STORE_LOCAL_SCRIPT_PATTERN = /[一-龠ぁ-んァ-ヶ]/.freeze
+    STORE_ENGLISH_LEGAL_DESIGNATOR_SUFFIX_PATTERN = /\s*,?\s*(?:co\.?\s*,?\s*ltd\.?|pty\s+ltd|pvt\.?\s+ltd|s\.?\s*a\.?\s*s\.?|s\.?\s*a\.?|inc\.?|incorporated|ltd\.?|limited|llc|gmbh|ag|bv|nv|plc|corp\.?|corporation)\.?\z/i.freeze
+    STORE_ENGLISH_COMPANY_SUFFIX_PATTERN = /\s*,?\s*company\.?\z/i.freeze
     STORE_LEGAL_ENTITY_PATTERN = /
       株式会社|有限会社|合同会社|合名会社|合資会社|一般社団法人|一般財団法人|公益社団法人|公益財団法人|
       \b(?:inc\.?|incorporated|ltd\.?|limited|llc|gmbh|ag|bv|nv|plc|corp\.?|corporation|company)\b|
@@ -525,8 +535,8 @@ module ReceiptAnalysisProfiles
       )+\z
     /ix.freeze
     STORE_MESSAGE_LINE_PATTERN = /
-      営業時間|営業案内|年中無休|定休日|元旦を除く|毎日.*安い|この価格|品質.*価格|
-      暮らし応援価格|地域一番店|お買得|お買い得|特売|セール|
+      営業時間|営業案内|年中無休|定休日|元旦を除く|毎日.*(?:安い|暮らし)|この価格|品質.*価格|
+      暮らし応援価格|地域一番店|お買得|お買い得|特売|セール|感謝デー|会員.*(?:募集中|限定|特典)|
       business\s+hours|opening\s+hours|store\s+hours|hours\s*[:：]|open\s+\d|open\s+daily|
       everyday\s+low\s+price|low\s+price|best\s+price|quality\s+and\s+price|
       promotion|campaign|special\s+offer
@@ -548,7 +558,7 @@ module ReceiptAnalysisProfiles
     STORE_BUILDING_OR_FLOOR_PATTERN = /ビル|building|floor|地下|地上|[bB]\s*\d+\s*[fF]\b|\d+\s*[fF]\b|\d+\s*階/.freeze
     STORE_LOCAL_BUSINESS_DESCRIPTOR_PATTERN = /ショコラ|チョコ|ブティック|カフェ|レストラン|ショップ|ストア|マーケット|食堂|ダイニング/.freeze
     STORE_CONTEXT_COMPACT_NOISE_PATTERN = /領収書|領収証|小計|合計|担当|レジ|取引No|取引no/i.freeze
-    STORE_CONTEXT_NOISE_PATTERN = /登録番号|店no|加盟店名|卓no|テーブル|席|人数|お客様相談室|サポート|ヘルプデスク|コールセンター/i.freeze
+    STORE_CONTEXT_NOISE_PATTERN = /登録番号|注文番号|伝票番号|会計番号|\Ano\s*[.:]|店no|加盟店名|卓no|テーブル|席|人数|お客様相談室|サポート|ヘルプデスク|コールセンター/i.freeze
     STORE_CONTEXT_ADDRESS_PATTERN = /[都道府県].*\d|[市区町村郡].*\d|〒|\d+[-丁目番地号]/.freeze
     STORE_CONTEXT_RECEIPT_NOISE_PATTERN = /tel|電話|fax|領収書|領収証|レシート|合計|小計|消費税|税率|税額|支払|決済|total|subtotal|tax|payment/i.freeze
     STORE_BRANCH_SUFFIX = "店"
@@ -1302,6 +1312,46 @@ module ReceiptAnalysisProfiles
 
       def signal_pdf_document_context_patterns
         SIGNAL_PDF_DOCUMENT_CONTEXT_PATTERNS
+      end
+
+      def store_money_or_numeric_pattern
+        STORE_MONEY_OR_NUMERIC_PATTERN
+      end
+
+      def store_isolated_logo_fragment_pattern
+        STORE_ISOLATED_LOGO_FRAGMENT_PATTERN
+      end
+
+      def store_name_letter_pattern
+        STORE_NAME_LETTER_PATTERN
+      end
+
+      def store_local_name_prefix_pattern
+        STORE_LOCAL_NAME_PREFIX_PATTERN
+      end
+
+      def store_local_descriptor_prefix_pattern
+        STORE_LOCAL_DESCRIPTOR_PREFIX_PATTERN
+      end
+
+      def store_registration_id_pattern
+        STORE_REGISTRATION_ID_PATTERN
+      end
+
+      def store_operator_number_noise_pattern
+        STORE_OPERATOR_NUMBER_NOISE_PATTERN
+      end
+
+      def store_local_script_pattern
+        STORE_LOCAL_SCRIPT_PATTERN
+      end
+
+      def store_english_legal_designator_suffix_pattern
+        STORE_ENGLISH_LEGAL_DESIGNATOR_SUFFIX_PATTERN
+      end
+
+      def store_english_company_suffix_pattern
+        STORE_ENGLISH_COMPANY_SUFFIX_PATTERN
       end
 
       def store_legal_entity_pattern

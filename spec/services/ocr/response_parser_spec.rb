@@ -1,6 +1,33 @@
 require 'rails_helper'
 
 RSpec.describe Ocr::ResponseParser do
+  it 'exposes atomic store evidence separately without changing the current scalar store result' do
+    result = described_class.new(response: {
+      'analyzeResult' => {
+        'content' => "Sample Store\n合計 300",
+        'documents' => [ { 'fields' => { 'MerchantName' => { 'valueString' => 'Sample Store', 'confidence' => 0.87 } } } ]
+      }
+    }).call
+
+    aggregate_failures do
+      expect(result.dig(:candidates, :store_name)).to eq('Sample Store')
+      expect(result.dig(:candidates, :store_name_evidence, :candidates)).to include(
+        include(candidate_id: 'merchant_name', text: 'Sample Store', confidence: 0.87)
+      )
+    end
+  end
+
+  it 'retains the actual legacy field location instead of inventing an Azure document path' do
+    result = described_class.new(response: {
+      'analyzeResult' => { 'content' => 'Sample Store' },
+      'fields' => { 'MerchantName' => { 'valueString' => 'Sample Store' } }
+    }).call
+
+    expect(result.dig(:candidates, :store_name_evidence, :candidates)).to include(
+      include(candidate_id: 'merchant_name', source_path: 'fields.MerchantName')
+    )
+  end
+
   describe '#call' do
     let(:raw_response) do
       {
