@@ -1,9 +1,15 @@
 # This file is copied to spec/ when you run 'rails generate rspec:install'
 require 'spec_helper'
 ENV['RAILS_ENV'] ||= 'test'
+require_relative '../lib/recify/test_database_guard'
+Recify::TestDatabaseGuard.assert_test_environment!(environment: ENV['RAILS_ENV'])
 require_relative '../config/environment'
 # Prevent database truncation if the environment is production
 abort("The Rails environment is running in production mode!") if Rails.env.production?
+Recify::TestDatabaseGuard.validate!(
+  environment: Rails.env.to_s,
+  configurations: ActiveRecord::Base.configurations.configs_for(env_name: "test", include_hidden: true)
+)
 # Uncomment the line below in case you have `--require rails_helper` in the `.rspec` file
 # that will avoid rails generators crashing because migrations haven't been run yet
 # return unless Rails.env.test?

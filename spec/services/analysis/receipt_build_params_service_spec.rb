@@ -3110,15 +3110,27 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         }
       end
 
-      it 'AI補完結果で上書きしつつAzureの確定値を保持する' do
+      it 'AI自由生成の店舗名を採用せず他の補完とAzure確定値を保持する' do
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
         aggregate_failures do
-          expect(params[:receipt_attributes][:store_name]).to eq('AI補正ストア')
+          expect(params[:receipt_attributes][:store_name]).to eq('サンプルストア')
           expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
           expect(params[:receipt_attributes][:tip_amount]).to eq(100)
           expect(params[:receipt_attributes][:country_region]).to eq('JPN')
           expect(params[:receipt_attributes][:receipt_type]).to eq('Meal')
+        end
+      end
+
+      it '店舗名の保存値と確認判定を一度に解決し診断へ店舗textを複製しない' do
+        input = ocr_result.deep_merge(lines: [ 'サンプルストア', '領収書' ])
+        result = described_class.call(ocr_result: input, ai_result: ai_result.deep_merge(receipt_attributes: { store_name: '領収書' }))
+
+        aggregate_failures do
+          expect(result.dig(:receipt_attributes, :store_name)).to eq('サンプルストア')
+          expect(result[:store_name_resolution]).to include(state: 'confirmed', reason_codes: [])
+          expect(result[:store_name_resolution].keys).to contain_exactly(:state, :option_id, :reason_codes)
+          expect(result[:store_name_resolution].to_json).not_to include('サンプルストア')
         end
       end
 

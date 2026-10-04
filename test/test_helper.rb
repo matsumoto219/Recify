@@ -1,5 +1,11 @@
 ENV["RAILS_ENV"] ||= "test"
+require_relative "../lib/recify/test_database_guard"
+Recify::TestDatabaseGuard.assert_test_environment!(environment: ENV["RAILS_ENV"])
 require_relative "../config/environment"
+Recify::TestDatabaseGuard.validate!(
+  environment: Rails.env.to_s,
+  configurations: ActiveRecord::Base.configurations.configs_for(env_name: "test", include_hidden: true)
+)
 require "rails/test_help"
 
 module ActiveSupport

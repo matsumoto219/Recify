@@ -127,7 +127,7 @@ class Receipts::Processing::Pipeline
       params[:receipt_items_attributes] = clear_resolved_item_review_flags(params[:receipt_items_attributes])
 
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
-      ocr_review_reasons = ocr_review_reasons_for(ocr_result)
+      ocr_review_reasons = resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params)
       if ocr_low_quality
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -227,7 +227,7 @@ class Receipts::Processing::Pipeline
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
-      ocr_review_reasons = ocr_review_reasons_for(ocr_result)
+      ocr_review_reasons = resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params)
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -295,7 +295,7 @@ class Receipts::Processing::Pipeline
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
-      ocr_review_reasons = ocr_review_reasons_for(ocr_result)
+      ocr_review_reasons = resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params)
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -1273,8 +1273,7 @@ class Receipts::Processing::Pipeline
 
     def resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       review_reasons = normalize_review_reasons(ai_result[:review_reasons])
-      review_reasons = remove_resolved_store_name_missing_review_reason(review_reasons, params, amount_result, ocr_result)
-      review_reasons = remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
+      review_reasons = resolved_store_name_review_reasons(review_reasons, params)
       review_reasons = remove_resolved_store_address_missing_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
@@ -1497,19 +1496,12 @@ class Receipts::Processing::Pipeline
       ocr_candidates(ocr_result)[:store_address].blank?
     end
 
-    def remove_resolved_store_name_uncertain_review_reason(review_reasons, params, ocr_result)
-      return review_reasons unless review_reasons.include?("store_name_uncertain")
-      return review_reasons unless resolved_store_name_supported_by_ocr?(params, ocr_result)
+    def resolved_store_name_review_reasons(review_reasons, params)
+      resolution = normalized_hash(params[:store_name_resolution])
+      return review_reasons unless %w[confirmed uncertain missing].include?(resolution[:state])
 
-      review_reasons - [ "store_name_uncertain" ]
-    end
-
-    def remove_resolved_store_name_missing_review_reason(review_reasons, params, amount_result, ocr_result)
-      return review_reasons unless review_reasons.include?("store_name_missing")
-      return review_reasons unless receipt_core_fields_resolved?(params, amount_result, ocr_result)
-      return review_reasons unless resolved_store_name_supported_by_ocr?(params, ocr_result)
-
-      review_reasons - [ "store_name_missing" ]
+      (review_reasons - %w[store_name_missing store_name_uncertain]) +
+        (normalize_review_reasons(resolution[:reason_codes]) & %w[store_name_missing store_name_uncertain])
     end
 
     def resolved_store_address_supported_by_ocr?(params, ocr_result)
@@ -1573,91 +1565,6 @@ class Receipts::Processing::Pipeline
         candidates[:purchased_at_text],
         candidates[:purchased_at_candidates]
       ].flatten.compact.join("\n")
-    end
-
-    def resolved_store_name_supported_by_ocr?(params, ocr_result)
-      store_name = Analysis.normalize_store_name_candidate(
-        params.dig(:receipt_attributes, :store_name)
-      )
-      return false unless resolved_customer_facing_store_name?(store_name)
-
-      compact_store_name = compact_store_name_for_review(store_name)
-      header_lines = Array(ocr_result[:lines]).first(8).filter_map do |line|
-        Analysis.normalize_store_name_candidate(line)
-      end
-      return true if header_lines.any? { |line| compact_store_name_for_review(line) == compact_store_name }
-
-      return true if latin_logo_local_store_name_supported_by_ocr?(store_name, header_lines)
-
-      Analysis.store_name_customer_facing_heading_candidates(header_lines).any? do |candidate|
-        compact_store_name_for_review(candidate) == compact_store_name
-      end
-    end
-
-    def latin_logo_local_store_name_supported_by_ocr?(store_name, header_lines)
-      parts = store_name.to_s.split
-      return false if parts.size < 3
-
-      brand = parts.first
-      branch = parts.last
-      descriptor = parts[1...-1].join
-      return false if brand.blank? || descriptor.blank? || branch.blank?
-
-      latin_brand_supported_by_header?(brand, header_lines) &&
-        descriptor_supported_by_header?(descriptor, header_lines) &&
-        branch_supported_by_header?(branch, header_lines)
-    end
-
-    def latin_brand_supported_by_header?(brand, header_lines)
-      compact_brand = compact_store_name_for_review(brand)
-      return false unless compact_brand.match?(/\A[a-z0-9&.'-]{2,30}\z/)
-
-      Array(header_lines).first(3).any? do |line|
-        compact_line = compact_store_name_for_review(line)
-        compact_line == compact_brand ||
-          compact_line.start_with?(compact_brand) ||
-          compact_brand.start_with?(compact_line)
-      end
-    end
-
-    def descriptor_supported_by_header?(descriptor, header_lines)
-      compact_descriptor = compact_store_name_for_review(descriptor)
-      return false if compact_descriptor.blank?
-
-      Array(header_lines).any? do |line|
-        compact_store_name_for_review(line).include?(compact_descriptor)
-      end
-    end
-
-    def branch_supported_by_header?(branch, header_lines)
-      compact_branch = compact_store_name_for_review(branch)
-      return false if compact_branch.blank?
-
-      Array(header_lines).any? do |line|
-        compact_line = compact_store_name_for_review(line)
-        compact_line == compact_branch
-      end
-    end
-
-    def resolved_customer_facing_store_name?(store_name)
-      normalized = store_name.to_s
-      return false if normalized.blank?
-      return false if normalized.length < 2 || normalized.length > 60
-      return false if Analysis.store_name_legal_entity_name?(normalized)
-      return false if Analysis.store_name_operator_context_line?(normalized)
-      return false if Analysis.store_name_descriptive_heading_line?(normalized)
-      return false if Analysis.store_name_message_line?(normalized)
-      return false if Analysis.store_name_isolated_logo_fragment?(normalized)
-      return false if normalized.split.any? { |part| Analysis.store_name_isolated_logo_fragment?(part) }
-      return false if normalized.match?(/[¥￥$€£]|\b(?:receipt|invoice|total|subtotal|tax|payment)\b/i)
-      return false if normalized.match?(/\d{4}[\/\-年]\s*\d{1,2}[\/\-月]\s*\d{1,2}日?|\d{1,2}[:：]\d{2}/)
-      return false if normalized.match?(profile.store_context_address_pattern)
-
-      normalized.match?(/[一-龠ぁ-んァ-ヶA-Za-z]/)
-    end
-
-    def compact_store_name_for_review(value)
-      Analysis.normalize_compact_store_name_candidate(value).to_s.downcase
     end
 
     def payment_method_resolved_after_build?(params, amount_result)

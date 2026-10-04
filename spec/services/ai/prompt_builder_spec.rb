@@ -54,6 +54,19 @@ RSpec.describe Ai::PromptBuilder do
   end
 
   describe '.build' do
+    it '店舗名はserverが構成した候補集合だけをIDとともに渡す' do
+      options = Analysis.store_name_options(ocr_result: ocr_result)
+      result = described_class.build(ocr_result)
+
+      expect(result.dig(:store, :name_options)).to include(
+        schema_version: 'store_name_options_v1', checksum: options[:checksum]
+      )
+      expect(result.dig(:store, :name_options, :options)).to eq(
+        options[:options].map { |option| option.slice(:option_id, :value, :candidate_ids, :line_indexes) }
+      )
+      expect(result.dig(:store, :name_options).to_json).not_to include('confidence')
+    end
+
     it '既存のPromptBuilder出力仕様を維持する' do
       result = described_class.build(ocr_result)
 

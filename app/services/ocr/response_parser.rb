@@ -236,6 +236,15 @@ class Ocr::ResponseParser
       case_preserved_lines: case_preserved_lines,
       candidates: {
         store_name: extract_store_name(authority_response, authority_lines),
+        store_name_evidence: Ocr::ResponseParser::StoreNameEvidenceExtractor.call(
+          analyze_result:,
+          fields: extract_fields(authority_response),
+          lines: case_preserved_lines,
+          excluded_line_indexes: reference_pricing_block_line_indexes(reference_pricing_blocks),
+          profile:,
+          merchant_source_path: extract_document(authority_response)["fields"] ?
+            "documents[0].fields.MerchantName" : "fields.MerchantName"
+        ),
         store_address: extract_store_address(authority_response),                                                   # MerchantAddress は取得率にばらつきあり。取得値は住所として保存/表示する
         store_address_components: extract_store_address_components(authority_response),
         store_phone_number: extract_store_phone_number(authority_response),

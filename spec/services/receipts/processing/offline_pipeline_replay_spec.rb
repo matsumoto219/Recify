@@ -63,6 +63,7 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
     },
     {
       fixture: 'multiple_tax_receipt',
+      expected_store_name: 'デイリーフレッシュマート みどり店',
       payment_method: 'cash',
       status: 'completed',
       subtotal: 1_598,
@@ -93,6 +94,7 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
     },
     {
       fixture: 'discount_heavy_receipt',
+      expected_store_name: 'マルマルスーパー 渋 谷 店',
       payment_method: 'credit_card',
       status: 'completed',
       subtotal: 529,
@@ -252,7 +254,7 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
     )
     raw_response['authorization'] = SECRET_SENTINEL
     stub_ocr_client(raw_response)
-    stub_ai_client(ai_result_for(case_config))
+    stub_ai_client(ai_result_for(case_config), expected_store_name: case_config[:expected_store_name])
 
     receipt = create(:receipt, :processing, :with_image)
     run = Receipts::Processing.start(receipt: receipt, source: 'upload').run
@@ -288,12 +290,21 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
     end
   end
 
-  def stub_ai_client(ai_result)
+  def stub_ai_client(ai_result, expected_store_name: nil)
     allow(Ai::Client).to receive(:new) do |**_options|
       client = instance_double(Ai::Client)
-      allow(client).to receive(:call) do |_input, before_provider_call: nil|
+      allow(client).to receive(:call) do |input, before_provider_call: nil|
         before_provider_call&.call
-        ai_result.deep_dup
+        result = ai_result.deep_dup
+        if expected_store_name
+          expected = Analysis.normalize_compact_store_name_candidate(expected_store_name).to_s.downcase
+          matching_options = input.fetch(:store).fetch(:name_options).fetch(:options).select do |option|
+            Analysis.normalize_compact_store_name_candidate(option[:value]).to_s.downcase == expected
+          end
+          expect(matching_options.size).to eq(1)
+          result[:meta][:store_name_selection] = { decision: 'select', option_id: matching_options.sole.fetch(:option_id) }
+        end
+        result
       end
       client
     end
@@ -330,6 +341,7 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
   def verify_receipt_result(receipt, case_config)
     aggregate_failures 'receipt and children' do
       expect(receipt.status).to eq(case_config.fetch(:status))
+      expect(receipt.store_name).to eq(case_config[:expected_store_name]) if case_config[:expected_store_name]
       expect(receipt.processing_error_code).to be_nil
       expect(receipt.subtotal_amount).to eq(case_config.fetch(:subtotal))
       expect(receipt.tax_amount).to eq(case_config.fetch(:tax))

@@ -67,6 +67,7 @@ module Ai
     def build_store_payload
       {
         store_name: candidate_value(:store_name),
+        name_options: store_name_options,
         store_address: candidate_value(:store_address),
         store_phone_number: candidate_value(:store_phone_number),
         customer_facing_store_candidates: customer_facing_store_candidates,
@@ -83,6 +84,13 @@ module Ai
         purchased_at_candidates: purchased_at_candidates,
         purchase_context_lines: purchase_context_lines
       }.compact
+    end
+
+    def store_name_options
+      options = Analysis.store_name_options(ocr_result: ocr_result)
+      options.slice(:schema_version, :checksum, :truncated, :invalid).merge(
+        options: options[:options].map { |option| option.slice(:option_id, :value, :candidate_ids, :line_indexes) }
+      )
     end
 
     def build_payment_payload

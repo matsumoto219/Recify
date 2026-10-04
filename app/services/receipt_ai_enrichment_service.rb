@@ -64,6 +64,7 @@ class ReceiptAiEnrichmentService
 
     result = call_ai_client(input)
     annotate_ai_name_completion!(result)
+    bind_store_name_selection!(result, input)
 
     if ai_service_healthy_result?(result)
       ExternalServices.mark_success!(:ai)
@@ -137,6 +138,18 @@ class ReceiptAiEnrichmentService
     return unless meta.respond_to?(:to_h)
 
     meta.to_h.with_indifferent_access[:final_error_detail].presence
+  end
+
+  def bind_store_name_selection!(result, input)
+    return unless result.is_a?(Hash) && result[:success] == true
+
+    store = input[:store]
+    return unless store.is_a?(Hash) && store[:name_options].is_a?(Hash)
+
+    meta = result[:meta] || {}
+    result[:meta] = meta.merge(
+      store_name_selection: Analysis.store_name_selection(meta[:store_name_selection], options: store[:name_options])
+    )
   end
 
   def provider_error_detail_from_exception(error)

@@ -48,6 +48,46 @@ RSpec.describe ReceiptAiEnrichmentService do
   end
 
   describe '.call' do
+    context '店舗名候補の選択' do
+      let(:name_options) do
+        { checksum: 'a' * 64, options: [ { option_id: 'store_option_0123456789abcdef0123456789abcdef', value: 'サンプルコンビニ' } ] }
+      end
+      let(:selection_input) { { store: { name_options: name_options } } }
+
+      before do
+        allow(Ai::PromptBuilder).to receive(:build).and_return(selection_input)
+        allow(client).to receive(:call).with(selection_input).and_return(successful_ai_result)
+      end
+
+      it '同じ1回の呼び出しで返った実在IDを入力候補集合へbindする' do
+        successful_ai_result[:meta] = {
+          store_name_selection: { decision: 'select', option_id: 'store_option_0123456789abcdef0123456789abcdef' }
+        }
+
+        result = described_class.call(valid_ocr_result)
+
+        expect(client).to have_received(:call).once
+        expect(result.dig(:meta, :store_name_selection)).to eq(
+          decision: 'select', option_id: 'store_option_0123456789abcdef0123456789abcdef', options_checksum: 'a' * 64
+        )
+        expect(result.dig(:receipt_attributes, :payment_method)).to eq('credit_card')
+      end
+
+      it '未知IDは店舗選択だけを無効化し通常AI結果を維持する' do
+        successful_ai_result[:meta] = {
+          store_name_selection: { decision: 'select', option_id: 'store_option_other' }
+        }
+
+        result = described_class.call(valid_ocr_result)
+
+        expect(result[:success]).to be(true)
+        expect(result[:needs_review]).to be(false)
+        expect(result.dig(:meta, :store_name_selection)).to eq(decision: 'invalid', options_checksum: 'a' * 64)
+        expect(result[:receipt_items_attributes]).to eq(successful_ai_result[:receipt_items_attributes])
+        expect(ExternalServices).not_to have_received(:mark_failure!)
+      end
+    end
+
     context '正常系' do
       it '指定されたruntime configをAI clientへ固定して渡す' do
         runtime_config = ExternalServices.runtime_config_snapshot.ai

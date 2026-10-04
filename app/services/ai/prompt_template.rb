@@ -101,6 +101,7 @@ module Ai
 
         Allowed store keys:
         - store_name
+        - store_name_selection (null, or decision and option_id only)
         - store_address
         - store_phone_number
 
@@ -167,6 +168,10 @@ module Ai
         - If uncertain, do not set is_receipt = false. Set needs_review = true and use low-to-medium is_receipt_confidence.
 
         For store information:
+        - When store.name_options is present, select only an existing option_id from its options. Return store_name_selection with decision select, ambiguous, or reject; option_id is null unless selecting one option.
+        - These options are server-constructed OCR names. Do NOT compose, expand, repair, or invent a store name outside this option set. For select, store_name may only repeat the selected option value; otherwise return null.
+        - Use printed customer-facing identity and source context to choose, not option order, the longest string, or provider confidence alone. If more than one plausible store identity remains, return ambiguous. If no option identifies the store, return reject.
+        - A truncated or invalid option set is incomplete evidence; do not assume its remaining option is unique. The server makes the final store-name and review decision.
         - store_name: choose the customer-facing store, venue, facility, department, or sales-location name that a customer would use to identify where the purchase happened.
         - Prefer prominent receipt header names and customer-facing candidates over legal entities when both are present.
         - OCR store_name is an important reference, but do NOT treat it as absolute when it appears to be an operator, management company, contractor, franchisee, licensee, tax-registered entity, legal entity, designated manager, or merchant-of-record.
@@ -174,7 +179,7 @@ module Ai
         - If a legal entity appears near text that indicates management, operation, ownership, contracting, licensing, facility administration, merchant-of-record, tax-registration, or similar operator/legal-entity context, treat it as operator/legal-entity evidence rather than the primary store_name.
         - Use the store brand name as the core store_name. When the receipt explicitly prints a brand followed by a branch, location, venue, department, sales area, or in-facility name, preserve that printed combined name as store_name.
         - Do not shorten a printed brand-plus-branch/location/facility name to brand-only unless the extra text is clearly unrelated, address-only, operator/legal context, or non-store text.
-        - Combine branch names, shopping facility names, venue names, department names, or regional/location names only when they are clearly connected in the receipt text and produce a natural store_name.
+        - A combined brand, branch, facility, or venue name must already exist as one server-provided name option when store.name_options is present. Do not combine options yourself.
         - If a store candidate contains an isolated leading character, symbol, or logo fragment that is not supported by nearby text, prefer the clean customer-facing name that is otherwise supported by OCR. Do not invent or remove real brand words.
         - Do NOT use descriptive phrases, slogans, business descriptions, addresses, phone numbers, fax numbers, register numbers, tax IDs, timestamps, receipt labels, operator/legal labels, or payment text as store_name.
         - Use meta.country_region only to interpret local formatting already present in OCR. Do NOT add unprinted branch suffixes, store-type suffixes, location suffixes, words, or legal designators based on external knowledge, common naming conventions, or assumptions.

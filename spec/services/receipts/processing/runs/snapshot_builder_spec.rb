@@ -1,6 +1,74 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
+  it 'AI店舗選択のIDと候補集合checksumを汎用文字列短縮せず保持する' do
+    selection = {
+      decision: 'select', option_id: 'store_option_0123456789abcdef0123456789abcdef', options_checksum: 'a' * 64
+    }
+    allow(described_class).to receive(:snapshot_string_max_bytes).and_return(16)
+
+    snapshot = described_class.ai_normalized_result_snapshot(success: true, meta: { store_name_selection: selection })
+
+    expect(snapshot.dig('meta', 'store_name_selection')).to eq(selection.deep_stringify_keys)
+  end
+
+  it 'AI店舗選択の不正な自由payloadをsnapshotへ保存しない' do
+    snapshot = described_class.ai_normalized_result_snapshot(
+      success: true, meta: { store_name_selection: { decision: 'select', raw_text: 'private text' } }
+    )
+
+    expect(snapshot.dig('meta', 'store_name_selection')).to eq('decision' => 'invalid')
+    expect(snapshot.to_json).not_to include('private text')
+  end
+
+  describe 'store name source evidence' do
+    let(:store_evidence) do
+      {
+        schema_version: 'store_name_evidence_v1', truncated: false, invalid: false,
+        candidates: [
+          { candidate_id: 'merchant_name', text: 'Sample Store', source: 'merchant_name',
+            source_path: 'documents[0].fields.MerchantName', confidence: 0.87, span_state: 'missing' },
+          { candidate_id: 'line_1', text: '中央店', source: 'line', source_path: 'lines[1]',
+            line_index: 1, span_state: 'missing' }
+        ]
+      }
+    end
+
+    it 'preserves full source identities through generic string limits and OCR rehydration' do
+      allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
+      original = { success: true, lines: [ 'Sample Store', '中央店' ], candidates: { store_name_evidence: store_evidence } }
+      snapshot = described_class.ocr_result_snapshot(original)
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(JSON.parse(snapshot.to_json))
+      repeated = described_class.ocr_result_snapshot(restored)
+
+      aggregate_failures do
+        expect(snapshot.dig('candidates', 'store_name_evidence')).to eq(store_evidence.deep_stringify_keys)
+        expect(repeated.dig('candidates', 'store_name_evidence')).to eq(store_evidence.deep_stringify_keys)
+      end
+    end
+
+    it 'marks snapshot candidate clipping instead of treating its subset as complete' do
+      allow(described_class).to receive(:snapshot_store_candidates_max).and_return(1)
+      snapshot = described_class.ocr_result_snapshot(candidates: { store_name_evidence: store_evidence })
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+      expect(restored.dig(:candidates, 'store_name_evidence')).to include('truncated' => true, 'invalid' => false)
+      expect(restored.dig(:candidates, 'store_name_evidence', 'candidates').size).to eq(1)
+    end
+
+    it 'does not expose unknown fields or silently restore malformed evidence as legacy data' do
+      store_evidence[:raw_response] = 'not retained'
+      snapshot = described_class.ocr_result_snapshot(candidates: { store_name_evidence: store_evidence })
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+      aggregate_failures do
+        expect(snapshot.to_json).not_to include('not retained')
+        expect(restored.dig(:candidates, 'store_name_evidence')).to include('invalid' => true, 'candidates' => [])
+        expect(described_class.ocr_result_snapshot(candidates: {}).fetch('candidates')).not_to have_key('store_name_evidence')
+      end
+    end
+  end
+
   def destination_ocr_result
     raw_json = JSON.parse(
       Rails.root.join('spec/fixtures/ocr/ocr_azure_measurement_line_group_destination_anonymized.json').read

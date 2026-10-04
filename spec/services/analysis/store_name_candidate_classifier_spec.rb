@@ -1,6 +1,28 @@
 require 'rails_helper'
 
 RSpec.describe Analysis::StoreNameCandidateClassifier do
+  it '注入profileの語彙とscript規則を使用し日本語のdefault判定を混ぜない' do
+    replacement = double(
+      store_legal_entity_pattern: /\bExampleEntity\b/,
+      store_local_script_pattern: /[Ω]/,
+      store_isolated_logo_fragment_pattern: /\A[Ω!]\z/
+    )
+    classifier = described_class.new(profile: replacement)
+
+    expect(classifier.legal_entity_name?('ExampleEntity Sample')).to be(true)
+    expect(classifier.legal_entity_name?('株式会社サンプル')).to be(false)
+    expect(classifier.normalize_compact_name('Ω Shop')).to eq('ΩShop')
+    expect(classifier.normalize_compact_name('サンプル 店')).to eq('サンプル 店')
+    expect(classifier.isolated_logo_fragment?('Ω')).to be(true)
+    expect(classifier.isolated_logo_fragment?('プ')).to be(false)
+  end
+
+  it 'invalid encodingや不正型を候補文字列へ変換しない' do
+    expect(described_class.normalize_name("\xFF".b)).to be_nil
+    expect(described_class.normalize_name({ name: 'private' })).to be_nil
+    expect(described_class.normalize_name('Sample'.b)).to eq('Sample')
+  end
+
   describe '.customer_facing_heading_candidates' do
     it 'ロゴ由来の孤立1文字を見出し候補へ含めず、後続の自然な店名候補を使う' do
       lines = [
@@ -121,11 +143,13 @@ RSpec.describe Analysis::StoreNameCandidateClassifier do
     it '店舗名ではなく広告文・営業案内として扱う行を判定する' do
       aggregate_failures do
         expect(described_class.store_message_line?('毎日安い!この価格!')).to be(true)
+        expect(described_class.store_message_line?('毎日の暮らしに、便利をお届け')).to be(true)
         expect(described_class.store_message_line?('プロの品質とプロの価格')).to be(true)
         expect(described_class.store_message_line?('営業時間AM9:00〜PM9:00')).to be(true)
         expect(described_class.store_message_line?('Open Daily 9:00-21:00')).to be(true)
         expect(described_class.store_message_line?('サンプルスーパー 東京中央店')).to be(false)
         expect(described_class.store_message_line?('SampleMart Downtown')).to be(false)
+        expect(described_class.store_message_line?('暮らしのサンプル商店')).to be(false)
       end
     end
   end

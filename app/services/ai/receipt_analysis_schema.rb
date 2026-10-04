@@ -46,9 +46,17 @@ module Ai
       def store_schema
         object_schema(
           "store_name" => nullable_string,
+          "store_name_selection" => store_name_selection_schema,
           "store_address" => nullable_string,
           "store_phone_number" => nullable_string
         )
+      end
+
+      def store_name_selection_schema
+        object_schema(
+          "decision" => { "type" => "string", "enum" => %w[select ambiguous reject] },
+          "option_id" => nullable_string
+        ).merge("type" => [ "object", "null" ])
       end
 
       def purchase_schema

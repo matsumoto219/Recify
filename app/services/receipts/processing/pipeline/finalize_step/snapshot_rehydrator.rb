@@ -73,6 +73,9 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
 
     def rehydrate_ocr_candidates(snapshot)
       candidates = normalized_hash(snapshot[:candidates]).dup
+      if candidates.key?(:store_name_evidence)
+        candidates[:store_name_evidence] = Analysis.store_name_evidence(candidates[:store_name_evidence])
+      end
       basis = candidates.delete(:tax_detail_amount_basis)
       counts = normalized_hash(normalized_hash(snapshot[:candidate_counts])[:tax_details])
       count = Array(candidates[:tax_details]).size
