@@ -484,6 +484,7 @@ class ReceiptsController < ApplicationController
       receipt: @receipt,
       submitted_params: submitted_params,
       purchase_inputs_changed: @receipt_form_purchase_inputs_changed,
+      tax_detail_diagnostic: receipt_form_tax_detail_diagnostic,
       adjustment_tax_detail_evidence_stale: receipt_form_adjustment_tax_detail_evidence_stale?,
       adjustment_absence_confirmed: @receipt_form_adjustment_absence_confirmed,
       invalid_item_source: @receipt_form_invalid_item_source == true,
@@ -710,14 +711,11 @@ class ReceiptsController < ApplicationController
   end
 
   def receipt_form_adjustment_tax_detail_evidence_stale?
-    if defined?(@receipt_form_adjustment_tax_detail_evidence_stale)
-      return @receipt_form_adjustment_tax_detail_evidence_stale
-    end
-    return false unless @receipt&.persisted?
-    return false if @receipt.receipt_tax_details.empty?
+    @receipt_form_adjustment_tax_detail_evidence_stale == true
+  end
 
-    result = calculate_receipt_amounts({}, :edit_save, false, amount_receipt_tax_details(:edit_save))
-    Array(result[:blocking_inconsistencies]).map(&:to_sym).include?(:tax_detail_mismatch)
+  def receipt_form_tax_detail_diagnostic
+    @receipt_form_tax_detail_diagnostic ||= Receipts::TaxDetailDiagnosticQuery.call(receipt: @receipt)
   end
 
   def prepare_upload_page_presenter
@@ -996,6 +994,7 @@ class ReceiptsController < ApplicationController
 
   def render_stale_edit_conflict(submitted_params: nil)
     @receipt.reload
+    @receipt_form_tax_detail_diagnostic = nil
     @receipt_form_adjustment_absence_confirmed = false
     @receipt.errors.add(:base, t("receipts.form.errors.stale_edit"))
     prepare_receipt_form_presenter(submitted_params: @receipt_form_submitted_params || submitted_params)

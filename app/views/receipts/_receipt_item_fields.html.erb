@@ -26,6 +26,11 @@
   item_row_dom_key = item.persisted? ? item.id : item_form.object_name.to_s.gsub(/[^a-zA-Z0-9_-]/, "-")
   item_details_id = "receipt-item-#{item_row_dom_key}-details"
   pricing_source_ui_mode = row_state.pricing_source_ui_mode
+  saved_tax_inclusion = item.attribute_in_database(row_state.active_tax_inclusion_field) if item.persisted?
+  tax_inclusion_unconfirmed = local_assigns.fetch(:tax_detail_diagnostic_unavailable, false) && item.persisted? &&
+    (item.pricing_source_kind.nil? || %w[count_unit_price explicit_line_total].include?(item.pricing_source_kind)) &&
+    !ReceiptCalculationSettings::TAX_INCLUSIONS.include?(saved_tax_inclusion) &&
+    !item.receipt.legacy_gross_item_projection?(pricing_source_kind: item.pricing_source_kind)
   item_details_open = row_state.pricing_source_review?
   pricing_source_details_open = local_assigns.fetch(:pricing_source_details_open, false) || item_details_open
 %>
@@ -51,6 +56,7 @@
          <% if item_target_id.present? %> id="<%= item_target_id %>" data-receipt-review-item-row="true"<% end %>
          data-receipt-form-target="itemRow"
          data-receipt-form-active-pricing-mode="<%= pricing_source_ui_mode %>"
+         data-receipt-form-tax-inclusion-fallback="<%= tax_inclusion_unconfirmed %>"
          data-receipt-form-explicit-line-total-source-missing="<%= row_state.explicit_line_total_source_missing? %>"
          data-receipt-form-has-persisted-absolute-discount-source="<%= row_state.persisted_absolute_discount_source? %>"
          data-receipt-form-has-persisted-explicit-positive-discount-rate-source="<%= row_state.persisted_explicit_positive_discount_rate_source? %>"
@@ -413,11 +419,13 @@
                           full_width: true,
                           wrapper_class: "md:w-auto",
                           data: {
-                            action: "change->receipt-form#itemTaxInclusionChanged",
+                            action: "change->receipt-form#itemTaxInclusionChanged click->receipt-form#itemTaxInclusionClicked",
                             receipt_form_target: "itemTaxInclusionControl"
                           } %>
                     <p class="text-xs leading-relaxed token-text-muted" data-receipt-tax-inclusion-description><%= t("receipts.item_fields.input_tax_inclusion_note") %></p>
-                    <% if row_state.tax_inclusion_fallback? %>
+                    <% if tax_inclusion_unconfirmed %>
+                      <p class="text-xs leading-relaxed token-text-muted"><%= t("receipts.item_fields.input_tax_inclusion_unconfirmed") %></p>
+                    <% elsif row_state.tax_inclusion_fallback? %>
                       <p class="text-xs leading-relaxed token-text-muted"><%= t("receipts.form.calculation_settings.value_fallback") %></p>
                     <% end %>
                   </div>

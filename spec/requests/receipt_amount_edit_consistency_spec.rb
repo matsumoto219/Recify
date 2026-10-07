@@ -914,7 +914,7 @@ RSpec.describe 'Receipt amount edit consistency', type: :request do
     receipt.reload
 
     aggregate_failures do
-      expect(form['data-receipt-form-adjustment-tax-detail-evidence-stale-value']).to eq('true')
+      expect(form['data-receipt-form-tax-detail-diagnostic-state-value']).to eq('unavailable')
       expect(response).to have_http_status(:redirect)
       expect(receipt.attributes).to include(
         'subtotal_amount' => 110,

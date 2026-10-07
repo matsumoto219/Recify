@@ -262,6 +262,7 @@ RSpec.describe "Receipt form Stimulus controller" do
     adjustments: [],
     adjustment_tax_detail_rates: [],
     adjustment_tax_detail_evidence_stale: false,
+    tax_detail_diagnostic_state: nil,
     purchase_inputs_changed: false,
     purchase_input_baseline_trusted: nil,
     initial_receipt_amounts: nil,
@@ -282,11 +283,16 @@ RSpec.describe "Receipt form Stimulus controller" do
     receipt_total_max: 999_999_999,
     receipt_tax_max: 999_999_999,
     capture_preview_unavailable: false,
+    capture_payment_sync: false,
     capture_line_displays: false,
     capture_source_displays: false,
     validate_numeric_inputs: false,
-    sync_initial_pricing_previews: false
+    sync_initial_pricing_previews: false,
+    confirm_first_tax_inclusion_after_change: false
   )
+    diagnostic_state = tax_detail_diagnostic_state ||
+      (adjustment_tax_detail_rates.empty? ? 'not_applicable' : 'consistent')
+
     run_controller_script(<<~JAVASCRIPT)
       const itemDefinitions = #{items.to_json}
       const adjustmentDefinitions = #{adjustments.to_json}
@@ -347,9 +353,10 @@ RSpec.describe "Receipt form Stimulus controller" do
           inputs.lineTotalInput.dataset.originalDiscountRate = String(definition.persistedDiscountRate ?? definition.discountRate ?? '')
         }
 
-        return {
+        const row = {
           dataset: {
             receiptFormActivePricingMode: String(definition.pricingSourceKind ?? 'unclassified'),
+            receiptFormTaxInclusionFallback: String(definition.taxInclusionFallback ?? false),
             receiptFormHasPersistedAbsoluteDiscountSource: String(definition.hasAbsoluteDiscountSource ?? false)
           },
           inputs,
@@ -362,6 +369,16 @@ RSpec.describe "Receipt form Stimulus controller" do
             return selector.includes('lineTotalDisplay') ? lineTotalDisplays : []
           }
         }
+        if (definition.hasTaxInclusionControl) {
+          const radios = ['gross', 'net'].map((value) => ({
+            type: 'radio', value, checked: value === (definition.taxInclusionChecked ?? 'gross')
+          }))
+          inputs.itemTaxInclusionControl = {
+            closest: () => row,
+            querySelector: (selector) => selector === 'input:checked' ? radios.find((radio) => radio.checked) : null
+          }
+        }
+        return row
       })
       const controller = Object.create(ReceiptFormController.prototype)
       const adjustmentRows = adjustmentDefinitions.map((definition) => {
@@ -395,6 +412,7 @@ RSpec.describe "Receipt form Stimulus controller" do
         paymentRowTargets: { value: [] },
         adjustmentTaxDetailRatesValue: { value: #{adjustment_tax_detail_rates.to_json} },
         adjustmentTaxDetailEvidenceStaleValue: { value: #{adjustment_tax_detail_evidence_stale.to_json} },
+        taxDetailDiagnosticStateValue: { value: #{diagnostic_state.to_json} },
         purchaseInputsChangedValue: { value: #{purchase_inputs_changed.to_json} },
         receiptTaxBasisValue: { value: #{basis.to_json} },
         unsetLabelValue: { value: 'Unset' },
@@ -431,7 +449,14 @@ RSpec.describe "Receipt form Stimulus controller" do
       if (#{capture_preview_unavailable.to_json}) {
         controller.renderUnavailablePreview = () => {
           previewUnavailable = true
-          if (#{capture_source_displays.to_json}) ReceiptFormController.prototype.renderUnavailablePreview.call(controller)
+          if (#{(capture_source_displays || capture_payment_sync).to_json}) ReceiptFormController.prototype.renderUnavailablePreview.call(controller)
+        }
+      }
+      if (#{capture_payment_sync.to_json}) {
+        const recalculate = controller.recalculate
+        controller.recalculate = (...args) => {
+          previewUnavailable = false
+          recalculate.call(controller, ...args)
         }
       }
       controller.syncPaymentSummaryLayout = () => {}
@@ -473,8 +498,8 @@ RSpec.describe "Receipt form Stimulus controller" do
           }))
         }
         if (adjustmentDefinitions.length > 0) {
-          amounts.paymentAdjustmentTotal = paymentAdjustmentSnapshot.adjustmentTotal
-          amounts.finalPaymentTotal = paymentAdjustmentSnapshot.finalPaymentTotal
+          amounts.paymentAdjustmentTotal = paymentAdjustmentSnapshot?.adjustmentTotal ?? null
+          amounts.finalPaymentTotal = paymentAdjustmentSnapshot?.finalPaymentTotal ?? null
         }
         if (itemDefinitions[0].captureOriginalLineTotal) {
           amounts.sourceOriginalLineTotal = Number(rows[0].inputs.originalLineTotalInput.value)
@@ -487,6 +512,7 @@ RSpec.describe "Receipt form Stimulus controller" do
           amounts.taxRateSummary = taxRateSummary.textContent
         }
         if (#{capture_preview_unavailable.to_json}) amounts.previewUnavailable = previewUnavailable
+        if (#{capture_payment_sync.to_json}) amounts.paymentSyncAvailable = Number.isFinite(controller.currentFinalPaymentTotal())
 
         return amounts
       }
@@ -505,6 +531,7 @@ RSpec.describe "Receipt form Stimulus controller" do
       const changedQuantityUnit = #{changed_quantity_unit.to_json}
       let doubled
       let restored
+      let confirmed
       let result
       if (changedPriceBeforeDiscount !== null) {
         const initialPrice = rows[0].inputs.priceInput.value
@@ -535,6 +562,11 @@ RSpec.describe "Receipt form Stimulus controller" do
         rows[0].inputs.quantityInput.value = String(changedQuantity)
         controller.recalculate()
         doubled = snapshot()
+        if (#{confirm_first_tax_inclusion_after_change.to_json}) {
+          const control = rows[0].inputs.itemTaxInclusionControl
+          controller.itemTaxInclusionClicked({ currentTarget: control, target: control.querySelector('input:checked') })
+          confirmed = snapshot()
+        }
         rows[0].inputs.quantityInput.value = initialQuantity
         controller.recalculate()
         restored = snapshot()
@@ -560,6 +592,7 @@ RSpec.describe "Receipt form Stimulus controller" do
       }
 
       if (!result) result = { initial, doubled, restored }
+      if (confirmed) result.confirmed = confirmed
       const changedFirstTaxRate = #{changed_first_tax_rate.to_json}
       if (changedFirstTaxRate !== null) {
         rows[0].inputs.taxRateInput.value = String(changedFirstTaxRate)
@@ -2403,7 +2436,8 @@ RSpec.describe "Receipt form Stimulus controller" do
       basis: "external",
       items:,
       adjustments:,
-      adjustment_tax_detail_rates: [ 8 ]
+      adjustment_tax_detail_rates: [ 8 ],
+      tax_detail_diagnostic_state: "mismatch"
     )
 
     aggregate_failures do
@@ -2413,7 +2447,7 @@ RSpec.describe "Receipt form Stimulus controller" do
       expect(external["initial"]).to include("subtotal" => 110, "tax" => 11, "total" => 121)
       expect(external["doubled"]).to include("subtotal" => 210, "tax" => 21, "total" => 231)
       expect(external["restored"]).to eq(external["initial"])
-      expect(incompatible["initial"]).to include("subtotal" => 110, "tax" => 10, "total" => 120)
+      expect(incompatible["initial"]).to include("subtotal" => 110, "tax" => 11, "total" => 121)
     end
   end
 
@@ -2445,6 +2479,272 @@ RSpec.describe "Receipt form Stimulus controller" do
     aggregate_failures do
       expect(result["initial"]).to include("subtotal" => 110, "tax" => 11, "total" => 121)
       expect(result["restored"]).to eq(result["initial"])
+    end
+  end
+
+  it "does not treat an unavailable tax-detail diagnosis as permission to infer a purchase adjustment rate" do
+    items = [ { price: 100, lineTotal: 100, taxRate: 10 } ]
+    unresolved_adjustment = [ { amount: 10, taxRate: nil, effect: "purchase_adjustment", sign: "surcharge" } ]
+    explicit_zero_adjustment = [ { amount: 10, taxRate: 0, effect: "purchase_adjustment", sign: "surcharge" } ]
+    payment_adjustment = [ { amount: 10, taxRate: nil, effect: "payment_adjustment", sign: "surcharge" } ]
+
+    unavailable = run_amount_round_trip(
+      basis: "external",
+      items:,
+      adjustments: unresolved_adjustment,
+      adjustment_tax_detail_rates: [ 10 ],
+      tax_detail_diagnostic_state: "unavailable",
+      capture_preview_unavailable: true
+    )
+    unknown = run_amount_round_trip(
+      basis: "external",
+      items:,
+      adjustments: unresolved_adjustment,
+      adjustment_tax_detail_rates: [ 10 ],
+      tax_detail_diagnostic_state: "unknown",
+      capture_preview_unavailable: true
+    )
+    explicit_zero = run_amount_round_trip(
+      basis: "external",
+      items:,
+      adjustments: explicit_zero_adjustment,
+      adjustment_tax_detail_rates: [ 10 ],
+      tax_detail_diagnostic_state: "unavailable",
+      capture_preview_unavailable: true
+    )
+    payment = run_amount_round_trip(
+      basis: "external",
+      items:,
+      adjustments: payment_adjustment,
+      adjustment_tax_detail_rates: [ 10 ],
+      tax_detail_diagnostic_state: "unavailable",
+      capture_preview_unavailable: true
+    )
+
+    aggregate_failures do
+      expect(unavailable.dig("initial", "previewUnavailable")).to be(true)
+      expect(unknown.dig("initial", "previewUnavailable")).to be(true)
+      expect(explicit_zero["initial"]).to include("previewUnavailable" => false, "tax" => 10, "total" => 120)
+      expect(payment["initial"]).to include("previewUnavailable" => false, "total" => 110, "finalPaymentTotal" => 120)
+    end
+  end
+
+  it "keeps the single item tax rate available when the saved tax details are mismatched or absent" do
+    items = [ { price: 100, lineTotal: 100, taxRate: 10 } ]
+    adjustments = [ { amount: 10, taxRate: nil, effect: "purchase_adjustment", sign: "surcharge" } ]
+    mismatched = run_amount_round_trip(
+      basis: "external",
+      items:,
+      adjustments:,
+      adjustment_tax_detail_rates: [ 8 ],
+      tax_detail_diagnostic_state: "mismatch",
+      capture_preview_unavailable: true
+    )
+    absent = run_amount_round_trip(
+      basis: "external",
+      items:,
+      adjustments:,
+      tax_detail_diagnostic_state: "not_applicable",
+      capture_preview_unavailable: true
+    )
+
+    aggregate_failures do
+      expect(mismatched["initial"]).to include("previewUnavailable" => false, "tax" => 11, "total" => 121)
+      expect(absent["initial"]).to include("previewUnavailable" => false, "tax" => 11, "total" => 121)
+    end
+  end
+
+  it "requires an explicit item tax choice before previewing changed amounts from an unresolved saved basis" do
+    item = {
+      pricingSourceKind: "count_unit_price",
+      price: 100,
+      quantity: 1,
+      lineTotal: 100,
+      taxRate: 10,
+      hasTaxInclusionControl: true,
+      taxInclusionChecked: "gross",
+      taxInclusionFallback: true
+    }
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [ item ],
+      changed_quantity: 2,
+      tax_detail_diagnostic_state: "unavailable",
+      capture_preview_unavailable: true,
+      capture_payment_sync: true,
+      capture_source_displays: true,
+      confirm_first_tax_inclusion_after_change: true
+    )
+
+    aggregate_failures do
+      expect(result["doubled"]).to include("previewUnavailable" => true, "paymentSyncAvailable" => false)
+      expect(result["confirmed"]).to include("previewUnavailable" => false, "total" => 200, "paymentSyncAvailable" => true)
+      expect(result["restored"]).to include("previewUnavailable" => false, "total" => 100)
+    end
+  end
+
+  it "keeps an unclassified saved item's fallback tax basis out of the amount preview" do
+    result = run_amount_round_trip(
+      basis: "internal",
+      items: [ {
+        pricingSourceKind: "unclassified",
+        price: 100,
+        quantity: 1,
+        lineTotal: 100,
+        taxRate: 10,
+        hasTaxInclusionControl: true,
+        taxInclusionChecked: "gross",
+        taxInclusionFallback: true
+      } ],
+      changed_quantity: 2,
+      tax_detail_diagnostic_state: "unavailable",
+      capture_preview_unavailable: true,
+      capture_payment_sync: true
+    )
+
+    expect(result["doubled"]).to include("previewUnavailable" => true, "paymentSyncAvailable" => false)
+  end
+
+  it "keeps confirmed and zero-amount item previews available" do
+    item = {
+      pricingSourceKind: "count_unit_price",
+      price: 100,
+      lineTotal: 100,
+      taxRate: 10,
+      hasTaxInclusionControl: true,
+      taxInclusionChecked: "gross",
+      taxInclusionFallback: false
+    }
+    confirmed = run_amount_round_trip(
+      basis: "internal", items: [ item ], changed_quantity: 2,
+      capture_preview_unavailable: true, capture_payment_sync: true
+    )
+    zero_amount = run_amount_round_trip(
+      basis: "internal", items: [ item.merge(price: 0, lineTotal: 0, taxInclusionFallback: true) ],
+      changed_quantity: 2, tax_detail_diagnostic_state: "unavailable", capture_preview_unavailable: true
+    )
+    no_source = run_amount_round_trip(
+      basis: "internal", items: [ item.merge(price: nil, lineTotal: nil, taxInclusionFallback: true) ],
+      changed_quantity: 2, tax_detail_diagnostic_state: "unavailable", capture_preview_unavailable: true
+    )
+    zero_tax = run_amount_round_trip(
+      basis: "internal", items: [ item.merge(taxRate: 0, taxInclusionFallback: true) ],
+      changed_quantity: 2, tax_detail_diagnostic_state: "unavailable", capture_preview_unavailable: true
+    )
+    no_tax_details = run_amount_round_trip(
+      basis: "internal", items: [ item.merge(taxInclusionFallback: true) ],
+      changed_quantity: 2, tax_detail_diagnostic_state: "not_applicable", capture_preview_unavailable: true
+    )
+
+    aggregate_failures do
+      expect(confirmed["doubled"]).to include("previewUnavailable" => false, "total" => 200, "paymentSyncAvailable" => true)
+      expect(zero_amount["doubled"]).to include("previewUnavailable" => false, "total" => 0)
+      expect(no_source["doubled"]).to include("previewUnavailable" => false, "total" => 0)
+      expect(zero_tax["doubled"]).to include("previewUnavailable" => false, "total" => 200)
+      expect(no_tax_details["doubled"]).to include("previewUnavailable" => false, "total" => 200)
+    end
+  end
+
+  it "separates an unavailable live preview from the saved total notice and payment sync" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const notice = { hidden: true, classList: { toggle: (_name, hidden) => { notice.hidden = hidden } } }
+      Object.defineProperties(controller, {
+        itemRowTargets: { value: [] },
+        paymentMismatchWarningTargets: { value: [] },
+        syncPaymentAmountButtonTargets: { value: [] },
+        hasTaxRateSummaryTarget: { value: false },
+        hasPreviewUnavailableNoticeTarget: { value: true },
+        previewUnavailableNoticeTarget: { value: notice }
+      })
+      controller.previewAmountTargets = () => []
+      controller.syncPaymentSummaryLayout = () => {}
+      controller.lastFinalPaymentTotal = 121
+
+      controller.renderUnavailablePreview()
+      const unavailable = { noticeHidden: notice.hidden, paymentTotal: controller.lastFinalPaymentTotal }
+      controller.syncPreviewAvailability(true)
+      process.stdout.write(JSON.stringify({ unavailable, restoredNoticeHidden: notice.hidden }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "unavailable" => { "noticeHidden" => false, "paymentTotal" => nil },
+      "restoredNoticeHidden" => true
+    )
+  end
+
+  %w[count_unit_price explicit_line_total].each do |pricing_source_kind|
+    it "disables the initial #{pricing_source_kind} preview and payment sync after a source error" do
+      result = run_controller_script(<<~JAVASCRIPT)
+        const controller = Object.create(ReceiptFormController.prototype)
+        const notice = { hidden: true, classList: { toggle: (_name, hidden) => { notice.hidden = hidden } } }
+        const syncButton = { hidden: false, classList: { add: () => { syncButton.hidden = true } } }
+        const total = { textContent: '¥110', dataset: {} }
+        const payment = { value: '60' }
+        const inputs = {
+          pricingSourceModeInput: { value: #{pricing_source_kind.to_json} },
+          quantityInput: { value: '3' },
+          inputTaxInclusionInput: { value: '' },
+          explicitLineTotalInput: { value: '300' }
+        }
+        const row = {
+          dataset: {},
+          querySelector (selector) {
+            const match = selector.match(/receipt-form-target="([^"]+)"/)
+            return match ? inputs[match[1]] ?? null : null
+          }
+        }
+        Object.defineProperties(controller, {
+          element: { value: { dataset: {} } },
+          itemRowTargets: { value: [row] },
+          paymentRowTargets: { value: [{ querySelector: () => payment }] },
+          paymentMismatchWarningTargets: { value: [] },
+          syncPaymentAmountButtonTargets: { value: [syncButton] },
+          lineTotalDisplayTargets: { value: [] },
+          hasInvalidItemSourceSummaryTarget: { value: true },
+          invalidItemSourceSummaryTarget: { value: { hidden: false } },
+          preserveRecordedAmountsValue: { value: true },
+          hasPreviewUnavailableNoticeTarget: { value: true },
+          previewUnavailableNoticeTarget: { value: notice },
+          hasTotalAmountTarget: { value: true },
+          totalAmountTarget: { value: total },
+          receiptPaymentAmountMaxValue: { value: 999999999 },
+          unsetLabelValue: { value: '—' }
+        })
+        controller.purchaseInputsChangedForPreview = () => true
+        controller.previewRowExcluded = () => false
+        controller.syncPaymentSummaryLayout = () => {}
+        controller.recalculate = () => {}
+
+        controller.captureInitialReceiptAmounts()
+        controller.syncInitialPricingPreviews()
+        controller.syncPaymentAmountToFinal({ preventDefault () {} })
+
+        process.stdout.write(JSON.stringify({
+          noticeHidden: notice.hidden,
+          syncButtonHidden: syncButton.hidden,
+          previewTotal: total.textContent,
+          savedTotal: controller.initialReceiptAmounts.total,
+          paymentTotal: controller.currentFinalPaymentTotal(),
+          paymentInput: payment.value,
+          sourceInputs: Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value]))
+        }))
+      JAVASCRIPT
+
+      expect(result).to eq(
+        "noticeHidden" => false,
+        "syncButtonHidden" => true,
+        "previewTotal" => "—",
+        "savedTotal" => 110,
+        "paymentTotal" => nil,
+        "paymentInput" => "60",
+        "sourceInputs" => {
+          "pricingSourceModeInput" => pricing_source_kind,
+          "quantityInput" => "3",
+          "inputTaxInclusionInput" => "",
+          "explicitLineTotalInput" => "300"
+        }
+      )
     end
   end
 

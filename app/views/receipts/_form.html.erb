@@ -16,6 +16,7 @@
 <% destroyed_receipt_adjustments = form_presenter.destroyed_receipt_adjustments %>
 <% visible_receipt_payments = form_presenter.visible_receipt_payments %>
 <% destroyed_receipt_payments = form_presenter.destroyed_receipt_payments %>
+<% tax_detail_diagnostic_state = form_presenter.tax_detail_diagnostic_state_value %>
 <%= form_with model: receipt,
               html: {
                 id: form_dom_id,
@@ -48,6 +49,7 @@
                   "receipt-form-adjustment-payment-label-pattern-value": form_presenter.adjustment_payment_label_pattern_value,
                   "receipt-form-adjustment-tax-detail-rates-value": form_presenter.adjustment_tax_detail_rates_value.to_json,
                   "receipt-form-adjustment-tax-detail-evidence-stale-value": form_presenter.adjustment_tax_detail_evidence_stale?,
+                  "receipt-form-tax-detail-diagnostic-state-value": tax_detail_diagnostic_state,
                   "receipt-form-purchase-inputs-changed-value": form_presenter.purchase_inputs_changed?,
                   "receipt-form-adjustment-surcharge-kinds-value": form_presenter.adjustment_surcharge_kinds_value,
                   "receipt-form-adjustment-discount-kinds-value": form_presenter.adjustment_discount_kinds_value,
@@ -264,6 +266,7 @@
                       item: item_form.object,
                       new_record: item_form.object.new_record?,
                       row_state: form_presenter.item_row(item_form.object, new_record: item_form.object.new_record?),
+                      tax_detail_diagnostic_unavailable: tax_detail_diagnostic_state == "unavailable",
                       pricing_source_details_open: form_presenter.invalid_item_source? %>
               <% end %>
             <% end %>
@@ -287,6 +290,7 @@
                       item: item_form.object,
                       new_record: true,
                       row_state: form_presenter.item_row(item_form.object, new_record: true),
+                      tax_detail_diagnostic_unavailable: tax_detail_diagnostic_state == "unavailable",
                       pricing_source_details_open: false %>
               <% end %>
             </template>
@@ -547,6 +551,16 @@
               payment_adjustment_total_target: "paymentAdjustmentAmount",
               final_payment_row_target: "finalPaymentRow",
               final_payment_total_target: "finalPaymentAmount" %>
+
+        <div class="hidden rounded-lg border token-border-soft token-bg-card px-4 py-3 text-sm token-text-muted"
+             data-receipt-form-target="previewUnavailableNotice"
+             role="status">
+          <p><%= t("receipts.form.amount_summary.preview_unavailable") %></p>
+          <% saved_total_amount = receipt.attribute_in_database(:total_amount) if receipt.persisted? %>
+          <% unless saved_total_amount.nil? %>
+            <p><%= t("receipts.form.amount_summary.saved_total", amount: receipt_total_amount_display(saved_total_amount)) %></p>
+          <% end %>
+        </div>
 
         <div id="<%= ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW %>" class="scroll-mt-24">
           <%= render "shared/ui/card/receipt_image_card",
