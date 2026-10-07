@@ -51,6 +51,25 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile purchased-at event labels' do
+    it '取引成立・発行・利用期間・再発行の地域語彙を所有する' do
+      roles = described_class.fetch('JPN').ocr_purchased_at_role_patterns
+
+      aggregate_failures do
+        expect('購入日').to match(roles.fetch('transaction'))
+        expect('精算時刻').to match(roles.fetch('settlement'))
+        expect('領収証発行').to match(roles.fetch('issuance'))
+        expect('入庫時刻').to match(roles.fetch('service_start'))
+        expect('出庫時刻').to match(roles.fetch('service_end'))
+        expect('駐車時間').to match(roles.fetch('duration'))
+        expect('再発行').to match(roles.fetch('reference'))
+        expect('精算予定').to match(roles.fetch('reference'))
+        expect('入庫券発行').to match(roles.fetch('reference'))
+        expect('発行').not_to match(described_class.fetch('JPN').analysis_purchase_time_exclusion_pattern)
+      end
+    end
+  end
+
   describe 'JPN profile store name evidence' do
     let(:profile) { described_class.fetch('JPN') }
 

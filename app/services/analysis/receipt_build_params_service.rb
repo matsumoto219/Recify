@@ -35,7 +35,20 @@ module Analysis
           ocr_result: normalized_ocr_result.merge(lines: lines, case_preserved_lines: case_preserved_lines),
           ai_result: normalized_ai_result
         )
-        receipt_attributes = build_receipt_attributes(candidates, ai_receipt_attributes, lines, store_name_resolution[:value])
+        purchased_at_resolution = ReceiptPurchasedAtResolver.resolve(
+          ai_attrs: ai_receipt_attributes,
+          candidates: candidates,
+          lines: lines,
+          profile: profile,
+          source_complete: purchased_at_source_complete?(normalized_ocr_result, lines)
+        )
+        receipt_attributes = build_receipt_attributes(
+          candidates,
+          ai_receipt_attributes,
+          lines,
+          store_name_resolution[:value],
+          purchased_at: purchased_at_resolution[:value]
+        )
         receipt_items_attributes = build_receipt_items_attributes(
           candidates,
           lines,
@@ -146,15 +159,11 @@ module Analysis
         ownership_contract = OwnershipConsistencyGuard.contract_for(tax_allocation_result)
         review_reasons = (
           skipped_negative_adjustment_review_reasons(skipped_negative_items, receipt_adjustments_attributes) +
-          invalid_adjustment_review_reasons + payment_review_reasons + store_name_resolution[:reason_codes]
+          invalid_adjustment_review_reasons + payment_review_reasons + store_name_resolution[:reason_codes] +
+          purchased_at_resolution[:reason_codes]
         ).uniq
         corrections = build_params_corrections(
-          purchased_at_fallback: ReceiptPurchasedAtResolver.fallback_snapshot(
-            ai_attrs: ai_receipt_attributes,
-            candidates: candidates,
-            lines: lines,
-            profile: profile
-          ),
+          purchased_at_fallback: purchased_at_resolution[:fallback],
           tax_rate_correction: tax_rate_correction
         )
 
@@ -174,6 +183,7 @@ module Analysis
           ownership_contract: ownership_contract,
           corrections: corrections,
           store_name_resolution: store_name_resolution.except(:value),
+          purchased_at_resolution: purchased_at_resolution.except(:value, :fallback),
           # OCRで検証したbounded candidateは診断専用。ReceiptItem authorityへは書き込まない。
           reference_pricing_candidates: Array(candidates[:reference_pricing_candidates]).map do |candidate|
             candidate.respond_to?(:deep_symbolize_keys) ? candidate.deep_symbolize_keys : candidate
@@ -202,6 +212,16 @@ module Analysis
 
       def normalized_lines(ocr_result)
         Array(ocr_result[:lines]).map(&:to_s)
+      end
+
+      def purchased_at_source_complete?(ocr_result, lines)
+        truncated = ocr_result.fetch(:truncated, {})
+        return false unless truncated.is_a?(Hash)
+        return false if truncated.key?(:lines) && ![ true, false ].include?(truncated[:lines])
+        return truncated[:lines] != true unless ocr_result.key?(:schema_version)
+
+        ocr_result[:schema_version] == "receipt_analysis_run_ocr_result_v1" &&
+          truncated[:lines] == false && lines.present?
       end
 
       def normalized_case_preserved_lines(ocr_result)
@@ -240,9 +260,8 @@ module Analysis
         }
       end
 
-      def build_receipt_attributes(candidates, ai_receipt_attributes, lines, store_name)
+      def build_receipt_attributes(candidates, ai_receipt_attributes, lines, store_name, purchased_at:)
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
-        purchased_at = ReceiptPurchasedAtResolver.call(ai_attrs:, candidates:, lines:, profile: profile)
 
         {
           store_name: store_name,

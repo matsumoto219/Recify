@@ -274,6 +274,18 @@ module ReceiptAnalysisProfiles
       /\A\s*\d{1,2}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,4}/,
       /\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日?/
     ].freeze
+    OCR_PURCHASED_AT_TIME_PATTERN = /(?<![\d:：])(\d{1,2})\s*(?:[:：]|時)\s*(\d{2})(?:\s*(?:[:：]|分)\s*(\d{2})\s*秒?)?\s*分?(?![\d:：分秒]|[.．]\d)/.freeze
+    OCR_PURCHASED_AT_TIME_CONTINUATION_PATTERN = /\A(?:\d{1,6}[ \t]+)?#{OCR_PURCHASED_AT_TIME_PATTERN}\s*\z/.freeze
+    OCR_PURCHASED_AT_BRIDGE_LINE_PATTERN = /\A\s*レジ\s*\d{1,4}\s*\z/.freeze
+    OCR_PURCHASED_AT_ROLE_PATTERNS = {
+      "reference" => /再発行|再印刷|再プリント|予約|予定|期限|営業時間|販売期間|日次精算|締め|取消|キャンセル|カード承認|与信|注文(?:日時|日|時刻|受付)|受付(?:日時|日|時刻)|(?:入庫|入場|整理|予約)(?:券|票).*発行/i,
+      "duration" => /駐車時間|利用時間|経過時間|滞在時間|所要時間/i,
+      "service_start" => /入庫|入場|利用開始|チェックイン/i,
+      "service_end" => /出庫|退場|利用終了|チェックアウト/i,
+      "settlement" => /精算|決済(?:完了|日時|日|時刻)|支払(?:い)?(?:完了|済|日時|日|時刻)|会計(?:完了|日時|日|時刻)|会計日/i,
+      "transaction" => /購入(?:日時|日|時刻)?|取引(?:日時|日|時刻)|売上(?:日時|日|時刻)|元取引/i,
+      "issuance" => /発行/i
+    }.freeze
     OCR_PAYMENT_METHOD_EXCLUDED_LINE_PATTERN = /お預かり|お預り|預かり|預り|お釣り|おつり|釣銭|つり銭|change|ポイント|point|クーポン|coupon|値引|割引|還元|discount|cashless\s*(?:reward|discount|cashback)|cashback|payment\s*discount/i.freeze
     OCR_PAYMENT_ADJUSTMENT_DISCOUNT_LABEL_PATTERN = /payment\s*discount|cashless\s*(?:reward|discount)|(?:支払(?:時|い)?|お支払(?:い)?|決済|キャッシュレス(?:決済)?)\s*(?:割引|還元)/i.freeze
     OCR_POINT_USAGE_ADJUSTMENT_LABEL_PATTERN = /ポイント\s*(?:利用|支払|払い|決済)|point\s*(?:usage|use|used|redemption|redeemed|payment)|points?\s*(?:used|redeemed|redemption|payment)/i.freeze
@@ -567,7 +579,7 @@ module ReceiptAnalysisProfiles
       /\d{4}[\/\-年]\d{1,2}[\/\-月]\d{1,2}日?/,
       /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{1,2,4}/
     ].freeze
-    ANALYSIS_PURCHASE_TIME_EXCLUSION_PATTERN = /予約|注文|受付|発行|有効期限|期限|期間|販売期間/.freeze
+    ANALYSIS_PURCHASE_TIME_EXCLUSION_PATTERN = /予約|注文|受付|再発行|再印刷|有効期限|期限|期間|販売期間|入庫|出庫|利用開始|利用終了|駐車時間|経過時間/.freeze
     ANALYSIS_PURCHASE_TIME_EXPRESSION_PATTERN = /(?:\A|[^\d])([01]?\d|2[0-3])(?:[:：]|時)([0-5]\d)分?(?:\z|[^\d])/.freeze
 
     ANALYSIS_EXTERNAL_TAX_DESCRIPTION_PATTERN = /外税|税別|税抜|消費税別|別途消費税|exclusive|sales\s*tax/i.freeze
@@ -775,6 +787,22 @@ module ReceiptAnalysisProfiles
 
       def ocr_purchased_at_date_patterns
         OCR_PURCHASED_AT_DATE_PATTERNS
+      end
+
+      def ocr_purchased_at_time_pattern
+        OCR_PURCHASED_AT_TIME_PATTERN
+      end
+
+      def ocr_purchased_at_time_continuation_pattern
+        OCR_PURCHASED_AT_TIME_CONTINUATION_PATTERN
+      end
+
+      def ocr_purchased_at_bridge_line_pattern
+        OCR_PURCHASED_AT_BRIDGE_LINE_PATTERN
+      end
+
+      def ocr_purchased_at_role_patterns
+        OCR_PURCHASED_AT_ROLE_PATTERNS
       end
 
       def ocr_payment_adjustment_discount_label_pattern

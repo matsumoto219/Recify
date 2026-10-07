@@ -614,14 +614,16 @@ RSpec.describe Ocr::ResponseParser do
 
       aggregate_failures do
         expect(structured_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20 18:42')
-        expect(date_only_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20')
-        expect(time_only_result.dig(:candidates, :purchased_at_text)).to eq('18:42')
-        expect(line_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日 18:42')
-        expect(nearby_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日 18:42')
-        expect(fallback_date_only_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日')
+        expect(date_only_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20 18:42')
+        expect(time_only_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20 18:42')
+        expect(line_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20 18:42')
+        expect(nearby_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20 18:42')
+        expect(fallback_date_only_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20')
         expect(fallback_time_only_result.dig(:candidates, :purchased_at_text)).to eq('18:42')
-        expect(noisy_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日 18:42')
-        expect(distant_time_result.dig(:candidates, :purchased_at_text)).to eq('2026年05月20日')
+        expect(noisy_fallback_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20 18:42')
+        expect(distant_time_result.dig(:candidates, :purchased_at_text)).to eq('2026-05-20')
+        expect(date_only_result.dig(:candidates, :purchased_at_evidence, :candidates).first[:precision]).to eq('datetime')
+        expect(fallback_date_only_result.dig(:candidates, :purchased_at_evidence, :candidates).first[:precision]).to eq('date_only')
       end
     end
 

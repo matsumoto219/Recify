@@ -1,149 +1,234 @@
 module Analysis
   class ReceiptPurchasedAtResolver
-    def self.call(ai_attrs:, candidates:, lines:, profile:)
-      new(ai_attrs:, candidates:, lines:, profile:).call
+    PURCHASE_ROLES = %w[transaction settlement issuance unknown].freeze
+    ESTABLISHED_ROLES = %w[transaction settlement].freeze
+
+    class << self
+      def call(**attributes)
+        resolve(**attributes)[:value]
+      end
+
+      def resolve(**attributes)
+        new(**attributes).resolve
+      end
+
+      def fallback_snapshot(**attributes)
+        resolve(**attributes)[:fallback]
+      end
     end
 
-    def self.fallback_snapshot(ai_attrs:, candidates:, lines:, profile:)
-      new(ai_attrs:, candidates:, lines:, profile:).fallback_snapshot
-    end
-
-    def initialize(ai_attrs:, candidates:, lines:, profile:)
-      @ai_attrs = ai_attrs
+    def initialize(ai_attrs:, candidates:, lines:, profile:, source_complete: true)
       @candidates = candidates
       @lines = lines
       @profile = profile
+      @source_complete = source_complete
     end
 
-    def call
-      explicit_ai_value = parse(@ai_attrs[:purchased_at])
-      return explicit_ai_value if explicit_ai_value.present?
+    def resolve
+      return resolution(nil, "missing") unless @profile
 
-      ai_text = @ai_attrs[:purchased_at_text].presence
-      parsed_ai_text = parse(ai_text)
-      return parsed_ai_text if parsed_ai_text.present? && !date_only_text?(ai_text)
+      evidence = source_evidence
+      return resolution(nil, "uncertain") if evidence[:invalid] || !evidence[:complete]
 
-      candidate_text = @candidates[:purchased_at_text].presence
-      parsed_candidate_text = parse(candidate_text)
-      return parsed_candidate_text if parsed_candidate_text.present? && !date_only_text?(candidate_text)
+      available = evidence[:candidates].select do |candidate|
+        PURCHASE_ROLES.include?(candidate[:role]) && candidate[:association] != "invalid"
+      end
+      selected = purchase_events(available)
+      return resolution(nil, "missing") if selected.empty?
 
-      date_text = ai_text.presence || candidate_text
-      parsed_date = parsed_ai_text || parsed_candidate_text
-      return parsed_date unless parsed_date.present? && date_only_text?(date_text)
+      full = selected.select { |candidate| candidate[:precision] == "datetime" }
+      dates = selected.filter_map { |candidate| candidate[:date] }.uniq
+      clock_events = if full.present?
+        selected.reject { |candidate| candidate[:precision] == "time_only" && candidate[:role] == "unknown" }
+      else
+        selected
+      end
+      times = clock_events.filter_map { |candidate| canonical_time(candidate[:time]) }.uniq
+      return resolution(nil, "conflicted") if dates.size > 1
 
-      time_candidate = unique_time_candidate_detail(time_candidate_values)
-      return parsed_date if time_candidate.blank?
+      if full.present?
+        return resolution(date_value(dates.first), "conflicted", precision: "date_only") if times.size > 1
 
-      parse("#{parsed_date.strftime('%Y-%m-%d')} #{time_candidate[:time]}") || parsed_date
-    end
-
-    def fallback_snapshot
-      explicit_ai_value = parse(@ai_attrs[:purchased_at])
-      return { applied: false, source: "ai_purchased_at" } if explicit_ai_value.present?
-
-      ai_text = @ai_attrs[:purchased_at_text].presence
-      parsed_ai_text = parse(ai_text)
-      return { applied: false, source: "ai_purchased_at_text" } if parsed_ai_text.present? && !date_only_text?(ai_text)
-
-      candidate_text = @candidates[:purchased_at_text].presence
-      parsed_candidate_text = parse(candidate_text)
-      if parsed_candidate_text.present? && !date_only_text?(candidate_text)
-        return { applied: false, source: "ocr_purchased_at_text" }
+        candidate = full.first
+        return resolution(
+          datetime_value(candidate),
+          "confirmed",
+          candidate: full.one? ? candidate : nil,
+          precision: "datetime"
+        )
       end
 
-      date_text = ai_text.presence || candidate_text
-      parsed_date = parsed_ai_text || parsed_candidate_text
-      unless parsed_date.present? && date_only_text?(date_text)
-        return {
-          applied: false,
-          reason: "date_candidate_missing_or_not_date_only"
-        }
+      if dates.one?
+        candidate = selected.find { |entry| entry[:date] == dates.first }
+        associated_times = selected.filter_map do |entry|
+          canonical_time(entry[:time]) if entry[:role] != "unknown" && entry[:association] == "exact"
+        end.uniq
+        state = if associated_times.size > 1
+          "conflicted"
+        elsif times.present?
+          "uncertain"
+        else
+          "date_only"
+        end
+        return resolution(date_value(dates.first), state, candidate: candidate, precision: "date_only")
       end
 
-      time_candidate = unique_time_candidate_detail(time_candidate_values)
-      if time_candidate.blank?
-        return {
-          applied: false,
-          reason: "unique_time_candidate_missing",
-          date_text: date_text
-        }
-      end
-
-      result = parse("#{parsed_date.strftime('%Y-%m-%d')} #{time_candidate[:time]}")
-      return { applied: false, reason: "combined_datetime_parse_failed", date_text: date_text } if result.blank?
-
-      {
-        applied: true,
-        source: "ocr_time_candidate",
-        date_text: date_text,
-        time_text: time_candidate[:raw_time_text],
-        normalized_time: time_candidate[:time],
-        ignored_prefix: time_candidate[:ignored_prefix],
-        source_text: time_candidate[:source_text],
-        result: result.strftime("%Y-%m-%d %H:%M")
-      }.compact
+      resolution(nil, "uncertain")
     end
 
     private
 
-    def parse(value)
-      return value if value.is_a?(Time) || value.is_a?(ActiveSupport::TimeWithZone)
-      return nil if value.blank?
+    def source_evidence
+      if @candidates.key?(:purchased_at_evidence)
+        return PurchasedAtEvidence.call(@candidates[:purchased_at_evidence]) || PurchasedAtEvidence.call({})
+      end
 
-      Time.zone.parse(value.to_s)
-    rescue ArgumentError, TypeError
-      nil
+      return PurchasedAtEvidence.call({}) unless @source_complete
+
+      source_lines = Array(@lines)
+      if source_lines.empty?
+        source_lines = Array(@candidates[:purchased_at_candidates]) + Array(@candidates[:purchase_context_lines])
+      end
+      hint = @candidates[:purchased_at_text]
+      if source_lines.empty?
+        source_lines = [ hint ].compact
+      elsif safe_legacy_date_hint?(hint, source_lines)
+        source_lines = [ hint ] + source_lines
+      end
+
+      evidence = PurchasedAtEvidence.from_lines(lines: source_lines, profile: @profile)
+      return evidence if evidence[:invalid] || evidence[:candidates].any? { |candidate| candidate[:date] }
+      return evidence unless hint.is_a?(String) && hint.bytesize <= 128
+
+      hinted = PurchasedAtEvidence.from_lines(lines: [ hint ], profile: @profile)
+      dated = hinted[:candidates].select { |candidate| candidate[:date] }
+      return evidence unless dated.one?
+      if dated.first[:time]
+        excluded = evidence[:candidates].any? do |candidate|
+          !PURCHASE_ROLES.include?(candidate[:role]) &&
+            canonical_time(candidate[:time]) == canonical_time(dated.first[:time])
+        end
+        return evidence if excluded
+      end
+
+      candidate = dated.first.merge(candidate_id: "datetime_legacy_0", source_path: "candidates.purchased_at_text")
+        .except(:line_index, :label_path)
+      PurchasedAtEvidence.call(evidence.merge(candidates: [ candidate ] + evidence[:candidates]))
+    end
+
+    def safe_legacy_date_hint?(hint, source_lines)
+      return false unless hint.is_a?(String) && date_only_text?(hint)
+      return false if source_lines.any? { |text| @profile.ocr_purchased_at_date_patterns.any? { |pattern| text.to_s.match?(pattern) } }
+
+      source_lines.none? { |text| text.to_s.match?(@profile.analysis_purchase_time_exclusion_pattern) }
+    end
+
+    def purchase_events(candidates)
+      established = candidates.select { |candidate| ESTABLISHED_ROLES.include?(candidate[:role]) }
+      return established if established.present?
+
+      issued = candidates.select { |candidate| candidate[:role] == "issuance" }
+      issued.presence || candidates.select { |candidate| candidate[:role] == "unknown" }
+    end
+
+    def datetime_value(candidate)
+      date = Date.iso8601(candidate[:date])
+      hour, minute, second = candidate[:time].split(":").map(&:to_i)
+      Time.zone.local(date.year, date.month, date.day, hour, minute, second || 0)
+    end
+
+    def date_value(text)
+      return unless text
+
+      date = Date.iso8601(text)
+      Time.zone.local(date.year, date.month, date.day)
+    end
+
+    def canonical_time(value)
+      return unless value
+
+      value.length == 5 ? "#{value}:00" : value
+    end
+
+    def resolution(value, state, candidate: nil, precision: nil)
+      precision ||= candidate&.fetch(:precision)
+      reason = case state
+      when "missing"
+        "purchased_at_missing"
+      when "uncertain"
+        "purchased_at_uncertain"
+      when "conflicted"
+        "purchased_at_conflicted"
+      end
+      result = {
+        value: value,
+        state: state,
+        precision: precision,
+        role: candidate&.fetch(:role),
+        candidate_id: candidate&.fetch(:candidate_id),
+        reason_codes: [ reason ].compact
+      }.compact
+      result[:value] = value
+      result[:fallback] = fallback_for(result)
+      result
+    end
+
+    def fallback_for(result)
+      value = result[:value]
+      hint = @candidates[:purchased_at_text]
+      if @candidates.key?(:purchased_at_evidence)
+        return {
+          applied: result[:state] == "confirmed",
+          source: "ocr_datetime_evidence",
+          result: value&.strftime("%Y-%m-%d %H:%M")
+        }.compact
+      end
+
+      return { applied: false, source: "ocr_purchased_at_text" } if hint.present? && !date_only_text?(hint) && value
+
+      if value && result[:precision] == "datetime" && date_only_text?(hint)
+        detail = Array(@lines).filter_map { |text| time_expression_detail(text) }
+          .find { |entry| entry[:time] == value.strftime("%H:%M") }
+        return {
+          applied: true,
+          source: "ocr_time_candidate",
+          date_text: hint,
+          time_text: detail&.fetch(:raw_time_text),
+          normalized_time: value.strftime("%H:%M"),
+          ignored_prefix: detail&.fetch(:ignored_prefix),
+          source_text: detail&.fetch(:source_text),
+          result: value.strftime("%Y-%m-%d %H:%M")
+        }.compact
+      end
+
+      if date_only_text?(hint)
+        { applied: false, reason: "unique_time_candidate_missing", date_text: hint }
+      else
+        { applied: false, reason: "date_candidate_missing_or_not_date_only" }
+      end
     end
 
     def date_only_text?(value)
-      text = value.to_s.strip
-      return false if text.blank?
-      return false if time_expression(text).present?
+      return false unless @profile && value.is_a?(String) && value.valid_encoding? && value.bytesize <= 128
+      return false if time_expression_detail(value)
 
-      @profile.analysis_purchased_at_date_only_patterns.any? { |pattern| text.match?(pattern) }
-    end
-
-    def time_candidate_values
-      Array(@candidates[:purchased_at_candidates]) +
-        Array(@candidates[:purchase_context_lines]) +
-        Array(@lines)
-    end
-
-    def unique_time_candidate_detail(values)
-      candidates = Array(values).filter_map do |value|
-        text = value.to_s.strip
-        next if text.blank?
-        next unless purchase_time_context_line?(text)
-
-        time_expression_detail(text)
-      end.uniq { |candidate| candidate[:time] }
-
-      candidates.one? ? candidates.first : nil
-    end
-
-    def purchase_time_context_line?(text)
-      return false if text.match?(@profile.analysis_purchase_time_exclusion_pattern)
-
-      time_expression(text).present?
-    end
-
-    def time_expression(text)
-      time_expression_detail(text)&.fetch(:time)
+      @profile.analysis_purchased_at_date_only_patterns.any? { |pattern| value.match?(pattern) }
     end
 
     def time_expression_detail(text)
-      match = text.to_s.match(@profile.analysis_purchase_time_expression_pattern)
-      return nil unless match
+      return unless text.is_a?(String) && text.valid_encoding? && text.bytesize <= 500
+
+      match = text.match(@profile.analysis_purchase_time_expression_pattern)
+      return unless match
 
       raw_end = match.end(2)
-      raw_time_text = text[match.begin(1)...raw_end].to_s
+      raw_time_text = text[match.begin(1)...raw_end]
       raw_time_text += "分" if text[raw_end] == "分"
-
       {
         time: "#{match[1].to_i.to_s.rjust(2, '0')}:#{match[2]}",
         raw_time_text: raw_time_text,
-        ignored_prefix: text[0...match.begin(1)].to_s.strip.presence,
-        source_text: text.to_s.strip
+        ignored_prefix: text[0...match.begin(1)].strip.presence,
+        source_text: text.strip
       }
     end
   end

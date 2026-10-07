@@ -2,6 +2,16 @@ require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator do
   describe '.ocr' do
+    it 'retains invalid datetime evidence instead of treating it as absent legacy evidence' do
+      result = described_class.ocr(
+        'success' => true,
+        'candidates' => { 'purchased_at_evidence' => { 'schema_version' => 'unknown', 'raw_text' => 'not retained' } }
+      )
+
+      expect(result.dig(:candidates, 'purchased_at_evidence')).to include(invalid: true, candidates: [])
+      expect(result.to_json).not_to include('not retained')
+    end
+
     it 'returns nil for blank or non-hash snapshots' do
       aggregate_failures do
         expect(described_class.ocr(nil)).to be_nil
@@ -34,6 +44,31 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator 
         meta: { 'provider' => 'fixture' },
         truncated: { 'items' => true }
       )
+    end
+
+    [
+      [ 'missing line marker', 'receipt_analysis_run_ocr_result_v1', {} ],
+      [ 'non-boolean line marker', 'receipt_analysis_run_ocr_result_v1', { 'lines' => 'false' } ],
+      [ 'unknown version', 'unknown', { 'lines' => false } ],
+      [ 'missing version', nil, { 'lines' => false } ]
+    ].each do |label, version, truncation|
+      it "does not treat #{label} as complete legacy datetime evidence" do
+        result = described_class.ocr(
+          'schema_version' => version,
+          'success' => true,
+          'lines' => [ '2026-09-01 07:36' ],
+          'candidates' => { 'purchased_at_text' => '2026-09-01 07:36' },
+          'truncated' => truncation
+        )
+
+        params = Analysis.build_receipt_params(ocr_result: result)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:purchased_at]).to be_nil
+          expect(params[:purchased_at_resolution][:state]).to eq('uncertain')
+          expect(params[:review_reasons]).to include('purchased_at_uncertain')
+        end
+      end
     end
 
     it 'uses strict boolean restoration' do
