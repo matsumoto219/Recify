@@ -109,7 +109,8 @@ export default class extends Controller {
     'paymentDifferenceAmount',
     'paymentSummaryGrid',
     'paymentMismatchWarning',
-    'syncPaymentAmountButton'
+    'syncPaymentAmountButton',
+    'previewUnavailableNotice'
   ]
 
   static values = {
@@ -140,6 +141,7 @@ export default class extends Controller {
     adjustmentPaymentLabelPattern: { type: String, default: '' },
     adjustmentTaxDetailRates: Array,
     adjustmentTaxDetailEvidenceStale: { type: Boolean, default: false },
+    taxDetailDiagnosticState: { type: String, default: 'unavailable' },
     purchaseInputsChanged: { type: Boolean, default: false },
     adjustmentSurchargeKinds: { type: String, default: 'service_charge,late_night_charge,delivery_fee,bag_fee,handling_fee' },
     adjustmentDiscountKinds: { type: String, default: 'receipt_discount,coupon,point_usage,return_refund' },
@@ -432,7 +434,24 @@ export default class extends Controller {
 
     const mode = this.pricingSourceModeForRow(row)
     row.dataset[`receiptFormTaxInclusion_${mode}`] = event.target.value
+    this.confirmItemTaxInclusionForPreview(row, mode)
     this.recalculate()
+  }
+
+  itemTaxInclusionClicked (event) {
+    if (event.target?.type !== 'radio' || !['gross', 'net'].includes(event.target.value)) return
+
+    const row = event.currentTarget.closest('[data-receipt-form-target="itemRow"]')
+    if (!row || !this.confirmItemTaxInclusionForPreview(row, this.pricingSourceModeForRow(row))) return
+
+    this.recalculate()
+  }
+
+  confirmItemTaxInclusionForPreview (row, mode) {
+    if (row.dataset.receiptFormTaxInclusionFallback !== 'true') return false
+
+    row.dataset[`receiptFormTaxInclusionConfirmed_${mode}`] = 'true'
+    return true
   }
 
   syncItemTaxInclusionForMode (row, mode) {
@@ -1189,6 +1208,7 @@ export default class extends Controller {
     let hasItemAmountSource = false
     let allAmountBearingItemsHaveTaxRate = true
     let itemPreviewUnavailable = false
+    let adjustmentPreviewUnavailable = false
     const purchaseInputsChanged = this.purchaseInputsChangedForPreview()
 
     this.itemRowTargets.forEach((row) => {
@@ -1248,7 +1268,12 @@ export default class extends Controller {
         itemPreviewUnavailable = true
         return
       }
-      const itemTaxBasis = this.itemPreviewTaxBasis({ row, pricingSourceMode })
+      const itemTaxBasis = this.itemPreviewTaxBasis({
+        row,
+        pricingSourceMode,
+        basisAffectsAmounts: itemAmountSourcePresent && lineTotal > 0 &&
+          (!itemTaxRateInputPresent || taxRatePercent > 0)
+      })
       let itemTaxRateAvailable = itemTaxRateInputPresent
       if (pricingSourceMode === 'reference_quantity_price' && itemTaxBasis === 'net' &&
         !row.querySelector('[data-receipt-form-target="itemTaxInclusionControl"]') &&
@@ -1352,6 +1377,11 @@ export default class extends Controller {
         return
       }
 
+      if (!explicitTaxRate && taxRatePercent === null) {
+        adjustmentPreviewUnavailable = true
+        return
+      }
+
       this.addSourceAwareTaxAmount(sourceAwareTaxGroups, {
         amount: signedAmount,
         taxRatePercent,
@@ -1359,7 +1389,8 @@ export default class extends Controller {
       })
     })
 
-    if (Array.from(sourceAwareTaxGroups.values()).some((group) => group.taxBasis === 'unavailable')) {
+    if (adjustmentPreviewUnavailable ||
+      Array.from(sourceAwareTaxGroups.values()).some((group) => group.taxBasis === 'unavailable')) {
       this.renderUnavailablePreview()
       return
     }
@@ -1416,16 +1447,19 @@ export default class extends Controller {
 
     this.syncPaymentAdjustmentSummary(paymentAdjustmentTotal, finalPaymentTotal)
     this.syncPaymentReconciliationSummary(this.paymentAmountSum(), finalPaymentTotal)
+    this.syncPreviewAvailability(true)
   }
 
   inheritedAdjustmentTaxRate ({ amountBearingItemCount, allAmountBearingItemsHaveTaxRate, amountBearingItemTaxRates, purchaseInputsChanged }) {
+    if (!['consistent', 'mismatch', 'not_applicable'].includes(this.taxDetailDiagnosticStateValue)) return null
     if (amountBearingItemCount === 0 || !allAmountBearingItemsHaveTaxRate) return null
     if (amountBearingItemTaxRates.size !== 1) return null
 
     const [itemTaxRate] = amountBearingItemTaxRates
     if (itemTaxRate <= 0) return null
 
-    const detailRates = !purchaseInputsChanged &&
+    const detailRates = this.taxDetailDiagnosticStateValue === 'consistent' &&
+      !purchaseInputsChanged &&
       !this.adjustmentTaxDetailEvidenceStaleValue &&
       Array.isArray(this.adjustmentTaxDetailRatesValue)
       ? this.adjustmentTaxDetailRatesValue
@@ -1537,7 +1571,7 @@ export default class extends Controller {
 
         const common = [
           mode,
-          this.itemPreviewTaxBasis({ row, pricingSourceMode: mode }),
+          this.itemPreviewTaxBasis({ row, pricingSourceMode: mode, forFingerprint: true }),
           this.normalizedOptionalDecimalInput(inputValue('quantityInput')),
           String(quantityUnit ?? '').trim(),
           this.normalizedOptionalDecimalInput(inputValue('discountRateInput')),
@@ -2033,7 +2067,12 @@ export default class extends Controller {
     }
   }
 
-  itemPreviewTaxBasis ({ row, pricingSourceMode }) {
+  itemPreviewTaxBasis ({ row, pricingSourceMode, basisAffectsAmounts = true, forFingerprint = false }) {
+    const diagnosticUnavailable = !['consistent', 'mismatch', 'not_applicable'].includes(this.taxDetailDiagnosticStateValue)
+    if (basisAffectsAmounts && diagnosticUnavailable && !forFingerprint &&
+      row.dataset?.receiptFormTaxInclusionFallback === 'true' &&
+      row.dataset[`receiptFormTaxInclusionConfirmed_${pricingSourceMode}`] !== 'true') return 'unavailable'
+
     const control = row.querySelector('[data-receipt-form-target="itemTaxInclusionControl"]')
     if (control) {
       const basis = control.querySelector('input:checked')?.value
@@ -2277,7 +2316,11 @@ export default class extends Controller {
 
   syncInitialPricingPreviews () {
     const invalidSource = this.hasInvalidItemSourceSummaryTarget && !this.invalidItemSourceSummaryTarget.hidden
-    if (this.preserveRecordedAmountsValue && !this.purchaseInputsChangedForPreview() && !invalidSource) return
+    if (invalidSource) {
+      this.renderUnavailablePreview()
+      return
+    }
+    if (this.preserveRecordedAmountsValue && !this.purchaseInputsChangedForPreview()) return
 
     const activeRows = this.itemRowTargets.filter((row) => !this.previewRowExcluded(row, 'destroyField'))
     const missingExplicitSourceRows = activeRows.filter((row) => this.explicitLineTotalSourceMissingForRow(row))
@@ -2490,6 +2533,7 @@ export default class extends Controller {
 
   renderUnavailablePreview () {
     this.lastFinalPaymentTotal = null
+    this.syncPreviewAvailability(false)
     this.itemRowTargets.forEach((row) => this.syncSourceLineTotalDisplay(row))
     const preservedLineTotalTargets = new Set(
       Array.from(this.itemRowTargets || [])
@@ -2509,6 +2553,12 @@ export default class extends Controller {
     this.paymentMismatchWarningTargets.forEach((warning) => warning.classList.add('hidden'))
     this.syncPaymentAmountButtonTargets.forEach((button) => button.classList.add('hidden'))
     this.syncPaymentSummaryLayout()
+  }
+
+  syncPreviewAvailability (available) {
+    if (this.hasPreviewUnavailableNoticeTarget) {
+      this.previewUnavailableNoticeTarget.classList.toggle('hidden', available)
+    }
   }
 
   previewAmountTargets () {

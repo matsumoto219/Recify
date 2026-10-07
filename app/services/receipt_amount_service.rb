@@ -93,6 +93,27 @@ class ReceiptAmountService
     raise InvalidItemSourceError, "Invalid item pricing source"
   end
 
+  def self.tax_detail_diagnostic(receipt:, receipt_items:, receipt_tax_details:, receipt_adjustments: [], receipt_payments: [])
+    Amounts::TaxDetailDiagnostic.new(
+      receipt: receipt,
+      receipt_items: receipt_items,
+      receipt_tax_details: receipt_tax_details,
+      receipt_adjustments: receipt_adjustments,
+      receipt_payments: receipt_payments
+    ).call do |calculation_receipt|
+      call(
+        receipt: calculation_receipt,
+        receipt_items: receipt_items,
+        receipt_tax_details: receipt_tax_details,
+        receipt_adjustments: receipt_adjustments,
+        receipt_payments: receipt_payments,
+        context: :edit_save
+      )
+    end
+  rescue InvalidItemSourceError
+    { state: :unavailable, reason: :invalid_saved_input, applicable: Array(receipt_tax_details).any? }
+  end
+
   def self.calculation_profile_snapshot(result, context: nil, rounding_mode: nil)
     Amounts::CalculationProfileSnapshot.call(
       result,

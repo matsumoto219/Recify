@@ -99,6 +99,8 @@ ja:
         open_details: 金額の内訳を表示
         close_details: 金額の内訳を閉じる
         tip_label: 合計金額の補足
+        preview_unavailable: 現在の入力から金額を計算できません。
+        saved_total: "保存済みの合計: %{amount}"
       calculation_settings:
         title: レシート計算方式
         description: 税額と割引額の丸め方を、このレシートに適用します。
@@ -206,6 +208,7 @@ ja:
       reference_quantity_unit: 基準単位
       input_tax_inclusion: 入力金額の区分
       input_tax_inclusion_note: 切り替えても入力済みの金額は換算しません。
+      input_tax_inclusion_unconfirmed: この明細の税込・税抜は保存されていません。金額の見込み額を確認するには区分を選択してください。
       reference_price_tax_inclusions:
         gross: 税込基準
         net: 税抜基準

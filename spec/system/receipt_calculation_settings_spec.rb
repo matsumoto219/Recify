@@ -2,6 +2,86 @@ require "rails_helper"
 require_relative "../support/system_test_helpers"
 
 RSpec.describe "レシート固有の計算条件", type: :system do
+  it "税区分未確定の金額編集が422になった直後は保存済み合計をプレビューや支払同期に使わない" do
+    user = create_system_test_user(password: "password")
+    receipt = create(
+      :receipt,
+      :completed,
+      user: user,
+      subtotal_amount: 200,
+      tax_amount: 20,
+      total_amount: 220,
+      payment_method: "cash",
+      calculation_settings: {
+        "schema_version" => 1,
+        "tax_rounding_mode" => { "value" => "floor", "origin" => "analysis" },
+        "discount_rounding_mode" => { "value" => "round", "origin" => "analysis" },
+        "tax_rounding_scope" => { "value" => "per_tax_rate_group", "origin" => "analysis" }
+      }
+    )
+    item = receipt.receipt_items.create!(
+      confirmed_name: "税区分未確定品",
+      pricing_source_kind: "count_unit_price",
+      price: 100,
+      quantity: 2,
+      quantity_unit_code: "each",
+      tax_rate: BigDecimal("0.1"),
+      original_line_total: 200,
+      line_total: 200
+    )
+    tax_detail = receipt.receipt_tax_details.create!(
+      description: "外税10%",
+      net_amount: 200,
+      amount: 20,
+      rate: BigDecimal("0.1")
+    )
+    payment = receipt.receipt_payments.create!(method: "現金", amount: 200)
+    saved_records = [ receipt, item, tax_detail, payment ].map(&:attributes)
+    visit new_user_session_path
+    fill_in "user_email", with: user.email
+    fill_in "user_password", with: "password"
+    click_button I18n.t("auth.sessions.submit")
+    expect(page).to have_current_path(receipts_path, ignore_query: true)
+    visit edit_receipt_path(receipt)
+    wait_for_stimulus_controller("receipt-form")
+
+    expect(page).to have_css('[data-receipt-form-target="totalAmount"]', text: "220")
+    row = find('[data-receipt-form-target="itemRow"]', match: :first)
+    row.find('[data-receipt-form-target="quantityInput"]', visible: :all).set("3")
+    selected_tax_inclusion = row.find('[data-receipt-form-target="itemTaxInclusionControl"] input:checked', visible: :all)
+    page.execute_script("arguments[0].value = ''", selected_tax_inclusion)
+    click_button I18n.t("receipts.form.buttons.save"), match: :first
+
+    error_summary = find('[data-receipt-form-target="invalidItemSourceSummary"]', visible: true)
+    expect(error_summary).to have_text(I18n.t("receipts.form.errors.invalid_item_pricing_source"))
+    wait_for_stimulus_controller("receipt-form")
+    notice = find('[data-receipt-form-target="previewUnavailableNotice"]', visible: true)
+    row = find('[data-receipt-form-target="itemRow"]', match: :first)
+    aggregate_failures do
+      expect(row.find('[data-receipt-form-target="quantityInput"]', visible: :all).value).to eq("3")
+      expect(row).to have_no_css('[data-receipt-form-target="itemTaxInclusionControl"] input:checked', visible: :all)
+      expect(notice).to have_text(I18n.t("receipts.form.amount_summary.preview_unavailable"))
+      expect(notice).to have_text(I18n.t("receipts.form.amount_summary.saved_total", amount: "¥220"))
+      %w[totalAmount subtotalAmount taxAmount paymentReconciliationFinalAmount paymentDifferenceAmount].each do |target|
+        expect(find("[data-receipt-form-target='#{target}']", visible: :all)).to have_text(
+          I18n.t("receipts.common.not_available"), exact: true
+        )
+      end
+      expect(page).to have_no_css('[data-receipt-form-target="syncPaymentAmountButton"]', visible: true)
+      expect(page).to have_no_css('[data-receipt-form-target="paymentMismatchWarning"]', visible: true)
+      expect(find('[data-receipt-form-target="paymentAmountInput"]', visible: :all).value).to eq("200")
+      expect([ receipt, item, tax_detail, payment ].map { |record| record.reload.attributes }).to eq(saved_records)
+    end
+    severe_entries = page.driver.browser.logs.get(:browser).select do |entry|
+      entry.level == "SEVERE" && !blocked_external_font_entry?(entry)
+    end
+    validation_entries, unexpected_entries = severe_entries.partition do |entry|
+      entry.message.include?(receipt_path(receipt)) && entry.message.include?("422 (Unprocessable Content)")
+    end
+    expect(validation_entries.size).to eq(1)
+    expect(unexpected_entries).to be_empty
+  end
+
   it "解析保存した混在明細の税区分と元金額を編集開始・無変更保存で維持する" do
     user = create_system_test_user(password: "password", default_item_tax_inclusion: "net")
     receipt = create(

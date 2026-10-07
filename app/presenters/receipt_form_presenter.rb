@@ -6,6 +6,7 @@ class ReceiptFormPresenter
     submitted_params: nil,
     purchase_inputs_changed: false,
     adjustment_tax_detail_evidence_stale: false,
+    tax_detail_diagnostic: nil,
     adjustment_absence_confirmed: false,
     invalid_item_source: false,
     calculation_context: nil,
@@ -20,6 +21,7 @@ class ReceiptFormPresenter
     @submitted_rows_by_id_cache = {}
     @purchase_inputs_changed = purchase_inputs_changed == true
     @adjustment_tax_detail_evidence_stale = adjustment_tax_detail_evidence_stale == true
+    @tax_detail_diagnostic = tax_detail_diagnostic
     @adjustment_absence_confirmed = adjustment_absence_confirmed == true
     @invalid_item_source = invalid_item_source == true
     @calculation_context_token = calculation_context_token || calculation_context&.token
@@ -70,6 +72,19 @@ class ReceiptFormPresenter
 
   def adjustment_tax_detail_evidence_stale?
     @adjustment_tax_detail_evidence_stale
+  end
+
+  def tax_detail_diagnostic_state_value
+    if @tax_detail_diagnostic
+      return "not_applicable" unless @tax_detail_diagnostic.applicable?
+
+      state = @tax_detail_diagnostic.state.to_s
+      return state if %w[consistent mismatch unavailable].include?(state)
+
+      return "unavailable"
+    end
+
+    receipt.receipt_tax_details.empty? ? "not_applicable" : "unavailable"
   end
 
   def adjustment_absence_confirmation_available?

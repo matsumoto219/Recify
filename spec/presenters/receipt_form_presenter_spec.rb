@@ -176,6 +176,28 @@ RSpec.describe ReceiptFormPresenter do
     end
   end
 
+  it '税内訳診断の判定不能と対象外を区別してJSへ渡す' do
+    receipt = build(:receipt)
+    receipt.receipt_tax_details.build(rate: BigDecimal('0.1'), net_amount: 100, amount: 10)
+    state_for = lambda do |state, applicable|
+      diagnostic = double(state: state, applicable?: applicable)
+      described_class.new(receipt: receipt, tax_detail_diagnostic: diagnostic).tax_detail_diagnostic_state_value
+    end
+
+    aggregate_failures do
+      expect(state_for.call(:consistent, true)).to eq('consistent')
+      expect(state_for.call(:mismatch, true)).to eq('mismatch')
+      expect(state_for.call(:unavailable, true)).to eq('unavailable')
+      expect(state_for.call(:unknown, true)).to eq('unavailable')
+      expect(state_for.call(:unavailable, false)).to eq('not_applicable')
+      expect(described_class.new(receipt: receipt).tax_detail_diagnostic_state_value).to eq('unavailable')
+      expect(described_class.new(receipt: build(:receipt)).tax_detail_diagnostic_state_value).to eq('not_applicable')
+    end
+
+    receipt.receipt_tax_details.clear
+    expect(state_for.call(:unknown, true)).to eq('unavailable')
+  end
+
   it 'invalid item sourceの422だけをフォームの復旧表示へ渡す' do
     aggregate_failures do
       expect(described_class.new(receipt: build(:receipt), invalid_item_source: true).invalid_item_source?).to be(true)
