@@ -82,7 +82,11 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = payment_params([ '合計金額 1273円', *payments ])
 
         aggregate_failures do
-          expect(params[:receipt_payments_attributes]).to eq([])
+          expect(params[:receipt_payments_attributes]).to contain_exactly(
+            include(method: '現金支払', amount: 1_273),
+            include(method: 'auPAY支払', amount: 1_273)
+          )
+          expect(params[:independent_receipt_payments]).to eq([])
           expect(params[:receipt_attributes][:payment_method]).to be_nil
           expect(params[:review_reasons]).to include('payment_method_uncertain')
         end
@@ -121,11 +125,15 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
     end
 
-    it '同一方法の別表記で全額が重複する場合は同じ支払として一度だけ採用する' do
-      params = payment_params([ '支払方法', 'auPAY', '1273', 'auPAY支払 1273円' ])
+    it '同一方法の別印字を金額一致だけで消さず支払集合の不確定を保持する' do
+      params = payment_params([ '合計金額 1273円', '支払方法', 'auPAY', '1273円', 'auPAY支払 1273円' ])
 
-      expect(params[:receipt_payments_attributes].size).to eq(1)
-      expect(params[:receipt_payments_attributes].sum { |payment| payment[:amount] }).to eq(1_273)
+      expect(params[:receipt_payments_attributes]).to contain_exactly(
+        include(method: 'auPAY', amount: 1_273),
+        include(method: 'auPAY支払', amount: 1_273)
+      )
+      expect(params[:independent_receipt_payments]).to eq([])
+      expect(params.dig(:payment_evidence, :settlement, :ambiguous)).to be(true)
       expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
     end
 

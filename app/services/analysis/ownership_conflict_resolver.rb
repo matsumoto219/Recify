@@ -192,6 +192,7 @@ module Analysis
     def aggregate_voucher_payments!
       voucher_payment_facts.group_by { |fact| normalized_voucher_method(fact) }.each_value do |group|
         next if group.one?
+        next if group.any? { |fact| fact.attributes.with_indifferent_access[:amount_role].present? }
 
         representative = group.first
         total = group.sum { |fact| fact.amount.to_i }

@@ -34,7 +34,8 @@ module Analysis
     end
 
     def payment_noise_only?(text, profile: ReceiptAnalysisProfiles.default)
-      has_exclusion = profile.fallback_payment_method_exclusion_patterns.any? { |pattern| text.match?(pattern) }
+      has_exclusion = profile.fallback_payment_method_exclusion_patterns.any? { |pattern| text.match?(pattern) } ||
+        text.match?(profile.ocr_settlement_line_pattern)
       has_payment_signal = detect_by_patterns(text, profile.fallback_payment_method_patterns).present?
       support_only = profile.fallback_payment_method_support_only_patterns.any? { |pattern| text.match?(pattern) } &&
         !text.match?(profile.fallback_payment_method_transaction_context_pattern)

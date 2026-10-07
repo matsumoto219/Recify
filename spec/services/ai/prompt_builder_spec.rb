@@ -815,6 +815,20 @@ RSpec.describe Ai::PromptBuilder do
       )
     end
 
+    it '電子ギフトの決済行と取得済みのstructured金額を補完せずAI入力へ渡す' do
+      ocr_result[:lines] = [ '合計 864円', 'eGift適用 600円', 'eGift適用 400円', '釣銭 0円' ]
+      ocr_result[:candidates][:payments] = [ { method: 'eGift', amount: 600, source_line_index: 1, method_source_line_index: 1 } ]
+
+      result = described_class.build(ocr_result)
+
+      aggregate_failures do
+        expect(result.dig(:payment, :payment_context_lines)).to include('eGift適用 600円', 'eGift適用 400円')
+        expect(result.dig(:payment, :printed_payments)).to eq([
+          { method: 'eGift', amount: 600, source_line_index: 1, method_source_line_index: 1 }
+        ])
+      end
+    end
+
     it 'キーワード未登録の短い調整候補もadjustment_context_linesとfull_context_linesに残す' do
       ocr_result[:lines] = [
         'サンプル店舗',

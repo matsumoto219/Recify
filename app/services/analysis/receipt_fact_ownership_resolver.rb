@@ -84,7 +84,7 @@ module Analysis
           owner: :payment,
           fact_type: :payment,
           effect_scope: :payment_reconciliation,
-          amount: attributes[:amount],
+          amount: %w[voucher_tender cash_settlement].include?(attributes[:amount_role]) ? attributes[:printed_amount] : attributes[:amount],
           attributes: attributes,
           origin: :payment
         )

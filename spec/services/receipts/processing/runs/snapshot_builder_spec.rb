@@ -1,6 +1,34 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
+  it '支払の物理sourceだけをsnapshotへ保持し再試行で同額別印字を区別する' do
+    original = {
+      success: true, lines: [ '合計 864円', 'eGift適用 500円', 'eGift適用 500円', '釣銭 0円' ],
+      candidates: {
+        payments: [ 1, 2 ].map do |index|
+          {
+            method: 'eGift', amount: 500, source_provider: 'azure',
+            source_field_path: "documents[0].fields.Payments[#{index - 1}].Amount",
+            source_line_index: index, source_span_start: 8, source_span_end: 11,
+            method_source_line_index: index, method_source_span_start: 0, method_source_span_end: 5,
+            raw_response: 'not retained', raw_text: 'not copied'
+          }
+        end
+      }
+    }
+
+    snapshot = described_class.ocr_result_snapshot(original)
+    restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(JSON.parse(snapshot.to_json))
+    evidence = Analysis.build_receipt_params(ocr_result: restored).fetch(:payment_evidence)
+
+    aggregate_failures do
+      expect(evidence[:payments].map { |payment| payment[:source_line_index] }).to eq([ 1, 2 ])
+      expect(evidence[:payments].map { |payment| payment[:printed_amount] }).to eq([ 500, 500 ])
+      expect(evidence[:payments]).to all(include(amount: nil, amount_role: 'voucher_tender'))
+      expect(snapshot.to_json).not_to include('not retained', 'not copied')
+    end
+  end
+
   it 'AI店舗選択のIDと候補集合checksumを汎用文字列短縮せず保持する' do
     selection = {
       decision: 'select', option_id: 'store_option_0123456789abcdef0123456789abcdef', options_checksum: 'a' * 64

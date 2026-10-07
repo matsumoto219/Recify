@@ -61,9 +61,6 @@ RSpec.describe Analysis::ReceiptFallbackPatterns do
         '銀聯' => 'credit_card',
         '現金' => 'cash',
         'cash' => 'cash',
-        'お預り' => 'cash',
-        'お釣り' => 'cash',
-        '釣銭' => 'cash',
         '現計' => 'cash',
         '現 計' => 'cash',
         'debit' => 'debit_card',
@@ -86,6 +83,16 @@ RSpec.describe Analysis::ReceiptFallbackPatterns do
         expect(described_class.detect_payment_method('WAON POINT')).to be_nil
         expect(described_class.detect_payment_method('ポイント利用')).to be_nil
         expect(described_class.detect_payment_method('card')).to eq('other')
+      end
+    end
+
+    it '預りや釣銭だけでは現金支払を確定しない' do
+      aggregate_failures do
+        expect(described_class.detect_payment_method('お預り')).to be_nil
+        expect(described_class.detect_payment_method('お釣り 0円')).to be_nil
+        expect(described_class.detect_payment_method('釣銭 0円')).to be_nil
+        expect(described_class.detect_payment_method('現金支払 800円')).to eq('cash')
+        expect(described_class.detect_payment_method('eGift適用 1000円')).to eq('other')
       end
     end
 

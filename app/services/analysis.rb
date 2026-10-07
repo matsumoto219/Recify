@@ -4,6 +4,10 @@ module Analysis
       ReceiptBuildParamsService.call(...)
     end
 
+    def finalize_payments(...)
+      ReceiptPaymentAllocation.call(...)
+    end
+
     def processing_error_mapping(error_code)
       ReceiptProcessingErrorMapper.map(error_code)
     end

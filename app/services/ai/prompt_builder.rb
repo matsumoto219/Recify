@@ -110,7 +110,8 @@ module Ai
         payment_method: candidate_value(:payment_method),
         payment_method_text: method_text,
         payment_candidates: candidates,
-        payment_context_lines: context_lines
+        payment_context_lines: context_lines,
+        printed_payments: normalize_printed_payments
       }.compact
     end
 
@@ -736,6 +737,19 @@ module Ai
           content: fetch(candidate, :content),
           amount: normalize_number(fetch(candidate, :amount)),
           confidence: normalize_decimal(fetch(candidate, :confidence))
+        }.compact
+      end
+    end
+
+    def normalize_printed_payments
+      Array(candidate_value(:payments)).filter_map do |payment|
+        next unless payment.is_a?(Hash)
+
+        {
+          method: fetch(payment, :method),
+          amount: normalize_number(fetch(payment, :amount)),
+          source_line_index: fetch(payment, :source_line_index),
+          method_source_line_index: fetch(payment, :method_source_line_index)
         }.compact
       end
     end

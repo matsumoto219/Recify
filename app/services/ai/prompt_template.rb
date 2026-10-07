@@ -213,12 +213,16 @@ module Ai
         - Classify payment evidence by payment_method category, not by literal wording alone.
 
         Payment classification rules:
-        - cash: expressions indicating cash, amount received, change, or cash payment.
+        - cash: explicit cash payment, or an amount received and change pair grounded in the cash settlement section.
         - credit_card: credit card brands, credit card slips, or card payment text. Treat VISA, MasterCard, American Express, and similar brands as credit_card unless debit is explicitly indicated.
         - debit_card: debit card brands or card payment text explicitly indicating debit.
         - e_money: transit IC cards, prepaid electronic money, or non-QR electronic wallets.
         - qr_payment: QR code, barcode, or mobile code payments.
         - other: payment evidence exists but cannot be classified above.
+
+        - A change line alone, including zero change, does not establish cash payment.
+        - Gift certificates and electronic gifts used in the settlement section are other. Product-level application, voucher sales, balances, and advertising do not establish payment.
+        - Keep payment method classification separate from amount evidence. Voucher face values and tendered amounts are not necessarily amounts applied to the purchase.
 
         - If a known local payment brand appears, use country_region and payment_context_lines to classify it.
         - Do NOT treat brand names in points, membership, coupons, loyalty programs, or advertising context as payment methods.

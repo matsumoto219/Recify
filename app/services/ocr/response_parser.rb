@@ -1869,6 +1869,7 @@ class Ocr::ResponseParser
     normalized_raw = normalize_payment_text(raw_text)
     normalized_raw_match = normalized_raw.to_s.match(payment_method_pattern)&.[](0)
     if normalized_raw_match.present? &&
+        !normalized_raw_match.match?(profile.ocr_voucher_payment_pattern) &&
         !point_or_membership_only_payment_text?(normalized_raw_match) &&
         !payment_method_excluded_text?(normalized_raw) &&
         !support_only_payment_text?(normalized_raw)
@@ -1911,9 +1912,11 @@ class Ocr::ResponseParser
 
   def extract_payment_method_from_lines(lines)
     analysis_profile = profile
-    profiles = Array(lines).filter_map do |line|
-      profile = payment_line_profile(line)
-      profile if profile[:payment_text].present?
+    profiles = Array(lines).each_with_index.filter_map do |line, index|
+      line_profile = payment_line_profile(line)
+      next if line_profile[:voucher] && !voucher_settlement_context?(lines, index)
+
+      line_profile if line_profile[:payment_text].present?
     end
 
     return analysis_profile.cash_label if profiles.any? { |line_profile| line_profile[:cash_total] }
@@ -1952,6 +1955,19 @@ class Ocr::ResponseParser
       profile[:payment_match].present?
     end
     general_match[:payment_match] if general_match.present?
+  end
+
+  def voucher_settlement_context?(lines, index)
+    line = Array(lines)[index].to_s
+    return false if line.match?(profile.analysis_payment_sale_or_promo_pattern)
+    return false unless line.match?(profile.analysis_payment_affirmative_pattern)
+
+    Array(lines)[0...index].reverse_each do |previous|
+      return false if previous.to_s.match?(profile.analysis_payment_section_end_pattern)
+      return true if previous.to_s.match?(profile.analysis_payment_section_start_pattern) ||
+        previous.to_s.match?(profile.analysis_payment_section_total_pattern)
+    end
+    false
   end
 
   def cash_total_line?(line)
@@ -1999,7 +2015,8 @@ class Ocr::ResponseParser
 
     @payment_line_profiles[raw] ||= begin
       payment_text = normalize_payment_text(raw)
-      payment_method_excluded = payment_text.present? && payment_method_excluded_text?(payment_text)
+      payment_method_excluded = payment_text.present? &&
+        (payment_method_excluded_text?(payment_text) || payment_text.match?(profile.analysis_payment_sale_or_promo_pattern))
 
       {
         raw: raw,
@@ -2465,12 +2482,22 @@ class Ocr::ResponseParser
 
     payments.map.with_index do |payment, index|
       value_object = payment["valueObject"] || {}
+      method_field = value_object["Method"]
       amount_field = value_object["Amount"]
+      method_metadata = payment_source_metadata(
+        parsed_response,
+        method_field,
+        field_path: "documents[0].fields.Payments[#{index}].Method"
+      )
 
       {
-        method: value_object.dig("Method", "valueString") || value_object.dig("Method", "content"),
+        method: method_field&.dig("valueString") || method_field&.dig("content"),
         amount: amount_field&.dig("valueCurrency", "amount") || amount_field&.dig("valueNumber"),
-        **structured_source_metadata(
+        raw_text: [ method_field&.dig("content"), amount_field&.dig("content") ].compact.join(" ").presence,
+        method_source_line_index: method_metadata[:source_line_index],
+        method_source_span_start: method_metadata[:source_span_start],
+        method_source_span_end: method_metadata[:source_span_end],
+        **payment_source_metadata(
           parsed_response,
           amount_field,
           field_path: "documents[0].fields.Payments[#{index}].Amount"
@@ -2479,6 +2506,19 @@ class Ocr::ResponseParser
     end
   rescue NoMethodError, TypeError
     []
+  end
+
+  def payment_source_metadata(parsed_response, field, field_path:)
+    metadata = structured_source_metadata(parsed_response, field, field_path: field_path)
+    return metadata unless field.is_a?(Hash)
+    return metadata if Array(field["spans"]).any?
+
+    content = normalize_text(field["content"])
+    return metadata if content.blank?
+    matching_lines = normalized_lines(parsed_response).count { |line| line.include?(content) }
+    return metadata if matching_lines == 1
+
+    metadata.except(:source_line_index, :source_span_start, :source_span_end)
   end
 
   # 税詳細は取得できる場合のみ保存し、金額計算/サマリー表示の補助情報として利用する。

@@ -99,12 +99,11 @@ module ReceiptAnalysisProfiles
       "cash" => [
         /現金/i,
         /cash/i,
-        /お釣り/i,
-        /おつり/i,
-        /釣銭/i,
-        /預り/i,
-        /お預り/i,
         /現\s*計/i
+      ],
+      "other" => [
+        /商品券|金券|ギフト(?:カード|券)?|お買物券|買物券|株主優待券|優待券/i,
+        /e[\s-]*gift|イーギフト|電子ギフト|gift\s*(?:certificate|card)|store\s*credit|ストアクレジット|voucher/i
       ]
     }.freeze
 
@@ -261,13 +260,13 @@ module ReceiptAnalysisProfiles
       支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge
     /ix.freeze
 
-    OCR_PAYMENT_METHOD_PATTERN = /現金|cash|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|mastercard|master|jcb|amex|american\s*express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|楽天edy|edy|\bid\b|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|\bnfc\b|mobilepayment|applepay|googlepay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|rakuten\s*pay|d払い|dpayment|au\s*pay|aupay|メルペイ|line\s*pay|linepay|alipay|wechatpay|デビット|debit/i.freeze
+    OCR_PAYMENT_METHOD_PATTERN = /現金|cash|e[\s-]*gift|イーギフト|電子ギフト|ストアクレジット|store\s*credit|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|mastercard|master|jcb|amex|american\s*express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|楽天edy|edy|\bid\b|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|\bnfc\b|mobilepayment|applepay|googlepay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|rakuten\s*pay|d払い|dpayment|au\s*pay|aupay|メルペイ|line\s*pay|linepay|alipay|wechatpay|デビット|debit/i.freeze
     OCR_POINT_KEYWORDS_PATTERN = /ポイント|point|会員|member|楽天ポイント|楽天ポイン|waonpoint|tポイント|dポイント|ponta/i.freeze
     OCR_PAYMENT_KEYWORDS_PATTERN = /現金|cash|クレジット|credit|visa|mastercard|master|jcb|amex|americanexpress|diners|discover|unionpay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|edy|id|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|nfc|mobilepayment|applepay|googlepay|qr(?:コード)?|paypay|楽天ペイ|rakutenpay|d払い|dpayment|aupay|メルペイ|linepay|alipay|wechatpay|デビット|debit|カード|支払|決済/i.freeze
     OCR_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|weaccept/i.freeze
     OCR_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|payment|paid|tender|settlement|charge/i.freeze
     OCR_CASH_TOTAL_PATTERN = /現計|現金計|現金合計/.freeze
-    OCR_VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i.freeze
+    OCR_VOUCHER_PAYMENT_PATTERN = /e[\s-]*gift|イーギフト|電子ギフト|ストアクレジット|store\s*credit|商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i.freeze
     OCR_SETTLEMENT_LINE_PATTERN = /お預かり|お預り|預かり|預り|現金預り|お釣り|おつり|釣銭|つり銭|change|返金/i.freeze
     OCR_PURCHASED_AT_DATE_PATTERNS = [
       /\d{4}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,2}/,
@@ -353,8 +352,8 @@ module ReceiptAnalysisProfiles
     OCR_ITEM_DISCOUNT_LINE_PATTERN = /値引|割引|discount|off/i.freeze
     OCR_ITEM_DISCOUNT_PER_UNIT_NOTE_PATTERN = /\A\s*(?:[（(]\s*(?:単品|[0-9０-９]+\s*(?:個|コ|点|本|袋|枚|台|箱|セット))\s*[-−▲]\s*[¥￥]?\s*[0-9０-９][0-9０-９,，]*(?:円)?\s*[）)]|[0-9０-９]+\s*(?:個|コ|点|本|袋|枚|台|箱|セット)\s*[x×]\s*単\s*[-−▲]\s*[¥￥]?\s*[0-9０-９][0-9０-９,，]*(?:円)?)\s*\z/i.freeze
 
-    ANALYSIS_FALLBACK_PAYMENT_LINE_PATTERN = /現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i.freeze
-    ANALYSIS_FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|現\s*計|cash(?:\s*total)?|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i.freeze
+    ANALYSIS_FALLBACK_PAYMENT_LINE_PATTERN = /現金|現\s*計|cash(?:\s*total)?|e[\s-]*gift|イーギフト|電子ギフト|ストアクレジット|store\s*credit|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|visa|master|mastercard|master\s*card|jcb|amex|american express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|rakuten pay|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|電子マネー/i.freeze
+    ANALYSIS_FALLBACK_PAYMENT_ACTION_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現金|現\s*計|cash(?:\s*total)?|e[\s-]*gift|イーギフト|電子ギフト|ストアクレジット|store\s*credit|商品券|金券|ギフト券|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|voucher|クレジット|credit|電子マネー|suica|pasmo|icoca|交通系\s*ic|交通系電子マネー|waon|nanaco|楽天edy|edy|(?<![A-Za-z0-9])i\s*d(?![A-Za-z0-9])|quickpay|quicpay|qui\s*c\s*pay|contactless|タッチ決済|コンタクトレス|nfc|mobile payment|apple pay|google pay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|d払い|d payment|au pay|aupay|メルペイ|line pay|linepay|alipay|wechat pay|wechatpay|デビット|debit|payment|paid|tender|settlement|charge/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_EXCLUDED_PATTERN = /ポイント|point|クーポン|coupon|還元|値引|割引|お釣り|おつり|釣銭|預り|お預り|残高|番号|会員|member/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|we\s+accept/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現\s*計|cash\s*total|payment|paid|tender|settlement|charge/i.freeze
@@ -362,7 +361,31 @@ module ReceiptAnalysisProfiles
     ANALYSIS_FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_AMOUNT_NOISE_PATTERN = /住所|所在地|丁目|番地|登録番号|事業者番号|伝票番号|処理番号|処理通番|承認番号|取引番号|レシート番号|カード番号|会員番号|端末番号|電話|tel|phone|〒|郵便|レジ\s*#?\s*\d|加盟店名|店舗|店名|支店|\d+\s*号店|merchant|address|approval|terminal|member/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_ADDRESS_AMOUNT_NOISE_PATTERN = /(?:都|道|府|県).*\d|(?:市|区|町|村).*\d/.freeze
-    ANALYSIS_VOUCHER_PAYMENT_PATTERN = /商品券|金券|ギフト(?:カード|券)?|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|store\s*credit|voucher/i.freeze
+    ANALYSIS_VOUCHER_PAYMENT_PATTERN = /e[\s-]*gift|イーギフト|電子ギフト|ストアクレジット|store\s*credit|商品券|金券|ギフト(?:カード|券)?|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|store\s*credit|voucher/i.freeze
+    ANALYSIS_PAYMENT_SECTION_START_PATTERN = /\A\s*(?:支払方法|お支払い方法|お支払方法|支払内訳|決済内訳|お支払い|payment\s*(?:method|details))\s*[:：]?\s*\z|クレジットカード売上票/i.freeze
+    ANALYSIS_PAYMENT_SECTION_TOTAL_PATTERN = /\A\s*(?:総\s*合\s*計|合\s*計(?:金額)?|税込合計|お買上(?:げ)?金額|total)(?:\s*[（(](?:税込|税抜|内税)[)）])?\s*[:：]?(?:\s|[¥￥]|\d|\z)/i.freeze
+    ANALYSIS_PAYMENT_SECTION_END_PATTERN = /ありがとう|毎度|ご来店|またの|領収(?:書)?番号|レシート番号|取引番号|thank\s*you|receipt\s*(?:no|number)/i.freeze
+    ANALYSIS_PAYMENT_AFFIRMATIVE_PATTERN = /適用|利用|使用|充当|支払|決済|精算|領収額|現\s*計|現金計|現金合計|paid|redeemed|applied|payment|cash\s*total/i.freeze
+    ANALYSIS_PAYMENT_APPLIED_AMOUNT_PATTERN = /充当(?:額|金額)?|利用額|支払額|支払(?:い)?\s*[¥￥]?\s*\d|applied\s*amount|redeemed\s*amount/i.freeze
+    ANALYSIS_PAYMENT_TENDER_AMOUNT_PATTERN = /額面|お預かり|お預り|預かり|預り|tender|face\s*value/i.freeze
+    ANALYSIS_PAYMENT_NEGATIVE_CONTEXT_PATTERN = /未(?:利用|使用|適用|充当|支払(?:い)?|払(?:い)?|決済|精算)|不使用|(?:使用|利用)(?:なし|不可|可(?:能)?)|un(?:paid|used|redeemed)(?![A-Za-z])|not\s*(?:paid|used|redeemed|applied)(?![A-Za-z])/i.freeze
+    ANALYSIS_PAYMENT_SALE_OR_PROMO_PATTERN = /#{ANALYSIS_PAYMENT_NEGATIVE_CONTEXT_PATTERN}|表示価格|販売|購入|チャージ|発行|残高|失効|枚数|対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|sale|balance|available|accepted|supported/i.freeze
+    ANALYSIS_PAYMENT_METHOD_SUFFIX_PATTERN = /(?:適用|利用額?|使用額?|充当(?:金額|額)?|支払(?:い)?額?|決済|精算|領収額|額面|お預かり|お預り|預かり|預り|paid|redeemed|applied|payment|tender|face\s*value)/i.freeze
+    ANALYSIS_PAYMENT_INFORMATIONAL_AMOUNT_PATTERN = /\A\s*モバイル決済領収額\s*[:：]?(?:\s|[¥￥]|\d|\z)/i.freeze
+    ANALYSIS_PAYMENT_INFORMATIONAL_ZERO_PATTERN = /\A\s*(?:現金領収額|cash\s*received\s*total)\s*[:：]?(?:\s|[¥￥]|\d|\z)/i.freeze
+    ANALYSIS_PAYMENT_TAX_BLOCK_HEADING_PATTERN = /\A\s*税\s*\z/.freeze
+    ANALYSIS_PAYMENT_TAX_BLOCK_RATE_PATTERN = /\A\s*(?:軽|軽減)?\s*\d+(?:\.\d+)?\s*[%％]\s*\z/.freeze
+    ANALYSIS_PAYMENT_TAX_SUMMARY_PATTERN = /\A\s*[（(]?\s*(?:消費税|内消費税|税額|税率|内税|外税|\d+(?:\.\d+)?\s*[%％]\s*(?:対象|税|tax))/i.freeze
+    ANALYSIS_PAYMENT_METADATA_ID_TITLE_PATTERN = /\A\s*(?:処理番号|処理通番|伝票番号|承認番号|取引番号|レシート番号|カード番号|会員番号|端末番号|登録番号|invoice\s*number|approval\s*number|terminal\s*number)\s*[:：]?\s*\z/i.freeze
+    ANALYSIS_PAYMENT_INSTRUMENT_QUALIFIER_PATTERN = /クレジット(?:カード)?|credit\s*(?:card)?/i.freeze
+    ANALYSIS_PAYMENT_CATEGORY_ALIAS_PATTERNS = {
+      "cash" => /\A(?:現金|現\s*計|cash)\z/i,
+      "credit_card" => /\A(?:クレジット(?:カード)?|credit\s*(?:card)?)\z/i,
+      "debit_card" => /\A(?:デビット(?:カード)?|debit\s*(?:card)?)\z/i,
+      "e_money" => /\A(?:電子マネー|e[_\s-]*money)\z/i,
+      "qr_payment" => /\A(?:QR(?:コード)?|qr[_\s-]*payment)\z/i,
+      "other" => /\A(?:商品券|金券|ギフト券|voucher|gift\s*certificate)\z/i
+    }.freeze
     ANALYSIS_POINT_PAYMENT_LINE_PATTERN = /ポイント\s*(?:利用|支払|払い|決済)|point\s*(?:redemption|payment|used|use|redeemed)|points?\s*(?:redemption|payment|used|redeemed)/i.freeze
     ANALYSIS_POINT_PAYMENT_STRONG_LINE_PATTERN = /ポイント\s*(?:支払|払い|決済)|point\s*(?:redemption|payment|redeemed)|points?\s*(?:redemption|payment|redeemed)/i.freeze
     ANALYSIS_POINT_DISPLAY_LINE_PATTERN = /獲得ポイント|現在ポイント|保有ポイント|ポイント残高|スマイルポイント|付与ポイント|earned\s*points?|current\s*points?|points?\s*balance/i.freeze
@@ -606,6 +629,7 @@ module ReceiptAnalysisProfiles
       "現金",
       "クレジット",
       "商品券",
+      "eGift",
       "交通系IC",
       "電子マネー",
       "PayPay",
@@ -636,7 +660,7 @@ module ReceiptAnalysisProfiles
     AI_REMOVABLE_NOISE_LINE_PATTERN = /小計|合計|税込|税抜|内税|外税|消費税|税率|値引|割引|預り|釣り|お釣り|数量|個数|単価|商品コード|商品番号|SKU/.freeze
     AI_STORE_CANDIDATE_REFERENCE_NOISE_PATTERN = /tel|電話|レジ|伝票|領収|日時|合計|小計/i.freeze
     AI_PURCHASE_CONTEXT_LINE_PATTERN = /購入|会計|発行|伝票|領収|オーダー|注文|日時|時刻/.freeze
-    AI_PAYMENT_CONTEXT_LINE_PATTERN = /現金|現計|現金計|現金合計|クレジット|カード|売上票|電子マネー|Edy|WAON|iD|QUICPay|交通系|Suica|PASMO|ICOCA|PayPay|楽天ペイ|d払い|au PAY|メルペイ|支払|決済|支払区分/.freeze
+    AI_PAYMENT_CONTEXT_LINE_PATTERN = /e[\s-]*gift|イーギフト|電子ギフト|商品券|金券|ギフト券|ストアクレジット|store\s*credit|現金|現計|現金計|現金合計|クレジット|カード|売上票|電子マネー|Edy|WAON|iD|QUICPay|交通系|Suica|PASMO|ICOCA|PayPay|楽天ペイ|d払い|au PAY|メルペイ|支払|決済|支払区分/i.freeze
     AI_TAX_CONTEXT_LINE_PATTERN = /税率|税額|内税|外税|消費税|軽減税率|標準税率|対象|\d+％|\d+%/.freeze
     AI_NUMERIC_SYMBOL_ONLY_LINE_PATTERN = /\A[\d\-\+\.,:%¥円\/\s]+\z/.freeze
     AI_MASKED_CARD_LINE_PATTERN = /\A\*{4,}.+\d{2,4}\z/.freeze
@@ -1113,6 +1137,74 @@ module ReceiptAnalysisProfiles
 
       def analysis_voucher_payment_pattern
         ANALYSIS_VOUCHER_PAYMENT_PATTERN
+      end
+
+      def analysis_payment_section_start_pattern
+        ANALYSIS_PAYMENT_SECTION_START_PATTERN
+      end
+
+      def analysis_payment_section_total_pattern
+        ANALYSIS_PAYMENT_SECTION_TOTAL_PATTERN
+      end
+
+      def analysis_payment_section_end_pattern
+        ANALYSIS_PAYMENT_SECTION_END_PATTERN
+      end
+
+      def analysis_payment_affirmative_pattern
+        ANALYSIS_PAYMENT_AFFIRMATIVE_PATTERN
+      end
+
+      def analysis_payment_applied_amount_pattern
+        ANALYSIS_PAYMENT_APPLIED_AMOUNT_PATTERN
+      end
+
+      def analysis_payment_tender_amount_pattern
+        ANALYSIS_PAYMENT_TENDER_AMOUNT_PATTERN
+      end
+
+      def analysis_payment_negative_context_pattern
+        ANALYSIS_PAYMENT_NEGATIVE_CONTEXT_PATTERN
+      end
+
+      def analysis_payment_sale_or_promo_pattern
+        ANALYSIS_PAYMENT_SALE_OR_PROMO_PATTERN
+      end
+
+      def analysis_payment_method_suffix_pattern
+        ANALYSIS_PAYMENT_METHOD_SUFFIX_PATTERN
+      end
+
+      def analysis_payment_informational_amount_pattern
+        ANALYSIS_PAYMENT_INFORMATIONAL_AMOUNT_PATTERN
+      end
+
+      def analysis_payment_informational_zero_pattern
+        ANALYSIS_PAYMENT_INFORMATIONAL_ZERO_PATTERN
+      end
+
+      def analysis_payment_tax_block_heading_pattern
+        ANALYSIS_PAYMENT_TAX_BLOCK_HEADING_PATTERN
+      end
+
+      def analysis_payment_tax_block_rate_pattern
+        ANALYSIS_PAYMENT_TAX_BLOCK_RATE_PATTERN
+      end
+
+      def analysis_payment_tax_summary_pattern
+        ANALYSIS_PAYMENT_TAX_SUMMARY_PATTERN
+      end
+
+      def analysis_payment_metadata_id_title_pattern
+        ANALYSIS_PAYMENT_METADATA_ID_TITLE_PATTERN
+      end
+
+      def analysis_payment_instrument_qualifier_pattern
+        ANALYSIS_PAYMENT_INSTRUMENT_QUALIFIER_PATTERN
+      end
+
+      def analysis_payment_category_alias_patterns
+        ANALYSIS_PAYMENT_CATEGORY_ALIAS_PATTERNS
       end
 
       def analysis_surcharge_kind_pattern(kind)
