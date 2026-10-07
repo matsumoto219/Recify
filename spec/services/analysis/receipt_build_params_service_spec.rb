@@ -4935,7 +4935,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           },
           lines: [
             '2026年 4月19日(日)No2',
-            '駐車券自家用車等',
+            'レジ2',
             '0796 16時41分'
           ]
         }
@@ -4995,7 +4995,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19'))
       end
 
-      it 'AIが明確な日時を返した場合はAI値を優先する' do
+      it 'OCRにないAI日時より同じ購入日のOCR時刻を使う' do
         ai_result = {
           receipt_attributes: {
             purchased_at_text: '2026-04-19 17:05'
@@ -5005,7 +5005,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: ai_result)
 
-        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19 17:05'))
+        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19 16:41'))
       end
 
       it '日付のみで時刻候補がない場合は従来通り日付のみを保存する' do
@@ -5025,6 +5025,40 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: parking_receipt_ocr_result, ai_result: nil)
 
         expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19'))
+      end
+
+      it '任意の商品行を跨ぐだけでは日付と時刻を同一取引として結合しない' do
+        parking_receipt_ocr_result[:lines] = [
+          '2026年4月19日',
+          '駐車券自家用車等',
+          '0796 16時41分'
+        ]
+
+        params = described_class.call(ocr_result: parking_receipt_ocr_result)
+
+        expect(params[:receipt_attributes][:purchased_at]).to eq(Time.zone.parse('2026-04-19'))
+        expect(params[:review_reasons]).to include('purchased_at_uncertain')
+      end
+
+      it '省略状態の型不正をraiseせず不完全な日時根拠として扱う' do
+        parking_receipt_ocr_result[:truncated] = 'invalid'
+
+        params = described_class.call(ocr_result: parking_receipt_ocr_result)
+
+        expect(params[:purchased_at_resolution][:state]).to eq('uncertain')
+        expect(params[:review_reasons]).to include('purchased_at_uncertain')
+      end
+
+      it '省略状態が未記録の旧snapshotを完全な日時根拠として扱わない' do
+        parking_receipt_ocr_result[:schema_version] = 'receipt_analysis_run_ocr_result_v1'
+        parking_receipt_ocr_result[:truncated] = {}
+        parking_receipt_ocr_result[:candidates][:purchased_at_text] = '2026-04-19 16:41'
+        parking_receipt_ocr_result[:lines] = [ '2026-04-19 16:41' ]
+
+        params = described_class.call(ocr_result: parking_receipt_ocr_result)
+
+        expect(params[:purchased_at_resolution][:state]).to eq('uncertain')
+        expect(params[:review_reasons]).to include('purchased_at_uncertain')
       end
     end
 
@@ -5102,6 +5136,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         {
           candidates: {
             store_name: 'サンプルストア',
+            purchased_at_text: '2026-05-20 12:34',
             total_amount: 1_640,
             payment_method_text: '現金',
             items: [

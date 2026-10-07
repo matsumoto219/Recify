@@ -15,7 +15,11 @@ class Receipts::Processing::Pipeline
       price_tax_inclusion_uncertain
     ].freeze
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
-    PURCHASED_AT_CONFLICTED_REVIEW_REASON = "purchased_at_conflicted"
+    PURCHASED_AT_REVIEW_REASONS = %w[
+      purchased_at_missing
+      purchased_at_uncertain
+      purchased_at_conflicted
+    ].freeze
     ITEM_NAME_UNCERTAIN_REVIEW_REASON = "item_name_uncertain"
     ITEMS_MISSING_REVIEW_REASON = "items_missing"
     ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON = "item_tax_rate_uncertain"
@@ -127,7 +131,10 @@ class Receipts::Processing::Pipeline
       params[:receipt_items_attributes] = clear_resolved_item_review_flags(params[:receipt_items_attributes])
 
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
-      ocr_review_reasons = resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params)
+      ocr_review_reasons = resolved_purchased_at_review_reasons(
+        resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params),
+        params
+      )
       if ocr_low_quality
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -146,6 +153,7 @@ class Receipts::Processing::Pipeline
         amount_review_reasons(amount_result),
         ocr_review_reasons
       )
+      review_reasons = resolved_purchased_at_review_reasons(review_reasons, params)
       params[:receipt_items_attributes] = materialize_item_review_reasons(
         params[:receipt_items_attributes],
         originally_reviewed_item_indexes: reviewed_item_indexes,
@@ -227,7 +235,10 @@ class Receipts::Processing::Pipeline
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
-      ocr_review_reasons = resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params)
+      ocr_review_reasons = resolved_purchased_at_review_reasons(
+        resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params),
+        params
+      )
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -239,6 +250,7 @@ class Receipts::Processing::Pipeline
         amount_review_reasons(amount_result),
         ocr_review_reasons
       )
+      review_reasons = resolved_purchased_at_review_reasons(review_reasons, params)
 
       # 仕様上、AI無効時の OCR only 保存ルートは completed ではなく review_needed を基本にする。
       # 先に AI クライアント層と通常 AI 保存ルートの安定化を優先するため、ここでは固定にしておく。
@@ -295,7 +307,10 @@ class Receipts::Processing::Pipeline
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
-      ocr_review_reasons = resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params)
+      ocr_review_reasons = resolved_purchased_at_review_reasons(
+        resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params),
+        params
+      )
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -306,6 +321,7 @@ class Receipts::Processing::Pipeline
         amount_review_reasons(amount_result),
         ocr_review_reasons
       )
+      review_reasons = resolved_purchased_at_review_reasons(review_reasons, params)
       mapped = Analysis.processing_error_mapping(error_code)
 
       receipt_attributes = params[:receipt_attributes].merge(
@@ -1277,7 +1293,7 @@ class Receipts::Processing::Pipeline
       review_reasons = remove_resolved_store_address_missing_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
       review_reasons = remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
-      review_reasons = remove_resolved_purchased_at_conflicted_review_reason(review_reasons, params, ocr_result)
+      review_reasons = resolved_purchased_at_review_reasons(review_reasons, params)
       review_reasons = remove_resolved_item_name_review_reasons(review_reasons, params, amount_result)
       review_reasons = remove_resolved_item_category_uncertain_review_reason(review_reasons, params)
       review_reasons = remove_resolved_item_tax_rate_uncertain_review_reason(review_reasons, params, amount_result)
@@ -1311,13 +1327,6 @@ class Receipts::Processing::Pipeline
       return review_reasons unless resolved_store_address_supported_by_ocr?(params, ocr_result)
 
       review_reasons - [ "store_address_uncertain" ]
-    end
-
-    def remove_resolved_purchased_at_conflicted_review_reason(review_reasons, params, ocr_result)
-      return review_reasons unless review_reasons.include?(PURCHASED_AT_CONFLICTED_REVIEW_REASON)
-      return review_reasons unless purchased_at_supported_by_ocr?(params, ocr_result)
-
-      review_reasons - [ PURCHASED_AT_CONFLICTED_REVIEW_REASON ]
     end
 
     def remove_resolved_item_name_review_reasons(review_reasons, params, amount_result)
@@ -1504,6 +1513,14 @@ class Receipts::Processing::Pipeline
         (normalize_review_reasons(resolution[:reason_codes]) & %w[store_name_missing store_name_uncertain])
     end
 
+    def resolved_purchased_at_review_reasons(review_reasons, params)
+      resolution = normalized_hash(params[:purchased_at_resolution])
+      return review_reasons unless %w[confirmed date_only conflicted uncertain missing].include?(resolution[:state])
+
+      (review_reasons - PURCHASED_AT_REVIEW_REASONS) +
+        (normalize_review_reasons(resolution[:reason_codes]) & PURCHASED_AT_REVIEW_REASONS)
+    end
+
     def resolved_store_address_supported_by_ocr?(params, ocr_result)
       store_address = normalized_hash(params[:receipt_attributes])[:store_address].to_s
       compact_address = compact_address_for_review(store_address)
@@ -1531,40 +1548,6 @@ class Receipts::Processing::Pipeline
         .unicode_normalize(:nfkc)
         .downcase
         .gsub(/[[:space:]\-−ー‐‑‒–—―・,，、。:：]/, "")
-    end
-
-    def purchased_at_supported_by_ocr?(params, ocr_result)
-      purchased_at = parse_time_value(normalized_hash(params[:receipt_attributes])[:purchased_at])
-      return false unless purchased_at.respond_to?(:strftime)
-
-      text = ocr_datetime_support_text(ocr_result)
-      return false if text.blank?
-
-      date_variants = [
-        purchased_at.strftime("%Y-%m-%d"),
-        purchased_at.strftime("%Y/%m/%d"),
-        purchased_at.strftime("%Y%m%d"),
-        "#{purchased_at.year}年#{purchased_at.month}月#{purchased_at.day}日",
-        purchased_at.strftime("%Y年%m月%d日")
-      ].uniq
-      time_variants = [
-        purchased_at.strftime("%H:%M"),
-        "#{purchased_at.hour}:#{purchased_at.min.to_s.rjust(2, '0')}",
-        "#{purchased_at.hour}時#{purchased_at.min.to_s.rjust(2, '0')}分"
-      ].uniq
-
-      date_variants.any? { |date| text.include?(date) } &&
-        (purchased_at.hour.zero? && purchased_at.min.zero? || time_variants.any? { |time| text.include?(time) })
-    end
-
-    def ocr_datetime_support_text(ocr_result)
-      candidates = normalized_hash(ocr_result[:candidates])
-      [
-        ocr_result[:raw_text],
-        ocr_result[:lines],
-        candidates[:purchased_at_text],
-        candidates[:purchased_at_candidates]
-      ].flatten.compact.join("\n")
     end
 
     def payment_method_resolved_after_build?(params, amount_result)

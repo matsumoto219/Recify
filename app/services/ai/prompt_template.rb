@@ -37,6 +37,7 @@ module Ai
         - Use ISO-like format: YYYY-MM-DD HH:MM
         - Time MUST be in 24-hour format (HH:MM)
         - Use only standard separators for date and time ("-" for date, ":" for time)
+        - A confirmed date-only value MUST remain YYYY-MM-DD without an invented time.
 
         Do NOT output anything except JSON.
         Do NOT include markdown fences or explanations.
@@ -193,9 +194,16 @@ module Ai
         - customer_facing_store_candidates, store_candidates, operator_candidates, branch_name_candidates, and address_candidates are supporting references only. Do NOT output those arrays.
 
         For purchase:
-        - purchased_at_text: prefer OCR purchased_at_text. Do NOT invent timestamps.
-        - If OCR contains only a date and purchased_at_candidates or purchase_context_lines contain a clearly supported transaction time, complete it to a datetime.
-        - If purchased_at_text contains only a date and a single plausible transaction time is available in purchased_at_candidates or purchase_context_lines, return a full datetime instead of a date-only value.
+        - purchased_at_text: identify when this purchase or fee settlement occurred. Do NOT invent timestamps.
+        - Use purchase.purchased_at_evidence as the event-role and association reference when present. Azure field names and OCR purchased_at_text do not override contrary event evidence.
+        - Match date and time only within the same event.
+        - Do not use service_start, service_end, duration, or reference events as the purchase datetime.
+        - Prefer the settlement or completed transaction for this purchase; ordinary receipt issuance may be used when no transaction event is available and its association is clear.
+        - Do not choose a later event merely because it is newer. A different service or reference time is not a competing purchase time.
+        - Preserve a confirmed purchase date when no supported purchase time is available.
+        - Do not complete a purchase date using a time from another event, a document-wide unique time, elapsed duration, or the current date.
+        - An incomplete or truncated evidence set does not prove that its remaining event is unique.
+        - If evidence is invalid or competing purchase events remain unresolved, return null and the appropriate purchased_at_uncertain or purchased_at_conflicted reason. Do not fall back to an excluded OCR datetime.
         - Use purchased_at_candidates, purchase_context_lines, and filtered_content as supporting evidence.
         - Prefer receipt, transaction, and payment context over order, preparation, reservation, or reference workflow times.
         - Use meta.country_region as a reference for local date and time notation.

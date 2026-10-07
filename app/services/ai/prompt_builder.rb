@@ -82,8 +82,18 @@ module Ai
       {
         purchased_at_text: candidate_value(:purchased_at_text),
         purchased_at_candidates: purchased_at_candidates,
-        purchase_context_lines: purchase_context_lines
+        purchase_context_lines: purchase_context_lines,
+        purchased_at_evidence: purchased_at_evidence
       }.compact
+    end
+
+    def purchased_at_evidence
+      return unless candidates.key?(:purchased_at_evidence) || candidates.key?("purchased_at_evidence")
+
+      @purchased_at_evidence ||= Analysis.purchased_at_evidence(
+        candidate_value(:purchased_at_evidence) || {},
+        max_candidates: self.class.purchase_candidates_max
+      )
     end
 
     def store_name_options
@@ -235,6 +245,14 @@ module Ai
     end
 
     def purchased_at_candidates
+      if purchased_at_evidence
+        return purchased_at_evidence[:candidates].filter_map do |candidate|
+          next if candidate[:role] == "duration"
+
+          [ candidate[:date], candidate[:time] ].compact.join(" ").presence
+        end.uniq
+      end
+
       lines.select { |line| date_time_line?(line) }.uniq.first(self.class.purchase_candidates_max)
     end
 
