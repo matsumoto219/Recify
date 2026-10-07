@@ -20,12 +20,18 @@ module Analysis
       candidates = entries.filter_map { |entry| candidate(entry, entries) }
       candidates = combine_partial_candidates(candidates, entries)
       complete = entries.none? { |entry| entry[:invalid] } && candidates.none? { |candidate| candidate[:association] == "invalid" }
-      omitted = candidates.drop(PurchasedAtEvidence::MAX_CANDIDATES)
+      purchase_candidates, excluded_candidates = candidates.partition do |candidate|
+        !PurchasedAtEvidence::EXCLUDED_ROLES.include?(candidate[:role])
+      end
+      ordered = purchase_candidates + excluded_candidates
+      retained = ordered.first(PurchasedAtEvidence::MAX_CANDIDATES).sort_by { |candidate| candidate[:line_index] }
+      omitted = ordered.drop(PurchasedAtEvidence::MAX_CANDIDATES)
       PurchasedAtEvidence.call(
         {
           schema_version: PurchasedAtEvidence::SCHEMA_VERSION,
-          candidates: candidates.first(PurchasedAtEvidence::MAX_CANDIDATES),
-          complete: complete && omitted.none?, truncated: omitted.any?, omitted_count: omitted.size, invalid: false
+          candidates: retained,
+          complete: complete && omitted.all? { |candidate| PurchasedAtEvidence::EXCLUDED_ROLES.include?(candidate[:role]) && candidate[:association] != "invalid" },
+          truncated: omitted.any?, omitted_count: omitted.size, invalid: false
         }
       )
     end

@@ -104,4 +104,48 @@ RSpec.describe Analysis::PurchasedAtEvidence do
       )
     )
   end
+
+  [ 0, 50 ].each do |purchase_index|
+    it "購入候補が#{purchase_index}行目でも除外候補だけの上限省略では確定根拠を失わない" do
+      lines = Array.new(50, "営業時間 10:00〜21:00")
+      lines.insert(purchase_index, "精算 2026/09/01 07:36")
+
+      result = described_class.from_lines(lines: lines, profile: ReceiptAnalysisProfiles.default)
+
+      expect(result).to include(complete: true, truncated: true, omitted_count: 1, invalid: false)
+      expect(result[:candidates].size).to eq(50)
+      expect(result[:candidates]).to include(
+        include(line_index: purchase_index, date: "2026-09-01", time: "07:36", role: "settlement")
+      )
+      expected_indexes = purchase_index.zero? ? (0..49).to_a : (0..48).to_a + [ 50 ]
+      expect(result[:candidates].map { |entry| entry[:line_index] }).to eq(expected_indexes)
+      expect(described_class.call(JSON.parse(result.to_json))).to eq(result)
+    end
+  end
+
+  [ "精算 ", "" ].each do |label|
+    it "ラベル#{label.inspect}の購入候補自体が上限を超えた場合は省略後も不完全状態を維持する" do
+      lines = Array.new(51) { |index| "#{label}2026/09/01 07:#{index.to_s.rjust(2, '0')}" }
+
+      result = described_class.from_lines(lines: lines, profile: ReceiptAnalysisProfiles.default)
+
+      expect(result).to include(complete: false, truncated: true, omitted_count: 1, invalid: false)
+      expect(result[:candidates].size).to eq(50)
+      expect(described_class.call(JSON.parse(result.to_json))).to eq(result)
+    end
+  end
+
+  it "省略された除外候補の対応が不正なら不完全状態を維持する" do
+    lines = [ "精算 2026/09/01 07:36" ] + Array.new(50, "営業時間 10:00〜21:00")
+    sources = lines.each_index.map do |index|
+      { candidate_id: "datetime_line_#{index}", source_path: "lines[#{index}]", association: "exact" }
+    end
+    sources.last[:association] = "invalid"
+
+    result = described_class.from_lines(lines: lines, profile: ReceiptAnalysisProfiles.default, line_sources: sources)
+
+    expect(result).to include(complete: false, truncated: true, omitted_count: 1, invalid: false)
+    expect(result[:candidates].size).to eq(50)
+    expect(described_class.call(JSON.parse(result.to_json))).to eq(result)
+  end
 end

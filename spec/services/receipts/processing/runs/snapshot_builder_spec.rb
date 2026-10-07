@@ -42,6 +42,26 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
       expect(repeated.dig('candidates', 'purchased_at_evidence', 'candidates').size).to eq(1)
     end
 
+    it 'keeps the settlement after excluded source rows are omitted at extraction and snapshot limits' do
+      lines = Array.new(50, '営業時間 10:00〜21:00') + [ '精算 2026/09/01 07:36' ]
+      evidence = Analysis.purchased_at_evidence_from_lines(lines: lines, profile: ReceiptAnalysisProfiles.default)
+      allow(described_class).to receive(:snapshot_purchase_candidates_max).and_return(1)
+      snapshot = described_class.ocr_result_snapshot(
+        success: true, lines: lines, candidates: { purchased_at_evidence: evidence }
+      )
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(JSON.parse(snapshot.to_json))
+      allow(described_class).to receive(:snapshot_purchase_candidates_max).and_return(50)
+      repeated = described_class.ocr_result_snapshot(restored)
+      params = Analysis.build_receipt_params(ocr_result: restored, ai_result: {})
+
+      expect(repeated.dig('candidates', 'purchased_at_evidence')).to eq(snapshot.dig('candidates', 'purchased_at_evidence'))
+      expect(repeated.dig('candidates', 'purchased_at_evidence')).to include(
+        'complete' => true, 'truncated' => true, 'omitted_count' => 50, 'invalid' => false
+      )
+      expect(params.dig(:receipt_attributes, :purchased_at)).to eq(Time.zone.parse('2026-09-01 07:36'))
+      expect(params[:purchased_at_resolution]).to include(state: 'confirmed', reason_codes: [])
+    end
+
     it 'rejects unknown fields without returning to the legacy datetime path' do
       datetime_evidence[:raw_response] = 'not retained'
       snapshot = described_class.ocr_result_snapshot(candidates: { purchased_at_evidence: datetime_evidence })
