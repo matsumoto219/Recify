@@ -265,6 +265,17 @@ class Receipts::Editing::ConsistencyGuard
   end
 
   def payment_sum_snapshot_mismatch?
+    if @amount_result.respond_to?(:key?) &&
+        (@amount_result.key?(:payment_reconciliation) || @amount_result.key?("payment_reconciliation"))
+      reconciliation = fetch_value(@amount_result, :payment_reconciliation)
+      return true unless reconciliation.respond_to?(:key?) &&
+        (reconciliation.key?(:payment_amount_sum) || reconciliation.key?("payment_amount_sum")) &&
+        (reconciliation.key?(:final_payment_total) || reconciliation.key?("final_payment_total"))
+
+      actual_payment_total = @receipt_payments.empty? ? nil : payment_total
+      return actual_payment_total != amount_result_value(:payment_reconciliation, :payment_amount_sum)
+    end
+
     payment_amount_sum = amount_result_value(:computed, :payment_amount_sum)
     return false if payment_amount_sum.nil?
 
@@ -274,8 +285,15 @@ class Receipts::Editing::ConsistencyGuard
   def payment_mismatch?
     return false if @receipt_payments.empty?
 
-    final_payment_total = amount_result_value(:computed, :final_payment_total)
+    section = if @amount_result.respond_to?(:key?) &&
+        (@amount_result.key?(:payment_reconciliation) || @amount_result.key?("payment_reconciliation"))
+      :payment_reconciliation
+    else
+      :computed
+    end
+    final_payment_total = amount_result_value(section, :final_payment_total)
     return false if final_payment_total.nil?
+    return false if payment_total.nil?
 
     payment_total != final_payment_total
   end
@@ -297,7 +315,10 @@ class Receipts::Editing::ConsistencyGuard
   end
 
   def payment_total
-    @receipt_payments.sum { |payment| amount_value(payment, :amount) }
+    amounts = @receipt_payments.map { |payment| fetch_value(payment, :amount) }
+    return nil if amounts.any?(&:nil?)
+
+    amounts.sum { |amount| ReceiptAmountService.parse_amount(amount) }
   end
 
   def amount_result_value(section, key)

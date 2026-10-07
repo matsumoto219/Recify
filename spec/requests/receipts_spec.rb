@@ -6238,6 +6238,33 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    [ nil, 0 ].each do |payment_amount|
+      it "編集フォームは支払額#{payment_amount.inspect}を区別して支払合計と差額を表示する" do
+        receipt.update!(total_amount: 100, subtotal_amount: 100, tax_amount: 0)
+        receipt.receipt_payments.create!(method: '現金', amount: 60)
+        receipt.receipt_payments.create!(method: 'eGift', amount: payment_amount)
+
+        get edit_receipt_path(receipt)
+
+        document = Nokogiri::HTML(response.body)
+        payment_rows = rendered_receipt_payment_rows(document)
+        sum = document.at_css('[data-receipt-form-target="paymentAmountSum"]')
+        difference = document.at_css('[data-receipt-form-target="paymentDifferenceAmount"]')
+        warning = document.at_css('[data-receipt-form-target="paymentMismatchWarning"]')
+
+        aggregate_failures do
+          expect(response).to have_http_status(:success)
+          expect(payment_rows.last.at_css('[data-receipt-form-target="paymentMethodInput"]')['value']).to eq('eGift')
+          expect(payment_rows.last.at_css('[data-receipt-form-target="paymentAmountInput"]')['value'].to_s).to eq(payment_amount.to_s)
+          expect(payment_rows.last.at_css('[data-receipt-form-target="paymentAmountInput"]')['placeholder']).to eq(I18n.t('receipts.payment_fields.amount_unavailable'))
+          expect(sum.text.strip).to eq(payment_amount.nil? ? I18n.t('receipts.common.not_available') : '¥60')
+          expect(sum['data-amount-value']).to eq(payment_amount.nil? ? '' : '60')
+          expect(difference.text.strip).to eq(payment_amount.nil? ? I18n.t('receipts.common.not_available') : '-¥40')
+          expect(warning['class'].include?('hidden')).to eq(payment_amount.nil?)
+        end
+      end
+    end
+
     it '編集フォームは支払合計が不足している時に警告と実支払額同期ボタンを表示する' do
       receipt.update!(total_amount: 1_000, subtotal_amount: 910, tax_amount: 90)
       receipt.receipt_items.create!(
@@ -7711,6 +7738,47 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
+    it '支払い行の金額を空欄にして保存しても方法とnilを保持する' do
+      receipt.update!(total_amount: 100, subtotal_amount: 100, tax_amount: 0, payment_method: 'other')
+      payment = receipt.receipt_payments.create!(method: 'eGift', amount: 100)
+
+      patch_receipt receipt, params: {
+        receipt: {
+          receipt_payments_attributes: { '0' => { id: payment.id, method: 'eGift', amount: '' } }
+        }
+      }
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(payment.reload).to have_attributes(method: 'eGift', amount: nil)
+        expect(receipt.reload).to have_attributes(total_amount: 100, payment_method: 'other', status: 'review_needed')
+        expect(receipt.review_reasons).to include('payment_amount_uncertain')
+        expect(receipt.review_reasons).not_to include('payment_method_uncertain', 'payment_amount_mismatch')
+      end
+    end
+
+    it '未取得の支払額を確定しても税の確認理由は維持する' do
+      receipt.update!(
+        total_amount: 100,
+        subtotal_amount: 100,
+        tax_amount: 0,
+        payment_method: 'other',
+        review_reasons: %w[payment_amount_uncertain tax_detail_mismatch]
+      )
+      payment = receipt.receipt_payments.create!(method: 'eGift', amount: nil)
+
+      patch_receipt receipt, params: {
+        receipt: { receipt_payments_attributes: { '0' => { id: payment.id, amount: '100' } } }
+      }
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(payment.reload).to have_attributes(method: 'eGift', amount: 100)
+        expect(receipt.reload.review_reasons).to eq([ 'tax_detail_mismatch' ])
+        expect(receipt.status).to eq('review_needed')
+      end
+    end
+
     it 'サービス料追加後に支払額が旧金額のままならpayment_amount_mismatchにする' do
       receipt.update!(store_name: 'サービス料追加前', total_amount: 1_000, subtotal_amount: 910, tax_amount: 90, status: 'completed')
       item = receipt.receipt_items.create!(
@@ -7765,7 +7833,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.total_amount).to eq(1_100)
         expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(1_100)
-        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to eq(1_000)
+        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate', 'payment_amount_sum')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('payment_reconciliation', 'payment_amount_sum')).to eq(1_000)
         expect(receipt.review_reasons).to include('payment_amount_mismatch')
         expect(receipt.status).to eq('review_needed')
       end
@@ -7825,7 +7895,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.total_amount).to eq(1_100)
         expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(1_100)
-        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to eq(1_000)
+        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate', 'payment_amount_sum')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('payment_reconciliation', 'payment_amount_sum')).to eq(1_000)
         expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_basis')).to eq('items_as_tax_included')
         expect(receipt.review_reasons).to include('payment_amount_mismatch')
         expect(receipt.status).to eq('review_needed')
@@ -7886,7 +7958,9 @@ RSpec.describe 'Receipts', type: :request do
         expect(response).to redirect_to(receipt_path(receipt))
         expect(receipt.total_amount).to eq(1_100)
         expect(receipt.amount_calculation_profile.dig('computed', 'final_payment_total')).to eq(1_100)
-        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to eq(1_100)
+        expect(receipt.amount_calculation_profile.dig('computed', 'payment_amount_sum')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('amount_engine', 'selected_candidate', 'payment_amount_sum')).to be_nil
+        expect(receipt.amount_calculation_profile.dig('payment_reconciliation', 'payment_amount_sum')).to eq(1_100)
         expect(receipt.review_reasons).not_to include('payment_amount_mismatch')
       end
     end

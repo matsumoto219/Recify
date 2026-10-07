@@ -618,7 +618,7 @@ RSpec.describe 'Amount Engine integration' do
     end
   end
 
-  it '税抜単価の税込補正OFFはmanual/edit_saveに影響しない' do
+  it '税抜単価の税込補正OFFは明示税抜sourceのmanual/edit_saveに影響しない' do
     create(
       :system_setting,
       key: ReceiptAmountService::TAX_EXCLUDED_PRICE_CONVERSION_SETTING_KEY,
@@ -627,7 +627,7 @@ RSpec.describe 'Amount Engine integration' do
 
     %i[manual edit_save].each do |context|
       result = call_amount_engine(
-        receipt: { subtotal_amount: 200, tax_amount: 20, total_amount: 220 },
+        receipt: { subtotal_amount: 200, tax_amount: 20, total_amount: 220, receipt_tax_basis: 'tax_added_to_subtotal', item_amount_basis: 'line_total_as_net' },
         items: [
           { price: 100, quantity: 2, quantity_unit_code: 'each', line_total: 200, tax_rate: BigDecimal('0.10') }
         ],
@@ -1360,7 +1360,8 @@ RSpec.describe 'Amount Engine integration' do
     aggregate_failures do
       # 検算: ユーザー編集保存では、OCRお預かりfallbackではなく明示入力として扱う。
       expect(result.dig(:computed, :final_payment_total)).to eq(1_000)
-      expect(result.dig(:computed, :payment_amount_sum)).to eq(1_100)
+      expect(result.dig(:computed, :payment_amount_sum)).to be_nil
+      expect(result.dig(:payment_reconciliation, :payment_amount_sum)).to eq(1_100)
       expect(result[:blocking_inconsistencies]).to include(:payment_amount_mismatch)
       expect(result[:needs_review]).to be(true)
     end

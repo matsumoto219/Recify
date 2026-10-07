@@ -1,6 +1,42 @@
 require 'rails_helper'
 
 RSpec.describe Amounts::PaymentReconciler do
+  it '方法が確定しても未取得額が含まれる集合は合計も差額も確定しない' do
+    result = described_class.new(
+      payments: [ { method: 'cash', amount: 200 }, { method: 'eGift', amount: nil } ],
+      purchase_total: 864,
+      payment_adjustment_total: 0
+    ).call
+
+    expect(result).to include(
+      payment_amount_sum: nil,
+      payment_delta: nil,
+      matched: nil,
+      reconciliation_status: :amount_unknown,
+      warnings: [ :payment_amount_uncertain ]
+    )
+  end
+
+  it '明示0円は未取得額と区別して照合する' do
+    result = described_class.new(
+      payments: [ { method: 'eGift', amount: 0 } ],
+      purchase_total: 0,
+      payment_adjustment_total: 0
+    ).call
+
+    expect(result).to include(payment_amount_sum: 0, payment_delta: 0, matched: true)
+  end
+
+  it '購入合計が未取得なら既知の支払額を保持して差額を計算しない' do
+    result = described_class.new(
+      payments: [ { method: 'cash', amount: 200 } ],
+      purchase_total: nil,
+      payment_adjustment_total: 0
+    ).call
+
+    expect(result).to include(final_payment_total: nil, payment_amount_sum: 200, payment_delta: nil, matched: nil)
+  end
+
   it '支払行も支払調整もない場合は照合済みではなく未観測として返す' do
     result = described_class.new(
       payments: [],

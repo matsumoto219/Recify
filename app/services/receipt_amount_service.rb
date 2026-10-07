@@ -201,6 +201,14 @@ class ReceiptAmountService
     ).call
   end
 
+  def self.apply_payment_reconciliation(amount_result:, receipt_payments:, purchase_total: amount_result.dig(:resolved, :total))
+    Amounts::PaymentReviewResult.call(
+      amount_result: amount_result,
+      payments: receipt_payments,
+      purchase_total: purchase_total
+    )
+  end
+
   def self.reference_projection_fallback_tax_rate(receipt_tax_rate:, receipt_tax_details:)
     Amounts::TaxDetailEvidence.new(receipt_tax_details).trusted_reference_projection_fallback_rate(
       receipt_tax_rate: receipt_tax_rate
@@ -473,12 +481,12 @@ class ReceiptAmountService
       receipt_tax_basis: active_receipt_tax_basis
     )
 
-    Amounts::Engine.new(
+    result = Amounts::Engine.new(
       receipt: @receipt,
       items: @items,
       tax_details: @tax_details,
       adjustments: @adjustments,
-      payments: @payments,
+      payments: candidate_payments,
       context: @context,
       tax_rounding_modes: candidate_tax_rounding_modes,
       discount_rounding_mode: active_discount_rounding_mode,
@@ -489,11 +497,21 @@ class ReceiptAmountService
       evaluated_candidates: evaluated_candidates_for_engine,
       snapshot_candidate_count: @snapshot_candidate_count
     ).call
+    self.class.apply_payment_reconciliation(amount_result: result, receipt_payments: @payments)
   rescue *INVALID_ITEM_SOURCE_ERRORS
     raise InvalidItemSourceError, "Invalid item pricing source"
   end
 
   private
+
+  def candidate_payments
+    return [] unless %i[analysis manual].include?(@context)
+    return [] unless @payments.all? do |payment|
+      !payment[:amount].nil? && payment[:amount_persisted_payment] != true
+    end
+
+    @payments
+  end
 
   def adjustment_tax_rate_items
     return normalized_items_for_adjustment_tax_rate unless @context == :analysis
@@ -890,7 +908,7 @@ class ReceiptAmountService
       items: @items,
       tax_details: @tax_details,
       adjustments: @adjustments,
-      payments: @payments,
+      payments: candidate_payments,
       context: @context,
       tax_rounding_modes: candidate_tax_rounding_modes,
       discount_rounding_modes: candidate_discount_rounding_modes,
@@ -1312,7 +1330,9 @@ class ReceiptAmountService
 
     {
       method: normalized[:method],
-      amount: to_i_or_nil(normalized[:amount]),
+      amount: %w[voucher_tender allocated unknown].include?(normalized[:amount_role].to_s) ? nil : to_i_or_nil(normalized[:amount]),
+      amount_persisted_payment: (payment.respond_to?(:persisted?) && payment.persisted?) ||
+        (normalized[:id].present? && normalized[:receipt_id].present?),
       label: normalized[:label],
       source_text: normalized[:source_text],
       source_line_index: normalized[:source_line_index],

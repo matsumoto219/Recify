@@ -19,6 +19,11 @@ module Amounts
         return false unless delta&.positive?
 
         normalized_payments = Array(payments)
+        return false if normalized_payments.any? do |payment|
+          fetch_value(payment, :amount_persisted_payment) == true ||
+            (payment.respond_to?(:persisted?) && payment.persisted?) ||
+            (fetch_value(payment, :id).present? && fetch_value(payment, :receipt_id).present?)
+        end
         return false if exact_final_payment_line_present?(normalized_payments, final_payment_total)
         return false unless normalized_payments.one?
 
@@ -69,7 +74,7 @@ module Amounts
 
     def initialize(payments:, purchase_total:, payment_adjustment_total:)
       @payments = Array(payments)
-      @purchase_total = Amounts::NumberParser.parse_amount(purchase_total)
+      @purchase_total = Amounts::NumberParser.parse_amount_or_nil(purchase_total)
       @payment_adjustment_total = Amounts::NumberParser.parse_amount(payment_adjustment_total)
     end
 
@@ -92,17 +97,22 @@ module Amounts
     attr_reader :payments, :purchase_total, :payment_adjustment_total
 
     def final_payment_total
+      return nil if purchase_total.nil?
+
       @final_payment_total ||= purchase_total + payment_adjustment_total
     end
 
     def payment_amount_sum
       return nil if payments.blank?
 
-      @payment_amount_sum ||= payments.sum { |payment| Amounts::NumberParser.parse_amount(fetch_value(payment, :amount)) }
+      amounts = payments.map { |payment| Amounts::NumberParser.parse_amount_or_nil(fetch_value(payment, :amount)) }
+      return nil if amounts.any?(&:nil?)
+
+      amounts.sum
     end
 
     def payment_delta
-      return nil if payment_amount_sum.nil?
+      return nil if payment_amount_sum.nil? || final_payment_total.nil?
 
       payment_amount_sum - final_payment_total
     end
@@ -116,6 +126,8 @@ module Amounts
 
     def reconciliation_status
       return payment_adjustment_total.zero? ? :not_observed : :evidence_missing if payments.blank?
+      return :amount_unknown if payment_amount_sum.nil?
+      return :not_observed if final_payment_total.nil?
 
       payment_delta.zero? ? :matched : :mismatched
     end
@@ -123,6 +135,7 @@ module Amounts
     def warnings
       # 支払不足・過払いは計算候補の破綻ではなく、保存後にユーザーへ確認を促すreview対象として扱う。
       return [] if %i[matched not_observed].include?(reconciliation_status)
+      return [ :payment_amount_uncertain ] if reconciliation_status == :amount_unknown
 
       [ :payment_amount_mismatch ]
     end

@@ -128,6 +128,7 @@ ja:
         tax_detail_mismatch: "税内訳の不一致"
         invalid_amount_relation: "金額の関係が不正"
         payment_amount_mismatch: "支払金額の不一致"
+        payment_amount_uncertain: "支払充当額の未取得"
         tax_details_double_counted: "税内訳の二重計上"
         tax_detail_gross_item_mismatch: "税内訳と明細金額の不一致"
         unsupported_tax_detail_gross_basis: "税内訳の税込基準を確認できない"

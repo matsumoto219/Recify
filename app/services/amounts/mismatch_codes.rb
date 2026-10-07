@@ -22,6 +22,7 @@ module Amounts
       adjustment_tax_rate_missing: "ADJUSTMENT_TAX_RATE_MISSING",
       invalid_amount_relation: "INVALID_AMOUNT_RELATION",
       payment_amount_mismatch: "PAYMENT_AMOUNT_MISMATCH",
+      payment_amount_uncertain: "PAYMENT_AMOUNT_UNCERTAIN",
       tax_details_double_counted: "TAX_DETAILS_DOUBLE_COUNTED",
       tax_detail_gross_item_mismatch: "TAX_DETAIL_GROSS_ITEM_MISMATCH"
     }.freeze

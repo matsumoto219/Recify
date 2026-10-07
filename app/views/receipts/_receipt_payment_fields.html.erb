@@ -68,6 +68,7 @@
                        attribute: :amount,
                        label: t("receipts.payment_fields.amount"),
                        value: row_state.amount_value,
+                       placeholder: t("receipts.payment_fields.amount_unavailable"),
                        min: 0,
                        max: ReceiptAmountService.receipt_payment_amount_max,
                        step: 1,

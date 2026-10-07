@@ -91,9 +91,16 @@
   <% subtotal_amount_value = receipt.subtotal_amount %>
   <% tax_amount_value = receipt.tax_amount %>
   <% payment_adjustment_summary = receipt_payment_adjustment_summary(receipt) %>
-  <% payment_reconciliation_final_total = payment_adjustment_summary&.final_payment_total || total_amount_value %>
-  <% payment_amount_sum_value = visible_receipt_payments.sum { |payment| payment.amount.to_i } %>
-  <% payment_difference_value = payment_reconciliation_final_total.nil? ? nil : payment_amount_sum_value - payment_reconciliation_final_total %>
+  <%
+    payment_reconciliation = ReceiptAmountService.reconcile_payments(
+      purchase_total: total_amount_value,
+      receipt_adjustments: visible_receipt_adjustments,
+      receipt_payments: visible_receipt_payments
+    )
+  %>
+  <% payment_reconciliation_final_total = payment_reconciliation[:final_payment_total] %>
+  <% payment_amount_sum_value = payment_reconciliation[:payment_amount_sum] %>
+  <% payment_difference_value = payment_reconciliation[:payment_delta] %>
   <% payment_mismatch_visible = visible_receipt_payments.any? && payment_difference_value.present? && payment_difference_value != 0 %>
 
   <%

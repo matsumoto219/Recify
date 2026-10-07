@@ -11,6 +11,7 @@ module Amounts
       tax_detail_mismatch
       invalid_amount_relation
       payment_amount_mismatch
+      payment_amount_uncertain
       tax_details_double_counted
       tax_detail_gross_item_mismatch
       adjustment_uncertain
