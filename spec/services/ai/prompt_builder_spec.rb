@@ -54,6 +54,76 @@ RSpec.describe Ai::PromptBuilder do
   end
 
   describe '.build' do
+    it '日時の役割と独立した候補省略状態を既存AI購入入力へ渡す' do
+      allow(described_class).to receive(:purchase_candidates_max).and_return(1)
+      ocr_result[:candidates][:purchased_at_evidence] = {
+        schema_version: 'purchased_at_evidence_v1', complete: true, truncated: false,
+        omitted_count: 0, invalid: false,
+        candidates: [
+          {
+            candidate_id: 'datetime_line_2',
+            date: '2026-05-20',
+            time: '12:34',
+            precision: 'datetime',
+            role: 'settlement',
+            association: 'exact',
+            source_path: 'lines[2]',
+            line_index: 2
+          },
+          {
+            candidate_id: 'datetime_line_3',
+            date: '2026-05-20',
+            time: '12:40',
+            precision: 'datetime',
+            role: 'settlement',
+            association: 'exact',
+            source_path: 'lines[3]',
+            line_index: 3
+          }
+        ]
+      }
+
+      result = described_class.build(ocr_result)
+
+      expect(result.dig(:purchase, :purchased_at_evidence)).to include(
+        schema_version: 'purchased_at_evidence_v1', complete: false, truncated: true, omitted_count: 1
+      )
+      expect(result.dig(:purchase, :purchased_at_evidence, :candidates).sole).to include(role: 'settlement')
+    end
+
+    it '購入日時候補に経過時間を時刻として渡さない' do
+      ocr_result[:lines] = [ '2026/05/20 12:34', '駐車時間 1:28' ]
+      ocr_result[:candidates][:purchased_at_evidence] = {
+        schema_version: 'purchased_at_evidence_v1', complete: true, truncated: false,
+        omitted_count: 0, invalid: false,
+        candidates: [
+          {
+            candidate_id: 'datetime_line_0',
+            date: '2026-05-20',
+            time: '12:34',
+            precision: 'datetime',
+            role: 'settlement',
+            association: 'exact',
+            source_path: 'lines[0]',
+            line_index: 0
+          },
+          {
+            candidate_id: 'datetime_line_1',
+            time: '01:28',
+            precision: 'time_only',
+            role: 'duration',
+            association: 'exact',
+            source_path: 'lines[1]',
+            line_index: 1
+          }
+        ]
+      }
+
+      result = described_class.build(ocr_result)
+
+      expect(result.dig(:purchase, :purchased_at_candidates)).to eq([ '2026-05-20 12:34' ])
+    end
+
     it '店舗名はserverが構成した候補集合だけをIDとともに渡す' do
       options = Analysis.store_name_options(ocr_result: ocr_result)
       result = described_class.build(ocr_result)

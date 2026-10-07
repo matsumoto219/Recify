@@ -454,13 +454,21 @@ class Receipts::Processing::Pipeline
     snapshot = normalized_hash(run.ocr_result_snapshot)
     return nil if snapshot.blank?
 
+    candidates = normalized_hash(snapshot[:candidates]).dup
+    if candidates.key?(:purchased_at_evidence)
+      candidates[:purchased_at_evidence] = Analysis.purchased_at_evidence(candidates[:purchased_at_evidence] || {})
+    end
+
     {
+      schema_version: snapshot[:schema_version] == Receipts::Processing::Runs::SnapshotBuilder::OCR_RESULT_SCHEMA_VERSION ?
+        snapshot[:schema_version] : "",
       success: snapshot[:success] == true,
       lines: Array(snapshot[:lines]).map(&:to_s),
       case_preserved_lines: Array(snapshot[:case_preserved_lines]).map(&:to_s),
-      candidates: normalized_hash(snapshot[:candidates]).to_h,
+      candidates: candidates.to_h,
       error_code: snapshot[:error_code].presence,
-      meta: normalized_hash(snapshot[:meta]).to_h
+      meta: normalized_hash(snapshot[:meta]).to_h,
+      truncated: normalized_hash(snapshot[:truncated]).to_h
     }.compact
   end
 

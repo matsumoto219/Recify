@@ -29,6 +29,188 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     end
   end
 
+  describe 'purchase datetime source evidence' do
+    let(:datetime_evidence) do
+      {
+        schema_version: 'purchased_at_evidence_v1', complete: true, truncated: false,
+        omitted_count: 0, invalid: false,
+        candidates: [
+          { candidate_id: 'datetime_line_0', date: '2026-09-01', time: '07:36', precision: 'datetime',
+            role: 'settlement', association: 'exact', source_path: 'lines[0]', line_index: 0 },
+          { candidate_id: 'datetime_line_1', date: '2026-09-01', time: '08:12', precision: 'datetime',
+            role: 'settlement', association: 'exact', source_path: 'lines[1]', line_index: 1 }
+        ]
+      }
+    end
+
+    it 'preserves exact dates and source identities independently from generic string truncation' do
+      allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
+      snapshot = described_class.ocr_result_snapshot(
+        success: true, candidates: { purchased_at_evidence: datetime_evidence }
+      )
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(JSON.parse(snapshot.to_json))
+      repeated = described_class.ocr_result_snapshot(restored)
+
+      aggregate_failures do
+        expect(snapshot.dig('candidates', 'purchased_at_evidence')).to eq(datetime_evidence.deep_stringify_keys)
+        expect(repeated.dig('candidates', 'purchased_at_evidence')).to eq(datetime_evidence.deep_stringify_keys)
+      end
+    end
+
+    it 'keeps omitted competing events incomplete after rehydration and a larger retry limit' do
+      allow(described_class).to receive(:snapshot_purchase_candidates_max).and_return(1)
+      snapshot = described_class.ocr_result_snapshot(candidates: { purchased_at_evidence: datetime_evidence })
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+      allow(described_class).to receive(:snapshot_purchase_candidates_max).and_return(5)
+      repeated = described_class.ocr_result_snapshot(restored)
+
+      expect(repeated.dig('candidates', 'purchased_at_evidence')).to include(
+        'complete' => false, 'truncated' => true, 'omitted_count' => 1, 'invalid' => false
+      )
+      expect(repeated.dig('candidates', 'purchased_at_evidence', 'candidates').size).to eq(1)
+    end
+
+    it 'keeps the settlement after excluded source rows are omitted at extraction and snapshot limits' do
+      lines = Array.new(50, '営業時間 10:00〜21:00') + [ '精算 2026/09/01 07:36' ]
+      evidence = Analysis.purchased_at_evidence_from_lines(lines: lines, profile: ReceiptAnalysisProfiles.default)
+      allow(described_class).to receive(:snapshot_purchase_candidates_max).and_return(1)
+      snapshot = described_class.ocr_result_snapshot(
+        success: true, lines: lines, candidates: { purchased_at_evidence: evidence }
+      )
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(JSON.parse(snapshot.to_json))
+      allow(described_class).to receive(:snapshot_purchase_candidates_max).and_return(50)
+      repeated = described_class.ocr_result_snapshot(restored)
+      params = Analysis.build_receipt_params(ocr_result: restored, ai_result: {})
+
+      expect(repeated.dig('candidates', 'purchased_at_evidence')).to eq(snapshot.dig('candidates', 'purchased_at_evidence'))
+      expect(repeated.dig('candidates', 'purchased_at_evidence')).to include(
+        'complete' => true, 'truncated' => true, 'omitted_count' => 50, 'invalid' => false
+      )
+      expect(params.dig(:receipt_attributes, :purchased_at)).to eq(Time.zone.parse('2026-09-01 07:36'))
+      expect(params[:purchased_at_resolution]).to include(state: 'confirmed', reason_codes: [])
+    end
+
+    it 'rejects unknown fields without returning to the legacy datetime path' do
+      datetime_evidence[:raw_response] = 'not retained'
+      snapshot = described_class.ocr_result_snapshot(candidates: { purchased_at_evidence: datetime_evidence })
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+      aggregate_failures do
+        expect(snapshot.to_json).not_to include('not retained')
+        expect(restored.dig(:candidates, 'purchased_at_evidence')).to include('invalid' => true, 'candidates' => [])
+        expect(described_class.ocr_result_snapshot(candidates: {}).fetch('candidates')).not_to have_key('purchased_at_evidence')
+      end
+    end
+
+    it 'preserves evidence in the AI input snapshot with its independent purchase limit' do
+      allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
+      snapshot = described_class.ai_input_snapshot(purchase: { purchased_at_evidence: datetime_evidence })
+
+      expect(snapshot.dig('purchase', 'purchased_at_evidence')).to eq(datetime_evidence.deep_stringify_keys)
+    end
+
+    it 'keeps legacy source-line truncation when copied into another retry snapshot' do
+      snapshot = described_class.ocr_result_snapshot(
+        success: true, lines: [ '2026-09-01 06:08' ], candidates: { purchased_at_text: '2026-09-01 06:08' },
+        truncated: { lines: true, case_preserved_lines: true }
+      )
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+      repeated = described_class.ocr_result_snapshot(restored)
+
+      expect(repeated.fetch('truncated')).to include('lines' => true, 'case_preserved_lines' => true)
+    end
+
+    [
+      [ 'missing metadata', 'receipt_analysis_run_ocr_result_v1', {} ],
+      [ 'non-boolean metadata', 'receipt_analysis_run_ocr_result_v1', { lines: 'false', case_preserved_lines: 'false' } ],
+      [ 'unknown version', 'unsupported', { lines: false, case_preserved_lines: false } ],
+      [ 'missing version', nil, { lines: false, case_preserved_lines: false } ]
+    ].each do |name, schema_version, truncated|
+      it "keeps #{name} unrecorded when a stored OCR snapshot is copied" do
+        original = {
+          schema_version: schema_version, success: true, lines: [ '2026-09-01 06:08' ],
+          case_preserved_lines: [ '2026-09-01 06:08' ], candidates: {}, truncated: truncated
+        }
+        snapshot = described_class.ocr_result_snapshot(original)
+        restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+        repeated = described_class.ocr_result_snapshot(restored)
+
+        aggregate_failures do
+          expect(snapshot.dig('truncated', 'lines')).to be_nil
+          expect(snapshot.dig('truncated', 'case_preserved_lines')).to be_nil
+          expect(repeated.dig('truncated', 'lines')).to be_nil
+          expect(repeated.dig('truncated', 'case_preserved_lines')).to be_nil
+        end
+      end
+    end
+
+    it 'records known complete live lines while retaining complete typed datetime evidence' do
+      snapshot = described_class.ocr_result_snapshot(
+        success: true, lines: [ '2026-09-01 07:36' ],
+        candidates: { purchased_at_evidence: datetime_evidence }
+      )
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+      repeated = described_class.ocr_result_snapshot(restored)
+
+      aggregate_failures do
+        expect(snapshot.fetch('truncated')).to include('lines' => false, 'case_preserved_lines' => false)
+        expect(snapshot.dig('candidates', 'purchased_at_evidence', 'complete')).to be(true)
+        expect(repeated.fetch('truncated')).to include('lines' => false, 'case_preserved_lines' => false)
+        expect(repeated.dig('candidates', 'purchased_at_evidence', 'complete')).to be(true)
+      end
+    end
+
+    [
+      [ 'non-hash metadata', 'invalid' ],
+      [ 'nil metadata', nil ],
+      [ 'non-boolean markers', { lines: 'false', case_preserved_lines: 'false' } ],
+      [ 'nil markers', { lines: nil, case_preserved_lines: nil } ]
+    ].each do |name, truncated|
+      it "does not turn #{name} into complete live source lines" do
+        snapshot = described_class.ocr_result_snapshot(
+          success: true, lines: [ '2026-09-01 07:36' ], candidates: {}, truncated: truncated
+        )
+
+        aggregate_failures do
+          expect(snapshot.dig('truncated', 'lines')).to be_nil
+          expect(snapshot.dig('truncated', 'case_preserved_lines')).to be_nil
+        end
+      end
+    end
+
+    it 'records bounded datetime resolution state without raw text or timestamp values' do
+      allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
+      resolution = {
+        state: 'confirmed', precision: 'datetime', role: 'settlement', candidate_id: 'datetime_line_0',
+        reason_codes: [], value: Time.zone.parse('2026-09-01 07:36'), raw_text: 'not retained'
+      }
+      snapshot = described_class.build_params_snapshot(purchased_at_resolution: resolution)
+
+      expect(snapshot['purchased_at_resolution']).to eq(resolution.except(:value, :raw_text).deep_stringify_keys)
+      expect(snapshot.to_json).not_to include('not retained', '2026-09-01')
+    end
+
+    it 'does not save arbitrary datetime resolution states or reason codes' do
+      snapshot = described_class.build_params_snapshot(
+        purchased_at_resolution: { state: 'unknown private text', reason_codes: [ 'not retained' ] }
+      )
+
+      expect(snapshot).not_to have_key('purchased_at_resolution')
+      expect(snapshot.to_json).not_to include('unknown private text', 'not retained')
+    end
+
+    it 'retains the bounded legacy datetime identity in the saved resolution diagnostic' do
+      resolution = {
+        state: 'date_only', precision: 'date_only', role: 'unknown', candidate_id: 'datetime_legacy_0',
+        reason_codes: []
+      }
+
+      snapshot = described_class.build_params_snapshot(purchased_at_resolution: resolution)
+
+      expect(snapshot.fetch('purchased_at_resolution')).to eq(resolution.deep_stringify_keys)
+    end
+  end
+
   it 'AI店舗選択のIDと候補集合checksumを汎用文字列短縮せず保持する' do
     selection = {
       decision: 'select', option_id: 'store_option_0123456789abcdef0123456789abcdef', options_checksum: 'a' * 64

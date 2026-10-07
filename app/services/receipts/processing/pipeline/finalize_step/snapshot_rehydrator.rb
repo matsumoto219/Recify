@@ -32,7 +32,7 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
       {
         schema_version: snapshot[:schema_version] ==
           Receipts::Processing::Runs::SnapshotBuilder::OCR_RESULT_SCHEMA_VERSION ?
-            snapshot[:schema_version] : nil,
+            snapshot[:schema_version] : "",
         success: snapshot[:success] == true,
         lines: Array(snapshot[:lines]).map(&:to_s),
         case_preserved_lines: Array(snapshot[:case_preserved_lines]).map(&:to_s),
@@ -76,6 +76,9 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
       if candidates.key?(:store_name_evidence)
         candidates[:store_name_evidence] = Analysis.store_name_evidence(candidates[:store_name_evidence])
       end
+      if candidates.key?(:purchased_at_evidence)
+        candidates[:purchased_at_evidence] = Analysis.purchased_at_evidence(candidates[:purchased_at_evidence] || {})
+      end
       basis = candidates.delete(:tax_detail_amount_basis)
       counts = normalized_hash(normalized_hash(snapshot[:candidate_counts])[:tax_details])
       count = Array(candidates[:tax_details]).size
@@ -93,6 +96,8 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         lines case_preserved_lines items payments tax_details adjustment_candidates
         reference_pricing_candidates item_calculation_mode_candidates
       ].each_with_object({}) do |key, snapshot|
+        next if %w[lines case_preserved_lines].include?(key) && ![ true, false ].include?(normalized[key])
+
         snapshot[key] = normalized[key] == true if normalized.key?(key)
       end
     end

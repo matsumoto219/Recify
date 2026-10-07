@@ -56,6 +56,14 @@ module Analysis
       ReceiptItemNormalizer::AI_ALLOWED_KEYS
     end
 
+    def purchased_at_evidence(...)
+      PurchasedAtEvidence.call(...)
+    end
+
+    def purchased_at_evidence_from_lines(...)
+      PurchasedAtEvidence.from_lines(...)
+    end
+
     def store_name_customer_facing_heading_candidates(...)
       StoreNameCandidateClassifier.customer_facing_heading_candidates(...)
     end

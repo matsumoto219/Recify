@@ -4,17 +4,17 @@ RSpec.describe Receipts::Processing::Pipeline do
   def successful_ocr_result
     {
       success: true,
-      raw_text: "テストストア\n2025/05/23 10:00\nコーヒー 180\n合計 180\n現金",
+      raw_text: "テストストア\n2026/05/23 10:00\nコーヒー 180\n合計 180\n現金",
       lines: [
         'テストストア',
-        '2025/05/23 10:00',
+        '2026/05/23 10:00',
         'コーヒー 180',
         '合計 180',
         '現金'
       ],
       candidates: {
         store_name: 'テストストア',
-        purchased_at_text: '2025/05/23 10:00',
+        purchased_at_text: '2026/05/23 10:00',
         total_amount: 180,
         country_region: 'JPN',
         payment_method_text: '現金',
@@ -61,6 +61,24 @@ RSpec.describe Receipts::Processing::Pipeline do
         }
       ]
     }
+  end
+
+  def datetime_ocr_result(events, complete: true)
+    sources = events.each_with_index.map do |event, index|
+      {
+        candidate_id: "datetime_line_#{index}", source_path: "lines[#{index}]", line_index: index,
+        association: 'exact', date: '2026-09-01', precision: 'datetime'
+      }.merge(event).compact
+    end
+    successful_ocr_result.deep_merge(
+      candidates: {
+        purchased_at_text: '2026-09-01 06:08',
+        purchased_at_evidence: {
+          schema_version: 'purchased_at_evidence_v1', candidates: sources,
+          complete: complete, truncated: !complete, omitted_count: complete ? 0 : 1, invalid: false
+        }
+      }
+    )
   end
 
   def rich_ocr_result(overrides = {})
@@ -985,6 +1003,31 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
+    [
+      [ '省略状態欠損', 'receipt_analysis_run_ocr_result_v1', {} ],
+      [ '省略状態の型不正', 'receipt_analysis_run_ocr_result_v1', { 'lines' => 'false' } ],
+      [ '未知version', 'unknown', { 'lines' => false } ],
+      [ 'version欠損', nil, { 'lines' => false } ]
+    ].each do |label, version, truncation|
+      it "#{label}の旧OCR snapshotをAI retryで完全な日時根拠へ昇格させない" do
+        receipt = create(:receipt, :processing, :with_image)
+        snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(successful_ocr_result)
+        snapshot['schema_version'] = version
+        snapshot['truncated'] = truncation
+        run = create(:receipt_analysis_run, receipt:, ocr_result_snapshot: snapshot)
+        allow(ReceiptAiEnrichmentService).to receive(:call).and_return(successful_ai_result)
+
+        result = described_class.run_ai(run)
+        params = Analysis.build_receipt_params(ocr_result: result.ocr_result, ai_result: result.ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes][:purchased_at]).to be_nil
+          expect(params[:purchased_at_resolution][:state]).to eq('uncertain')
+          expect(params[:review_reasons]).to include('purchased_at_uncertain')
+        end
+      end
+    end
+
     it 'runtime config取得失敗時はAI providerを呼ばずrunを失敗させる' do
       receipt = create(:receipt, :processing, :with_image)
       run = create(:receipt_analysis_run, receipt:)
@@ -1507,7 +1550,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       ocr_result = successful_ocr_result.deep_merge(
         lines: [
           '2026年 4月19日(日)No2',
-          '駐車券自家用車等',
+          'レジ2',
           '0796 16時41分'
         ],
         candidates: {
@@ -5833,7 +5876,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
-    it '最終保存購入日時がOCR行に支持されていればAIのpurchased_at_conflictedを落とす' do
+    it '購入日時の一意な根拠があればAIのpurchased_at_conflictedを落とす' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = successful_ocr_result.deep_merge(
         raw_text: "AIテストストア\n2026-05-23 10:00\nコーヒー 180\n合計 180\n現金 180",
@@ -5877,6 +5920,81 @@ RSpec.describe Receipts::Processing::Pipeline do
         expect(receipt.review_reasons).not_to include('purchased_at_conflicted')
         expect(receipt.review_reasons).to be_blank
       end
+    end
+
+    it '精算日時を確定できればAIの日時に関する三種類の確認理由を解消する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = datetime_ocr_result([
+        { role: 'service_start', time: '06:08' },
+        { role: 'settlement', time: '07:36' }
+      ])
+      ai_result = successful_ai_result.deep_merge(
+        needs_review: true,
+        review_reasons: %w[purchased_at_missing purchased_at_uncertain purchased_at_conflicted],
+        receipt_attributes: { purchased_at: Time.zone.parse('2026-09-01 06:08') }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ai_success, ocr_result:, ai_result:)
+      )
+
+      expect(receipt.reload.purchased_at).to eq(Time.zone.parse('2026-09-01 07:36'))
+      expect(receipt.review_reasons).to be_empty
+      expect(receipt.status).to eq('completed')
+    end
+
+    it '時刻が競合するときは購入日を保持し全文一致だけで確認理由を解除しない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = datetime_ocr_result([
+        { role: 'settlement', time: '07:36' },
+        { role: 'settlement', time: '08:00' }
+      ]).merge(lines: [ '2026-09-01 07:36', '2026-09-01 08:00' ])
+      ai_result = successful_ai_result.deep_merge(
+        needs_review: true,
+        review_reasons: [ 'purchased_at_conflicted' ],
+        receipt_attributes: { purchased_at: Time.zone.parse('2026-09-01 07:36') }
+      )
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ai_success, ocr_result:, ai_result:)
+      )
+
+      expect(receipt.reload.purchased_at).to eq(Time.zone.parse('2026-09-01'))
+      expect(receipt.review_reasons).to eq([ 'purchased_at_conflicted' ])
+      expect(receipt.status).to eq('review_needed')
+    end
+
+    it 'OCRのみでも精算日時を使い既存のOCR-only状態を維持する' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = datetime_ocr_result([
+        { role: 'service_start', time: '06:08' },
+        { role: 'settlement', time: '07:36' }
+      ])
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ocr_only, ocr_result:)
+      )
+
+      expect(receipt.reload.purchased_at).to eq(Time.zone.parse('2026-09-01 07:36'))
+      expect(receipt.review_reasons & %w[purchased_at_missing purchased_at_uncertain purchased_at_conflicted]).to be_empty
+      expect(receipt.status).to eq('review_needed')
+    end
+
+    it 'AI失敗時も日付のみを保持し時刻の欠損だけで確認理由を増やさない' do
+      receipt = create(:receipt, :processing, :with_image)
+      ocr_result = datetime_ocr_result([ { role: 'transaction', time: nil, precision: 'date_only' } ])
+
+      described_class.finalize(
+        receipt: receipt,
+        decision: finalize_decision(:ai_fallback, ocr_result:)
+      )
+
+      expect(receipt.reload.purchased_at).to eq(Time.zone.parse('2026-09-01'))
+      expect(receipt.review_reasons & %w[purchased_at_missing purchased_at_uncertain purchased_at_conflicted]).to be_empty
+      expect(receipt.status).to eq('review_needed')
     end
 
     it '最終保存住所がOCR根拠と一致すればAIのstore_address_uncertainを落とす' do

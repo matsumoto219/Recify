@@ -63,6 +63,36 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep do
     end
   end
 
+  it '実充当額を確定しても精算時刻の競合は購入日と確認理由を保持する' do
+    ocr_result[:lines][1] = '精算 2026/06/18 12:30'
+    ocr_result[:lines].insert(2, '精算 2026/06/18 13:00')
+    ocr_result[:candidates][:review_reasons] = %w[payment_method_missing purchased_at_missing]
+    ocr_result[:candidates][:purchased_at_evidence] = {
+      schema_version: 'purchased_at_evidence_v1',
+      candidates: [
+        {
+          candidate_id: 'datetime_line_1', source_path: 'lines[1]', line_index: 1,
+          association: 'exact', date: '2026-06-18', time: '12:30', precision: 'datetime', role: 'settlement'
+        },
+        {
+          candidate_id: 'datetime_line_2', source_path: 'lines[2]', line_index: 2,
+          association: 'exact', date: '2026-06-18', time: '13:00', precision: 'datetime', role: 'settlement'
+        }
+      ],
+      complete: true, truncated: false, omitted_count: 0, invalid: false
+    }
+
+    described_class.new(receipt:, decision: decision).call
+
+    aggregate_failures do
+      expect(receipt.reload).to have_attributes(
+        total_amount: 864, payment_method: 'other', purchased_at: Time.zone.parse('2026-06-18'), status: 'review_needed'
+      )
+      expect(receipt.receipt_payments.reload.pluck(:method, :amount)).to eq([ [ 'eGift', 864 ] ])
+      expect(receipt.review_reasons).to eq([ 'purchased_at_conflicted' ])
+    end
+  end
+
   it '精算欄に未分類金額があれば方法だけ保持し金額と税の確認理由を分離する' do
     ocr_result[:lines] << '未分類精算 120'
     ai_result[:review_reasons] << 'tax_amount_mismatch'

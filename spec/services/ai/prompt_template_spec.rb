@@ -30,6 +30,15 @@ RSpec.describe Ai::PromptTemplate do
     let(:system_prompt) { built_prompt[:system] }
     let(:user_prompt) { built_prompt[:user] }
 
+    it '同一イベントの日時対応を要求し日付のみの保持も指示する' do
+      aggregate_failures do
+        expect(user_prompt).to include('Match date and time only within the same event.')
+        expect(user_prompt).to include('Do not use service_start, service_end, duration, or reference events as the purchase datetime.')
+        expect(user_prompt).to include('Preserve a confirmed purchase date when no supported purchase time is available.')
+        expect(user_prompt).to include('An incomplete or truncated evidence set does not prove that its remaining event is unique.')
+      end
+    end
+
     it 'category一覧はReceiptItemのcanonical順序をそのまま使用する' do
       allowed_categories = described_class.new(input).send(:allowed_categories)
 

@@ -228,6 +228,12 @@ class Ocr::ResponseParser
       item_calculation_mode_candidates.sort_by! { |candidate| candidate.fetch(:item_index) }
     end
     authority_raw_text = authority_lines.reject(&:blank?).join("\n")
+    purchased_at = Ocr::ResponseParser::PurchasedAtCandidateExtractor.extract(
+      fields: extract_fields(authority_response),
+      lines: authority_lines,
+      profile:,
+      analyze_result:
+    )
 
     {
       success: normalized_raw_text.present? || normalized_lines.any?,
@@ -248,11 +254,8 @@ class Ocr::ResponseParser
         store_address: extract_store_address(authority_response),                                                   # MerchantAddress は取得率にばらつきあり。取得値は住所として保存/表示する
         store_address_components: extract_store_address_components(authority_response),
         store_phone_number: extract_store_phone_number(authority_response),
-        purchased_at_text: Ocr::ResponseParser::PurchasedAtCandidateExtractor.call(
-          fields: extract_fields(authority_response),
-          lines: authority_lines,
-          profile: profile
-        ),
+        purchased_at_text: purchased_at[:purchased_at_text],
+        purchased_at_evidence: purchased_at[:purchased_at_evidence],
         total_amount: total_amount,
         subtotal_amount: subtotal_amount,
         tax_amount: tax_amount,

@@ -30,6 +30,12 @@ module Receipts::Processing::Runs
     MAX_ITEMS = 50
     MAX_STORE_CANDIDATES = 10
     MAX_PURCHASED_AT_CANDIDATES = 5
+    PURCHASED_AT_RESOLUTION_STATES = %w[confirmed date_only conflicted uncertain missing].freeze
+    PURCHASED_AT_PRECISIONS = %w[datetime date_only time_only].freeze
+    PURCHASED_AT_ROLES = %w[
+      transaction settlement issuance service_start service_end duration reference unknown
+    ].freeze
+    PURCHASED_AT_REASON_CODES = %w[purchased_at_missing purchased_at_uncertain purchased_at_conflicted].freeze
     MAX_PAYMENT_CANDIDATES = 10
     MAX_TAX_DETAILS = 10
     MAX_REVIEW_REASONS = 20
@@ -349,7 +355,7 @@ module Receipts::Processing::Runs
       params = normalized_hash(build_params)
       receipt_attrs = normalized_hash(params[:receipt_attributes])
 
-      sanitize_hash(
+      snapshot = sanitize_hash(
         {
           schema_version: BUILD_PARAMS_SCHEMA_VERSION,
           receipt_attributes: build_params_receipt_attributes(receipt_attrs),
@@ -365,6 +371,9 @@ module Receipts::Processing::Runs
           review_reasons: limited_strings(params[:review_reasons], snapshot_review_reasons_limit)
         }.compact
       )
+      resolution = purchased_at_resolution_snapshot(params[:purchased_at_resolution])
+      snapshot["purchased_at_resolution"] = resolution.deep_stringify_keys if resolution
+      snapshot
     end
 
     def ocr_summary(ocr_result)
@@ -425,8 +434,8 @@ module Receipts::Processing::Runs
         error_code: safe_string(result[:error_code]),
         meta: ocr_meta_snapshot(result[:meta]),
         truncated: {
-          lines: Array(result[:lines]).size > ocr_lines_limit,
-          case_preserved_lines: Array(result[:case_preserved_lines]).size > ocr_lines_limit,
+          lines: ocr_line_source_truncation(result, :lines, ocr_lines_limit),
+          case_preserved_lines: ocr_line_source_truncation(result, :case_preserved_lines, ocr_lines_limit),
           items: Array(candidates[:items]).size > ocr_items_snapshot_limit,
           payments: Array(candidates[:payments]).size > receipt_payments_snapshot_limit,
           tax_details: Array(candidates[:tax_details]).size > receipt_tax_details_snapshot_limit,
@@ -449,6 +458,13 @@ module Receipts::Processing::Runs
         )
         snapshot["candidates"]["store_name_evidence"] = evidence.deep_stringify_keys if evidence
       end
+      if candidates.key?(:purchased_at_evidence)
+        evidence = Analysis.purchased_at_evidence(
+          candidates[:purchased_at_evidence] || {},
+          max_candidates: snapshot_purchase_candidates_limit
+        )
+        snapshot["candidates"]["purchased_at_evidence"] = evidence.deep_stringify_keys
+      end
       snapshot
     end
 
@@ -462,7 +478,7 @@ module Receipts::Processing::Runs
       filtered_content = truncate_string(input[:filtered_content], max_bytes: filtered_content_max_bytes)
       items = limited_items(input[:items])
 
-      sanitize_hash(
+      snapshot = sanitize_hash(
         {
           schema_version: AI_INPUT_SCHEMA_VERSION,
           prompt_schema_version: PROMPT_SCHEMA_VERSION,
@@ -483,6 +499,15 @@ module Receipts::Processing::Runs
           }
         }.compact
       )
+      purchase = normalized_hash(input[:purchase])
+      if purchase.key?(:purchased_at_evidence)
+        evidence = Analysis.purchased_at_evidence(
+          purchase[:purchased_at_evidence] || {},
+          max_candidates: snapshot_purchase_candidates_limit
+        )
+        snapshot["purchase"]["purchased_at_evidence"] = evidence.deep_stringify_keys
+      end
+      snapshot
     end
 
     def ai_normalized_result_snapshot(ai_result)
@@ -642,6 +667,32 @@ module Receipts::Processing::Runs
       }.compact
     end
 
+    def purchased_at_resolution_snapshot(value)
+      resolution = normalized_hash(value)
+      state = enum_string(resolution[:state], PURCHASED_AT_RESOLUTION_STATES)
+      reasons = resolution[:reason_codes]
+      return unless state && reasons.is_a?(Array) && reasons.size <= PURCHASED_AT_REASON_CODES.size
+      return unless reasons.all? { |reason| PURCHASED_AT_REASON_CODES.include?(reason) }
+
+      candidate_id = resolution[:candidate_id]
+      if candidate_id
+        candidate_id = bounded_string(
+          candidate_id,
+          max_bytes: 80,
+          pattern: /\Adatetime_(?:line_\d{1,4}|page_\d{1,2}_line_\d{1,4}|structured_\d|legacy_0)(?:_part_\d{1,2})?\z/
+        )
+        return unless candidate_id
+      end
+
+      {
+        state: state,
+        precision: enum_string(resolution[:precision], PURCHASED_AT_PRECISIONS),
+        role: enum_string(resolution[:role], PURCHASED_AT_ROLES),
+        candidate_id: candidate_id,
+        reason_codes: reasons
+      }.compact
+    end
+
     def build_params_corrections_snapshot(corrections, tax_rate_correction)
       normalized = normalized_hash(corrections).to_h
       normalized["tax_rate_correction"] ||= tax_rate_correction if tax_rate_correction.present?
@@ -717,6 +768,19 @@ module Receipts::Processing::Runs
         review_reasons: limited_strings(candidates[:review_reasons], snapshot_review_reasons_limit),
         confidence_summary: sanitized_confidence_summary(candidates[:confidence_summary])
       }.compact
+    end
+
+    def ocr_line_source_truncation(result, key, limit)
+      return true if Array(result[key]).size > limit
+      return if result.key?(:truncated) && !result[:truncated].is_a?(Hash)
+
+      truncated = normalized_hash(result[:truncated])
+      stored = truncated[key]
+      return if truncated.key?(key) && ![ true, false ].include?(stored)
+      return true if stored == true
+      return false unless result.key?(:schema_version)
+
+      false if result[:schema_version] == OCR_RESULT_SCHEMA_VERSION && stored == false
     end
 
     def item_calculation_mode_discount_proofs(result, candidates)
