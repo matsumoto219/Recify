@@ -125,9 +125,9 @@ RSpec.describe "レシート固有の計算条件", type: :system do
     2.times do
       visit edit_receipt_path(receipt)
       wait_for_stimulus_controller("receipt-form")
-      rows = all('[data-receipt-form-target="itemRow"]', visible: :all)
-      %w[net gross].each_with_index do |basis, index|
-        expect(rows[index]).to have_css(
+      items.zip(%w[net gross]) do |item, basis|
+        row = find("##{ReceiptsHelper::RECEIPT_REVIEW_TARGET_ITEM_ID_PREFIX}#{item.id}")
+        expect(row).to have_css(
           "[data-receipt-form-target='itemTaxInclusionControl'] input[value='#{basis}']:checked",
           visible: :all
         )
