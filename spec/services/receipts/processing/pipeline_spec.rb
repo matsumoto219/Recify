@@ -2425,7 +2425,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
-    it '商品券複数枚とお預り差額で支払合計が一致すればAIの支払方法uncertainを解消する' do
+    it '商品券複数枚の額面とお預り差額だけでは充当額を補完せず方法を保持する' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = successful_ocr_result.deep_merge(
         raw_text: "サンプルスーパー 東京中央店\n商品A ¥4,800\n小計 ¥4,800\n外税 8%対象額 ¥4,800\n外税額 8% ¥384\n合計 ¥5,184\nサンプル商品券1000\nサンプル商品券1000\nサンプル商品券1000\nサンプル商品券1000\nサンプル商品券1000\nお預り ¥200\nお釣り ¥16",
@@ -2528,19 +2528,16 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt.reload
 
       aggregate_failures do
-        # 検算: 商品合計4,800 + 外税384 = 5,184。商品券1,000 x 5 + 現金(200 - 16) = 5,184。
-        expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to eq([])
+        # 検算: 商品合計4,800 + 外税384 = 5,184。券の額面と現金の明記がない預りでは充当額を確定しない。
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to contain_exactly('payment_method_uncertain', 'payment_amount_uncertain')
         expect(receipt.subtotal_amount).to eq(4_800)
         expect(receipt.tax_amount).to eq(384)
         expect(receipt.total_amount).to eq(5_184)
         expect(receipt.payment_method).to eq('other')
         expect(receipt.receipt_adjustments).to be_empty
-        expect(receipt.receipt_payments.map { |payment| [ payment.method, payment.amount ] }).to contain_exactly(
-          [ 'サンプル商品券', 5_000 ],
-          [ 'cash', 184 ]
-        )
-        expect(receipt.receipt_payments.sum(&:amount)).to eq(5_184)
+        expect(receipt.receipt_payments.pluck(:method, :amount)).to eq(Array.new(5) { [ 'サンプル商品券', nil ] })
+        expect(receipt.amount_calculation_profile.dig('payment_reconciliation', 'payment_amount_sum')).to be_nil
         expect(receipt.receipt_tax_details.map { |detail| [ detail.rate, detail.net_amount, detail.amount, detail.net_amount + detail.amount ] }).to contain_exactly(
           [ BigDecimal('0.08'), 4_800, 384, 5_184 ]
         )
@@ -2548,7 +2545,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
-    it '現計の直前にreceipt totalがある場合はcash paymentを保存する' do
+    it '現計付近の税額やreceipt totalを支払額へ借用せずcashの方法を保存する' do
       receipt = create(:receipt, :processing, :with_image)
       ocr_result = successful_ocr_result.deep_merge(
         raw_text: "サンプル公園駐車場\n駐車券自家用車等\n¥500\n10%対象\n10%税\n¥500\n現 計\n¥45\n(うち消費税等\n¥500\n¥45)",
@@ -2624,15 +2621,15 @@ RSpec.describe Receipts::Processing::Pipeline do
       receipt.reload
 
       aggregate_failures do
-        # 検算: 455 + 45 = 500。現計直後の税額45ではなく、receipt total 500を支払額にする。
-        expect(receipt.status).to eq('completed')
-        expect(receipt.review_reasons).to eq([])
+        # 検算: 455 + 45 = 500。現計直後の税額45と購入合計500は支払額の根拠にしない。
+        expect(receipt.status).to eq('review_needed')
+        expect(receipt.review_reasons).to eq([ 'payment_amount_uncertain' ])
         expect(receipt.subtotal_amount).to eq(455)
         expect(receipt.tax_amount).to eq(45)
         expect(receipt.total_amount).to eq(500)
         expect(receipt.payment_method).to eq('cash')
         expect(receipt.receipt_payments.map { |payment| [ payment.method, payment.amount ] }).to contain_exactly(
-          [ 'cash', 500 ]
+          [ 'cash', nil ]
         )
         expect(receipt.receipt_tax_details.map { |detail| [ detail.rate, detail.net_amount, detail.amount, detail.net_amount + detail.amount ] }).to contain_exactly(
           [ BigDecimal('0.1'), 455, 45, 500 ]
@@ -3356,7 +3353,7 @@ RSpec.describe Receipts::Processing::Pipeline do
             { raw_text: 'レジ袋中1枚', price: 3, quantity: 1, line_total: 3, tax_rate: 0.1, confidence: 0.95 }
           ],
           payments: [
-            { method: 'Suica支払', amount: 801 }
+            { method: 'Suica支払', amount: 801, method_source_line_index: 8, source_line_index: 9 }
           ],
           tax_details: [
             { description: '8%対象', amount: 59, rate: 8, net_amount: 739 },
@@ -5508,7 +5505,8 @@ RSpec.describe Receipts::Processing::Pipeline do
         ])
         expect(receipt.status).to eq('completed')
         expect(receipt.review_reasons).to be_blank
-        expect(captured_amount_result.dig(:computed, :payment_amount_sum)).to eq(1_510)
+        expect(captured_amount_result.dig(:computed, :payment_amount_sum)).to be_nil
+        expect(receipt.amount_calculation_profile.dig('payment_reconciliation', 'payment_amount_sum')).to eq(1_510)
         expect(captured_amount_result[:review_reasons]).to be_blank
       end
     end
@@ -5893,7 +5891,7 @@ RSpec.describe Receipts::Processing::Pipeline do
           store_name: 'AIテストストア',
           purchased_at_text: '2026-05-23 10:00',
           payments: [
-            { method: 'Cash', amount: 180 }
+            { method: 'Cash', amount: 180, method_source_line_index: 4, source_line_index: 4 }
           ]
         }
       )
@@ -6014,7 +6012,7 @@ RSpec.describe Receipts::Processing::Pipeline do
           store_name: 'AIテストストア',
           store_address: 'サンプル県サンプル市三分割30-10-10',
           payments: [
-            { method: 'Cash', amount: 180 }
+            { method: 'Cash', amount: 180, method_source_line_index: 4, source_line_index: 4 }
           ]
         }
       )
@@ -6667,7 +6665,7 @@ RSpec.describe Receipts::Processing::Pipeline do
             { raw_text: '商品A', price: 500, quantity: 1, line_total: 500, confidence: 0.95 }
           ],
           payments: [
-            { method: 'Cash', amount: 500 }
+            { method: 'Cash', amount: 500, method_source_line_index: 5, source_line_index: 5 }
           ],
           tax_details: []
         },
@@ -7117,13 +7115,14 @@ RSpec.describe Receipts::Processing::Pipeline do
         expect(receipt.status).to eq('review_needed')
         expect(receipt.processing_error_code).to be_nil
         expect(receipt.review_reasons).to include('item_total_mismatch')
+        expect(receipt.review_reasons).to include('payment_amount_uncertain')
         expect(receipt.subtotal_amount).to eq(819)
         expect(receipt.tax_amount).to eq(71)
         expect(receipt.total_amount).to eq(890)
         expect(receipt.tax_rate).to be_nil
         expect(receipt.payment_method).to eq('credit_card')
         expect(receipt.receipt_payments.pluck(:method, :amount)).to eq([
-          [ 'クレジット支払', 890 ]
+          [ 'クレジット支払', nil ]
         ])
         expect(receipt.receipt_tax_details.pluck(:rate, :net_amount, :amount)).to contain_exactly(
           [ BigDecimal('0.08'), 548, 44 ],

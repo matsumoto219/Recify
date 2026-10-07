@@ -89,6 +89,7 @@ ja:
         item_pricing_mode_uncertain: "明細の計算方式をご確認ください"
         invalid_amount_relation: "小計・税額・合計の整合性が取れていません"
         payment_amount_mismatch: "支払合計と計算上の支払額が一致していません"
+        payment_amount_uncertain: "支払方法は取得しましたが、購入代金に充当された金額を確認できません"
         tax_details_double_counted: "税内訳が二重計上されている可能性があります"
         tax_detail_gross_item_mismatch: "税率別対象額と明細合計が大きく一致していません"
         insufficient_data: "計算に必要なデータが不足しています"

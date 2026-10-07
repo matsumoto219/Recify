@@ -1068,7 +1068,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
           aggregate_failures(noise_line) do
             expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
-            expect(params[:receipt_payments_attributes]).to eq([])
+            expect(params[:receipt_payments_attributes]).to contain_exactly(include(method: 'paypay支払', amount: nil))
+            expect(params[:independent_receipt_payments]).to eq([])
           end
         end
       end
@@ -1088,7 +1089,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
           aggregate_failures(identifier) do
             expect(params[:receipt_attributes][:payment_method]).to eq('e_money')
-            expect(params[:receipt_payments_attributes]).to eq([])
+            expect(params[:receipt_payments_attributes]).to contain_exactly(include(method: 'iD支払', amount: nil))
+            expect(params[:independent_receipt_payments]).to eq([])
           end
         end
       end
@@ -1121,7 +1123,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
-        expect(params[:receipt_payments_attributes]).to eq([])
+        expect(params[:receipt_payments_attributes]).to contain_exactly(include(method: 'iD支払', amount: nil))
+        expect(params[:independent_receipt_payments]).to eq([])
       end
 
       it '複数支払行の裸の金額は合計がreceipt totalと完全一致する場合だけ補完する' do
@@ -1149,7 +1152,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         [
           { amount: 500, expected: [ include(method: 'iD', amount: 500) ] },
-          { amount: 501, expected: [] }
+          { amount: 501, expected: [ include(method: 'iD', amount: nil) ] }
         ].each do |example|
           ocr_result[:candidates][:payment_method_text] = 'iD'
           ocr_result[:candidates][:payments] = []
@@ -1253,7 +1256,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
         aggregate_failures do
-          expect(params[:receipt_attributes][:payment_method]).to be_nil
+          expect(params[:receipt_attributes][:payment_method]).to eq('qr_payment')
           expect(params[:receipt_payments_attributes]).to contain_exactly(
             include(method: 'paypay支払', amount: 250)
           )
@@ -1301,7 +1304,8 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         aggregate_failures do
           expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
-          expect(params[:receipt_payments_attributes]).to eq([])
+          expect(params[:receipt_payments_attributes]).to contain_exactly(include(method: 'Mastercard', amount: nil))
+          expect(params[:independent_receipt_payments]).to eq([])
         end
       end
 
@@ -1396,9 +1400,9 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
         aggregate_failures do
-          # 検算: 商品券 1,000 + QUICPay 872 = 支払合計 1,872。
+          # QUICPay印字額872円は独立した充当額。商品券1,000円は額面として保持。
           expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: '店換金商品券', amount: 1_000),
+            include(method: '店換金商品券', amount: nil),
             include(method: 'QUICPay支払', amount: 872)
           )
           expect(params[:receipt_adjustments_attributes]).to eq([])
@@ -1455,7 +1459,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         aggregate_failures do
           expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: 'サンプル商品券', amount: 1_000),
+            include(method: 'サンプル商品券', amount: nil),
             include(method: 'クレジット', amount: 500),
             include(method: '現金', amount: 1_800)
           )
@@ -1464,7 +1468,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
-      it '現計の直前にあるreceipt totalをcash paymentとして補完し直後の税額を拾わない' do
+      it '現計の近傍で税額と競合する金額を合計に合わせて補完しない' do
         ocr_result[:candidates][:payment_method_text] = '現金'
         ocr_result[:candidates][:payments] = []
         ocr_result[:candidates][:total_amount] = 500
@@ -1484,12 +1488,13 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
         aggregate_failures do
-          # 検算: receipt total 500 と一致する現計直前の金額を支払額にし、直後の税額45は採用しない。
+          # 現計近傍の金額は税行と競合するため、合計に合わせて支払額を補わない。
           expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: 'cash', amount: 500)
+            include(method: 'cash', amount: nil)
           )
           expect(params[:receipt_payments_attributes]).not_to include(include(amount: 45))
           expect(params[:receipt_attributes][:payment_method]).to eq('cash')
+          expect(params[:independent_receipt_payments]).to eq([])
         end
       end
 
@@ -1529,8 +1534,9 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
         aggregate_failures do
-          expect(params[:receipt_payments_attributes]).to eq([])
+          expect(params[:receipt_payments_attributes]).to contain_exactly(include(method: 'cash', amount: nil))
           expect(params[:receipt_attributes][:payment_method]).to eq('cash')
+          expect(params[:independent_receipt_payments]).to eq([])
         end
       end
 
@@ -1628,7 +1634,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
-      it '同一商品券行が複数ある場合は枚数分を集約してpaymentにする' do
+      it '同額別印字の商品券額面を保持し購入確定前に充当額へ集約しない' do
         ocr_result[:candidates][:payment_method_text] = '商品券'
         ocr_result[:candidates][:payments] = []
         ocr_result[:candidates][:total_amount] = 5_184
@@ -1650,16 +1656,16 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
         aggregate_failures do
-          # 検算: 商品券 1,000 x 5 = 5,000。
-          expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: 'サンプル商品券', amount: 5_000)
-          )
+          # 印字額面1,000円が5行。利用根拠がないため充当額は未確定。
+          expect(params[:receipt_payments_attributes]).to eq([ { method: 'サンプル商品券', amount: nil } ] * 5)
+          expect(params.dig(:payment_evidence, :payments).map { |payment| payment[:printed_amount] }).to eq([ 1_000 ] * 5)
+          expect(params[:independent_receipt_payments]).to eq([])
           expect(params[:receipt_adjustments_attributes]).to eq([])
           expect(params[:receipt_attributes][:payment_method]).to eq('other')
         end
       end
 
-      it 'AI adjustmentの商品券が1件だけでもOCR上の複数商品券行を優先して集約paymentにする' do
+      it 'AIの商品券adjustmentを除き別印字の額面を購入候補へ流さない' do
         ocr_result[:candidates][:payment_method_text] = '商品券'
         ocr_result[:candidates][:payments] = []
         ocr_result[:candidates][:total_amount] = 5_184
@@ -1696,15 +1702,15 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
 
         aggregate_failures do
-          # 検算: AIの1件ではなく、OCR行の 1,000 x 5 = 5,000 を支払額にする。
-          expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: 'サンプル商品券', amount: 5_000)
-          )
+          # AI提案の金額を借用せず、別印字5行の額面だけを残す。
+          expect(params[:receipt_payments_attributes]).to eq([ { method: 'サンプル商品券', amount: nil } ] * 5)
+          expect(params.dig(:payment_evidence, :payments).map { |payment| payment[:printed_amount] }).to eq([ 1_000 ] * 5)
+          expect(params[:independent_receipt_payments]).to eq([])
           expect(params[:receipt_adjustments_attributes]).to eq([])
         end
       end
 
-      it '商品券支払の不足額がお預りとお釣りの差額に一致する場合はcash paymentを追加する' do
+      it '商品券の額面差額と預り差額の一致だけではcash paymentを作らない' do
         ocr_result[:candidates][:payment_method_text] = '商品券'
         ocr_result[:candidates][:payments] = []
         ocr_result[:candidates][:total_amount] = 5_184
@@ -1730,12 +1736,10 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
         aggregate_failures do
-          # 検算: 商品券 1,000 x 5 = 5,000, 現金 200 - 16 = 184, 支払合計 5,184。
-          expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: 'サンプル商品券', amount: 5_000),
-            include(method: 'cash', amount: 184)
-          )
-          expect(params[:receipt_payments_attributes].sum { |payment| payment[:amount].to_i }).to eq(5_184)
+          # 商品券の利用や預りの方法帰属が未確定。合計との一致から現金を作らない。
+          expect(params[:receipt_payments_attributes]).to eq([ { method: 'サンプル商品券', amount: nil } ] * 5)
+          expect(params.dig(:payment_evidence, :settlement, :ambiguous)).to be(true)
+          expect(params[:independent_receipt_payments]).to eq([])
           expect(params[:receipt_attributes][:payment_method]).to eq('other')
         end
       end
@@ -1766,9 +1770,9 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         params = described_class.call(ocr_result: ocr_result, ai_result: nil)
 
         aggregate_failures do
-          expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: 'サンプル商品券', amount: 5_000)
-          )
+          expect(params[:receipt_payments_attributes]).to eq([ { method: 'サンプル商品券', amount: nil } ] * 5)
+          expect(params.dig(:payment_evidence, :payments).map { |payment| payment[:printed_amount] }).to eq([ 1_000 ] * 5)
+          expect(params[:independent_receipt_payments]).to eq([])
           expect(params[:receipt_payments_attributes]).not_to include(include(method: 'cash'))
         end
       end
@@ -1928,6 +1932,69 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           )
           expect(params[:receipt_attributes][:payment_method]).to eq('credit_card')
         end
+      end
+
+      it '商品券と併用した確定ポイント支払を最終精算額から一度だけ差し引く' do
+        ocr_result[:candidates].merge!(
+          total_amount: 864,
+          subtotal_amount: 800,
+          tax_amount: 64,
+          payment_method_text: 'eGift',
+          payments: [],
+          items: [ { raw_text: '検証品', price: 800, quantity: 1, line_total: 800, tax_rate: 8 } ],
+          tax_details: [ { description: '外税8%', rate: 8, net_amount: 800, amount: 64 } ]
+        )
+        ocr_result[:lines] = [ '検証品 800円', '小計 800円', '外税8% 64円', '合計 864円', 'ポイント支払 300P ¥300', 'eGift適用 1000円', '釣銭 0円' ]
+        params = described_class.call(ocr_result: ocr_result, ai_result: nil)
+        amount_result = ReceiptAmountService.call(
+          receipt: params[:receipt_attributes],
+          receipt_items: params[:receipt_items_attributes],
+          receipt_tax_details: params[:receipt_tax_details_attributes],
+          receipt_adjustments: params[:receipt_adjustments_attributes],
+          receipt_payments: params[:independent_receipt_payments],
+          context: :analysis
+        )
+
+        finalized = Analysis.finalize_payments(params: params, amount_result: amount_result)
+
+        expect(amount_result.dig(:computed, :final_payment_total)).to eq(864)
+        expect(finalized[:receipt_payments_attributes]).to contain_exactly(
+          include(method: 'ポイント支払', amount: 300),
+          include(method: 'eGift', amount: 564)
+        )
+      end
+
+      it '同じ印字ポイントが支払調整へ確定した場合は商品券残額から二重に引かない' do
+        ocr_result[:candidates].merge!(
+          total_amount: 864,
+          subtotal_amount: 800,
+          tax_amount: 64,
+          payment_method_text: 'eGift',
+          payments: [],
+          items: [ { raw_text: '検証品', price: 800, quantity: 1, line_total: 800, tax_rate: 8 } ],
+          tax_details: [ { description: '外税8%', rate: 8, net_amount: 800, amount: 64 } ]
+        )
+        ocr_result[:lines] = [ '検証品 800円', '小計 800円', '外税8% 64円', '合計 864円', 'ポイント利用 ¥300', 'eGift適用 1000円', '釣銭 0円' ]
+        ai_result = {
+          receipt_adjustments_attributes: [
+            { kind: 'point_usage', label: 'ポイント利用', amount: 300, sign: 'discount', source_text: 'ポイント利用 ¥300', source_line_index: 4, confidence: 0.98 }
+          ]
+        }
+        params = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+        amount_result = ReceiptAmountService.call(
+          receipt: params[:receipt_attributes],
+          receipt_items: params[:receipt_items_attributes],
+          receipt_tax_details: params[:receipt_tax_details_attributes],
+          receipt_adjustments: params[:receipt_adjustments_attributes],
+          receipt_payments: params[:independent_receipt_payments],
+          context: :analysis
+        )
+
+        finalized = Analysis.finalize_payments(params: params, amount_result: amount_result)
+
+        expect(params[:receipt_payments_attributes]).to contain_exactly(include(method: 'eGift', amount: nil))
+        expect(amount_result.dig(:computed, :final_payment_total)).to eq(564)
+        expect(finalized[:receipt_payments_attributes]).to contain_exactly(include(method: 'eGift', amount: 564))
       end
 
       it 'ポイント支払に円金額がある場合はpoint paymentとして保存する' do
@@ -2346,7 +2413,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
             include(description: '10%対象', rate: BigDecimal('0.1'), net_amount: 271, amount: 27)
           )
           expect(params[:receipt_payments_attributes]).to contain_exactly(
-            include(method: 'クレジット支払', amount: 890)
+            include(method: 'クレジット支払', amount: nil)
           )
           expect(params[:receipt_adjustments_attributes]).to be_empty
           expect(params[:receipt_items_attributes].map { |item| item[:line_total] }).to eq([ 158, 108, 19, 12, 8 ])

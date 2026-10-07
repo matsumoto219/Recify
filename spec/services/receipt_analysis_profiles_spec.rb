@@ -275,6 +275,42 @@ RSpec.describe ReceiptAnalysisProfiles do
   end
 
   describe 'JPN profile analysis voucher labels' do
+    it '電子ギフトの表記をOCRとAnalysisとAI入力で共有する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        %w[eGift E-Gift イーギフト 電子ギフト].each do |label|
+          expect(label).to match(profile.ocr_voucher_payment_pattern)
+          expect(label).to match(profile.analysis_voucher_payment_pattern)
+          expect(label).to match(profile.analysis_fallback_payment_line_pattern)
+          expect(label).to match(profile.ai_payment_context_line_pattern)
+        end
+        expect('eGift利用').to match(profile.analysis_payment_affirmative_pattern)
+        expect('eGift使用').to match(profile.analysis_payment_affirmative_pattern)
+        expect('eGift未利用').to match(profile.analysis_payment_negative_context_pattern)
+        expect('ポイント利用不可').to match(profile.analysis_payment_negative_context_pattern)
+        expect('ポイント利用なし').to match(profile.analysis_payment_negative_context_pattern)
+        expect('eGift not paid').to match(profile.analysis_payment_negative_context_pattern)
+        expect('eGiftunpaid1000').to match(profile.analysis_payment_negative_context_pattern)
+        expect('eGift使用可能').to match(profile.analysis_payment_sale_or_promo_pattern)
+        expect('eGift使用').not_to match(profile.analysis_payment_negative_context_pattern)
+        expect('eGift額面').not_to match(profile.analysis_payment_affirmative_pattern)
+        expect('eGift販売').to match(profile.analysis_payment_sale_or_promo_pattern)
+        expect('商品券充当額').to match(profile.analysis_payment_applied_amount_pattern)
+        expect('合計(税込)').to match(profile.analysis_payment_section_total_pattern)
+        expect('不明決済対象 300円').not_to match(profile.analysis_payment_tax_summary_pattern)
+        expect('8%対象 800円').to match(profile.analysis_payment_tax_summary_pattern)
+        expect('税').to match(profile.analysis_payment_tax_block_heading_pattern)
+        expect('税 StarPay支払 300円').not_to match(profile.analysis_payment_tax_block_heading_pattern)
+        expect('軽8%').to match(profile.analysis_payment_tax_block_rate_pattern)
+        expect('ポイント8%').not_to match(profile.analysis_payment_tax_block_rate_pattern)
+        expect('現金領収額 0円').to match(profile.analysis_payment_informational_zero_pattern)
+        expect('現金支払 0円').not_to match(profile.analysis_payment_informational_zero_pattern)
+        expect('Cash').to match(profile.analysis_payment_category_alias_patterns['cash'])
+        expect('VISA').not_to match(profile.analysis_payment_category_alias_patterns['credit_card'])
+      end
+    end
+
     it '商品券・ストアクレジット系ラベルをprofile側で定義する' do
       pattern = described_class.fetch('JPN').analysis_voucher_payment_pattern
 

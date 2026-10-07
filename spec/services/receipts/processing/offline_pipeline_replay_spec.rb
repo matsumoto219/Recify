@@ -47,8 +47,8 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
       tax_rate: BigDecimal('0.1'),
       item_count: 4,
       adjustment_count: 0,
-      payment_count: 0,
-      payment_sum: 0,
+      payment_count: 1,
+      payment_sum: 770,
       tax_detail_count: 1,
       item_rows: [
         [ 'ノート A5', 1, 220, 220, 220, nil, BigDecimal('0.1') ],
@@ -57,7 +57,7 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
         [ '修正テープ', 1, 308, 308, 308, nil, BigDecimal('0.1') ]
       ],
       adjustment_rows: [],
-      payment_rows: [],
+      payment_rows: [ [ '現金', 770 ] ],
       tax_detail_rows: [ [ '10%対象', 700, 70, BigDecimal('0.1') ] ],
       review_reasons: []
     },

@@ -48,6 +48,7 @@ module ReviewReasons
     item_pricing_mode_uncertain
     invalid_amount_relation
     payment_amount_mismatch
+    payment_amount_uncertain
     tax_details_double_counted
     tax_detail_gross_item_mismatch
     insufficient_data

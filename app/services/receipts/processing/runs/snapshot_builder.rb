@@ -2731,7 +2731,15 @@ module Receipts::Processing::Runs
         {
           method: safe_string(payment[:method]),
           amount: safe_value(payment[:amount]),
-          confidence: safe_value(payment[:confidence])
+          confidence: safe_value(payment[:confidence]),
+          source_provider: safe_string(payment[:source_provider]),
+          source_field_path: safe_string(payment[:source_field_path]),
+          source_line_index: bounded_non_negative_integer(payment[:source_line_index], maximum: MAX_OCR_LINES - 1),
+          source_span_start: bounded_non_negative_integer(payment[:source_span_start], maximum: 10_000_000),
+          source_span_end: bounded_non_negative_integer(payment[:source_span_end], maximum: 10_000_000),
+          method_source_line_index: bounded_non_negative_integer(payment[:method_source_line_index], maximum: MAX_OCR_LINES - 1),
+          method_source_span_start: bounded_non_negative_integer(payment[:method_source_span_start], maximum: 10_000_000),
+          method_source_span_end: bounded_non_negative_integer(payment[:method_source_span_end], maximum: 10_000_000)
         }.compact
       end
     end

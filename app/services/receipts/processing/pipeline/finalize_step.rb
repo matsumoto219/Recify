@@ -123,18 +123,17 @@ class Receipts::Processing::Pipeline
       # === AmountService integration ===
       amount_result = calculate_analysis_amount_result(params)
       params, amount_result = apply_item_calculation_modes(params, amount_result, ocr_result:)
-      @final_amount_result = amount_result
-
       # 金額を補正（通常はresolvedを採用。預り差額から復元したtotalだけは支払一致時に保護する）
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
+      params, amount_result = finalize_payment_amounts(params, amount_result)
+      @final_amount_result = amount_result
       reviewed_item_indexes = originally_reviewed_item_indexes(params[:receipt_items_attributes])
       params[:receipt_items_attributes] = clear_resolved_item_review_flags(params[:receipt_items_attributes])
 
       ocr_low_quality = low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
-      ocr_review_reasons = resolved_purchased_at_review_reasons(
-        resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params),
-        params
-      )
+      ocr_review_reasons = resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params)
+      ocr_review_reasons = resolved_purchased_at_review_reasons(ocr_review_reasons, params)
+      ocr_review_reasons = resolved_payment_method_review_reasons(ocr_review_reasons, params)
       if ocr_low_quality
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -218,9 +217,9 @@ class Receipts::Processing::Pipeline
       # === AmountService integration point (OCR only) ===
       amount_result = calculate_analysis_amount_result(params)
       params, amount_result = apply_item_calculation_modes(params, amount_result, ocr_result:)
-      @final_amount_result = amount_result
-
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
+      params, amount_result = finalize_payment_amounts(params, amount_result)
+      @final_amount_result = amount_result
 
       items_attributes = apply_amount_item_totals(
         apply_ocr_only_tax_rate_policy(params[:receipt_items_attributes], amount_result),
@@ -235,10 +234,9 @@ class Receipts::Processing::Pipeline
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
-      ocr_review_reasons = resolved_purchased_at_review_reasons(
-        resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params),
-        params
-      )
+      ocr_review_reasons = resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params)
+      ocr_review_reasons = resolved_purchased_at_review_reasons(ocr_review_reasons, params)
+      ocr_review_reasons = resolved_payment_method_review_reasons(ocr_review_reasons, params)
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -290,9 +288,9 @@ class Receipts::Processing::Pipeline
       # === AmountService integration point (fallback) ===
       amount_result = calculate_analysis_amount_result(params)
       params, amount_result = apply_item_calculation_modes(params, amount_result, ocr_result:)
-      @final_amount_result = amount_result
-
       params[:receipt_attributes].merge!(receipt_amount_attributes_for(params, amount_result))
+      params, amount_result = finalize_payment_amounts(params, amount_result)
+      @final_amount_result = amount_result
 
       items_attributes = apply_amount_item_totals(
         apply_ocr_only_tax_rate_policy(params[:receipt_items_attributes], amount_result),
@@ -307,10 +305,9 @@ class Receipts::Processing::Pipeline
         adjustments_attributes: params[:receipt_adjustments_attributes]
       )
 
-      ocr_review_reasons = resolved_purchased_at_review_reasons(
-        resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params),
-        params
-      )
+      ocr_review_reasons = resolved_store_name_review_reasons(ocr_review_reasons_for(ocr_result), params)
+      ocr_review_reasons = resolved_purchased_at_review_reasons(ocr_review_reasons, params)
+      ocr_review_reasons = resolved_payment_method_review_reasons(ocr_review_reasons, params)
       if low_quality_ocr?(ocr_result, receipt_attributes: params[:receipt_attributes])
         ocr_review_reasons << "ocr_low_confidence"
       end
@@ -641,7 +638,7 @@ class Receipts::Processing::Pipeline
         receipt_items: params[:receipt_items_attributes],
         receipt_tax_details: params[:receipt_tax_details_attributes],
         receipt_adjustments: params[:receipt_adjustments_attributes],
-        receipt_payments: params[:receipt_payments_attributes],
+        receipt_payments: params.fetch(:independent_receipt_payments, params[:receipt_payments_attributes]),
         context: :analysis,
         tax_rounding_mode:,
         tax_rounding_scope:,
@@ -650,6 +647,16 @@ class Receipts::Processing::Pipeline
       )
 
       amount_result_with_receipt_amount_overrides(params, result)
+    end
+
+    def finalize_payment_amounts(params, amount_result)
+      params = Analysis.finalize_payments(params:, amount_result:)
+      result = ReceiptAmountService.apply_payment_reconciliation(
+        amount_result:,
+        receipt_payments: params[:receipt_payments_attributes],
+        purchase_total: params.dig(:receipt_attributes, :total_amount)
+      )
+      [ params, result ]
     end
 
     def apply_item_calculation_modes(params, preliminary_amount_result, ocr_result:)
@@ -1556,11 +1563,24 @@ class Receipts::Processing::Pipeline
 
       payments = Array(params[:receipt_payments_attributes])
       return false if payments.blank?
+      return false if Array(params[:review_reasons]).include?("payment_method_uncertain")
 
-      final_payment_total = final_payment_total_from_amount_result(amount_result)
-      return false unless final_payment_total&.positive?
+      evidence = normalized_hash(params[:payment_evidence])
+      if evidence.present?
+        return Array(evidence[:payments]).any? do |payment|
+          normalized = normalized_hash(payment)
+          normalized[:method_identity] == receipt_attributes[:payment_method] &&
+            (normalized[:settlement_use] == true || normalized[:amount_role] == "applied")
+        end
+      end
 
-      payments.sum { |payment| payment.with_indifferent_access[:amount].to_i } == final_payment_total
+      payments.all? { |payment| normalized_hash(payment)[:method].present? }
+    end
+
+    def resolved_payment_method_review_reasons(reasons, params)
+      return reasons unless payment_method_resolved_after_build?(params, nil)
+
+      reasons - %w[payment_method_missing payment_method_uncertain]
     end
 
     def final_payment_total_from_amount_result(amount_result)

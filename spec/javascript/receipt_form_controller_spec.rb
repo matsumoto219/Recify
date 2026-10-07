@@ -3606,6 +3606,73 @@ RSpec.describe "Receipt form Stimulus controller" do
     )
   end
 
+  it "keeps the payment sum unknown when one visible amount is missing or invalid" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const row = (value) => ({ querySelector: () => ({ value }) })
+      Object.defineProperty(controller, 'receiptPaymentAmountMaxValue', { value: 999999999 })
+      const sums = [[], ['0'], ['0', '60'], ['60', ''], ['', '60'], ['60', 'invalid'], ['60', '1000000000']].map((values) => {
+        controller.visiblePaymentRows = () => values.map(row)
+        return controller.paymentAmountSum()
+      })
+      process.stdout.write(JSON.stringify(sums))
+    JAVASCRIPT
+
+    expect(result).to eq([ nil, 0, 60, nil, nil, nil, nil ])
+  end
+
+  it "hides payment reconciliation and synchronization until every payment amount is known" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      const amountTarget = () => ({ textContent: '¥0', title: '¥0', dataset: {} })
+      const sum = amountTarget()
+      const difference = amountTarget()
+      const warning = { hidden: false, classList: { toggle: (_name, hidden) => { warning.hidden = hidden } } }
+      const button = { hidden: false, classList: { toggle: (_name, hidden) => { button.hidden = hidden } } }
+      const known = { value: '60' }
+      const unknown = { value: '' }
+      const rows = [known, unknown].map((input) => ({ querySelector: () => input }))
+      Object.defineProperties(controller, {
+        unsetLabelValue: { value: 'Unset' },
+        receiptPaymentAmountMaxValue: { value: 999999999 },
+        hasPaymentAmountSumTarget: { value: true },
+        paymentAmountSumTarget: { value: sum },
+        hasPaymentReconciliationFinalAmountTarget: { value: false },
+        hasPaymentDifferenceAmountTarget: { value: true },
+        paymentDifferenceAmountTarget: { value: difference },
+        paymentMismatchWarningTargets: { value: [warning] },
+        syncPaymentAmountButtonTargets: { value: [button] }
+      })
+      controller.visiblePaymentRows = () => rows
+      controller.currentFinalPaymentTotal = () => 100
+      controller.shouldRenderAmountImmediately = () => true
+      controller.syncPaymentSummaryLayout = () => {}
+      let recalculations = 0
+      controller.recalculate = () => { recalculations += 1 }
+      controller.syncPaymentReconciliationSummary(controller.paymentAmountSum(), 100)
+      controller.syncPaymentAmountToFinal({ preventDefault () {} })
+      const unknownState = {
+        sum: sum.textContent, difference: difference.textContent,
+        warningHidden: warning.hidden, syncHidden: button.hidden,
+        inputs: [known.value, unknown.value], recalculations
+      }
+      unknown.value = '0'
+      controller.syncPaymentReconciliationSummary(controller.paymentAmountSum(), 100)
+      process.stdout.write(JSON.stringify({
+        unknown: unknownState,
+        zero: { sum: sum.textContent, difference: difference.textContent, warningHidden: warning.hidden, syncHidden: button.hidden }
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "unknown" => {
+        "sum" => "Unset", "difference" => "Unset", "warningHidden" => true, "syncHidden" => true,
+        "inputs" => [ "60", "" ], "recalculations" => 0
+      },
+      "zero" => { "sum" => "¥60", "difference" => "-¥40", "warningHidden" => false, "syncHidden" => false }
+    )
+  end
+
   it "does not write a negative amount through the payment synchronization action" do
     result = run_controller_script(<<~JAVASCRIPT)
       const controller = Object.create(ReceiptFormController.prototype)

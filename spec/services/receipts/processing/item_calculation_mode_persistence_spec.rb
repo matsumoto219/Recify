@@ -27,7 +27,16 @@ RSpec.describe 'OCR item calculation mode persistence' do
       payments: []
     )
     result.dig(:candidates, :items).each { |item| item[:tax_rate] = BigDecimal('0.1') }
+    align_net_receipt_cash_change!(result)
     result
+  end
+
+  def align_net_receipt_cash_change!(result)
+    # 1,000 - 153 = 847。元fixtureと同じ文字数で変更し、明細sourceのspanとlayoutを維持する。
+    result[:raw_text] = result.fetch(:raw_text).sub('¥230', '¥153')
+    %i[lines case_preserved_lines].each do |key|
+      result[key] = result.fetch(key).map { |line| line.sub('¥230', '¥153') }
+    end
   end
 
   def mixed_explicit_ocr_result
@@ -449,6 +458,7 @@ RSpec.describe 'OCR item calculation mode persistence' do
         satisfy { |item| !item.review_reasons.include?('item_pricing_mode_uncertain') }
       )
       expect(receipt).to have_attributes(subtotal_amount: 770, tax_amount: 77, total_amount: 847)
+      expect(receipt.receipt_payments.pluck(:amount)).to eq([ 847 ])
       expect(receipt.amount_source_semantics_for_edit).to include(
         'receipt_tax_basis' => 'tax_added_to_subtotal',
         'item_amount_basis' => 'line_total_as_net'
@@ -568,6 +578,7 @@ RSpec.describe 'OCR item calculation mode persistence' do
   it '全明細が税抜のexplicitでも入力元金額と正式な税率単位合計を別々に保存する' do
     ocr_result = mixed_explicit_ocr_result
     ocr_result.fetch(:candidates).merge!(subtotal_amount: 770, tax_amount: 77, total_amount: 847, tax_details: [])
+    align_net_receipt_cash_change!(ocr_result)
     receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
     run = build_ready_run(receipt, ocr_result:, strategy: :ai_success)
 
@@ -578,6 +589,7 @@ RSpec.describe 'OCR item calculation mode persistence' do
     aggregate_failures do
       expect(result.next_step).to eq(:done)
       expect(receipt).to have_attributes(subtotal_amount: 770, tax_amount: 77, total_amount: 847)
+      expect(receipt.receipt_payments.pluck(:amount)).to eq([ 847 ])
       expect(items.pluck(:pricing_source_kind)).to all(eq('explicit_line_total'))
       expect(items.pluck(:price)).to all(be_nil)
       expect(items.pluck(:original_line_total, :line_total)).to eq(

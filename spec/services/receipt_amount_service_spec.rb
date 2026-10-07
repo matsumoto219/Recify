@@ -2908,7 +2908,9 @@ RSpec.describe ReceiptAmountService do
           total: nil,
           tax_rate: nil
         )
-        expect(result[:review_reasons]).to include('insufficient_data', 'payment_amount_mismatch')
+        expect(result[:review_reasons]).to include('insufficient_data')
+        expect(result[:review_reasons]).not_to include('payment_amount_mismatch')
+        expect(result[:payment_reconciliation]).to include(final_payment_total: nil, payment_delta: nil, matched: nil)
       end
     end
 
@@ -4906,7 +4908,8 @@ RSpec.describe ReceiptAmountService do
           expect(result.dig(:computed, :payment_adjustment_total)).to eq(-50)
           expect(result.dig(:computed, :purchase_total)).to eq(342)
           expect(result.dig(:computed, :final_payment_total)).to eq(292)
-          expect(result.dig(:computed, :payment_amount_sum)).to eq(292)
+          expect(result.dig(:computed, :payment_amount_sum)).to be_nil
+          expect(result.dig(:payment_reconciliation, :payment_amount_sum)).to eq(292)
           expect(result[:resolved]).to include(subtotal: 312, tax: 30, total: 342)
           expect(result[:inconsistencies]).not_to include(:item_total_mismatch, :payment_amount_mismatch)
         end

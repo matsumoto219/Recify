@@ -24,7 +24,7 @@ module Receipts::Processing::Contracts
     ).freeze
     REASONS = %w[
       total_mismatch total_amount_mismatch subtotal_amount_mismatch item_total_mismatch tax_amount_mismatch
-      tax_detail_mismatch invalid_amount_relation payment_amount_mismatch tax_details_double_counted
+      tax_detail_mismatch invalid_amount_relation payment_amount_mismatch payment_amount_uncertain tax_details_double_counted
       tax_detail_gross_item_mismatch unsupported_tax_detail_gross_basis adjustment_uncertain insufficient_data
       ocr_total_mismatch tax_detail_rate_mismatch tax_detail_incomplete tax_detail_partial item_tax_rate_group_uncertain
       zero_amount_item_incomplete discount_data_incomplete adjustment_tax_rate_missing price_tax_inclusion_uncertain
@@ -57,6 +57,7 @@ module Receipts::Processing::Contracts
     SAVED_PROFILE_KEYS = %w[
       schema_version context profile rounding_mode computed resolved score warnings mismatch_codes blocking_mismatch_codes
       warning_mismatch_codes selected_candidate_status safe_to_auto_complete amount_engine
+      payment_reconciliation
     ].freeze
     ITEM_KEYS = %w[
       price quantity quantity_unit_code original_line_total line_total discount_amount discount_rate tax_rate
@@ -70,6 +71,7 @@ module Receipts::Processing::Contracts
     ].freeze
     ENUMS = {
       "context" => %w[analysis manual edit_save],
+      "reconciliation_status" => %w[matched mismatched not_observed evidence_missing amount_unknown],
       "selected_candidate_status" => %w[accepted rejected],
       "selected_basis" => BASES,
       "rounding_mode" => ROUNDING_MODES,
@@ -94,6 +96,7 @@ module Receipts::Processing::Contracts
     BOOLEAN_KEYS = %w[
       needs_review safe_to_auto_complete no_safe_candidate payment_amount_mismatch_suppressed amount_price_present
       amount_quantity_present amount_line_total_present amount_discount_amount_present
+      matched
     ].freeze
     REASON_KEYS = %w[review_reasons warnings warning_reasons mismatch_codes blocking_mismatch_codes warning_mismatch_codes hard_reject_reasons].freeze
     UNAVAILABLE_REASONS = %w[limits_missing invalid_limits missing_diagnostics invalid_diagnostics mandatory_budget_exceeded].freeze
@@ -296,6 +299,7 @@ module Receipts::Processing::Contracts
         when "rounding_mode" then rounding(value)
         when "computed", "resolved" then fields(value, TOTAL_KEYS)
         when "amount_engine" then fields(value, ENGINE_KEYS)
+        when "payment_reconciliation" then fields(value, %w[purchase_total payment_adjustment_total final_payment_total payment_amount_sum payment_delta matched reconciliation_status])
         else scalar(key, value)
         end
       end

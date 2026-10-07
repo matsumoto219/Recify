@@ -46,6 +46,7 @@ module ReceiptsHelper
     "payment_method_missing" => RECEIPT_REVIEW_TARGET_PAYMENTS,
     "payment_method_uncertain" => RECEIPT_REVIEW_TARGET_PAYMENTS,
     "payment_amount_mismatch" => RECEIPT_REVIEW_TARGET_PAYMENTS,
+    "payment_amount_uncertain" => RECEIPT_REVIEW_TARGET_PAYMENTS,
     "total_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
     "tax_amount_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,
     "tax_detail_mismatch" => RECEIPT_REVIEW_TARGET_AMOUNT_SUMMARY,

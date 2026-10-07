@@ -5,6 +5,23 @@ RSpec.describe Receipts::Editing::InputNormalizer do
 
   let(:receipt) { build(:receipt) }
 
+  it "支払金額の未取得と明示0円を区別して保持する" do
+    normalized = described_class.call(
+      receipt: receipt,
+      attributes: {
+        "receipt_payments_attributes" => {
+          "0" => { "method" => "eGift", "amount" => "" },
+          "1" => { "method" => "現金", "amount" => "0" }
+        }
+      }
+    ).fetch("receipt_payments_attributes")
+
+    aggregate_failures do
+      expect(normalized["0"]).to include("method" => "eGift", "amount" => nil)
+      expect(normalized["1"]).to include("method" => "現金", "amount" => 0)
+    end
+  end
+
   [ nil, "", "NET", "tax_excluded", false, [], {} ].each do |basis|
     it "明示された不正な入力税区分 #{basis.inspect} を既定値やNULLへ変換しない" do
       expect do

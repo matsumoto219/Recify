@@ -254,6 +254,7 @@ class Receipts::Editing::ReviewState
     end
     if payment_result
       reasons.delete("payment_amount_mismatch")
+      reasons.delete("payment_amount_uncertain")
       reasons |= ReviewReasons.review_reasons_for_user(payment_result[:warnings])
     end
     reasons.delete(ADJUSTMENT_REVIEW_REASON) if adjustment_review_reason_resolved?

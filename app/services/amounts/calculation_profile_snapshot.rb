@@ -44,6 +44,20 @@ module Amounts
       }
       snapshot[:selected_candidate_status] = normalize_scalar(result[:selected_candidate_status]) if result.key?(:selected_candidate_status)
       snapshot[:safe_to_auto_complete] = normalize_value(result[:safe_to_auto_complete]) unless result[:safe_to_auto_complete].nil?
+      if result[:payment_reconciliation].respond_to?(:with_indifferent_access)
+        reconciliation = result[:payment_reconciliation].with_indifferent_access
+        snapshot[:payment_reconciliation] = normalize_value(
+          reconciliation.slice(
+            :purchase_total,
+            :payment_adjustment_total,
+            :final_payment_total,
+            :payment_amount_sum,
+            :payment_delta,
+            :matched,
+            :reconciliation_status
+          )
+        )
+      end
 
       amount_engine = sanitized_amount_engine(result[:amount_engine])
       snapshot[:amount_engine] = amount_engine if amount_engine.present?

@@ -119,12 +119,147 @@ RSpec.describe Receipts::Editing::ConsistencyGuard do
     end
   end
 
+  it '後段照合の支払合計と保存予定childrenが異なる場合は保存不能にする' do
+    result = described_class.call(
+      receipt_items: items,
+      receipt_adjustments: adjustments,
+      receipt_payments: [ { method: '現金', amount: 50 } ],
+      amount_result: amount_result(
+        computed: { payment_amount_sum: nil },
+        payment_reconciliation: { payment_amount_sum: 110, final_payment_total: 110 }
+      )
+    )
+
+    expect(result.fatal_errors).to include(:payment_sum_snapshot_mismatch)
+  end
+
+  it '後段照合がある場合は候補の印字支払合計を保存用の照合へ再利用しない' do
+    result = described_class.call(
+      receipt_items: items,
+      receipt_adjustments: adjustments,
+      receipt_payments: payments,
+      amount_result: amount_result(
+        computed: { payment_amount_sum: 0 },
+        payment_reconciliation: { payment_amount_sum: 110, final_payment_total: 110 }
+      )
+    )
+
+    expect(result).to be_consistent
+  end
+
+  [ [ nil, 0 ], [ 0, nil ] ].each do |saved_amount, reconciled_sum|
+    it "後段照合の#{reconciled_sum.inspect}と保存予定の#{saved_amount.inspect}を同じ金額として扱わない" do
+      result = described_class.call(
+        receipt_items: items,
+        receipt_adjustments: adjustments,
+        receipt_payments: [ { method: 'eGift', amount: saved_amount } ],
+        amount_result: amount_result(
+          computed: { payment_amount_sum: nil },
+          payment_reconciliation: { payment_amount_sum: reconciled_sum, final_payment_total: 110 }
+        )
+      )
+
+      expect(result.fatal_errors).to include(:payment_sum_snapshot_mismatch)
+    end
+  end
+
+  [ [], [ { method: 'eGift', amount: nil } ] ].each do |unknown_payments|
+    it "後段照合と保存予定の支払合計がどちらも未確定なら保存を許可する #{unknown_payments.inspect}" do
+      result = described_class.call(
+        receipt_items: items,
+        receipt_adjustments: adjustments,
+        receipt_payments: unknown_payments,
+        amount_result: amount_result(
+          computed: { payment_amount_sum: 0 },
+          payment_reconciliation: { payment_amount_sum: nil, final_payment_total: 110 }
+        )
+      )
+
+      expect(result).to be_consistent
+    end
+  end
+
   it '支払額だけがfinal payment totalと異なる場合は保存を許可してreview reasonを補完する' do
     result = described_class.call(
       receipt_items: items,
       receipt_adjustments: adjustments,
       receipt_payments: [ { method: '現金', amount: 50 } ],
       amount_result: amount_result(computed: { payment_amount_sum: 50 })
+    )
+
+    aggregate_failures do
+      expect(result).to be_consistent
+      expect(result.review_reasons).to include('payment_amount_mismatch')
+    end
+  end
+
+  [ nil, 0 ].each do |final_total|
+    it "後段の実支払額#{final_total.inspect}を内部計算の0円と区別して照合する" do
+      result = described_class.call(
+        receipt_items: [],
+        receipt_adjustments: [],
+        receipt_payments: [ { method: '現金', amount: 200 } ],
+        amount_result: amount_result(
+          computed: {
+            purchase_total: 0,
+            final_payment_total: 0,
+            purchase_adjustment_total: 0,
+            payment_amount_sum: nil
+          },
+          resolved: { total: final_total },
+          payment_reconciliation: { payment_amount_sum: 200, final_payment_total: final_total }
+        )
+      )
+
+      aggregate_failures do
+        expect(result).to be_consistent
+        expect(result.review_reasons.include?('payment_amount_mismatch')).to eq(!final_total.nil?)
+      end
+    end
+  end
+
+  it '後段snapshotに実支払額キーがない場合は内部計算へfallbackせず保存を拒否する' do
+    result = described_class.call(
+      receipt_items: items,
+      receipt_adjustments: adjustments,
+      receipt_payments: payments,
+      amount_result: amount_result(payment_reconciliation: { payment_amount_sum: 110 })
+    )
+
+    expect(result).not_to be_consistent
+  end
+
+  it '支払金額に未取得がある場合は既知額の合計で不一致を作らない' do
+    result = described_class.call(
+      receipt_items: items,
+      receipt_adjustments: adjustments,
+      receipt_payments: [ { method: '現金', amount: 50 }, { method: 'eGift', amount: nil } ],
+      amount_result: amount_result(computed: { payment_amount_sum: nil })
+    )
+
+    aggregate_failures do
+      expect(result).to be_consistent
+      expect(result.review_reasons).not_to include('payment_amount_mismatch')
+    end
+  end
+
+  it '支払金額が未取得なのにsnapshotが明示0円の場合は保存不能にする' do
+    result = described_class.call(
+      receipt_items: items,
+      receipt_adjustments: adjustments,
+      receipt_payments: [ { method: 'eGift', amount: nil } ],
+      amount_result: amount_result(computed: { payment_amount_sum: 0 })
+    )
+
+    expect(result.fatal_errors).to include(:payment_sum_snapshot_mismatch)
+  end
+
+  it '明示0円の支払は未取得と区別して購入額と照合する' do
+    result = described_class.call(
+      receipt_items: items,
+      receipt_adjustments: adjustments,
+      receipt_payments: [ { method: 'eGift', amount: 0 } ],
+      amount_result: amount_result(computed: { payment_amount_sum: 0 })
     )
 
     aggregate_failures do

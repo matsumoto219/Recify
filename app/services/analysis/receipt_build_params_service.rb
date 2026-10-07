@@ -35,6 +35,12 @@ module Analysis
           ocr_result: normalized_ocr_result.merge(lines: lines, case_preserved_lines: case_preserved_lines),
           ai_result: normalized_ai_result
         )
+        payment_evidence = ReceiptPaymentEvidenceExtractor.call(candidates:, lines:, profile:)
+        truncation = normalized_ocr_result[:truncated]
+        if (!truncation.nil? && !truncation.is_a?(Hash)) ||
+            %i[lines payments items].any? { |key| truncation.is_a?(Hash) && truncation[key] == true }
+          payment_evidence[:settlement].merge!(complete: false, ambiguous: true)
+        end
         purchased_at_resolution = ReceiptPurchasedAtResolver.resolve(
           ai_attrs: ai_receipt_attributes,
           candidates: candidates,
@@ -47,6 +53,7 @@ module Analysis
           ai_receipt_attributes,
           lines,
           store_name_resolution[:value],
+          payment_evidence:,
           purchased_at: purchased_at_resolution[:value]
         )
         receipt_items_attributes = build_receipt_items_attributes(
@@ -58,12 +65,7 @@ module Analysis
           skipped_negative_items:
         )
         payment_review_reasons = []
-        receipt_payments_attributes = build_receipt_payments_attributes(
-          candidates,
-          lines,
-          receipt_total: receipt_attributes[:total_amount],
-          review_reasons: payment_review_reasons
-        )
+        receipt_payments_attributes = payment_evidence[:payments]
         tax_detail_result = recover_receipt_tax_details_result_from_lines(
           build_receipt_tax_details_attributes(candidates),
           lines,
@@ -102,22 +104,46 @@ module Analysis
         )
         receipt_items_attributes = ownership_result.items
         receipt_adjustments_attributes = ownership_result.adjustments
-        receipt_payments_attributes = ownership_result.payments
+        payment_evidence[:payments] = ownership_result.facts.filter_map do |fact|
+          next unless fact.origin == :payment && fact.action == :persist
+
+          attributes = fact.attributes.to_h.symbolize_keys
+          attributes if attributes[:amount_role].present?
+        end
+        receipt_payments_attributes = payment_evidence[:payments].map { |payment| payment.slice(:method, :amount) }
         receipt_tax_details_attributes = ownership_result.tax_details
         invalid_adjustment_review_reasons = ownership_result.review_reasons
-        receipt_payments_attributes = add_cash_difference_payment(
-          receipt_payments_attributes,
-          lines,
-          receipt_attributes[:total_amount]
-        )
-        receipt_attributes[:payment_method] = reconcile_payment_method_with_payments(
-          receipt_attributes[:payment_method],
-          receipt_payments_attributes,
-          adjustments: receipt_adjustments_attributes,
-          lines:,
-          receipt_total: receipt_attributes[:total_amount],
-          review_reasons: payment_review_reasons
-        )
+        representative_payments = payment_evidence[:payments]
+        if representative_payments.any? { |payment| payment[:amount]&.positive? || payment[:printed_amount]&.positive? }
+          representative_payments = representative_payments.reject { |payment| payment[:amount] == 0 }
+        end
+        methods = representative_payments.filter_map { |payment| payment[:method_identity].presence }.uniq
+        representative = PAYMENT_METHOD_REPRESENTATIVE_PRIORITY.find { |method| methods.include?(method) }
+        representative ||= "other" if methods.include?("other")
+        current_method = receipt_attributes[:payment_method]
+        zero_methods = Array(payment_evidence.dig(:settlement, :zero_method_identities))
+        current_method = nil if zero_methods.include?(current_method) && !methods.include?(current_method)
+        if methods.include?("other")
+          cash_settlement_only = payment_evidence[:payments].all? do |payment|
+            payment[:method_identity] == "other" || payment[:amount_role] == "cash_settlement"
+          end
+          receipt_attributes[:payment_method] = cash_settlement_only ? "other" : representative
+        elsif current_method.blank? || grounded_non_cash_payment?(representative_payments, current_method)
+          receipt_attributes[:payment_method] = representative
+        else
+          receipt_attributes[:payment_method] = reconcile_payment_method_with_payments(
+            current_method,
+            receipt_payments_attributes,
+            adjustments: receipt_adjustments_attributes,
+            lines:,
+            receipt_total: receipt_attributes[:total_amount],
+            review_reasons: payment_review_reasons
+          )
+        end
+        if payment_evidence.dig(:settlement, :method_conflict) == true
+          receipt_attributes[:payment_method] = nil
+          payment_review_reasons << "payment_method_uncertain"
+        end
         amount_hints = build_amount_hints(
           ai_receipt_attributes,
           candidates,
@@ -174,6 +200,8 @@ module Analysis
           receipt_items_attributes: receipt_items_attributes,
           # NOTE: 現状は Payments[] 自体の取得率が低く、保存されても UI では未使用
           receipt_payments_attributes: receipt_payments_attributes,
+          payment_evidence: payment_evidence,
+          independent_receipt_payments: independent_receipt_payments(payment_evidence),
           # 税詳細は保存し、金額計算/サマリー表示の補助情報として利用する
           receipt_tax_details_attributes: receipt_tax_details_attributes,
           receipt_adjustments_attributes: receipt_adjustments_attributes,
@@ -195,6 +223,25 @@ module Analysis
 
       def profile
         ReceiptAnalysisProfiles.default
+      end
+
+      def independent_receipt_payments(evidence)
+        return [] if evidence.dig(:settlement, :ambiguous) == true
+
+        payments = evidence[:payments]
+        return [] unless payments.all? do |payment|
+          %w[applied cash_settlement].include?(payment[:amount_role]) && !payment[:amount].nil?
+        end
+
+        payments
+      end
+
+      def grounded_non_cash_payment?(payments, current_method)
+        methods = payments.map { |payment| payment[:method_identity] }.uniq
+        return false unless methods.one? && %w[credit_card debit_card e_money qr_payment].include?(methods.sole)
+        return false unless payments.any? { |payment| payment[:settlement_use] == true }
+
+        payment_method_should_follow_payments?(current_method, methods.sole)
       end
 
       def normalize_ocr_result(ocr_result)
@@ -260,7 +307,7 @@ module Analysis
         }
       end
 
-      def build_receipt_attributes(candidates, ai_receipt_attributes, lines, store_name, purchased_at:)
+      def build_receipt_attributes(candidates, ai_receipt_attributes, lines, store_name, payment_evidence:, purchased_at:)
         ai_attrs = normalize_receipt_attributes(ai_receipt_attributes)
 
         {
@@ -271,7 +318,7 @@ module Analysis
           ),
           store_phone_number: ai_attrs[:store_phone_number].presence || candidates[:store_phone_number],
           purchased_at: purchased_at,
-          total_amount: resolve_receipt_total_amount(ai_attrs, candidates, lines),
+          total_amount: resolve_receipt_total_amount(ai_attrs, candidates, lines, payment_evidence:),
           subtotal_amount: ai_attrs[:subtotal_amount] || normalize_amount(candidates[:subtotal_amount]),
           tax_amount: resolve_receipt_tax_amount(ai_attrs, candidates, lines),
           tax_rate: ai_attrs[:tax_rate] || normalize_rate(candidates[:tax_rate]),
@@ -291,12 +338,15 @@ module Analysis
         )
       end
 
-      def resolve_receipt_total_amount(ai_attrs, candidates, lines)
+      def resolve_receipt_total_amount(ai_attrs, candidates, lines, payment_evidence:)
         preferred_total = normalize_amount(ai_attrs[:total_amount]) || normalize_amount(candidates[:total_amount])
         inferred_total = tax_section_gross_total_from_lines(lines)
         if inferred_total&.positive? && low_quality_receipt_total_candidate?(preferred_total, inferred_total)
           return inferred_total
         end
+        payments = payment_evidence[:payments]
+        return preferred_total unless payments.one? && payments.sole[:amount_role] == "cash_settlement"
+        return preferred_total unless payment_evidence.dig(:settlement, :observed_ambiguity) == false
 
         settlement_total = settlement_purchase_total_from_lines(lines)
         return preferred_total if preferred_total.blank?
@@ -941,10 +991,14 @@ module Analysis
 
       def settlement_label_line?(lines, index, label_pattern)
         text = Array(lines)[index].to_s.unicode_normalize(:nfkc)
+        return false if text.match?(profile.analysis_voucher_payment_pattern)
+
         return true if text.match?(label_pattern)
         return false if settlement_amounts_from_text(text).present?
 
         joined = Array(lines)[index, 2].join.unicode_normalize(:nfkc)
+        return false if joined.match?(profile.analysis_voucher_payment_pattern)
+
         joined.match?(label_pattern)
       end
 

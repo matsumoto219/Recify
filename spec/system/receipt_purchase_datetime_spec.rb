@@ -19,7 +19,7 @@ RSpec.describe "解析した購入日時の表示と編集", type: :system do
         store_name: "サンプル売店", purchased_at_text: "2026-09-01 06:08", country_region: "JPN",
         total_amount: 100, payment_method_text: "現金",
         items: [ { raw_text: "検証品", price: 100, quantity: 1, line_total: 100, tax_rate: 0, confidence: 0.99 } ],
-        payments: [ { method: "Cash", amount: 100 } ], tax_details: [],
+        payments: [ { method: "Cash", amount: 100, method_source_line_index: 4, source_line_index: 4 } ], tax_details: [],
         purchased_at_evidence: {
           schema_version: "purchased_at_evidence_v1", candidates: sources,
           complete: true, truncated: false, omitted_count: 0, invalid: false

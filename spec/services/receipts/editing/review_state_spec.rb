@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Editing::ReviewState do
-  def resolve(receipt, permitted: {}, amount_reasons: [], amount_needs_review: false, child_review_remaining: false, nested_amount_inputs_submitted: false, item_inputs_submitted: false, adjustment_absence_confirmed: false)
+  def resolve(receipt, permitted: {}, amount_reasons: [], amount_needs_review: false, child_review_remaining: false, nested_amount_inputs_submitted: false, item_inputs_submitted: false, adjustment_absence_confirmed: false, payment_result: nil)
     described_class.call(
       receipt: receipt,
       permitted: permitted.stringify_keys,
@@ -10,7 +10,8 @@ RSpec.describe Receipts::Editing::ReviewState do
       child_review_remaining: child_review_remaining,
       nested_amount_inputs_submitted: nested_amount_inputs_submitted,
       item_inputs_submitted: item_inputs_submitted,
-      adjustment_absence_confirmed: adjustment_absence_confirmed
+      adjustment_absence_confirmed: adjustment_absence_confirmed,
+      payment_result: payment_result
     )
   end
 
@@ -29,6 +30,51 @@ RSpec.describe Receipts::Editing::ReviewState do
       expect(result.review_reasons).to eq([ 'tax_detail_mismatch' ])
       expect(result.status).to eq('review_needed')
     end
+  end
+
+  it '支払い方法だけを確定しても支払金額と税のreasonは解除しない' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      payment_method: nil,
+      review_reasons: %w[payment_method_uncertain payment_amount_uncertain tax_detail_mismatch]
+    )
+
+    result = resolve(receipt, permitted: { payment_method: 'other' })
+
+    aggregate_failures do
+      expect(result.review_reasons).to contain_exactly('payment_amount_uncertain', 'tax_detail_mismatch')
+      expect(result.status).to eq('review_needed')
+    end
+  end
+
+  it '支払照合が確定した変更だけで支払金額のreasonを更新し、税のreasonは維持する' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      payment_method: 'other',
+      review_reasons: %w[payment_amount_uncertain tax_detail_mismatch]
+    )
+
+    result = resolve(receipt, payment_result: { warnings: [] })
+
+    aggregate_failures do
+      expect(result.review_reasons).to eq([ 'tax_detail_mismatch' ])
+      expect(result.status).to eq('review_needed')
+    end
+  end
+
+  it '支払方法の修正後も支払照合が未確定なら金額のreasonを維持する' do
+    receipt = build(
+      :receipt,
+      status: 'review_needed',
+      payment_method: 'other',
+      review_reasons: [ 'payment_amount_uncertain' ]
+    )
+
+    result = resolve(receipt, payment_result: { warnings: [ :payment_amount_uncertain ] })
+
+    expect(result).to have_attributes(review_reasons: [ 'payment_amount_uncertain' ], status: 'review_needed')
   end
 
   it 'nested金額入力を再計算した場合は古いAmount reasonを現在結果へ置き換える' do

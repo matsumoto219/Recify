@@ -249,6 +249,7 @@ ja:
       method: 支払い方法
       method_placeholder: "例: 現金"
       amount: 支払額
+      amount_unavailable: 未取得
       remove_aria: 支払い行を削除
       payment_amount_sum: 支払合計
       final_payment_total: 実支払額

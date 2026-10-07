@@ -1791,9 +1791,9 @@ export default class extends Controller {
 
   syncPaymentReconciliationSummary (paymentAmountSum, finalPaymentTotal) {
     const hasPaymentRows = this.visiblePaymentRows().length > 0
-    const finalPaymentTotalAvailable = Number.isFinite(finalPaymentTotal)
-    const paymentDifference = finalPaymentTotalAvailable ? paymentAmountSum - finalPaymentTotal : null
-    const mismatch = hasPaymentRows && finalPaymentTotalAvailable && paymentDifference !== 0
+    const reconciliationAvailable = Number.isFinite(paymentAmountSum) && Number.isFinite(finalPaymentTotal)
+    const paymentDifference = reconciliationAvailable ? paymentAmountSum - finalPaymentTotal : null
+    const mismatch = hasPaymentRows && reconciliationAvailable && paymentDifference !== 0
     const syncableMismatch = mismatch && finalPaymentTotal >= 0
 
     if (this.hasPaymentAmountSumTarget) {
@@ -1805,7 +1805,7 @@ export default class extends Controller {
     }
 
     if (this.hasPaymentDifferenceAmountTarget) {
-      if (finalPaymentTotalAvailable) {
+      if (reconciliationAvailable) {
         this.paymentDifferenceAmountTarget.textContent = this.formatPaymentDifference(paymentDifference)
         this.paymentDifferenceAmountTarget.title = this.paymentDifferenceAmountTarget.textContent.trim()
         this.syncAmountDisplayState(this.paymentDifferenceAmountTarget, paymentDifference)
@@ -1835,9 +1835,13 @@ export default class extends Controller {
   }
 
   paymentAmountSum () {
-    return this.visiblePaymentRows().reduce((sum, row) => {
+    const rows = this.visiblePaymentRows()
+    if (rows.length === 0) return null
+
+    return rows.reduce((sum, row) => {
       const amountInput = row.querySelector('[data-receipt-form-target="paymentAmountInput"]')
-      const amount = this.clampNumber(this.parseIntegerInput(amountInput?.value), 0, this.receiptPaymentAmountMaxValue)
+      const amount = this.parseIntegerInput(amountInput?.value)
+      if (sum === null || !Number.isFinite(amount) || amount < 0 || amount > this.receiptPaymentAmountMaxValue) return null
 
       return sum + amount
     }, 0)
@@ -1857,6 +1861,8 @@ export default class extends Controller {
     if (!Number.isFinite(finalPaymentTotal) || finalPaymentTotal < 0) return
 
     const currentPaymentSum = this.paymentAmountSum()
+    if (!Number.isFinite(currentPaymentSum)) return
+
     const delta = finalPaymentTotal - currentPaymentSum
     const firstInput = rows[0].querySelector('[data-receipt-form-target="paymentAmountInput"]')
     if (!firstInput) return
