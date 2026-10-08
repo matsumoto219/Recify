@@ -30,6 +30,8 @@ RSpec.describe SystemSettings do
         'external_services.degraded_failure_threshold',
         'external_services.down_failure_threshold',
         'external_services.recovery_success_threshold',
+        'external_services.ai.reasoning_effort',
+        'external_services.ai.name_completion_reasoning_effort',
         'external_services.ai.open_timeout_seconds',
         'external_services.ai.read_timeout_seconds',
         'external_services.ai.max_elapsed_seconds',

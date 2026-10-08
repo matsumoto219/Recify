@@ -50,6 +50,46 @@ RSpec.describe "External service tuning SystemSettings" do
     end
   end
 
+  describe "AI reasoning effort" do
+    {
+      "external_services.ai.reasoning_effort" => "low",
+      "external_services.ai.name_completion_reasoning_effort" => "high"
+    }.each do |key, default|
+      context key do
+        it "high-riskの編集可能enumとして既定値と確認必須を定義する" do
+          definition = SystemSettings.definition_for(key)
+
+          aggregate_failures do
+            expect(definition).to have_attributes(
+              category: "external_service_tuning",
+              value_type: "enum",
+              default: default,
+              allowed_values: %w[none low medium high xhigh max],
+              editable: true,
+              risk_level: "high",
+              requires_confirmation: true
+            )
+            expect(SystemSettings.value_for(key)).to eq(default)
+          end
+        end
+
+        %w[none low medium high xhigh max].each do |value|
+          it "#{value}を許可する" do
+            expect(SystemSettings.cast_update_value(key, value)).to eq(value)
+          end
+        end
+
+        [ nil, "", "LOW", "minimal", "unknown" ].each do |value|
+          it "#{value.inspect}を拒否する" do
+            expect do
+              SystemSettings.cast_update_value(key, value)
+            end.to raise_error(SystemSettings::ValidationError, "invalid_enum")
+          end
+        end
+      end
+    end
+  end
+
   describe "AI dependencies" do
     it "open timeoutがread timeoutを超える設定を拒否する" do
       create(

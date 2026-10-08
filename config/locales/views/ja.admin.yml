@@ -1259,6 +1259,8 @@ ja:
         amount_snapshot_limit_note: 新しく作成する解析から適用します。待機中の解析や同じ解析の再試行、保存済みの履歴には反映しません。件数は保存容量の範囲内で保持され、超過分は省略内容とともに記録します。上限を増やすと保存容量と保存処理の負荷が増えます。
         store_name_casing_context_lines_note: 店舗名の大文字小文字復元で参照するOCR先頭行数です。0にすると復元を行いません。値を大きくすると店舗名以外の行が候補に入る可能性があります。snapshot_ocr_lines_max以下で運用してください。
         operation_service_toggle_note: OCR / AI の外部API呼び出しを管理者が停止する高リスクな運用スイッチです。OCR停止中は画像解析を開始できません。AI停止中は、OCRが利用可能な場合にAI補完を行わずOCR結果のみで保存します。外部API費用や障害対応時にのみ変更してください。
+        ai_reasoning_effort_note: 商品名補完がOFFのときに使う推論量です。既定値はlowです。AIリクエスト全体に適用され、API費用や処理時間に影響します。noneは推論を行わない指定であり、AI処理を停止する設定ではありません。新しく作成する解析から適用され、実行中の解析や同じ解析の再試行には反映されません。
+        ai_name_completion_reasoning_effort_note: 商品名補完がONのときに使う推論量です。既定値はhighです。商品名補完だけでなくAIリクエスト全体に適用され、API費用や処理時間に影響します。noneは推論を行わない指定であり、AI処理を停止する設定ではありません。新しく作成する解析から適用され、実行中の解析や同じ解析の再試行には反映されません。
         external_service_tuning_note: AI / OCR のtimeout、retry、pollingを次の解析から変更する高リスク設定です。値を大きくするとAPI費用やworker占有時間が増え、小さくすると正常な解析を失敗扱いにする可能性があります。関連する最大処理時間とdelay上限を確認し、障害調査で必要な範囲だけ変更してください。実行中の解析には反映されません。
         amount_engine_tax_excluded_price_conversion_note: OCR/AI解析時に税抜と判断した明細を税込のprice/line_totalへ補正する高リスク設定です。OFFにすると解析保存金額、明細保存値、候補採用、要確認理由が変わる可能性があります。手動作成・編集保存には適用されません。
         reference_pricing_auto_adoption_note: strictなAzure行構造候補だけを新しい金額authorityへ昇格する高リスク設定です。ONは新しい採用を許可し、OFFでも候補と提案の生成を継続して採用済みsourceは変更しません。

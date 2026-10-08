@@ -246,6 +246,26 @@ module SystemSettings
         max: 20
       ),
       Definition.new(
+        key: "external_services.ai.reasoning_effort",
+        category: "external_service_tuning",
+        value_type: "enum",
+        default: "low",
+        editable: true,
+        risk_level: "high",
+        allowed_values: %w[none low medium high xhigh max],
+        requires_confirmation: true
+      ),
+      Definition.new(
+        key: "external_services.ai.name_completion_reasoning_effort",
+        category: "external_service_tuning",
+        value_type: "enum",
+        default: "high",
+        editable: true,
+        risk_level: "high",
+        allowed_values: %w[none low medium high xhigh max],
+        requires_confirmation: true
+      ),
+      Definition.new(
         key: "external_services.ai.open_timeout_seconds",
         category: "external_service_tuning",
         value_type: "integer",
