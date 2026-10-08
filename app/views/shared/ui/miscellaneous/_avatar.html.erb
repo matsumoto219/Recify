@@ -51,7 +51,6 @@
   }
   if preview
     avatar_image_data.merge!(avatar_preview_target: "image", persisted_url: avatar_url)
-    avatar_fallback_data.merge!(avatar_preview_target: "fallback", default_text: fallback_text)
   end
 %>
 
@@ -60,7 +59,7 @@
   style="width: <%= size %>px; height: <%= size %>px;"
   data-controller="image-load-state"
   data-image-load-state-fallback-while-loading-value="true"
-  data-action="turbo:before-cache@document->image-load-state#beforeCache"
+  data-action="avatar-preview:source-changed->image-load-state#sync turbo:before-cache@document->image-load-state#beforeCache pageshow@window->image-load-state#sync"
   aria-busy="<%= avatar_url.present? %>"
   data-avatar>
   <% if preview || avatar_attached %>

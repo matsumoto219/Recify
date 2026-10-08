@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
 require "base64"
+require "json"
 require "open3"
-require "rails_helper"
 
 RSpec.describe "Receipt review target JavaScript module" do
   def run_module_script(script)
-    source = Rails.root.join("app/javascript/receipts/review_targets.js").read.gsub(/^export /, "")
+    source = File.read(File.expand_path("../../app/javascript/receipts/review_targets.js", __dir__)).gsub(/^export /, "")
     encoded_source = Base64.strict_encode64(source)
     harness = <<~JAVASCRIPT
       const source = Buffer.from(#{encoded_source.inspect}, 'base64').toString('utf8')

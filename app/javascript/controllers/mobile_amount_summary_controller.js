@@ -1,7 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
 import {
-  REVIEW_REASON_TARGET_LINK_SELECTOR,
   reviewTargetIdFromHash,
+  reviewTargetLinkForClick,
   reviewTargetUrl,
   samePageReviewTargetUrl
 } from 'receipts/review_targets'
@@ -24,6 +24,7 @@ export default class extends Controller {
     this.handleHashChange = this.handleHashChange.bind(this)
     this.handleKeyboardVisibilityChange = this.handleKeyboardVisibilityChange.bind(this)
     this.handleReviewTargetClick = this.handleReviewTargetClick.bind(this)
+    this.handleReviewNavigation = this.handleReviewNavigation.bind(this)
 
     this.desktopMedia = window.matchMedia(DESKTOP_MEDIA_QUERY)
     this.detailsMedia = window.matchMedia(DETAILS_MEDIA_QUERY)
@@ -39,6 +40,7 @@ export default class extends Controller {
     }
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     document.addEventListener('click', this.handleReviewTargetClick)
+    document.addEventListener('receipt-review:navigate', this.handleReviewNavigation)
     window.addEventListener('hashchange', this.handleHashChange)
     window.addEventListener('mobile-ui:keyboard-visibility-change', this.handleKeyboardVisibilityChange)
 
@@ -62,6 +64,7 @@ export default class extends Controller {
     }
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     document.removeEventListener('click', this.handleReviewTargetClick)
+    document.removeEventListener('receipt-review:navigate', this.handleReviewNavigation)
     window.removeEventListener('hashchange', this.handleHashChange)
     window.removeEventListener('mobile-ui:keyboard-visibility-change', this.handleKeyboardVisibilityChange)
     this.resetContentInset()
@@ -106,12 +109,18 @@ export default class extends Controller {
   }
 
   handleReviewTargetClick (event) {
-    const link = event.target?.closest?.(REVIEW_REASON_TARGET_LINK_SELECTOR)
+    const link = reviewTargetLinkForClick(event)
     if (!link) return
 
     const url = reviewTargetUrl(link.getAttribute('href'), window.location.href)
     if (!url || !samePageReviewTargetUrl(url, window.location)) return
     if (reviewTargetIdFromHash(url.hash) !== this.reviewTargetValue) return
+
+    if (!this.desktopMedia.matches && !this.keyboardVisible()) this.setOpen(true)
+  }
+
+  handleReviewNavigation (event) {
+    if (event.detail?.targetId !== this.reviewTargetValue || !event.target?.contains?.(this.element)) return
 
     if (!this.desktopMedia.matches && !this.keyboardVisible()) this.setOpen(true)
   }

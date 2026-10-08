@@ -46,8 +46,22 @@ const syncTheme = () => {
   syncBrowserChromeThemeColor()
 }
 
+const restorePreviewSources = (event) => {
+  // Cached bodies may reference object URLs released by the previous controllers.
+  // Restore safe sources before insertion; connect can rebuild any retained File.
+  event.detail.newBody.querySelectorAll('img[data-persisted-url][src^="blob:"]').forEach((image) => {
+    const source = image.dataset.persistedUrl
+    if (source) {
+      image.setAttribute('src', source)
+    } else {
+      image.removeAttribute('src')
+    }
+  })
+}
+
 const systemThemeMedia = window.matchMedia?.('(prefers-color-scheme: dark)')
 
+document.addEventListener('turbo:before-render', restorePreviewSources)
 document.addEventListener('turbo:load', syncTheme)
 window.addEventListener('recify:theme-change', syncBrowserChromeThemeColor)
 systemThemeMedia?.addEventListener('change', syncBrowserChromeThemeColor)

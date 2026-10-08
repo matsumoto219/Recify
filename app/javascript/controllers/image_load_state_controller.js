@@ -9,104 +9,62 @@ export default class extends Controller {
 
   connect () {
     this.state = null
+    this.connected = true
     this.sync()
 
     queueMicrotask(() => {
-      if (this.element.isConnected) this.sync()
+      if (this.connected && this.element.isConnected) this.sync()
     })
   }
 
-  imageLoaded (event) {
-    if (!this.currentImageEvent(event)) return
+  disconnect () {
+    this.connected = false
+  }
 
-    if (this.imageTarget.naturalWidth > 0) {
-      this.showAvailable()
-    } else {
-      this.showUnavailable()
-    }
+  imageLoaded (event) {
+    if (this.currentImageEvent(event)) this.sync()
   }
 
   imageFailed (event) {
-    if (!this.currentImageEvent(event)) return
-
-    this.showUnavailable()
+    if (this.currentImageEvent(event)) this.sync()
   }
 
   beforeCache () {
-    this.state = null
-
-    if (!this.hasImageTarget) return
-
-    const hasSource = this.imageTarget.getAttribute('src')?.length > 0
-    this.imageTarget.classList.add('hidden')
-
-    if (this.hasFallbackTarget) {
-      const showLoadingFallback = hasSource && this.fallbackWhileLoadingValue
-      this.fallbackTarget.classList.toggle('hidden', !showLoadingFallback)
-    }
-    if (this.hasEmptyTarget) this.emptyTarget.classList.toggle('hidden', hasSource)
-
-    this.element.setAttribute('aria-busy', String(hasSource))
+    // Turbo can prepare a snapshot while this same document remains visible.
+    this.sync()
   }
 
   sync () {
-    if (!this.hasImageTarget) return
+    const image = this.hasImageTarget ? this.imageTarget : null
+    const source = image?.getAttribute('src') || ''
+    let state = 'empty'
 
-    const source = this.imageTarget.getAttribute('src')
-    if (!source) {
-      this.hasEmptyTarget ? this.showEmpty() : this.showUnavailable()
-      return
+    if (source) {
+      state = image.complete ? (image.naturalWidth > 0 ? 'available' : 'unavailable') : 'loading'
     }
 
-    if (!this.imageTarget.complete) {
-      if (this.fallbackWhileLoadingValue) {
-        this.imageTarget.classList.add('hidden')
-        if (this.hasFallbackTarget) this.fallbackTarget.classList.remove('hidden')
-        if (this.hasEmptyTarget) this.emptyTarget.classList.add('hidden')
-      }
-      this.element.setAttribute('aria-busy', 'true')
-      return
+    if (image) image.classList.toggle('hidden', state !== 'available')
+    if (this.hasFallbackTarget) {
+      const showFallback = state === 'unavailable' ||
+        (state === 'empty' && !this.hasEmptyTarget) ||
+        (state === 'loading' && this.fallbackWhileLoadingValue)
+      this.fallbackTarget.classList.toggle('hidden', !showFallback)
+    }
+    if (this.hasEmptyTarget) this.emptyTarget.classList.toggle('hidden', state !== 'empty')
+    this.element.setAttribute('aria-busy', String(state === 'loading'))
+    this.element.setAttribute('data-image-load-state-state', state)
+
+    if (this.state !== state || this.source !== source || this.image !== image) {
+      this.state = state
+      this.source = source
+      this.image = image
+      this.dispatch(state, { detail: { image, state } })
     }
 
-    if (this.imageTarget.naturalWidth > 0) {
-      this.showAvailable()
-    } else {
-      this.showUnavailable()
-    }
-  }
-
-  showAvailable () {
-    this.imageTarget.classList.remove('hidden')
-    if (this.hasFallbackTarget) this.fallbackTarget.classList.add('hidden')
-    if (this.hasEmptyTarget) this.emptyTarget.classList.add('hidden')
-    this.element.setAttribute('aria-busy', 'false')
-    this.dispatchState('available')
-  }
-
-  showUnavailable () {
-    if (this.hasImageTarget) this.imageTarget.classList.add('hidden')
-    if (this.hasFallbackTarget) this.fallbackTarget.classList.remove('hidden')
-    if (this.hasEmptyTarget) this.emptyTarget.classList.add('hidden')
-    this.element.setAttribute('aria-busy', 'false')
-    this.dispatchState('unavailable')
-  }
-
-  showEmpty () {
-    if (this.hasImageTarget) this.imageTarget.classList.add('hidden')
-    if (this.hasFallbackTarget) this.fallbackTarget.classList.add('hidden')
-    this.emptyTarget.classList.remove('hidden')
-    this.element.setAttribute('aria-busy', 'false')
-    this.dispatchState('empty')
-  }
-
-  dispatchState (state) {
-    if (this.state === state) return
-
-    this.state = state
-    this.dispatch(state)
+    return state
   }
 
   currentImageEvent (event) {
-    return !event?.currentTarget || event.currentTarget === this.imageTarget
+    return this.hasImageTarget && (!event?.currentTarget || event.currentTarget === this.imageTarget)
   }
 }

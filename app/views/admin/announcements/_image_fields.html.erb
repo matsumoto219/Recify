@@ -13,7 +13,7 @@
       attachment_preview_target: "image",
       image_load_state_target: "image",
       action: "load->image-load-state#imageLoaded error->image-load-state#imageFailed",
-      persisted_url: (url_for(announcement.image) if image_attached)
+      persisted_url: (image_attached ? url_for(announcement.image) : "")
     }.compact
   }
   image_preview_attributes[:src] = url_for(announcement.image) if image_attached
@@ -28,7 +28,7 @@
   <div
     class="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
     data-controller="attachment-preview image-load-state"
-    data-action="attachment-preview:source-changed->image-load-state#sync turbo:before-cache@document->image-load-state#beforeCache"
+    data-action="attachment-preview:source-changed->image-load-state#sync turbo:before-cache@document->image-load-state#beforeCache pageshow@window->image-load-state#sync"
     data-attachment-preview-invalid-type-message-value="<%= t("admin.announcements.form.image_validation.invalid_type") %>"
     data-attachment-preview-file-too-large-message-value="<%= t("admin.announcements.form.image_validation.file_too_large", max_size: number_to_human_size(image_max_file_size)) %>"
     data-attachment-preview-max-file-size-bytes-value="<%= image_max_file_size %>">
@@ -38,7 +38,6 @@
           <%= tag.img(**image_preview_attributes) %>
           <div
             class="<%= image_attached ? "hidden" : "flex" %> min-w-0 flex-col items-center justify-center text-center"
-            data-attachment-preview-target="fallback"
             data-image-load-state-target="empty">
             <span class="material-symbols-outlined text-4xl token-text-muted" aria-hidden="true">image</span>
             <p class="mt-2 break-words text-sm token-text-muted [overflow-wrap:anywhere]"><%= t("admin.announcements.form.image_empty") %></p>

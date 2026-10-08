@@ -26,14 +26,13 @@ import {
   roundLineAmount
 } from 'receipts/amount_preview'
 import {
-  REVIEW_REASON_TARGET_LINK_SELECTOR,
-  reviewTargetHash,
   reviewTargetIdFromHash,
+  reviewTargetLinkForClick,
   reviewTargetUrl,
   samePageReviewTargetUrl
 } from 'receipts/review_targets'
 import {
-  pushReviewNavigationHash,
+  navigateReviewTargetHash,
   registerReviewNavigation,
   unregisterReviewNavigation
 } from 'receipts/review_navigation'
@@ -715,17 +714,26 @@ export default class extends Controller {
   }
 
   handleReviewTargetClick (event) {
-    const link = event.target?.closest?.(REVIEW_REASON_TARGET_LINK_SELECTOR)
+    const link = reviewTargetLinkForClick(event)
     if (!link || !this.element.contains(link)) return
 
     const url = this.reviewTargetUrl(link.getAttribute('href'))
     if (!url || !this.samePageReviewTargetUrl(url)) return
 
     const targetId = this.reviewTargetIdFromHash(url.hash)
-    if (targetId === this.reviewItemsTargetValue || targetId === this.reviewAdjustmentsTargetValue) {
+    const section = document.getElementById(targetId)
+    if (targetId && targetId === link.dataset.reviewReasonTarget && section && this.element.contains(section)) {
       event.preventDefault()
-      this.navigateReviewTargetHash(targetId)
-      this.scheduleReviewTargetScroll(document.getElementById(targetId), {
+      if (!this.navigateReviewTargetHash(targetId)) return
+
+      const scroll = this.element.dispatchEvent(new CustomEvent('receipt-review:navigate', {
+        bubbles: true,
+        cancelable: true,
+        detail: { targetId }
+      }))
+      if (!scroll) return
+
+      this.scheduleReviewTargetScroll(section, {
         block: 'start',
         delay: event.detail === 1 ? REVIEW_TARGET_CLICK_SCROLL_DELAY_MS : 0
       })
@@ -916,18 +924,7 @@ export default class extends Controller {
   }
 
   navigateReviewTargetHash (targetId) {
-    if (!targetId) return
-
-    const hash = reviewTargetHash(targetId)
-    if (window.location.hash === hash) return
-    if (pushReviewNavigationHash(hash)) return
-
-    if (typeof window.history?.pushState === 'function') {
-      window.history.pushState(window.history.state, '', hash)
-      return
-    }
-
-    window.location.hash = hash
+    return navigateReviewTargetHash(targetId)
   }
 
   scheduleReviewTargetScroll (target, { block = 'center', delay = REVIEW_TARGET_CLICK_SCROLL_DELAY_MS } = {}) {

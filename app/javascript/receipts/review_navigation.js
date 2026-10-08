@@ -1,3 +1,5 @@
+import { reviewTargetHash } from 'receipts/review_targets'
+
 const REVIEW_NAVIGATION_STATE_KEY = 'recifyReviewNavigation'
 const reviewNavigationSessions = new WeakMap()
 
@@ -88,6 +90,23 @@ export function registerReviewNavigation (form) {
 export function unregisterReviewNavigation (registration) {
   const entry = registration && reviewNavigationSessions.get(registration.session)
   if (entry && entry.registration === registration) entry.registration = null
+}
+
+export function navigateReviewTargetHash (targetId) {
+  if (typeof window === 'undefined' || !targetId) return false
+
+  const hash = reviewTargetHash(targetId)
+  if (hash === window.location.hash || pushReviewNavigationHash(hash)) return true
+
+  if (window.Turbo?.session?.enabled && typeof window.Turbo.visit === 'function') {
+    const location = new URL(window.location.href)
+    location.hash = hash
+    window.Turbo.visit(location.href, { action: 'advance' })
+    return false
+  }
+
+  window.location.hash = hash
+  return true
 }
 
 export function pushReviewNavigationHash (hash) {
