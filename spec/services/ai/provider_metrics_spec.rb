@@ -92,6 +92,84 @@ RSpec.describe Ai::ProviderMetrics do
       expect(metrics).to eq({})
       expect { JSON.generate(metrics) }.not_to raise_error
     end
+
+    it '要求modelとreasoning設定を応答modelから分離して保存する' do
+      metrics = described_class.build(
+        model: 'gpt-returned',
+        requested_model: 'gpt-requested',
+        reasoning_effort: 'high',
+        response_status: 'incomplete',
+        incomplete_reason: 'max_output_tokens',
+        reasoning: 'private reasoning',
+        summary: 'private summary'
+      )
+
+      expect(metrics).to eq(
+        model: 'gpt-returned',
+        requested_model: 'gpt-requested',
+        reasoning_effort: 'high',
+        response_status: 'incomplete',
+        incomplete_reason: 'max_output_tokens'
+      )
+    end
+
+    %w[none low medium high xhigh max].each do |effort|
+      it "reasoning_effortの許可値 #{effort} を保持する" do
+        expect(described_class.build(reasoning_effort: effort)).to eq(reasoning_effort: effort)
+      end
+    end
+
+    it '未知の設定・status・incomplete reasonと不正な要求modelは除外する' do
+      metrics = described_class.build(
+        requested_model: 'person@example.test',
+        reasoning_effort: 'minimal',
+        response_status: 'future_status',
+        incomplete_reason: 'provider private detail'
+      )
+
+      expect(metrics).to eq({})
+    end
+  end
+
+  describe '.token_usage' do
+    it 'reasoningとcached inputを含む既知のtoken数を整数で保持する' do
+      usage = described_class.token_usage(
+        input_tokens: '10',
+        output_tokens: 20,
+        total_tokens: 30,
+        reasoning_tokens: 8,
+        cached_input_tokens: 0,
+        private_tokens: 100
+      )
+
+      expect(usage).to eq(input_tokens: 10, output_tokens: 20, total_tokens: 30, reasoning_tokens: 8, cached_input_tokens: 0)
+      expect(usage.values).to all(be_a(Integer))
+    end
+
+    it '不明なusageはゼロを補わず省略する' do
+      expect(described_class.token_usage(nil)).to eq({})
+    end
+
+    {
+      '負数' => -1,
+      '小数' => 1.5,
+      '整数表現のFloat' => 2.0,
+      '小数文字列' => '1.5',
+      '不正な文字列' => 'unknown',
+      '非有限数' => Float::INFINITY,
+      '整数上限超過' => 2**63,
+      '文字列の整数上限超過' => (2**63).to_s
+    }.each do |label, value|
+      it "#{label} のtoken数を除外する" do
+        expect(described_class.token_usage(reasoning_tokens: value, cached_input_tokens: value)).to eq({})
+      end
+    end
+
+    it '整数上限は丸めずに保持する' do
+      usage = described_class.token_usage(reasoning_tokens: ((2**63) - 1).to_s)
+
+      expect(usage).to eq(reasoning_tokens: (2**63) - 1)
+    end
   end
 
   describe '.merge' do

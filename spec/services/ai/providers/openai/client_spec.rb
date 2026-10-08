@@ -7,7 +7,7 @@ RSpec.describe Ai::Providers::Openai::Client do
     ExternalServices.runtime_config_snapshot.ai.with(**runtime_config_overrides)
   end
   let(:client) { described_class.new(runtime_config: runtime_config) }
-  let(:request_body) { { model: 'gpt-test', input: 'payload' } }
+  let(:request_body) { { model: 'gpt-test', reasoning: { effort: 'low' }, input: 'payload' } }
   let(:backoff_policy) { Ai::BackoffPolicy.new(base_delay: 1.0, max_delay: 10.0, jitter: -> { 0.0 }) }
   let(:configured_env) do
     {
@@ -91,7 +91,7 @@ RSpec.describe Ai::Providers::Openai::Client do
       allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input, runtime_config: runtime_config).and_return(request_body)
       allow(client).to receive(:post_request).with(request_body).and_return({ 'id' => 'resp_123' })
       allow(Ai::Providers::Openai::ResponseParser).to receive(:parse)
-        .with(parsed_response_with_metrics('resp_123', model: 'gpt-test', provider_status: '200'))
+        .with(parsed_response_with_metrics('resp_123', requested_model: 'gpt-test', reasoning_effort: 'low', provider_status: '200'), provider_response: true)
         .and_return(parsed_response)
 
       result = client.call(input)
@@ -100,7 +100,7 @@ RSpec.describe Ai::Providers::Openai::Client do
         expect(Ai::Providers::Openai::RequestBuilder).to have_received(:build).with(input, runtime_config: runtime_config)
         expect(client).to have_received(:post_request).with(request_body)
         expect(Ai::Providers::Openai::ResponseParser).to have_received(:parse)
-          .with(parsed_response_with_metrics('resp_123', model: 'gpt-test', provider_status: '200'))
+          .with(parsed_response_with_metrics('resp_123', requested_model: 'gpt-test', reasoning_effort: 'low', provider_status: '200'), provider_response: true)
         expect(result).to be_a(Ai::ProviderResult)
         expect(result.payload).to eq(parsed_response)
       end
@@ -128,10 +128,13 @@ RSpec.describe Ai::Providers::Openai::Client do
       allow(client).to receive(:post_request).with(request_body).and_return(
         valid_openai_response(
           response_id: 'resp_metrics',
+          model: 'gpt-test-version',
           usage: {
             'input_tokens' => 123,
             'output_tokens' => 45,
-            'total_tokens' => 168
+            'total_tokens' => 168,
+            'input_tokens_details' => { 'cached_tokens' => 100 },
+            'output_tokens_details' => { 'reasoning_tokens' => 20 }
           }
         )
       )
@@ -141,13 +144,18 @@ RSpec.describe Ai::Providers::Openai::Client do
       expect(result).to be_a(Ai::ProviderResult)
       expect(result.payload.dig(:meta, :metrics)).to include(
         provider: 'openai',
-        model: 'gpt-test',
+        model: 'gpt-test-version',
+        requested_model: 'gpt-test',
+        reasoning_effort: 'low',
+        response_status: 'completed',
         response_id: 'resp_metrics',
         provider_status: '200',
         token_usage: {
           input_tokens: 123,
           output_tokens: 45,
-          total_tokens: 168
+          total_tokens: 168,
+          reasoning_tokens: 20,
+          cached_input_tokens: 100
         }
       )
     end
@@ -168,6 +176,29 @@ RSpec.describe Ai::Providers::Openai::Client do
           expect(client).not_to have_received(:sleep)
         end
       }
+    end
+
+    it 'providerの返却model欠損を要求modelで補わない' do
+      allow(client).to receive(:post_request).and_return(valid_openai_response(model: nil))
+
+      result = client.call(input)
+
+      aggregate_failures do
+        expect(result.model).to be_nil
+        expect(result.metrics).not_to have_key(:model)
+        expect(result.metrics).to include(requested_model: 'gpt-test', reasoning_effort: 'low')
+      end
+    end
+
+    it 'usageの不正な型やnested値を結果として保持しない' do
+      allow(client).to receive(:post_request).and_return(valid_openai_response(usage: [ 1 ]))
+
+      result = client.call(input)
+
+      aggregate_failures do
+        expect(result.payload[:success]).to be(true)
+        expect(result.metrics).not_to have_key(:token_usage)
+      end
     end
 
     it 'runtime configでretry上限を設定する' do
@@ -558,10 +589,84 @@ RSpec.describe Ai::Providers::Openai::Client do
           expect(error).not_to be_retryable
           expect(Ai::FallbackDecision.call(error: error, provider: 'openai', fallback_provider: 'other')).not_to be_fallback
           expect(error.metrics[:retry_count]).to eq(0)
+          expect(error.metrics).to include(requested_model: 'gpt-test', reasoning_effort: 'low')
         end
       }
       expect(http).to have_received(:request).once
       expect(executor).not_to have_received(:sleep)
+    end
+
+    it 'incompleteはJSONが完成していても再送せず要求条件と使用量を保持する' do
+      payload = valid_openai_response(
+        usage: { 'input_tokens' => 123, 'output_tokens' => 45, 'output_tokens_details' => { 'reasoning_tokens' => 20 } }
+      ).merge('status' => 'incomplete', 'incomplete_details' => { 'reason' => 'max_output_tokens' })
+      allow(response).to receive(:body).and_return(payload.to_json)
+      executor = Ai::ProviderExecutor.new(provider_client: client, provider_name: 'openai')
+      allow(executor).to receive(:sleep)
+
+      expect do
+        executor.call(input)
+      end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+        aggregate_failures do
+          expect(error).not_to be_retryable
+          expect(error).not_to be_fallbackable
+          expect(error.metrics).to include(
+            requested_model: 'gpt-test',
+            reasoning_effort: 'low',
+            response_status: 'incomplete',
+            incomplete_reason: 'max_output_tokens',
+            retry_count: 0,
+            token_usage: { input_tokens: 123, output_tokens: 45, reasoning_tokens: 20 }
+          )
+        end
+      }
+      expect(http).to have_received(:request).once
+      expect(executor).not_to have_received(:sleep)
+    end
+
+    it 'refusalは有効なreceipt JSONを含んでも採用せず要求条件を保持する' do
+      payload = valid_openai_response.merge('output' => [ { 'content' => [ { 'type' => 'refusal', 'refusal' => 'private text' } ] } ])
+      allow(response).to receive(:body).and_return(payload.to_json)
+
+      expect do
+        client.call(input)
+      end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+        aggregate_failures do
+          expect(error).not_to be_retryable
+          expect(error.metrics).to include(requested_model: 'gpt-test', reasoning_effort: 'low', response_status: 'completed')
+          expect(error.message).not_to include('private text')
+        end
+      }
+    end
+
+    it 'HTTPでreceipt payloadだけ返された場合はcompletedを推測しない' do
+      allow(response).to receive(:body).and_return(JSON.parse(valid_openai_response['output_text']).to_json)
+
+      expect { client.call(input) }.to raise_error(Ai::Errors::InvalidResponseError)
+    end
+
+    it '配列のJSON responseは再送不可で拒否し要求条件を保持する' do
+      allow(response).to receive(:body).and_return('[1]')
+
+      expect do
+        client.call(input)
+      end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+        aggregate_failures do
+          expect(error).not_to be_retryable
+          expect(error).not_to be_fallbackable
+          expect(error.metrics).to include(requested_model: 'gpt-test', reasoning_effort: 'low', provider_status: '200')
+        end
+      }
+    end
+
+    it 'HTTP timeoutでも要求したmodelとeffortを保持する' do
+      allow(http).to receive(:request).with(request).and_raise(Net::ReadTimeout.new('timeout'))
+
+      expect do
+        client.call(input)
+      end.to raise_error(Ai::Errors::TimeoutError) { |error|
+        expect(error.metrics).to include(requested_model: 'gpt-test', reasoning_effort: 'low', provider_status: 'timeout')
+      }
     end
 
     it 'Net::OpenTimeout はそのまま送出する' do

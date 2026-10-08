@@ -23,7 +23,7 @@ module Ai
               post_request(body)
             end
 
-          payload = ResponseParser.parse(attach_response_metrics(response, request_body: body))
+          payload = ResponseParser.parse(attach_response_metrics(response, request_body: body), provider_response: true)
           Ai::ProviderResult.new(
             provider: PROVIDER_NAME,
             model: payload.dig(:meta, :model),
@@ -36,7 +36,7 @@ module Ai
             message: e.message,
             provider: PROVIDER_NAME,
             cause: e,
-            metrics: error_metrics(provider_status: "timeout")
+            metrics: error_metrics(provider_status: "timeout", request_body: body)
           )
         rescue Ai::Errors::ProviderError => e
           raise e
@@ -52,7 +52,7 @@ module Ai
             fallbackable: true,
             cause: e,
             provider_status: "unexpected_error",
-            metrics: error_metrics(provider_status: "unexpected_error")
+            metrics: error_metrics(provider_status: "unexpected_error", request_body: body)
           )
         end
 
@@ -278,7 +278,13 @@ module Ai
         end
 
         def attach_response_metrics(response, request_body:)
-          return response unless response.is_a?(Hash)
+          unless response.is_a?(Hash)
+            raise Ai::Errors::InvalidResponseError.new(
+              message: "OpenAI response must be a JSON object",
+              provider: PROVIDER_NAME,
+              metrics: error_metrics(provider_status: "200", request_body: request_body)
+            )
+          end
 
           response.merge(
             Ai::ProviderMetrics::METADATA_KEY => response_metrics(response, request_body: request_body)
@@ -290,7 +296,10 @@ module Ai
             provider: PROVIDER_NAME,
             provider_status: "200",
             response_id: response["id"] || response[:id],
-            model: response["model"] || response[:model] || request_model(request_body),
+            model: response["model"] || response[:model],
+            requested_model: request_model(request_body),
+            reasoning_effort: request_body.dig(:reasoning, :effort),
+            response_status: response["status"] || response[:status],
             token_usage: extract_token_usage(response)
           )
         end
@@ -334,6 +343,8 @@ module Ai
             {
               provider: PROVIDER_NAME,
               model: request_model(request_body),
+              requested_model: request_model(request_body),
+              reasoning_effort: request_body&.dig(:reasoning, :effort),
               provider_status: provider_status,
               rate_limited: rate_limited
             }.merge(detail_metrics)
@@ -342,9 +353,16 @@ module Ai
 
         def extract_token_usage(response)
           usage = response["usage"] || response[:usage]
-          return {} unless usage.respond_to?(:to_h)
+          return {} unless usage.is_a?(Hash)
 
-          Ai::ProviderMetrics.token_usage(usage)
+          usage = usage.with_indifferent_access
+          output_details = usage[:output_tokens_details]
+          input_details = usage[:input_tokens_details]
+          details = {
+            reasoning_tokens: output_details.is_a?(Hash) ? output_details[:reasoning_tokens] : nil,
+            cached_input_tokens: input_details.is_a?(Hash) ? input_details[:cached_tokens] : nil
+          }.compact
+          Ai::ProviderMetrics.token_usage(usage.merge(details))
         end
 
         def request_model(body)

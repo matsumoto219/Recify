@@ -2,12 +2,17 @@ module Ai
   class ProviderMetrics
     METADATA_KEY = "recify_ai_metrics".freeze
     MAX_NUMERIC_VALUE = (2**63) - 1
+    REASONING_EFFORTS = %w[none low medium high xhigh max].freeze
+    RESPONSE_STATUSES = %w[completed failed in_progress cancelled queued incomplete].freeze
+    INCOMPLETE_REASONS = %w[max_output_tokens content_filter].freeze
     TOKEN_USAGE_KEYS = %i[
       input_tokens
       output_tokens
       total_tokens
       prompt_tokens
       completion_tokens
+      reasoning_tokens
+      cached_input_tokens
     ].freeze
 
     class << self
@@ -25,6 +30,10 @@ module Ai
         {
           provider: safe_string(metrics[:provider]),
           model: safe_string(metrics[:model]),
+          requested_model: safe_string(metrics[:requested_model]),
+          reasoning_effort: safe_enum(metrics[:reasoning_effort], REASONING_EFFORTS),
+          response_status: safe_enum(metrics[:response_status], RESPONSE_STATUSES),
+          incomplete_reason: safe_enum(metrics[:incomplete_reason], INCOMPLETE_REASONS),
           final_provider: safe_string(metrics[:final_provider]),
           elapsed_ms: safe_numeric(metrics[:elapsed_ms]),
           retry_count: safe_numeric(metrics[:retry_count]),
@@ -52,7 +61,7 @@ module Ai
         usage = normalized_hash(value)
 
         TOKEN_USAGE_KEYS.each_with_object({}) do |key, memo|
-          numeric = safe_numeric(usage[key])
+          numeric = safe_integer(usage[key])
           memo[key] = numeric unless numeric.nil?
         end
       end
@@ -71,6 +80,18 @@ module Ai
 
       def safe_message(value)
         ExternalServices.sanitize_error_text(value)
+      end
+
+      def safe_enum(value, allowed_values)
+        value if allowed_values.include?(value)
+      end
+
+      def safe_integer(value)
+        integer = value if value.is_a?(Integer)
+        if value.is_a?(String) && value.bytesize <= 32 && value.ascii_only? && value.match?(/\A\d+\z/)
+          integer = value.to_i
+        end
+        integer if integer&.between?(0, MAX_NUMERIC_VALUE)
       end
 
       def safe_numeric(value)

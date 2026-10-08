@@ -5,45 +5,52 @@ module Ai
     module Openai
       class ResponseParser
         class << self
-          def parse(response)
-            new(response).parse
+          def parse(response, provider_response: false)
+            new(response, provider_response: provider_response).parse
           end
         end
 
-        def initialize(response)
+        def initialize(response, provider_response: false)
           @response = response || {}
+          @provider_response = provider_response
         end
 
         def parse
+          metrics = {}
           parsed_body = normalized_response_body
+          metrics = response_metrics(parsed_body)
+          validate_response!(parsed_body)
           payload = extract_json_payload(parsed_body)
 
           Ai::ResponseParser.parse(
             payload,
             provider: "openai",
-            meta: build_meta(parsed_body)
+            meta: build_meta(parsed_body, metrics: metrics)
           )
         rescue JSON::ParserError => e
           raise Ai::Errors::InvalidResponseError.new(
             message: "Failed to parse OpenAI JSON payload",
             error_code: "ai_invalid_response",
             provider: "openai",
+            metrics: metrics,
             cause: e
           )
-        rescue Ai::Errors::InvalidResponseError, Ai::Errors::ProviderError
+        rescue Ai::Errors::ProviderError => e
+          e.metrics.replace(Ai::ProviderMetrics.merge(metrics, e.metrics))
           raise
         rescue StandardError => e
           raise Ai::Errors::InvalidResponseError.new(
             message: "Failed to parse OpenAI response",
             error_code: "ai_invalid_response",
             provider: "openai",
+            metrics: metrics,
             cause: e
           )
         end
 
         private
 
-        attr_reader :response
+        attr_reader :response, :provider_response
 
         def normalized_response_body
           return response if response.is_a?(Hash)
@@ -63,7 +70,7 @@ module Ai
           output_text = nested_output_text(body)
           return JSON.parse(output_text) if output_text.present?
 
-          if body["store"].is_a?(Hash) || body[:store].is_a?(Hash)
+          if !provider_response && !response_envelope?(body) && (body["store"].is_a?(Hash) || body[:store].is_a?(Hash))
             return stringify_keys(body.except(Ai::ProviderMetrics::METADATA_KEY))
           end
 
@@ -74,13 +81,50 @@ module Ai
           )
         end
 
+        def validate_response!(body)
+          return unless provider_response || response_envelope?(body)
+
+          unless (body["status"] || body[:status]) == "completed"
+            raise Ai::Errors::InvalidResponseError.new(
+              message: "OpenAI response was not completed",
+              provider: "openai"
+            )
+          end
+          return unless refusal_response?(body)
+
+          raise Ai::Errors::InvalidResponseError.new(
+            message: "OpenAI response contained a refusal",
+            provider: "openai"
+          )
+        end
+
+        def response_envelope?(body)
+          %w[object status output incomplete_details].any? { |key| body.key?(key) || body.key?(key.to_sym) }
+        end
+
+        def refusal_response?(body)
+          Array(body["output"] || body[:output]).any? do |item|
+            next false unless item.is_a?(Hash)
+
+            Array(item["content"] || item[:content]).any? do |content|
+              content.is_a?(Hash) && (content["type"] || content[:type]) == "refusal"
+            end
+          end
+        end
+
         def direct_output_text(body)
           body["output_text"] || body[:output_text]
         end
 
         def nested_output_text(body)
           Array(body["output"] || body[:output]).each do |item|
+            next unless item.is_a?(Hash)
+            next unless [ nil, "message" ].include?(item["type"] || item[:type])
+
             Array(item["content"] || item[:content]).each do |content|
+              next unless content.is_a?(Hash)
+              next unless (content["type"] || content[:type]) == "output_text"
+
               text = content["text"] || content[:text]
               return text if text.present?
             end
@@ -89,37 +133,45 @@ module Ai
           nil
         end
 
-        def build_meta(body)
+        def build_meta(body, metrics:)
           {
             provider: "openai",
             response_id: body["id"] || body[:id],
             model: body["model"] || body[:model],
-            metrics: response_metrics(body).presence
+            metrics: metrics.presence
           }.compact
         end
 
         def response_metrics(body)
           metrics = body[Ai::ProviderMetrics::METADATA_KEY] || body[:recify_ai_metrics] || {}
-          return {} if metrics.blank? && token_usage(body).blank?
+          usage = token_usage(body)
+          status = body["status"] || body[:status]
+          incomplete_details = body["incomplete_details"] || body[:incomplete_details]
+          incomplete_reason = incomplete_details["reason"] || incomplete_details[:reason] if incomplete_details.is_a?(Hash)
+          return {} if metrics.blank? && usage.blank? && status.blank? && incomplete_reason.blank?
 
           Ai::ProviderMetrics.merge(
             metrics,
             response_id: body["id"] || body[:id],
             model: body["model"] || body[:model],
-            token_usage: token_usage(body)
+            response_status: status,
+            incomplete_reason: incomplete_reason,
+            token_usage: usage.presence
           )
         end
 
         def token_usage(body)
-          Ai::ProviderMetrics.token_usage(body["usage"] || body[:usage])
-        end
+          usage = body["usage"] || body[:usage]
+          return {} unless usage.is_a?(Hash)
 
-        def error_meta(error)
-          {
-            provider: "openai",
-            error_class: error.class.name,
-            error_message: error.message
-          }.merge(build_meta(response.is_a?(Hash) ? response : {})).compact
+          usage = usage.with_indifferent_access
+          output_details = usage[:output_tokens_details]
+          input_details = usage[:input_tokens_details]
+          details = {
+            reasoning_tokens: output_details.is_a?(Hash) ? output_details[:reasoning_tokens] : nil,
+            cached_input_tokens: input_details.is_a?(Hash) ? input_details[:cached_tokens] : nil
+          }.compact
+          Ai::ProviderMetrics.token_usage(usage.merge(details))
         end
 
         def stringify_keys(object)

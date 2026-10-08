@@ -585,7 +585,10 @@ RSpec.describe 'Error pages', type: :request do
     end
 
     it 'Kamal proxyへpublic配下の4xx/5xx静的エラーを配布できる' do
-      config = YAML.safe_load_file(Rails.root.join('config/deploy.yml').to_s, aliases: true)
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('KAMAL_DEPLOY_HOST').and_return('example-host')
+      allow(ENV).to receive(:fetch).with('APP_HOST').and_return('example.com')
+      config = YAML.safe_load(ERB.new(Rails.root.join('config/deploy.yml').read).result, aliases: true)
 
       expect(config['error_pages_path']).to eq('public')
       error_pages = Dir[Rails.root.join(config['error_pages_path'], '{4??.html,5??.html}')].map do |path|
