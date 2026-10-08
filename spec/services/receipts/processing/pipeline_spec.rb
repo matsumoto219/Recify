@@ -1034,7 +1034,7 @@ RSpec.describe Receipts::Processing::Pipeline do
       Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
       allow(SystemSettings).to receive(:values_for).and_call_original
       allow(SystemSettings).to receive(:values_for)
-        .with(SystemSettings::EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS)
+        .with(SystemSettings::EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS + %w[external_services.ai.reasoning_effort external_services.ai.name_completion_reasoning_effort])
         .and_raise(ActiveRecord::ConnectionNotEstablished)
       allow(ReceiptAiEnrichmentService).to receive(:call)
 

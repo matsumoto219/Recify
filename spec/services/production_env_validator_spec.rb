@@ -214,8 +214,14 @@ RSpec.describe ProductionEnvValidator do
       described_class.validate!(env: env, rails_config: rails_config, strict: true, **validator_options)
     end.to raise_error(described_class::ValidationError) { |error|
       expect(error.message).to include("OPENAI_API_KEY")
-      expect(error.message).to include("OPENAI_AI_MODEL")
+      expect(error.message).not_to include("OPENAI_AI_MODEL")
     }
+  end
+
+  it "does not require a model override when AI is enabled" do
+    env = required_env.except("OPENAI_AI_MODEL")
+
+    expect(described_class.call(env: env, rails_config: rails_config, strict: true, **validator_options)).to be_success
   end
 
   it "does not require OpenAI keys when AI is disabled by ENV" do

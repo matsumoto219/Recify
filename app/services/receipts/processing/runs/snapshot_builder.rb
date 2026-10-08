@@ -507,6 +507,8 @@ module Receipts::Processing::Runs
         )
         snapshot["purchase"]["purchased_at_evidence"] = evidence.deep_stringify_keys
       end
+      execution = ai_execution_snapshot(normalized_hash(input[:meta])[:ai_execution])
+      snapshot["meta"]["ai_execution"] = execution if execution
       snapshot
     end
 
@@ -3022,6 +3024,21 @@ module Receipts::Processing::Runs
         confidence_summary: sanitized_confidence_summary(meta[:confidence_summary]),
         ai_name_completion_enabled: meta[:ai_name_completion_enabled] == true
       }.compact
+    end
+
+    def ai_execution_snapshot(value)
+      execution = normalized_hash(value)
+      return if execution.empty?
+
+      model = execution[:model]
+      effort = execution[:reasoning_effort]
+      unless execution[:schema_version] == 1 && model.is_a?(String) &&
+          ExternalServices.sanitize_error_text(model, identifier: true) == model &&
+          effort.is_a?(String) && SystemSettings.definition_for("external_services.ai.reasoning_effort").allowed_values.include?(effort)
+        raise ExternalServices::RuntimeConfigUnavailableError
+      end
+
+      { "schema_version" => 1, "model" => model, "reasoning_effort" => effort }
     end
 
     def limited_items(items)

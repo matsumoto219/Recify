@@ -49,9 +49,15 @@ RSpec.describe Ai::AvailabilityChecker do
     end
   end
 
-  it 'model 設定がない場合は false を返す' do
+  it 'model 設定がない場合はアプリのdefaultで利用可能とする' do
     with_env(configured_env.merge('OPENAI_AI_MODEL' => nil)) do
-      expect(described_class.call).to eq(false)
+      expect(described_class.call).to eq(true)
+    end
+  end
+
+  it 'model 設定が空白の場合もアプリのdefaultで利用可能とする' do
+    with_env(configured_env.merge('OPENAI_AI_MODEL' => '   ')) do
+      expect(described_class.call).to eq(true)
     end
   end
 

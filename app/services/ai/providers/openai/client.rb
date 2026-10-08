@@ -15,7 +15,7 @@ module Ai
         end
 
         def call(input, before_provider_call: nil)
-          body = RequestBuilder.build(input)
+          body = RequestBuilder.build(input, runtime_config: runtime_config)
           response =
             if before_provider_call
               post_request(body, before_provider_call: before_provider_call)
@@ -184,7 +184,7 @@ module Ai
         end
 
         def invalid_request_response?(response)
-          response.code.to_i == 400 || response.code.to_i == 422
+          [ 400, 404, 422 ].include?(response.code.to_i)
         end
 
         def server_error_response?(response)

@@ -3,20 +3,21 @@ module Ai
     module Openai
       class RequestBuilder
         class << self
-          def build(input)
-            new(input).build
+          def build(input, runtime_config: nil)
+            new(input, runtime_config: runtime_config).build
           end
         end
 
-        def initialize(input)
+        def initialize(input, runtime_config: nil)
           @input = input || {}
+          @runtime_config = runtime_config || ExternalServices.runtime_config_snapshot.ai
         end
 
         def build
           prompt = Ai::PromptTemplate.build(input)
 
           request = {
-            model: model_name,
+            model: runtime_config.model,
             input: [
               {
                 role: "system",
@@ -42,44 +43,16 @@ module Ai
             }
           }
 
-          if ai_name_completion_enabled?
-            request[:reasoning] = {
-              effort: "medium"
-            }
-          end
+          request[:reasoning] = {
+            effort: ai_name_completion_enabled? ? runtime_config.name_completion_reasoning_effort : runtime_config.reasoning_effort
+          }
 
           request
         end
 
         private
 
-        attr_reader :input
-
-        def model_name
-          ENV.fetch("OPENAI_AI_MODEL") do
-            raise Ai::Errors::ProviderError.new(
-              message: "OPENAI_AI_MODEL is not set",
-              error_code: "ai_config_error",
-              provider: Ai::Providers::Openai::Client::PROVIDER_NAME,
-              category: :config,
-              retryable: false,
-              fallbackable: false,
-              provider_status: "configuration",
-              provider_error_code: "model_missing",
-              provider_error_type: "configuration",
-              provider_message: "OpenAI AI model is missing",
-              phase: "configuration",
-              metrics: Ai::ProviderMetrics.build(
-                provider: Ai::Providers::Openai::Client::PROVIDER_NAME,
-                provider_status: "configuration",
-                provider_error_code: "model_missing",
-                provider_error_type: "configuration",
-                provider_message: "OpenAI AI model is missing",
-                phase: "configuration"
-              )
-            )
-          end
-        end
+        attr_reader :input, :runtime_config
 
         def ai_name_completion_enabled?
           input.respond_to?(:with_indifferent_access) &&

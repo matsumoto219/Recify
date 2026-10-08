@@ -38,7 +38,6 @@ class ProductionEnvValidator
 
   AI_REQUIRED_ENV = %w[
     OPENAI_API_KEY
-    OPENAI_AI_MODEL
   ].freeze
 
   TURNSTILE_REQUIRED_ENV = %w[

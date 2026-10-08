@@ -229,10 +229,20 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
     end
   end
 
-  it 'OpenAI model未設定ではAI API未到達としてAI counterを消費しない' do
+  it 'OpenAI model未設定でも既定モデルでAI APIへ到達しcounterを消費する' do
     receipt = create(:receipt, :processing, :with_image, user: user)
     run = create(:receipt_analysis_run, receipt: receipt)
     Receipts::Processing.record_ocr_snapshot(run, successful_ocr_result)
+    provider_client = double('ProviderClient')
+    allow(Ai::ProviderRegistry).to receive(:fetch) do |provider, runtime_config:|
+      expect(provider).to eq('openai')
+      expect(runtime_config.model).to eq('gpt-6-luna')
+      provider_client
+    end
+    allow(provider_client).to receive(:call) do |_input, before_provider_call:|
+      before_provider_call.call
+      raise Ai::Errors::InvalidResponseError.new(message: 'invalid fixture response', provider: 'openai')
+    end
 
     with_env(
       'OPENAI_API_KEY' => 'test-openai-key',
@@ -243,15 +253,13 @@ RSpec.describe 'OCR/AI operation service toggles', type: :service do
 
       aggregate_failures do
         expect(result.next_step).to eq(:finalize)
-        expect(result.finalize_decision.error_code).to eq('ai_config_error')
-        expect(UsageCounter.where(user: user, key: 'ai_jobs_per_day')).to be_empty
+        expect(result.finalize_decision.error_code).to eq('ai_invalid_response')
+        expect(UsageCounter.find_by!(user: user, key: 'ai_jobs_per_day').used_count).to eq(1)
         expect(run.reload.ai_normalized_result_snapshot).to include(
           'success' => false,
-          'error_code' => 'ai_config_error'
+          'error_code' => 'ai_invalid_response'
         )
-        expect(ExternalServices.snapshot(:ai)[:last_error_detail]).to include(
-          provider_error_code: 'model_missing'
-        )
+        expect(provider_client).to have_received(:call).once
       end
     end
   end

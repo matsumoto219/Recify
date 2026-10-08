@@ -150,8 +150,12 @@ module ExternalServices
       end
     end
 
-    def runtime_config_snapshot
-      RuntimeConfig.load
+    def openai_model_name(env: ENV)
+      RuntimeConfig.openai_model_name(env: env)
+    end
+
+    def runtime_config_snapshot(legacy_snapshot: nil)
+      RuntimeConfig.load(legacy_snapshot: legacy_snapshot)
     rescue StandardError => e
       Rails.logger.error("[ExternalServices] runtime_config_unavailable class=#{e.class}")
       raise RuntimeConfigUnavailableError

@@ -1,6 +1,19 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
+  it 'AI実行条件は安全な値だけを文字列短縮せず保存する' do
+    allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
+    execution = { schema_version: 1, model: 'future-model', reasoning_effort: 'max', prompt: 'not retained' }
+
+    snapshot = described_class.ai_input_snapshot(meta: { ai_name_completion_enabled: true, ai_execution: execution })
+
+    expect(snapshot.fetch('meta')).to include(
+      'ai_name_completion_enabled' => true,
+      'ai_execution' => { 'schema_version' => 1, 'model' => 'future-model', 'reasoning_effort' => 'max' }
+    )
+    expect(snapshot.to_json).not_to include('not retained')
+  end
+
   it '支払の物理sourceだけをsnapshotへ保持し再試行で同額別印字を区別する' do
     original = {
       success: true, lines: [ '合計 864円', 'eGift適用 500円', 'eGift適用 500円', '釣銭 0円' ],
