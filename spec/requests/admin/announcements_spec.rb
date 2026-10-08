@@ -191,7 +191,7 @@ RSpec.describe 'Admin announcements', type: :request do
         expect(document.at_css("input[type='file'][name='announcement[image]']")['accept']).to eq('image/jpeg,image/png,image/webp')
         expect(document.at_css('[data-controller~="attachment-preview"]')).to be_present
         expect(document.at_css('[data-attachment-preview-target~="image"]')['class']).to include('hidden')
-        expect(document.at_css('[data-attachment-preview-target~="fallback"]')['class']).not_to include('hidden')
+        expect(document.at_css('[data-image-load-state-target~="empty"]')['class']).not_to include('hidden')
         expect(document.at_css("input[type='file'][name='announcement[image]']")['data-action']).to include('change->attachment-preview#preview')
         expect(document.at_css('[data-attachment-preview-target~="error"]')['class']).to include('hidden')
         expect(document.css("input[name*='announcement_links_attributes']").size).to be >= 3
@@ -810,7 +810,7 @@ RSpec.describe 'Admin announcements', type: :request do
       image_controller = preview_image&.ancestors&.find do |node|
         node['data-controller'].to_s.split.include?('image-load-state')
       end
-      empty_fallback = document.at_css('[data-attachment-preview-target~="fallback"]')
+      empty_fallback = document.at_css('[data-image-load-state-target~="empty"]')
       unavailable_fallback = image_controller&.at_css('[data-image-load-state-target~="fallback"]')
       remove_checkbox = document.at_css("input[name='announcement[remove_image]']")
 

@@ -42,6 +42,29 @@ RSpec.describe "画像読み込み失敗時の実Chromeフォールバック", t
     click_button I18n.t("shared.receipt_image_card.show_image")
   end
 
+  def cache_without_leaving
+    same_document = page.evaluate_async_script(<<~JAVASCRIPT)
+      const done = arguments[arguments.length - 1]
+      const body = document.body
+      Turbo.session.view.cacheSnapshot().then(() => done(document.body === body), () => done(false))
+    JAVASCRIPT
+    expect(same_document).to be(true)
+  end
+
+  def expect_loaded_image(selector)
+    expect(page).to have_css("#{selector}:not(.hidden)")
+    image = find(selector)
+    displayed_image = image.evaluate_script(<<~JAVASCRIPT)
+      (() => {
+        const bounds = this.getBoundingClientRect()
+        const style = getComputedStyle(this)
+        return this.complete && this.naturalWidth > 0 && this.naturalHeight > 0 &&
+          style.display !== 'none' && style.visibility !== 'hidden' && bounds.width > 0 && bounds.height > 0
+      })()
+    JAVASCRIPT
+    expect(displayed_image).to be(true)
+  end
+
   def expect_no_unexpected_console_errors
     unexpected = page.driver.browser.logs.get(:browser).select do |entry|
       next false unless entry.level == "SEVERE"
@@ -81,6 +104,9 @@ RSpec.describe "画像読み込み失敗時の実Chromeフォールバック", t
     open_receipt_image
     expect(page).to have_content(I18n.t("shared.receipt_image_card.unavailable"))
     expect(page).to have_css("[data-receipt-image-card-target~='previewTrigger'][disabled]", visible: :all)
+    cache_without_leaving
+    expect(page).to have_content(I18n.t("shared.receipt_image_card.unavailable"))
+    expect(page).to have_css("[data-receipt-image-card-target~='previewTrigger'][disabled]", visible: :all)
     missing_preview_trigger = find("[data-receipt-image-card-target~='previewTrigger']", visible: :all)
     missing_download = find("[data-receipt-image-card-target~='download']", visible: :all)
     expect(missing_preview_trigger["aria-label"]).to eq(I18n.t("shared.receipt_image_card.unavailable"))
@@ -94,6 +120,10 @@ RSpec.describe "画像読み込み失敗時の実Chromeフォールバック", t
     wait_for_stimulus_controller("image-load-state")
     open_receipt_image
     expect(page).to have_css("img[data-receipt-image-card-target~='previewImage']:not(.hidden)")
+    expect(page).to have_css("[data-receipt-image-card-target~='previewTrigger']:not([disabled])")
+    expect(page).to have_link(I18n.t("shared.receipt_image_card.download"))
+    cache_without_leaving
+    expect_loaded_image("img[data-receipt-image-card-target~='previewImage']")
     expect(page).to have_css("[data-receipt-image-card-target~='previewTrigger']:not([disabled])")
     expect(page).to have_link(I18n.t("shared.receipt_image_card.download"))
     normal_preview_trigger = find("[data-receipt-image-card-target~='previewTrigger']")
@@ -144,6 +174,11 @@ RSpec.describe "画像読み込み失敗時の実Chromeフォールバック", t
       Rails.root.join("spec/fixtures/files/receipt_sample.jpg")
     )
     expect(page).to have_css("img[data-avatar-image]:not(.hidden)")
+    avatar_source = find("img[data-avatar-preview-target~='image']")["src"]
+    cache_without_leaving
+    expect_loaded_image("img[data-avatar-preview-target~='image']")
+    expect(find("img[data-avatar-preview-target~='image']")["src"]).to eq(avatar_source)
+    expect(find("input[name='user[avatar]']", visible: :all).evaluate_script("this.files.length")).to eq(1)
 
     aggregate_failures do
       expect(page.evaluate_script("window.innerWidth")).to eq(390)
@@ -174,6 +209,8 @@ RSpec.describe "画像読み込み失敗時の実Chromeフォールバック", t
     expect(page).to have_current_path(announcement_path(normal_announcement), ignore_query: true)
     wait_for_stimulus_controller("image-load-state")
     expect(page).to have_css("img[alt='正常な公開画像']:not(.hidden)")
+    cache_without_leaving
+    expect_loaded_image("img[alt='正常な公開画像']")
     expect(page).to have_no_content(I18n.t("announcements.image.unavailable"))
 
     page.go_back
@@ -222,6 +259,11 @@ RSpec.describe "画像読み込み失敗時の実Chromeフォールバック", t
       Rails.root.join("spec/fixtures/files/receipt_sample.jpg")
     )
     expect(page).to have_css("img[data-attachment-preview-target~='image']:not(.hidden)")
+    attachment_source = find("img[data-attachment-preview-target~='image']")["src"]
+    cache_without_leaving
+    expect_loaded_image("img[data-attachment-preview-target~='image']")
+    expect(find("img[data-attachment-preview-target~='image']")["src"]).to eq(attachment_source)
+    expect(find("input[name='announcement[image]']", visible: :all).evaluate_script("this.files.length")).to eq(1)
     expect(page).to have_no_content(I18n.t("announcements.image.unavailable"))
 
     aggregate_failures do

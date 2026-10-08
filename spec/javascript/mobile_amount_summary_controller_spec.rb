@@ -3,32 +3,21 @@
 require "base64"
 require "json"
 require "open3"
-require "rails_helper"
 
 RSpec.describe "Mobile amount summary Stimulus controller" do
-  let(:source) { Rails.root.join("app/javascript/controllers/mobile_amount_summary_controller.js").read }
+  let(:source) { File.read(File.expand_path("../../app/javascript/controllers/mobile_amount_summary_controller.js", __dir__)) }
 
   def run_controller_script(script)
     controller_source = source
       .sub("import { Controller } from '@hotwired/stimulus'\n", "")
       .sub(/import \{.*?\} from 'receipts\/review_targets'\n/m, "")
-    encoded_source = Base64.strict_encode64(controller_source)
+    module_source = File.read(File.expand_path("../../app/javascript/receipts/review_targets.js", __dir__)).gsub(/^export /, "")
+    encoded_source = Base64.strict_encode64("#{module_source}\n#{controller_source}")
     harness = <<~JAVASCRIPT
       class Controller {}
 
       const source = Buffer.from(#{encoded_source.inspect}, 'base64').toString('utf8')
         .replace('export default class extends Controller', 'class MobileAmountSummaryController extends Controller')
-      const REVIEW_REASON_TARGET_LINK_SELECTOR = 'a[data-review-reason-target-link]'
-      const reviewTargetUrl = (href, baseHref) => {
-        try { return new URL(href || '', baseHref) } catch { return null }
-      }
-      const samePageReviewTargetUrl = (url, location) =>
-        url.origin === location.origin && url.pathname === location.pathname && url.search === location.search
-      const reviewTargetIdFromHash = (hash) => {
-        const targetId = String(hash || '').replace(/^#/, '')
-        if (targetId === '') return null
-        try { return decodeURIComponent(targetId) } catch { return targetId }
-      }
       eval(`${source}\nglobalThis.MobileAmountSummaryController = MobileAmountSummaryController`)
 
       class FakeClassList {
@@ -305,7 +294,7 @@ RSpec.describe "Mobile amount summary Stimulus controller" do
     result = run_controller_script(<<~JAVASCRIPT)
       controller.connect()
       const targetLink = {
-        getAttribute: () => '/receipts/receipt_1/edit#receipt-section-amount-summary'
+        getAttribute: (name) => name === 'href' ? '/receipts/receipt_1/edit#receipt-section-amount-summary' : null
       }
       controller.handleReviewTargetClick({
         target: { closest: () => targetLink }
@@ -319,7 +308,7 @@ RSpec.describe "Mobile amount summary Stimulus controller" do
 
       controller.setOpen(false)
       const foreignLink = {
-        getAttribute: () => 'http://other.test/receipts/receipt_1/edit#receipt-section-amount-summary'
+        getAttribute: (name) => name === 'href' ? 'http://other.test/receipts/receipt_1/edit#receipt-section-amount-summary' : null
       }
       controller.handleReviewTargetClick({
         target: { closest: () => foreignLink }
@@ -341,6 +330,36 @@ RSpec.describe "Mobile amount summary Stimulus controller" do
       "hashOpened" => true,
       "foreignOpened" => false,
       "keyboardOpened" => false
+    )
+  end
+
+  it "同じformの確認移動通知で内訳を開き、別formや修飾clickには反応しない" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      controller.connect()
+      const reveal = (inside, targetId = controller.reviewTargetValue) => {
+        listeners.document.get('receipt-review:navigate')({
+          target: { contains: (target) => inside && target === element },
+          detail: { targetId }
+        })
+        const opened = details.classList.contains('is-open')
+        controller.setOpen(false)
+        return opened
+      }
+      const ownForm = reveal(true)
+      const otherForm = reveal(false)
+      const otherTarget = reveal(true, 'receipt-section-image-preview')
+      const link = {
+        getAttribute: (name) => name === 'href' ? '#receipt-section-amount-summary' : null
+      }
+      controller.handleReviewTargetClick({ target: { closest: () => link }, metaKey: true })
+      const modifiedClick = details.classList.contains('is-open')
+      controller.disconnect()
+      process.stdout.write(JSON.stringify({ ownForm, otherForm, otherTarget, modifiedClick, remaining: listeners.document.size }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "ownForm" => true, "otherForm" => false, "otherTarget" => false,
+      "modifiedClick" => false, "remaining" => 0
     )
   end
 

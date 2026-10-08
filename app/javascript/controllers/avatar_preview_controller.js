@@ -6,7 +6,6 @@ export default class extends Controller {
     'input',
     'removeCheckbox',
     'image',
-    'fallback',
     'error',
     'errorText'
   ]
@@ -20,13 +19,12 @@ export default class extends Controller {
   connect () {
     this.objectUrl = null
     this.persistedImageUrl = this.hasImageTarget ? this.imageTarget.dataset.persistedUrl || '' : ''
-    this.defaultFallbackText = this.hasFallbackTarget ? this.fallbackTarget.dataset.defaultText || this.fallbackTarget.textContent.trim() : 'U'
     this.hideError()
     this.refreshPreview()
   }
 
   disconnect () {
-    this.revokeObjectUrl()
+    if (this.objectUrl) this.showPersistedOrFallback()
   }
 
   preview () {
@@ -50,9 +48,10 @@ export default class extends Controller {
       this.removeCheckboxTarget.checked = false
     }
 
-    this.revokeObjectUrl()
+    const previousObjectUrl = this.objectUrl
     this.objectUrl = URL.createObjectURL(file)
     this.showImage(this.objectUrl)
+    if (previousObjectUrl) URL.revokeObjectURL(previousObjectUrl)
   }
 
   toggleRemove () {
@@ -104,6 +103,7 @@ export default class extends Controller {
   showPersistedOrFallback () {
     if (this.persistedImageUrl.length > 0) {
       this.showImage(this.persistedImageUrl)
+      this.revokeObjectUrl()
     } else {
       this.showFallback()
     }
@@ -112,21 +112,14 @@ export default class extends Controller {
   showImage (src) {
     if (!this.hasImageTarget) return
 
-    this.imageTarget.src = src
-    this.imageTarget.classList.add('hidden')
-    if (this.hasFallbackTarget) {
-      this.fallbackTarget.classList.remove('hidden')
-    }
+    if (this.imageTarget.getAttribute('src') !== src) this.imageTarget.src = src
+    this.dispatch('source-changed', { target: this.imageTarget })
   }
 
   showFallback () {
     if (this.hasImageTarget) {
       this.imageTarget.removeAttribute('src')
-      this.imageTarget.classList.add('hidden')
-    }
-    if (this.hasFallbackTarget) {
-      this.fallbackTarget.textContent = this.defaultFallbackText
-      this.fallbackTarget.classList.remove('hidden')
+      this.dispatch('source-changed', { target: this.imageTarget })
     }
     this.revokeObjectUrl()
   }

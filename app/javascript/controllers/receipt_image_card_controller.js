@@ -1,12 +1,11 @@
 import { Controller } from '@hotwired/stimulus'
 import {
-  REVIEW_REASON_TARGET_LINK_SELECTOR,
-  reviewTargetHash,
   reviewTargetIdFromHash,
+  reviewTargetLinkForClick,
   reviewTargetUrl,
   samePageReviewTargetUrl
 } from 'receipts/review_targets'
-import { pushReviewNavigationHash } from 'receipts/review_navigation'
+import { navigateReviewTargetHash } from 'receipts/review_navigation'
 
 const ALLOWED_RECEIPT_IMAGE_TYPES = [
   'image/jpeg',
@@ -42,7 +41,7 @@ function isAllowedReceiptImageFile (file) {
 
 // Connects to data-controller="receipt-image-card"
 export default class extends Controller {
-  static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'previewTrigger', 'previewOverlay', 'modalImage', 'download', 'fileName', 'dropOverlay', 'uploadError', 'removeImageField']
+  static targets = ['content', 'chevron', 'toggleButton', 'modal', 'fileInput', 'previewImage', 'previewTrigger', 'previewOverlay', 'modalImage', 'modalFallback', 'download', 'fileName', 'dropOverlay', 'uploadError', 'removeImageField']
   static values = {
     initiallyOpen: Boolean,
     collapseOnMobile: Boolean,
@@ -52,6 +51,9 @@ export default class extends Controller {
     storageUsedBytes: { type: Number, default: 0 },
     storageLimitBytes: { type: Number, default: 0 },
     storageExcludingBlobBytes: { type: Number, default: 0 },
+    originalSource: String,
+    downloadHref: String,
+    previewLabel: String,
     unavailableImageLabel: String,
     reviewTarget: String
   }
@@ -65,18 +67,18 @@ export default class extends Controller {
     this.imageIsAvailable = false
     this.modalElement = this.hasModalTarget ? this.modalTarget : null
     this.modalImageElement = this.hasModalImageTarget ? this.modalImageTarget : null
-    this.downloadHref = this.hasDownloadTarget ? this.downloadTarget.getAttribute('href') : null
-    this.downloadTabIndex = this.hasDownloadTarget ? this.downloadTarget.getAttribute('tabindex') : null
-    this.previewTriggerLabel = this.hasPreviewTriggerTarget ? this.previewTriggerTarget.getAttribute('aria-label') : null
+    this.modalFallbackElement = this.hasModalFallbackTarget ? this.modalFallbackTarget : null
     this.defaultUploadErrorMessage = this.hasUploadErrorTarget ? this.uploadErrorTarget.textContent.trim() : ''
     this.modalPlaceholder = document.createComment('receipt-image-modal-placeholder')
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
+    this.handlePageShow = this.handlePageShow.bind(this)
     this.handleBreakpointChange = this.handleBreakpointChange.bind(this)
     this.handleReviewTargetClick = this.handleReviewTargetClick.bind(this)
+    this.handleReviewNavigation = this.handleReviewNavigation.bind(this)
     this.handleReviewTargetHashChange = this.handleReviewTargetHashChange.bind(this)
     this.sync()
 
-    this.initializeFileName()
+    this.restoreImageSource()
 
     this.handleKeydown = this.handleKeydown.bind(this)
     this.handleModalCloseClick = this.handleModalCloseClick.bind(this)
@@ -86,23 +88,27 @@ export default class extends Controller {
     document.addEventListener('keydown', this.handleKeydown)
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     document.addEventListener('click', this.handleReviewTargetClick)
+    document.addEventListener('receipt-review:navigate', this.handleReviewNavigation)
     window.addEventListener('hashchange', this.handleReviewTargetHashChange)
+    window.addEventListener('pageshow', this.handlePageShow)
     this.addBreakpointListener()
     this.addModalEventListeners()
-    this.syncInitialImageState()
+    this.syncImageState()
     this.openFromReviewTargetHash()
   }
 
   disconnect () {
     this.removeBreakpointListener()
     this.removeModalEventListeners()
-    this.restoreModal()
-    this.unlockBodyScroll()
+    this.closeModal()
+    if (this.objectUrl) this.setImageSource(this.originalSourceValue)
     this.revokeObjectUrl()
     document.removeEventListener('keydown', this.handleKeydown)
     document.removeEventListener('turbo:before-cache', this.handleBeforeCache)
     document.removeEventListener('click', this.handleReviewTargetClick)
+    document.removeEventListener('receipt-review:navigate', this.handleReviewNavigation)
     window.removeEventListener('hashchange', this.handleReviewTargetHashChange)
+    window.removeEventListener('pageshow', this.handlePageShow)
   }
 
   buildPreviewBreakpointMediaQuery () {
@@ -154,7 +160,10 @@ export default class extends Controller {
   }
 
   previewFile (file) {
-    if (!file) return
+    if (!file) {
+      this.restoreImageSource()
+      return
+    }
 
     if (!isAllowedReceiptImageFile(file)) {
       this.clearFileInput()
@@ -172,28 +181,45 @@ export default class extends Controller {
     this.hideUploadError()
     this.clearRemoveImageRequest()
 
-    this.revokeObjectUrl()
+    this.setSelectedImageSource(file)
+  }
+
+  restoreImageSource () {
+    const file = this.hasFileInputTarget ? this.fileInputTarget.files?.[0] : null
+    if (file && isAllowedReceiptImageFile(file)) {
+      this.updateFileName(file.name)
+      this.setSelectedImageSource(file)
+    } else {
+      this.initializeFileName()
+      this.setImageSource(this.originalSourceValue)
+      this.revokeObjectUrl()
+    }
+  }
+
+  setSelectedImageSource (file) {
+    const previousObjectUrl = this.objectUrl
     this.objectUrl = URL.createObjectURL(file)
+    this.setImageSource(this.objectUrl)
+    if (previousObjectUrl) URL.revokeObjectURL(previousObjectUrl)
+  }
 
-    if (this.hasPreviewImageTarget) {
-      this.prepareImageLoad()
-      this.previewImageTarget.src = this.objectUrl
-
-      const loadStateManaged = this.previewImageTarget.hasAttribute('data-image-load-state-target')
-      this.previewImageTarget.classList.toggle('hidden', loadStateManaged)
-
-      // placeholder（親要素内のテキスト等）を非表示にする
-      const container = loadStateManaged ? null : this.previewImageTarget.closest('.relative')
-      if (container) {
-        const texts = container.querySelectorAll('span, p')
-        texts.forEach(el => el.classList.add('hidden'))
+  setImageSource (source) {
+    if (this.hasPreviewImageTarget && this.previewImageTarget.getAttribute('src') !== source) {
+      if (source) {
+        this.previewImageTarget.setAttribute('src', source)
+      } else {
+        this.previewImageTarget.removeAttribute('src')
       }
     }
-
-    if (this.modalImageElement) {
-      this.modalImageElement.classList.add('hidden')
-      this.modalImageElement.src = this.objectUrl
+    if (this.modalImageElement && this.modalImageElement.getAttribute('src') !== source) {
+      if (source) {
+        this.modalImageElement.setAttribute('src', source)
+      } else {
+        this.modalImageElement.removeAttribute('src')
+      }
     }
+    this.syncImageState()
+    this.syncModalImageAvailability()
   }
 
   updateFileName (fileName) {
@@ -304,7 +330,6 @@ export default class extends Controller {
 
     this.hideUploadError()
     this.clearFileInput()
-    this.revokeObjectUrl()
     if (this.hasFileNameTarget) {
       this.updateFileName(this.fileNameTarget.dataset.initialLabel || this.emptyFileLabelValue)
     }
@@ -320,6 +345,9 @@ export default class extends Controller {
     if (!this.hasFileInputTarget) return
 
     this.fileInputTarget.value = ''
+    this.setImageSource(this.originalSourceValue)
+    this.revokeObjectUrl()
+    this.initializeFileName()
   }
 
   exceedsStorageQuota (file) {
@@ -330,7 +358,7 @@ export default class extends Controller {
   }
 
   handleReviewTargetClick (event) {
-    const link = event.target?.closest?.(REVIEW_REASON_TARGET_LINK_SELECTOR)
+    const link = reviewTargetLinkForClick(event)
     if (!link) return
 
     const url = this.reviewTargetUrl(link.getAttribute('href'))
@@ -341,10 +369,15 @@ export default class extends Controller {
     if (!this.containsImagePreviewReviewTarget(targetId)) return
 
     event.preventDefault()
-    const hash = this.reviewTargetHash(targetId)
-    if (window.location.hash !== hash && !pushReviewNavigationHash(hash)) {
-      window.history.pushState(window.history.state, '', hash)
-    }
+    if (navigateReviewTargetHash(targetId)) this.openFromReviewTarget({ scroll: true })
+  }
+
+  handleReviewNavigation (event) {
+    if (!this.imagePreviewReviewTargetId(event.detail?.targetId)) return
+    if (!event.target?.contains(this.element)) return
+    if (!this.containsImagePreviewReviewTarget(event.detail.targetId)) return
+
+    event.preventDefault()
     this.openFromReviewTarget({ scroll: true })
   }
 
@@ -393,10 +426,6 @@ export default class extends Controller {
 
     this.isOpen = true
     this.sync()
-  }
-
-  reviewTargetHash (targetId) {
-    return reviewTargetHash(targetId)
   }
 
   scrollReviewTargetIntoView () {
@@ -453,6 +482,7 @@ export default class extends Controller {
     if (!this.modalElement || !this.modalImageElement) return
     if (!this.modalElement.classList.contains('hidden')) return
 
+    this.syncModalImageAvailability()
     this.moveModalToBody()
     this.modalElement.classList.remove('hidden')
     this.modalElement.setAttribute('aria-hidden', 'false')
@@ -481,17 +511,28 @@ export default class extends Controller {
       this.closeModal()
     }
 
-    this.restoreImageControlsForCache()
+    this.syncImageState()
     this.sync()
   }
 
-  imageAvailable () {
+  handlePageShow () {
+    this.syncImageState()
+    this.syncModalImageAvailability()
+  }
+
+  currentImageStateEvent (event) {
+    return !event || event.detail?.image === this.previewImageTarget
+  }
+
+  imageAvailable (event) {
+    if (!this.currentImageStateEvent(event)) return
+
     this.imageIsAvailable = true
 
     if (this.hasPreviewTriggerTarget) {
       this.previewTriggerTarget.disabled = false
       this.previewTriggerTarget.setAttribute('aria-disabled', 'false')
-      if (this.previewTriggerLabel) this.previewTriggerTarget.setAttribute('aria-label', this.previewTriggerLabel)
+      if (this.previewLabelValue) this.previewTriggerTarget.setAttribute('aria-label', this.previewLabelValue)
     }
 
     if (this.hasPreviewOverlayTarget) {
@@ -502,7 +543,9 @@ export default class extends Controller {
     this.syncModalImageAvailability()
   }
 
-  imageUnavailable () {
+  imageUnavailable (event) {
+    if (!this.currentImageStateEvent(event)) return
+
     this.imageIsAvailable = false
 
     if (this.modalElement && !this.modalElement.classList.contains('hidden')) {
@@ -521,29 +564,19 @@ export default class extends Controller {
       this.previewOverlayTarget.classList.add('hidden')
     }
 
-    if (this.modalImageElement) this.modalImageElement.classList.add('hidden')
     this.disableDownload()
   }
 
-  prepareImageLoad () {
-    this.imageIsAvailable = false
-
-    if (this.hasPreviewTriggerTarget) {
-      this.previewTriggerTarget.disabled = true
-      this.previewTriggerTarget.setAttribute('aria-disabled', 'true')
-    }
-
-    if (this.hasPreviewOverlayTarget) this.previewOverlayTarget.classList.add('hidden')
-    if (this.modalImageElement) this.modalImageElement.classList.add('hidden')
-    this.disableDownload()
-  }
-
-  syncInitialImageState () {
+  syncImageState () {
     if (!this.hasPreviewImageTarget) return
-    if (!this.previewImageTarget.getAttribute('src')) return
-    if (!this.previewImageTarget.complete) return
 
-    if (this.previewImageTarget.naturalWidth > 0) {
+    const element = this.previewImageTarget.closest('[data-controller~="image-load-state"]')
+    const loadState = element && this.application.getControllerForElementAndIdentifier(element, 'image-load-state')
+    // Bootstrap from the image if its controller has not connected yet.
+    const state = loadState?.sync()
+    const image = this.previewImageTarget
+    const available = state ? state === 'available' : image.getAttribute('src') && image.complete && image.naturalWidth > 0
+    if (available) {
       this.imageAvailable()
     } else {
       this.imageUnavailable()
@@ -553,8 +586,12 @@ export default class extends Controller {
   syncModalImageAvailability () {
     if (!this.modalImageElement) return
 
-    const loaded = this.modalImageElement.complete && this.modalImageElement.naturalWidth > 0
-    this.modalImageElement.classList.toggle('hidden', !this.imageIsAvailable || !loaded)
+    const hasSource = Boolean(this.modalImageElement.getAttribute('src'))
+    const loading = hasSource && !this.modalImageElement.complete
+    const loaded = hasSource && this.modalImageElement.complete && this.modalImageElement.naturalWidth > 0
+    this.modalImageElement.classList.toggle('hidden', !loaded)
+    this.modalFallbackElement?.classList.toggle('hidden', loading || loaded)
+    this.modalElement?.setAttribute('aria-busy', String(loading))
   }
 
   handleModalImageLoad () {
@@ -562,18 +599,14 @@ export default class extends Controller {
   }
 
   handleModalImageError () {
-    this.imageUnavailable()
+    this.syncModalImageAvailability()
   }
 
   enableDownload () {
-    if (!this.hasDownloadTarget) return
+    if (!this.hasDownloadTarget || !this.downloadHrefValue) return
 
-    if (this.downloadHref) this.downloadTarget.setAttribute('href', this.downloadHref)
-    if (this.downloadTabIndex === null) {
-      this.downloadTarget.removeAttribute('tabindex')
-    } else {
-      this.downloadTarget.setAttribute('tabindex', this.downloadTabIndex)
-    }
+    this.downloadTarget.setAttribute('href', this.downloadHrefValue)
+    this.downloadTarget.removeAttribute('tabindex')
     this.downloadTarget.setAttribute('aria-disabled', 'false')
     this.downloadTarget.hidden = false
     this.downloadTarget.classList.remove('hidden')
@@ -582,33 +615,11 @@ export default class extends Controller {
   disableDownload () {
     if (!this.hasDownloadTarget) return
 
-    const currentHref = this.downloadTarget.getAttribute('href')
-    if (currentHref) this.downloadHref = currentHref
     this.downloadTarget.removeAttribute('href')
     this.downloadTarget.setAttribute('tabindex', '-1')
     this.downloadTarget.setAttribute('aria-disabled', 'true')
     this.downloadTarget.hidden = true
     this.downloadTarget.classList.add('hidden')
-  }
-
-  restoreImageControlsForCache () {
-    this.imageIsAvailable = false
-
-    if (this.hasPreviewTriggerTarget) {
-      this.previewTriggerTarget.disabled = true
-      this.previewTriggerTarget.setAttribute('aria-disabled', 'true')
-      if (this.previewTriggerLabel) this.previewTriggerTarget.setAttribute('aria-label', this.previewTriggerLabel)
-    }
-    if (this.hasPreviewOverlayTarget) this.previewOverlayTarget.classList.add('hidden')
-    if (this.modalImageElement) this.modalImageElement.classList.add('hidden')
-
-    if (this.hasDownloadTarget) {
-      if (this.downloadHref) this.downloadTarget.setAttribute('href', this.downloadHref)
-      this.downloadTarget.setAttribute('tabindex', '-1')
-      this.downloadTarget.setAttribute('aria-disabled', 'true')
-      this.downloadTarget.hidden = true
-      this.downloadTarget.classList.add('hidden')
-    }
   }
 
   handleModalCloseClick (event) {
@@ -618,10 +629,6 @@ export default class extends Controller {
 
   handleModalPanelClick (event) {
     event.stopPropagation()
-  }
-
-  stopPropagation (e) {
-    e.stopPropagation()
   }
 
   addModalEventListeners () {
@@ -690,10 +697,17 @@ export default class extends Controller {
   }
 
   lockBodyScroll () {
+    if (this.bodyScrollLocked) return
+
+    this.bodyScrollWasLocked = document.body.classList.contains('overflow-hidden')
+    this.bodyScrollLocked = true
     document.body.classList.add('overflow-hidden')
   }
 
   unlockBodyScroll () {
-    document.body.classList.remove('overflow-hidden')
+    if (!this.bodyScrollLocked) return
+
+    if (!this.bodyScrollWasLocked) document.body.classList.remove('overflow-hidden')
+    this.bodyScrollLocked = false
   }
 }

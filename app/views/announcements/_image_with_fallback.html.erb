@@ -2,7 +2,7 @@
   class="overflow-hidden rounded-2xl border token-border-soft token-bg-input"
   data-controller="image-load-state"
   data-image-load-state-fallback-while-loading-value="true"
-  data-action="turbo:before-cache@document->image-load-state#beforeCache">
+  data-action="turbo:before-cache@document->image-load-state#beforeCache pageshow@window->image-load-state#sync">
   <div class="<%= aspect_class %> flex items-center justify-center p-2 sm:p-3">
     <%= image_tag announcement.image,
           alt: alt_text,

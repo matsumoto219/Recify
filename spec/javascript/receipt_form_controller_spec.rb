@@ -12,7 +12,9 @@ RSpec.describe "Receipt form Stimulus controller" do
 
   def run_controller_script(script)
     module_source = %w[numeric_input amount_preview review_targets review_navigation].map do |name|
-      Rails.root.join("app/javascript/receipts/#{name}.js").read.gsub(/^export /, "")
+      Rails.root.join("app/javascript/receipts/#{name}.js").read
+        .gsub(/^import .* from 'receipts\/review_targets'\n/, "")
+        .gsub(/^export /, "")
     end.join("\n")
     controller_source = source.gsub(%r!import \{[^}]*\} from 'receipts/(?:numeric_input|amount_preview|review_targets|review_navigation)'\n!m, "")
     encoded_module_source = Base64.strict_encode64(module_source)
@@ -172,6 +174,7 @@ RSpec.describe "Receipt form Stimulus controller" do
 
       const element = {
         contains: (node) => Boolean(node?.inside),
+        dispatchEvent: () => true,
         addEventListener: (name, callback) => listeners.element.set(name, callback),
         removeEventListener: (name, callback) => {
           if (listeners.element.get(name) === callback) listeners.element.delete(name)
@@ -182,7 +185,7 @@ RSpec.describe "Receipt form Stimulus controller" do
         }
       }
 
-      const makeLink = (targetId, fallbackTarget = adjustmentSection.id) => {
+      const makeLink = (targetId, fallbackTarget = targetId.startsWith('receipt-section-') ? targetId : adjustmentSection.id) => {
         const link = {
           inside: true,
           dataset: { reviewReasonTarget: fallbackTarget },
@@ -200,6 +203,9 @@ RSpec.describe "Receipt form Stimulus controller" do
       })
 
       globalThis.CSS = { escape: (value) => value }
+      globalThis.CustomEvent = class {
+        constructor (type, options) { this.type = type; Object.assign(this, options) }
+      }
       globalThis.fetch = () => { fetchCount += 1 }
       globalThis.document = {
         activeElement: null,

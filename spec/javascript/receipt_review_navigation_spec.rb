@@ -83,17 +83,162 @@ RSpec.describe "Receipt review navigation JavaScript module" do
   end
 
   def run_module_script(script)
-    source = File.read(File.expand_path("../../app/javascript/receipts/review_navigation.js", __dir__)).gsub(/^export /, "")
-    encoded_source = Base64.strict_encode64(source)
+    source = %w[review_targets review_navigation].map do |name|
+      File.read(File.expand_path("../../app/javascript/receipts/#{name}.js", __dir__))
+        .gsub(/^import .* from 'receipts\/review_targets'\n/, "")
+        .gsub(/^export /, "")
+    end.join("\n")
+    encoded_source = Base64.strict_encode64("#{source}\n#{script}")
     harness = <<~JAVASCRIPT
       const source = Buffer.from(#{encoded_source.inspect}, 'base64').toString('utf8')
-      eval(`${source}\n#{script}`)
+      eval(source)
     JAVASCRIPT
 
-    stdout, stderr, status = Open3.capture3("node", "-e", harness)
+    stdout, stderr, status = Open3.capture3("node", stdin_data: harness)
     raise stderr unless status.success?
 
     JSON.parse(stdout)
+  end
+
+  def run_form_navigation_script(script)
+    source = File.read(File.expand_path("../../app/javascript/controllers/receipt_form_controller.js", __dir__))
+      .gsub(/import \{[^}]*\} from '[^']+'\n/m, "")
+      .sub("export default class extends Controller", "class ReceiptFormController extends Controller")
+
+    run_module_script(browser_setup + <<~JAVASCRIPT + script)
+      class Controller {}
+      #{source}
+      const target = {
+        id: 'receipt-section-amount-summary',
+        inside: true,
+        isConnected: true,
+        scrollIntoView: (options) => scrolls.push(options)
+      }
+      const link = {
+        inside: true,
+        dataset: { reviewReasonTarget: target.id },
+        attributes: {},
+        getAttribute (name) {
+          return name === 'href' ? '#' + target.id : (this.attributes[name] ?? null)
+        },
+        hasAttribute (name) { return Object.hasOwn(this.attributes, name) },
+        closest: () => link
+      }
+      const event = {
+        target: link, button: 0, detail: 0, defaultPrevented: false,
+        preventDefault () { this.defaultPrevented = true }
+      }
+      const reveals = []
+      let scrollHandled = false
+      form.contains = (node) => node?.inside === true
+      form.dispatchEvent = (event) => {
+        reveals.push({ type: event.type, ...event.detail })
+        return !scrollHandled
+      }
+      const getElementById = document.getElementById
+      document.getElementById = (id) => id === target.id ? target : getElementById(id)
+      window.requestAnimationFrame = (callback) => callback()
+      window.setTimeout = (callback) => { callback(); return 1 }
+      window.clearTimeout = () => {}
+      globalThis.CustomEvent = class {
+        constructor (type, options) { this.type = type; Object.assign(this, options) }
+      }
+      const controller = Object.assign(Object.create(ReceiptFormController.prototype), {
+        element: form,
+        reviewItemTargetPrefixValue: 'receipt-item-',
+        reviewItemsTargetValue: 'receipt-section-items',
+        reviewAdjustmentTargetPrefixValue: 'receipt-adjustment-',
+        reviewAdjustmentsTargetValue: 'receipt-section-adjustments'
+      })
+      registerReviewNavigation(form)
+    JAVASCRIPT
+  end
+
+  %w[basic-info items adjustments payments amount-summary image-preview].each do |section|
+    it "#{section}への確認リンクを同じformの履歴へ登録し再クリックでも履歴を重ねない" do
+      result = run_form_navigation_script(<<~JAVASCRIPT)
+        target.id = 'receipt-section-#{section}'
+        link.dataset.reviewReasonTarget = target.id
+        controller.handleReviewTargetClick(event)
+        controller.handleReviewTargetClick({ ...event, defaultPrevented: false })
+        process.stdout.write(JSON.stringify({
+          prevented: event.defaultPrevented,
+          pushes: pushes.length,
+          hash: session.history.location.hash,
+          identifier: session.history.restorationIdentifier,
+          reveals,
+          scrolls: scrolls.length
+        }))
+      JAVASCRIPT
+
+      expect(result).to eq(
+        "prevented" => true, "pushes" => 1, "hash" => "#receipt-section-#{section}",
+        "identifier" => "entry-1",
+        "reveals" => Array.new(2) { { "type" => "receipt-review:navigate", "targetId" => "receipt-section-#{section}" } },
+        "scrolls" => 2
+      )
+    end
+  end
+
+  it "画像カードが展開後のスクロールを担当するとformは重複してスクロールしない" do
+    result = run_form_navigation_script(<<~JAVASCRIPT)
+      target.id = 'receipt-section-image-preview'
+      link.dataset.reviewReasonTarget = target.id
+      scrollHandled = true
+      controller.handleReviewTargetClick(event)
+      process.stdout.write(JSON.stringify({ reveals: reveals.length, pushes: pushes.length, scrolls: scrolls.length }))
+    JAVASCRIPT
+
+    expect(result).to eq("reveals" => 1, "pushes" => 1, "scrolls" => 0)
+  end
+
+  {
+    "別formのリンク" => "link.inside = false",
+    "別formの移動先" => "target.inside = false",
+    "定義と異なる移動先" => "link.dataset.reviewReasonTarget = 'other-section'",
+    "別origin" => "link.getAttribute = (name) => name === 'href' ? 'https://other.example/#' + target.id : null",
+    "別path" => "link.getAttribute = (name) => name === 'href' ? '/receipts/2/edit#' + target.id : null",
+    "別query" => "link.getAttribute = (name) => name === 'href' ? '?tab=other#' + target.id : null",
+    "処理済みclick" => "event.defaultPrevented = true",
+    "中ボタン" => "event.button = 1",
+    "右ボタン" => "event.button = 2",
+    "Meta click" => "event.metaKey = true",
+    "Control click" => "event.ctrlKey = true",
+    "Shift click" => "event.shiftKey = true",
+    "Alt click" => "event.altKey = true",
+    "別tab" => "link.attributes.target = '_blank'",
+    "download" => "link.attributes.download = ''"
+  }.each do |condition, setup|
+    it "#{condition}を画面内の確認移動として横取りしない" do
+      result = run_form_navigation_script(<<~JAVASCRIPT)
+        #{setup}
+        const initiallyPrevented = event.defaultPrevented
+        controller.handleReviewTargetClick(event)
+        process.stdout.write(JSON.stringify({
+          prevented: event.defaultPrevented !== initiallyPrevented,
+          pushes: pushes.length, reveals: reveals.length, scrolls: scrolls.length
+        }))
+      JAVASCRIPT
+
+      expect(result).to eq("prevented" => false, "pushes" => 0, "reveals" => 0, "scrolls" => 0)
+    end
+  end
+
+  it "Turbo内部APIが使えない確認移動は独自のstateを作らず通常のvisitへ戻す" do
+    result = run_module_script(browser_setup + <<~JAVASCRIPT)
+      const visits = []
+      window.Turbo.visit = (...args) => visits.push(args)
+      delete session.history.getRestorationDataForIdentifier
+      const originalState = structuredClone(window.history.state)
+      const handled = navigateReviewTargetHash('receipt-section-image-preview')
+      process.stdout.write(JSON.stringify({ handled, visits, unchanged: JSON.stringify(window.history.state) === JSON.stringify(originalState) }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "handled" => false,
+      "visits" => [ [ "https://recify.example/receipts/1/edit?tab=items#receipt-section-image-preview", { "action" => "advance" } ] ],
+      "unchanged" => true
+    )
   end
 
   it "Turboの履歴識別子とindexを更新し、既存stateを保持して同じform内を戻る" do

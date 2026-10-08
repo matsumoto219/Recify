@@ -1,15 +1,16 @@
 # frozen_string_literal: true
 
 require "base64"
+require "json"
 require "open3"
-require "rails_helper"
+require "spec_helper"
 
 RSpec.describe "Receipt image card Stimulus controller" do
-  let(:source) { Rails.root.join("app/javascript/controllers/receipt_image_card_controller.js").read }
+  let(:source) { File.read(File.expand_path("../../app/javascript/controllers/receipt_image_card_controller.js", __dir__)) }
 
-  def review_link_result(href:, current_hash: "")
+  def review_link_result(href:, current_hash: "", prevented: false)
     module_source = %w[review_targets review_navigation].map do |name|
-      Rails.root.join("app/javascript/receipts/#{name}.js").read.gsub(/^export /, "")
+      File.read(File.expand_path("../../app/javascript/receipts/#{name}.js", __dir__)).gsub(/^import .*? from '[^']+'\n/m, "").gsub(/^export /, "")
     end.join("\n")
     controller = source
       .sub("import { Controller } from '@hotwired/stimulus'", "class Controller {}")
@@ -50,7 +51,8 @@ RSpec.describe "Receipt image card Stimulus controller" do
         scrollReviewTargetIntoView () { calls.scrolls += 1 }
       })
       const event = {
-        target: { closest: () => ({ getAttribute: () => #{href.to_json} }) },
+        defaultPrevented: #{prevented},
+        target: { closest: () => ({ getAttribute: (name) => name === 'href' ? #{href.to_json} : null }) },
         preventDefault () { calls.prevented = true }
       }
       controller.handleReviewTargetClick(event)
@@ -84,7 +86,7 @@ RSpec.describe "Receipt image card Stimulus controller" do
     end
   end
 
-  it "intercepts a new image-review hash and preserves Turbo history state and selected image" do
+  it "opens an image-review hash and preserves selected files when Turbo is unavailable" do
     result = review_link_result(href: "#receipt-section-image-preview")
 
     expect(result).to include(
@@ -93,9 +95,7 @@ RSpec.describe "Receipt image card Stimulus controller" do
       "available" => true, "objectUrl" => "blob:existing-selection",
       "files" => [ "existing-file" ], "removeImage" => true
     )
-    expect(result.fetch("pushes")).to eq([
-      { "state" => { "turbo" => { "restorationIdentifier" => "existing" } }, "url" => "#receipt-section-image-preview" }
-    ])
+    expect(result.fetch("pushes")).to eq([])
   end
 
   it "reopens the same hash without replacing or adding history" do
@@ -107,6 +107,12 @@ RSpec.describe "Receipt image card Stimulus controller" do
       "scrolls" => 1,
       "pushes" => [],
       "replacements" => []
+    )
+  end
+
+  it "leaves clicks already handled by the form to the common navigation owner" do
+    expect(review_link_result(href: "#receipt-section-image-preview", prevented: true)).to include(
+      "prevented" => false, "isOpen" => false, "pushes" => [], "replacements" => []
     )
   end
 
@@ -130,8 +136,8 @@ RSpec.describe "Receipt image card Stimulus controller" do
     open_preview = source[/openPreview \(\{ userDirected = false \} = \{\}\) \{.*?^\s+\}/m]
 
     aggregate_failures do
-      expect(open_from_review_target).to be_present
-      expect(open_preview).to be_present
+      expect(open_from_review_target).not_to be_nil
+      expect(open_preview).not_to be_nil
       expect(open_from_review_target).not_to include("clearFileInput")
       expect(open_from_review_target).not_to include("clearRemoveImageRequest")
       expect(open_preview).not_to include("clearFileInput")
@@ -148,7 +154,6 @@ RSpec.describe "Receipt image card Stimulus controller" do
       expect(source).to include("this.downloadTarget.hidden = true")
       expect(source).to include("this.previewTriggerTarget.setAttribute('aria-label', this.unavailableImageLabelValue)")
       expect(source).to include("if (!this.imageIsAvailable) return")
-      expect(source).to include("this.restoreImageControlsForCache()")
     end
   end
 end
