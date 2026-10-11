@@ -133,18 +133,19 @@ RSpec.describe Ai::PromptTemplate do
       end
     end
 
-    it '商品名補完ON時は商品名の補完・誤字修正だけを許可する' do
+    it '商品名補完ON時は既存語の欠落部を補い新商品や規格を推測しないよう指示する' do
       prompt = described_class.build(
         input.deep_merge(meta: { ai_name_completion_enabled: true })
       )
       enabled_user_prompt = prompt[:user]
 
       aggregate_failures do
-        expect(enabled_user_prompt).to include('suggested_name: infer or complete item names when they appear truncated, noisy, or misspelled.')
+        expect(enabled_user_prompt).to include('suggested_name: complete a missing ending of an existing item-name word only when the intended word is highly likely.')
         expect(enabled_user_prompt).to include('When completing or correcting item names, preserve the original writing style, such as katakana, kanji, or uppercase/lowercase English.')
         expect(enabled_user_prompt).to include('Do NOT change an item into a different product by guesswork.')
-        expect(enabled_user_prompt).to include('Complete or correct item names only when confidence is sufficiently high.')
-        expect(enabled_user_prompt).to include('Keep needs_review = true when the completed result is not sufficiently confident.')
+        expect(enabled_user_prompt).to include('Do not add a brand, flavor, product variant, model number, capacity, quantity, or unit that is absent from that item.')
+        expect(enabled_user_prompt).to include('If a completion is uncertain, return the original name; inability to complete a name alone is not a reason for needs_review.')
+        expect(enabled_user_prompt).to include('Use item_name_uncertain only when the item itself cannot be identified reliably or its name conflicts with the OCR evidence.')
         expect(enabled_user_prompt).not_to include('preserve the item name exactly as captured by OCR and do not edit it under any circumstances.')
       end
     end

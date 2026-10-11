@@ -303,7 +303,7 @@ module Ai
 
     def system_item_name_rule
       if ai_name_completion_enabled?
-        "- invent unrelated item names that are not semantically close to the OCR item text"
+        "- invent item attributes or turn an OCR item into a different product"
       else
         "- invent item names"
       end
@@ -312,11 +312,14 @@ module Ai
     def user_item_name_rules
       if ai_name_completion_enabled?
         <<~RULES.chomp
-          - suggested_name: infer or complete item names when they appear truncated, noisy, or misspelled.
+          - suggested_name: complete a missing ending of an existing item-name word only when the intended word is highly likely.
           - When completing or correcting item names, preserve the original writing style, such as katakana, kanji, or uppercase/lowercase English.
+          - Complete at most one existing word. Preserve every existing character, word order, spacing, model number, capacity, quantity, and unit; do not replace or remove them or add a separate word.
           - Do NOT change an item into a different product by guesswork.
-          - Complete or correct item names only when confidence is sufficiently high.
-          - Keep needs_review = true when the completed result is not sufficiently confident.
+          - Do not add a brand, flavor, product variant, model number, capacity, quantity, or unit that is absent from that item.
+          - Keep already complete names unchanged. Familiarity with a popular product is not evidence for an unprinted variant.
+          - If a completion is uncertain, return the original name; inability to complete a name alone is not a reason for needs_review.
+          - Use item_name_uncertain only when the item itself cannot be identified reliably or its name conflicts with the OCR evidence.
         RULES
       else
         <<~RULES.chomp

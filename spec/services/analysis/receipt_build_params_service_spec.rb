@@ -94,6 +94,174 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
       end
     end
 
+    context 'AI商品名補完で既存の語の欠落部を補う場合' do
+      let(:source_name) { 'フレンチトース' }
+      let(:proposed_name) { 'フレンチトースト' }
+      let(:completion_enabled) { true }
+      let(:ai_item_needs_review) { false }
+      let(:ai_result) do
+        {
+          meta: { ai_name_completion_enabled: completion_enabled },
+          receipt_items_attributes: [
+            { index: 0, suggested_name: proposed_name, category: 'food', needs_review: ai_item_needs_review }
+          ]
+        }
+      end
+
+      before do
+        ocr_result[:candidates][:items] = [
+          {
+            raw_text: source_name,
+            price: 220,
+            quantity: 2,
+            quantity_unit_code: 'each',
+            product_code: 'P001',
+            line_total: 440
+          }
+        ]
+      end
+
+      {
+        '末尾1文字' => [ 'フレンチトース', 'フレンチトースト' ],
+        '末尾複数文字' => [ 'コンソメ ポテトチッ', 'コンソメ ポテトチップス' ],
+        '末尾の長音' => [ 'ティッシュペーパ', 'ティッシュペーパー' ],
+        '規格より前の語' => [ 'クリアファイ A4', 'クリアファイル A4' ],
+        '英字の語' => [ 'Chocolate Cooki', 'Chocolate Cookie' ]
+      }.each do |description, (source, completed)|
+        context description do
+          let(:source_name) { source }
+          let(:proposed_name) { completed }
+
+          it '同じ明細のsuggested_nameだけを補完しOCR値と明細数を保持する' do
+            result = described_class.call(ocr_result: ocr_result, ai_result: ai_result)
+
+            expect(result[:receipt_items_attributes]).to contain_exactly(
+              include(
+                raw_text: source,
+                suggested_name: completed,
+                confirmed_name: nil,
+                price: 220,
+                quantity: 2,
+                quantity_unit_code: 'each',
+                product_code: 'P001',
+                line_total: 440,
+                needs_review: false
+              )
+            )
+            expect(result[:receipt_items_attributes].sole[:review_reasons]).not_to include('item_name_uncertain')
+          end
+        end
+      end
+
+      context '補完OFF' do
+        let(:completion_enabled) { false }
+
+        it '補完可能な提案も採用せず元の商品名を保持する' do
+          item = described_class.call(ocr_result: ocr_result, ai_result: ai_result)[:receipt_items_attributes].sole
+
+          expect(item).to include(raw_text: source_name, suggested_name: source_name, needs_review: false)
+          expect(item[:review_reasons]).not_to include('item_name_uncertain')
+        end
+      end
+
+      {
+        'OCR名の改行' => [ "携帯アクセサリ\nサンプル", '携帯アクセサリ サンプル' ],
+        'OCR名のタブ' => [ "携帯アクセサリ\tサンプル", '携帯アクセサリ サンプル' ],
+        'AI名の改行' => [ '携帯アクセサリ サンプル', "携帯アクセサリ\nサンプル" ],
+        'AI名のタブ' => [ '携帯アクセサリ サンプル', "携帯アクセサリ\tサンプル" ]
+      }.each do |description, (source, proposed)|
+        context description do
+          let(:source_name) { source }
+          let(:proposed_name) { proposed }
+
+          it '既存の空白正規化による同値を採用しOCR値と確認状態を保持する' do
+            original_ocr = ocr_result.deep_dup
+
+            item = described_class.call(ocr_result: ocr_result, ai_result: ai_result)[:receipt_items_attributes].sole
+
+            expect(item).to include(raw_text: source, suggested_name: proposed, confirmed_name: nil, needs_review: false)
+            expect(item[:review_reasons]).not_to include('item_name_uncertain')
+            expect(ocr_result).to eq(original_ocr)
+          end
+        end
+      end
+
+      context '他の理由で明細の確認が必要' do
+        let(:ai_item_needs_review) { true }
+
+        it 'needs_reviewだけで商品名補完を拒否せず既存の確認状態を維持する' do
+          item = described_class.call(ocr_result: ocr_result, ai_result: ai_result)[:receipt_items_attributes].sole
+
+          expect(item).to include(suggested_name: proposed_name, needs_review: true)
+          expect(item[:review_reasons]).not_to include('item_name_uncertain')
+        end
+      end
+
+      context '補完を断定できずAIが原名を返す' do
+        let(:proposed_name) { source_name }
+
+        it '補完されないことだけでは確認理由を追加しない' do
+          item = described_class.call(ocr_result: ocr_result, ai_result: ai_result)[:receipt_items_attributes].sole
+
+          expect(item).to include(suggested_name: source_name, needs_review: false)
+          expect(item[:review_reasons]).not_to include('item_name_uncertain')
+        end
+      end
+
+      it '明示された英字product_codeを名前の欠落語として補完しない' do
+        ocr_result[:candidates][:items].sole.merge!(raw_text: '部品 ABC', product_code: 'ABC')
+        ai_result[:receipt_items_attributes].sole[:suggested_name] = '部品 ABCD'
+
+        item = described_class.call(ocr_result: ocr_result, ai_result: ai_result)[:receipt_items_attributes].sole
+
+        expect(item).to include(suggested_name: '部品 ABC', product_code: 'ABC', needs_review: true)
+        expect(item[:review_reasons]).to include('item_name_uncertain')
+      end
+
+      context '保存可能な名前の長さ上限' do
+        let(:source_name) { 'a' * 499 }
+        let(:proposed_name) { 'a' * 500 }
+
+        it '500文字を途中で切り詰めず保持する' do
+          item = described_class.call(ocr_result: ocr_result, ai_result: ai_result)[:receipt_items_attributes].sole
+
+          expect(item).to include(suggested_name: proposed_name, needs_review: false)
+        end
+      end
+
+      {
+        '未印字のprefix' => [ 'ノート A5', '限定ノート A5' ],
+        '新しい独立語' => [ 'ポテトチッ', 'ポテトチップス うすしお' ],
+        '未印字のブランド' => [ 'ポテトチッ', 'サンプル ポテトチップス' ],
+        '型番の追加' => [ '部品 AB-12', '部品 AB-123' ],
+        '補完と同時の規格変更' => [ 'クリアファイ A4', 'クリアファイル A3' ],
+        '規格の削除' => [ 'クリアファイ A4', 'クリアファイル' ],
+        '容量の追加' => [ 'ポテトチッ', 'ポテトチップス 100g' ],
+        '容量の変更' => [ '飲料 1000mL', '飲料 500mL' ],
+        '単位の変更' => [ 'ポテトチッ 100 g', 'ポテトチッ 100 gram' ],
+        '数量の削除' => [ 'ポテトチッ 2袋', 'ポテトチップス' ],
+        '複数語の変更' => [ 'コンソ ポテトチッ', 'コンソメ ポテトチップス' ],
+        '語順の変更' => [ 'コンソメ ポテトチッ', 'ポテトチップス コンソメ' ],
+        '語尾補完と同時の空白変更' => [ "コンソメ\nポテトチッ", 'コンソメ ポテトチップス' ],
+        'HTML追加' => [ 'ポテトチッ', 'ポテトチッ<script>alert(1)</script>' ],
+        '制御文字追加' => [ 'ポテトチッ', "ポテトチップス\u0000" ],
+        '名前上限超過' => [ 'ポテトチッ', "ポテトチッ#{'ス' * 501}" ],
+        '不正なUTF-8' => [ 'ポテトチッ', "\xFF".b.force_encoding(Encoding::UTF_8) ]
+      }.each do |description, (source, proposed)|
+        context description do
+          let(:source_name) { source }
+          let(:proposed_name) { proposed }
+
+          it '元の商品名を維持し不整合な提案を確認対象にする' do
+            item = described_class.call(ocr_result: ocr_result, ai_result: ai_result)[:receipt_items_attributes].sole
+
+            expect(item).to include(raw_text: source, suggested_name: source, needs_review: true, line_total: 440)
+            expect(item[:review_reasons]).to include('item_name_uncertain')
+          end
+        end
+      end
+    end
+
     it 'ownership handoffへsource evidenceのexact attributesだけを渡す' do
       evidence_attributes = {
         source_provider: 'azure',
