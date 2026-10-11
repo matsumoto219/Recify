@@ -2115,6 +2115,44 @@ RSpec.describe ReceiptAmountService do
       end
     end
 
+    context '購入調整後の明細が印字の税込税詳細を説明する場合' do
+      def discounted_measurement_result(tax_rate:)
+        call_service(
+          receipt: { subtotal_amount: 2_193, tax_amount: 163 },
+          receipt_items: [
+            { price: 7_200, quantity: BigDecimal('0.45'), quantity_unit_code: 'kilogram', line_total: 3_240, tax_rate: tax_rate },
+            { line_total: 33, tax_rate: BigDecimal('0.1') }
+          ],
+          receipt_tax_details: [
+            { rate: BigDecimal('0.08'), net_amount: 2_160, amount: 160 },
+            { rate: BigDecimal('0.1'), net_amount: 33, amount: 3 }
+          ],
+          receipt_adjustments: [
+            { kind: 'receipt_discount', sign: 'discount', amount: 1_080, tax_rate: BigDecimal('0.08') }
+          ]
+        )
+      end
+
+      it 'totalと明細税率が欠損しても明細を非課税として税詳細へ二重加算しない' do
+        result = discounted_measurement_result(tax_rate: nil)
+
+        aggregate_failures do
+          expect(result[:resolved]).to include(subtotal: 2_030, tax: 163, total: 2_193)
+          expect(result[:tax_details]).to contain_exactly(
+            include(rate: BigDecimal('0.08'), net_amount: 2_000, amount: 160),
+            include(rate: BigDecimal('0.1'), net_amount: 30, amount: 3)
+          )
+          expect(result.dig(:computed, :items).first[:tax_rate]).not_to eq(BigDecimal('0'))
+        end
+      end
+
+      it '明細税率があっても小額の税込対象へ税額を加算し直さない' do
+        result = discounted_measurement_result(tax_rate: BigDecimal('0.08'))
+
+        expect(result[:resolved]).to include(subtotal: 2_030, tax: 163, total: 2_193)
+      end
+    end
+
     it '外税単一税率で対象額と税額の合計がOCR totalに一致する場合はgross basisにしない' do
       result = call_service(
         receipt: {

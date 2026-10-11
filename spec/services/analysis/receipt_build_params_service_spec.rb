@@ -2495,6 +2495,43 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         end
       end
 
+      it '末尾の長い英数字識別子に妨げられず預り差額と単一税率TaxDetailsを復元する' do
+        sample_ocr_result = {
+          candidates: {
+            store_name: '検証店',
+            subtotal_amount: 5_280,
+            total_amount: 6_000,
+            tax_amount: 391,
+            country_region: 'JPN',
+            items: [
+              { raw_text: '検証商品', price: 5_280, quantity: 2, line_total: 10_560, tax_rate: 8 },
+              { raw_text: '商品値引', line_total: -5_280, tax_rate: 8 }
+            ],
+            tax_details: [ { description: '軽', rate: 8, amount: 391 } ]
+          },
+          lines: [
+            '検証商品', '10,560 軽', '商品値引', '-5,280', '小計 [2]', '5,280',
+            'お預かり', '6,000', 'お釣り', '-720', '合計', '税', '軽 8%', '¥5,280', '¥391',
+            '123AB12345678901234567'
+          ]
+        }
+
+        params = described_class.call(ocr_result: sample_ocr_result, ai_result: nil)
+
+        aggregate_failures do
+          expect(params[:receipt_attributes]).to include(total_amount: 5_280, tax_amount: 391)
+          expect(params[:receipt_payments_attributes]).to contain_exactly(include(method: 'cash', amount: 5_280))
+          expect(params[:amount_hints]).to include(
+            settlement_total_from_deposit_change: true,
+            settlement_total: 5_280,
+            tax_detail_amount_basis: 'net'
+          )
+          expect(params[:receipt_tax_details_attributes]).to contain_exactly(
+            include(rate: BigDecimal('0.08'), net_amount: 4_889, amount: 391)
+          )
+        end
+      end
+
       it 'amount-only TaxDetailsとOCR行の複数税率対象額から内税TaxDetailsを復元する' do
         noisy_tax_ocr_result = {
           candidates: {

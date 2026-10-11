@@ -8,7 +8,11 @@ module Amounts
         return [] if reference_projection_tax_rate_missing?
 
         tax_rounding_modes.map do |rounding_mode|
-          mixed_candidate(rounding_mode)
+          candidate = mixed_candidate(rounding_mode)
+          next candidate unless candidate && corroborated_gross_tax_details?
+          next candidate if candidate.purchase_total == adjusted_item_total
+
+          candidate.with_hard_reject_reasons([ :tax_detail_mismatch ])
         end.compact
       end
 
@@ -97,6 +101,8 @@ module Amounts
         targets.each do |rate, target|
           next if groups.key?(rate)
 
+          remaining_target = target_before_purchase_adjustments(target, purchase_adjustment_groups[rate])
+          exact = false unless remaining_target.values_at(:gross, :net, :tax).all?(&:zero?)
           groups[rate] = target.slice(:rate, :gross, :net, :tax)
         end
 
@@ -494,6 +500,30 @@ module Amounts
 
       def tax_detail_targets_by_rate
         tax_detail_evidence.targets_by_rate
+      end
+
+      def corroborated_gross_tax_details?
+        return false unless tax_detail_evidence.purchase_amount_evidence_present?
+
+        gross = final_detected_tax_details.sum { |detail| detail[:printed_amount].to_i }
+        tax = final_detected_tax_details.sum { |detail| detail[:target_tax_amount].to_i }
+        receipt_total = amount_or_nil(receipt[:total_amount])
+        return false unless gross.positive? && gross == adjusted_item_total
+        return false if !receipt_total.nil? && receipt_total != gross
+        return false unless [ amount_or_nil(receipt[:subtotal_amount]), receipt_total ].include?(gross)
+        return false unless tax == amount_or_nil(receipt[:tax_amount])
+        return false if receipt_total.nil? && final_detected_tax_details.none? { |detail| detail[:basis] == :gross }
+
+        final_detected_tax_details.all? do |detail|
+          source = indifferent_hash(tax_details[detail[:index]])
+          next false if source[:tax_detail_amount_basis].to_s == "net"
+          next false if detail[:description].to_s.match?(profile.amount_tax_detail_net_pattern)
+          next false if detail[:description].to_s.match?(profile.analysis_external_tax_description_pattern)
+
+          Amounts::CandidateGenerator::ROUNDING_MODES.any? do |mode|
+            rounded_tax_from_gross(detail[:printed_amount].to_i, detail[:rate], mode) == detail[:target_tax_amount].to_i
+          end
+        end
       end
     end
   end

@@ -84,7 +84,7 @@ module Receipts::Processing::Contracts
       "source" => %w[receipt_items receipt_tax_detail receipt_input receipt_adjustment receipt_payments amount_engine],
       "basis" => %w[gross net tax_only summary intermediate unknown tax_included tax_excluded non_taxable],
       "formula" => BASES,
-      "printed_amount_basis" => %w[gross net tax_only summary intermediate unknown],
+      "printed_amount_basis" => %w[gross net gross_target net_subtotal tax_only summary intermediate unknown],
       "effect" => %w[purchase_adjustment payment_adjustment unknown_adjustment],
       "kind" => %w[receipt_discount coupon point_usage return_refund service_charge late_night_charge delivery_fee bag_fee handling_fee other],
       "sign" => %w[discount surcharge],

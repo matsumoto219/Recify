@@ -689,6 +689,7 @@ module Analysis
         end
         next if line.match?(profile.analysis_fallback_payment_metadata_label_pattern)
         next if index.positive? && lines[index - 1].match?(profile.analysis_fallback_payment_metadata_label_pattern) && line.match?(METADATA_VALUE_PATTERN)
+        next if non_monetary_identifier_line?(line)
         next if line.match?(profile.analysis_payment_sale_or_promo_pattern)
         next if line.match?(profile.analysis_point_display_line_pattern)
         if line.match?(profile.analysis_payment_tax_block_heading_pattern) && lines[index + 1].to_s.match?(profile.analysis_payment_tax_block_rate_pattern)
@@ -723,6 +724,14 @@ module Analysis
         @ambiguous = true if line.match?(MONEY_PATTERN) || line.match?(profile.analysis_return_refund_kind_pattern) ||
           line.match?(profile.analysis_payment_affirmative_pattern)
       end
+    end
+
+    def non_monetary_identifier_line?(line)
+      return false unless line.match?(/\A(?=.*[A-Za-z])[A-Za-z0-9]+\z/)
+      return false if line.match?(profile.analysis_fallback_payment_action_pattern)
+      return false if line.match?(profile.analysis_payment_affirmative_pattern)
+
+      line.scan(/\d+/).any? { |digits| digits.sub(/\A0+/, "").length > amount_max.to_s.length }
     end
 
     def inspect_unbounded_payment_lines

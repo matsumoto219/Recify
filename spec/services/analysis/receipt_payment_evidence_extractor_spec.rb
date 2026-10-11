@@ -366,6 +366,67 @@ RSpec.describe Analysis::ReceiptPaymentEvidenceExtractor do
     expect(result[:settlement][:observed_ambiguity]).to be(false)
   end
 
+  it '金額上限を超える数字列を含む英数字識別子を精算の競合にしない' do
+    result = evidence([
+      'お預かり', '6000', 'お釣り', '-720', '合計', '税', '軽8%', '¥5280', '¥391',
+      '123AB12345678901234567'
+    ])
+
+    expect(result[:payments]).to contain_exactly(include(method: 'cash', amount: 5280, amount_role: 'cash_settlement'))
+    expect(result[:settlement][:observed_ambiguity]).to be(false)
+  end
+
+  it '識別子に見える長い数字列でも支払文言があれば精算の競合に残す' do
+    result = evidence([ '合計 864円', 'eGift適用 1000円', 'StarPaypayment12345678901234567', '釣銭 0円' ])
+
+    expect(result[:settlement]).to include(complete: false, observed_ambiguity: true)
+  end
+
+  it '識別子に見える長い数字列でも肯定的な充当文言があれば精算の競合に残す' do
+    result = evidence([ '合計 864円', 'eGift適用 1000円', 'redeemed12345678901234567', '釣銭 0円' ])
+
+    expect(result[:settlement]).to include(complete: false, observed_ambiguity: true)
+  end
+
+  it '識別子に見える長い数字列でも返金文言があれば精算の競合に残す' do
+    result = evidence([ '合計 864円', 'eGift適用 1000円', 'refund12345678901234567', '釣銭 0円' ])
+
+    expect(result[:settlement]).to include(complete: false, observed_ambiguity: true)
+  end
+
+  it '上限内の金額を含む未知の英数字決済行を識別子として除外しない' do
+    result = evidence([ '合計 864円', 'eGift適用 1000円', 'INV300', '釣銭 0円' ])
+
+    expect(result[:settlement]).to include(complete: false, observed_ambiguity: true)
+  end
+
+  it '先頭ゼロを含む上限内の金額を長い識別子として除外しない' do
+    result = evidence([ '合計 864円', 'eGift適用 1000円', 'INV00000000000000300', '釣銭 0円' ])
+
+    expect(result[:settlement]).to include(complete: false, observed_ambiguity: true)
+  end
+
+  it '先頭ゼロを除いても上限桁数を超える英数字識別子は精算の競合にしない' do
+    result = evidence([
+      'お預かり', '6000', 'お釣り', '-720', '合計', '税', '軽8%', '¥5280', '¥391',
+      'INV00012345678901234567'
+    ])
+
+    expect(result[:settlement][:observed_ambiguity]).to be(false)
+  end
+
+  it '数字のみの上限超過額を識別子として除外しない' do
+    result = evidence([ '合計 864円', 'eGift適用 1000円', '12345678901234567', '釣銭 0円' ])
+
+    expect(result[:settlement]).to include(complete: false, observed_ambiguity: true)
+  end
+
+  it '通貨記号つきの上限超過額を含む行を識別子として除外しない' do
+    result = evidence([ '合計 864円', 'eGift適用 1000円', 'ABC¥12345678901234567', '釣銭 0円' ])
+
+    expect(result[:settlement]).to include(complete: false, observed_ambiguity: true)
+  end
+
   it '税の対象額と税額の位置に未分類決済が混在すれば除外しない' do
     result = evidence([ '合計 864円', 'eGift適用 1000円', '税', '軽8%', '¥800', 'StarPay支払 300円', '釣銭 0円' ])
 
