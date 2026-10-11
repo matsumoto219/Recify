@@ -2,7 +2,7 @@ require "test_helper"
 
 class SettingsControllerTest < ActionDispatch::IntegrationTest
   setup do
-    sign_in_with_current_legal_acceptance users(:one)
+    sign_in_with_current_legal_acceptance FactoryBot.create(:user)
   end
 
   test "should get index" do
