@@ -118,6 +118,107 @@ RSpec.describe 'Admin system settings', type: :request do
     end
   end
 
+  describe 'AI reasoning effort設定' do
+    {
+      'external_services.ai.reasoning_effort' => { default: 'low', completion_mode: 'OFF' },
+      'external_services.ai.name_completion_reasoning_effort' => { default: 'high', completion_mode: 'ON' }
+    }.each do |key, values|
+      context key do
+        it '再認証・理由・確認を伴う更新と既定値へのresetを監査する' do
+          admin = create(:user, :admin)
+          sign_in admin
+
+          patch admin_system_setting_path(key), params: { value: 'max', reason: 'change reasoning effort', confirm: '1' }
+
+          aggregate_failures do
+            expect(response).to redirect_to(new_admin_passkey_reauthentication_path(return_to: admin_system_setting_path(key)))
+            expect(SystemSetting.find_by(key: key)).to be_nil
+          end
+
+          reauthenticate_admin_with_passkey!(admin)
+          patch admin_system_setting_path(key), params: { value: 'max', reason: 'change reasoning effort' }
+
+          aggregate_failures do
+            expect(response).to have_http_status(:unprocessable_content)
+            expect(SystemSetting.find_by(key: key)).to be_nil
+            expect(AuditLog.last).to have_attributes(outcome: 'failed', error_code: 'confirmation_required')
+          end
+
+          patch admin_system_setting_path(key), params: { value: 'max', reason: '', confirm: '1' }
+
+          aggregate_failures do
+            expect(response).to have_http_status(:unprocessable_content)
+            expect(SystemSetting.find_by(key: key)).to be_nil
+          end
+
+          expect {
+            patch admin_system_setting_path(key), params: { value: 'max', reason: 'change reasoning effort', confirm: '1' }
+          }.to change(AuditLog, :count).by(1)
+
+          aggregate_failures do
+            expect(response).to redirect_to(admin_system_setting_path(key))
+            expect(SystemSetting.find_by!(key: key).value).to eq('value' => 'max')
+            expect(AuditLog.last).to have_attributes(action: 'system_settings.update', outcome: 'succeeded', target_uid: key)
+            expect(AuditLog.last.before_state).to eq('value' => values[:default], 'source' => 'default')
+            expect(AuditLog.last.after_state).to eq('value' => 'max', 'source' => 'db')
+            expect(AuditLog.last.metadata).to include('risk_level' => 'high', 'reauthenticated' => true)
+          end
+
+          expect {
+            patch admin_system_setting_reset_path(key), params: { reason: 'restore reasoning effort', confirm: '1' }
+          }.to change(AuditLog, :count).by(1)
+
+          aggregate_failures do
+            expect(response).to redirect_to(admin_system_setting_path(key))
+            expect(SystemSetting.find_by(key: key)).to be_nil
+            expect(SystemSettings.value_for(key)).to eq(values[:default])
+            expect(AuditLog.last).to have_attributes(action: 'system_settings.reset', outcome: 'succeeded', target_uid: key)
+            expect(AuditLog.last.before_state).to eq('value' => 'max', 'source' => 'db')
+            expect(AuditLog.last.after_state).to eq('value' => values[:default], 'source' => 'default')
+            expect_no_jobs_enqueued
+          end
+        end
+
+        it '許可されていない値では保存済みoverrideを変更しない' do
+          admin = create(:user, :admin)
+          setting = create(:system_setting, key: key, value: SystemSettings.stored_value('medium'), updated_by_user: admin)
+          sign_in admin
+          reauthenticate_admin_with_passkey!(admin)
+
+          patch admin_system_setting_path(key), params: { value: 'minimal', reason: 'change reasoning effort', confirm: '1' }
+
+          aggregate_failures do
+            expect(response).to have_http_status(:unprocessable_content)
+            expect(setting.reload.value).to eq('value' => 'medium')
+            expect(AuditLog.last).to have_attributes(action: 'system_settings.update', outcome: 'failed', error_code: 'invalid_enum')
+            expect_no_jobs_enqueued
+          end
+        end
+
+        it '実キー・既定値・共通enum入力と商品名補完条件を表示する' do
+          admin = create(:user, :admin)
+          sign_in admin
+          reauthenticate_admin_with_passkey!(admin)
+
+          get admin_system_setting_path(key)
+
+          document = Nokogiri::HTML(response.body)
+          note = document.at_css('p.token-bg-warning-soft')
+          options = document.css('select[name="value"] option')
+
+          aggregate_failures do
+            expect(response).to have_http_status(:success)
+            expect(document.at_css('h2.section-header-title')&.text&.strip).to eq(key)
+            expect(options.map { |option| option['value'] }).to eq(%w[none low medium high xhigh max])
+            expect(document.at_css('select[name="value"] option[selected]')['value']).to eq(values[:default])
+            expect(note.text).to include("商品名補完が#{values[:completion_mode]}", 'AIリクエスト全体', 'none', 'AI処理を停止する設定ではありません')
+            expect(document.at_css('input[name="confirm"][type="checkbox"]')).to be_present
+          end
+        end
+      end
+    end
+  end
+
   describe 'GET /admin/system_settings' do
     it '金額診断の保存上限を実キーと新規解析への適用説明で表示する' do
       sign_in create(:user, :admin)
@@ -460,7 +561,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('external_services.ai.read_timeout_seconds')
         expect(response.body).to include('external_service_tuning')
         expect(response.body).to include('high')
-        expect(response.body).to include('120')
+        expect(response.body).to include('300')
         expect(response.body).to include('900')
         expect(note.text).to include('次の解析から変更')
         expect(note.text).to include('API費用やworker占有時間')
@@ -484,7 +585,7 @@ RSpec.describe 'Admin system settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(input['inputmode']).to eq('numeric')
-        expect(hint.text).to include('15', '900', '120', 'アプリ既定値')
+        expect(hint.text).to include('15', '900', '300', 'アプリ既定値')
         expect(response.body).not_to include('>default<')
       end
     end
@@ -1294,7 +1395,7 @@ RSpec.describe 'Admin system settings', type: :request do
       expect {
         patch admin_system_setting_path('external_services.ai.max_elapsed_seconds'),
               params: {
-                value: '1200',
+                value: '3600',
                 reason: 'allow long product name completion',
                 confirm: '1'
               },
@@ -1306,15 +1407,15 @@ RSpec.describe 'Admin system settings', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_system_setting_path('external_services.ai.max_elapsed_seconds'))
-        expect(setting.value).to eq('value' => 1200)
+        expect(setting.value).to eq('value' => 3600)
         expect(audit_log).to have_attributes(
           action: 'system_settings.update',
           outcome: 'succeeded',
           target_uid: 'external_services.ai.max_elapsed_seconds',
           reason: 'allow long product name completion'
         )
-        expect(audit_log.before_state).to eq('value' => 600, 'source' => 'default')
-        expect(audit_log.after_state).to eq('value' => 1200, 'source' => 'db')
+        expect(audit_log.before_state).to eq('value' => 1200, 'source' => 'default')
+        expect(audit_log.after_state).to eq('value' => 3600, 'source' => 'db')
         expect(audit_log.metadata).to include(
           'category' => 'external_service_tuning',
           'risk_level' => 'high',
@@ -1331,7 +1432,7 @@ RSpec.describe 'Admin system settings', type: :request do
       expect {
         patch admin_system_setting_path('external_services.ai.read_timeout_seconds'),
               params: {
-                value: '300',
+                value: '450',
                 reason: 'extend AI read timeout',
                 confirm: '1'
               }
@@ -1341,8 +1442,8 @@ RSpec.describe 'Admin system settings', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include('最大処理時間を950秒以上')
-        expect(document.at_css('input[name="value"]')['value']).to eq('300')
+        expect(response.body).to include('最大処理時間を1400秒以上')
+        expect(document.at_css('input[name="value"]')['value']).to eq('450')
         expect(document.at_css('textarea[name="reason"]').text.strip).to eq('extend AI read timeout')
         expect(document.at_css('input[name="confirm"][type="checkbox"]')['checked']).to eq('checked')
         expect(SystemSetting.find_by(key: 'external_services.ai.read_timeout_seconds')).to be_nil

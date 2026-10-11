@@ -69,6 +69,37 @@ RSpec.describe Receipts::Processing::Contracts::AmountCalculationRunSnapshot do
     expect(snapshot.fetch('state')).to eq('available')
   end
 
+  it '税詳細の印字対象額basisを元コードのまま保存しreaderへ渡す' do
+    candidate[:evidence] = [
+      { source: 'receipt_tax_detail', index: 0, basis: 'gross', printed_amount_basis: 'gross_target', printed_amount: 108 },
+      { source: 'receipt_tax_detail', index: 1, basis: 'net', printed_amount_basis: 'net_subtotal', printed_amount: 100 }
+    ]
+    snapshot = build
+
+    aggregate_failures do
+      expect(snapshot.fetch('state')).to eq('available')
+      expect(snapshot.dig('engine', 'amount_engine', 'selected_candidate', 'evidence')).to contain_exactly(
+        include('printed_amount_basis' => 'gross_target', 'printed_amount' => 108),
+        include('printed_amount_basis' => 'net_subtotal', 'printed_amount' => 100)
+      )
+      expect(snapshot.fetch('omissions')).to all(include('omitted_count' => 0))
+      expect(described_class.read(JSON.parse(JSON.generate(snapshot)))).to eq(snapshot)
+    end
+  end
+
+  it '印字対象額basisの未許可値を保存・再読込しない' do
+    candidate[:evidence] = [ evidence.merge(printed_amount_basis: 'PRIVATE_BASIS') ]
+    snapshot = build
+
+    expect(snapshot.fetch('state')).to eq('partial')
+    expect(snapshot.dig('engine', 'amount_engine', 'selected_candidate', 'evidence')).to be_empty
+    expect(JSON.generate(snapshot)).not_to include('PRIVATE_BASIS')
+    candidate[:evidence] = [ evidence ]
+    modified = build
+    modified['engine']['amount_engine']['selected_candidate']['evidence'][0]['printed_amount_basis'] = 'PRIVATE_BASIS'
+    expect(described_class.read(modified)).to be_nil
+  end
+
   it 'warning別のclassificationやReceipt statusからAmount review判定を推測しない' do
     result = amount_result.merge(needs_review: true, review_reasons: [ 'purchase_adjustment_tax_allocation_uncertain' ],
       warning_mismatch_codes: [ 'ADJUSTMENT_TAX_RATE_MISSING' ])

@@ -21,13 +21,18 @@ class Receipts::Processing::Pipeline
       purchased_at_conflicted
     ].freeze
     ITEM_NAME_UNCERTAIN_REVIEW_REASON = "item_name_uncertain"
+    ITEM_NAME_INDEPENDENT_REVIEW_REASONS = %w[
+      item_category_uncertain
+      item_quantity_uncertain
+      item_tax_rate_uncertain
+      item_pricing_mode_uncertain
+    ].freeze
     ITEMS_MISSING_REVIEW_REASON = "items_missing"
     ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON = "item_tax_rate_uncertain"
-    ITEM_REVIEW_REASONS = %w[
+    INHERITABLE_ITEM_REVIEW_REASONS = %w[
       item_name_uncertain
       item_category_uncertain
       item_quantity_uncertain
-      item_pricing_mode_uncertain
       item_tax_rate_uncertain
     ].freeze
     ITEM_TAX_RATE_RESOLUTION_BLOCKING_REASONS = %w[
@@ -1264,7 +1269,7 @@ class Receipts::Processing::Pipeline
     end
 
     def materialize_item_review_reasons(items_attributes, originally_reviewed_item_indexes:, receipt_review_reasons:)
-      inherited_reasons = normalize_review_reasons(receipt_review_reasons) & ITEM_REVIEW_REASONS
+      inherited_reasons = normalize_review_reasons(receipt_review_reasons) & INHERITABLE_ITEM_REVIEW_REASONS
       return items_attributes if inherited_reasons.empty? || originally_reviewed_item_indexes.empty?
 
       Array(items_attributes).map.with_index do |item, index|
@@ -1297,9 +1302,9 @@ class Receipts::Processing::Pipeline
     def resolved_ai_review_reasons(ai_result, params, amount_result, ocr_result:)
       review_reasons = normalize_review_reasons(ai_result[:review_reasons])
       review_reasons = resolved_store_name_review_reasons(review_reasons, params)
-      review_reasons = remove_resolved_store_address_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+      review_reasons = remove_resolved_store_address_missing_review_reason(review_reasons, params, ocr_result)
       review_reasons = remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
-      review_reasons = remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+      review_reasons = remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, ocr_result)
       review_reasons = resolved_purchased_at_review_reasons(review_reasons, params)
       review_reasons = remove_resolved_item_name_review_reasons(review_reasons, params, amount_result)
       review_reasons = remove_resolved_item_category_uncertain_review_reason(review_reasons, params)
@@ -1314,18 +1319,38 @@ class Receipts::Processing::Pipeline
       review_reasons - payment_method_reasons
     end
 
-    def remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+    def remove_resolved_store_phone_number_missing_review_reason(review_reasons, params, ocr_result)
       return review_reasons unless review_reasons.include?("store_phone_number_missing")
-      return review_reasons unless receipt_core_fields_resolved?(params, amount_result, ocr_result)
+      return review_reasons unless store_contact_resolved_or_optional?(
+        params, ocr_result, field: :store_phone_number, pattern: profile.signal_phone_pattern
+      )
 
       review_reasons - [ "store_phone_number_missing" ]
     end
 
-    def remove_resolved_store_address_missing_review_reason(review_reasons, params, amount_result, ocr_result)
+    def remove_resolved_store_address_missing_review_reason(review_reasons, params, ocr_result)
       return review_reasons unless review_reasons.include?("store_address_missing")
-      return review_reasons unless receipt_core_fields_resolved?(params, amount_result, ocr_result)
+      return review_reasons unless store_contact_resolved_or_optional?(
+        params, ocr_result, field: :store_address, pattern: profile.signal_address_pattern
+      )
 
       review_reasons - [ "store_address_missing" ]
+    end
+
+    def store_contact_resolved_or_optional?(params, ocr_result, field:, pattern:)
+      return true if normalized_hash(params[:receipt_attributes])[field].present?
+
+      candidates = ocr_candidates(ocr_result)
+      return false if candidates[field].present?
+      return false if field == :store_address && candidates[:store_address_components].present?
+      line_truncated = normalized_hash(ocr_result[:truncated])[:lines]
+      return false if line_truncated == true
+      if ocr_result.key?(:schema_version)
+        return false unless ocr_result[:schema_version] == Receipts::Processing::Runs::SnapshotBuilder::OCR_RESULT_SCHEMA_VERSION
+        return false unless line_truncated == false
+      end
+
+      Array(ocr_result[:lines]).none? { |line| line.to_s.match?(pattern) }
     end
 
     def remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)
@@ -1402,11 +1427,21 @@ class Receipts::Processing::Pipeline
       return false if items.blank?
 
       items.none? do |item|
-        normalized = normalized_hash(item)
-        item_name_review_reasons?(normalized) ||
-          item_needs_review?(normalized) ||
-          item_display_name(normalized).blank?
+        item_name_review_unresolved?(normalized_hash(item))
       end
+    end
+
+    def item_name_review_unresolved?(item)
+      return true if item_name_review_reasons?(item) || item_display_name(item).blank?
+
+      review_reasons = normalize_review_reasons(item[:review_reasons])
+      unless review_reasons.any? && (review_reasons - ITEM_NAME_INDEPENDENT_REVIEW_REASONS).empty?
+        return item_needs_review?(item)
+      end
+
+      confidence = normalize_confidence(item[:confidence])
+      item[:raw_text].blank? || item[:line_total].blank? ||
+        (confidence.present? && confidence < REVIEW_NEEDED_CONFIDENCE_THRESHOLD)
     end
 
     def item_name_review_reasons?(item)

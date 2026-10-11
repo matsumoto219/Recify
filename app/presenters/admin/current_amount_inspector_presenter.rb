@@ -152,7 +152,7 @@ module Admin
       "tax_detail_amount_basis" => %w[gross net unknown],
       "source" => %w[receipt_items receipt_tax_detail receipt_input receipt_adjustment receipt_payments amount_engine],
       "formula" => BASES,
-      "printed_amount_basis" => %w[gross net tax_only summary intermediate unknown],
+      "printed_amount_basis" => %w[gross net gross_target net_subtotal tax_only summary intermediate unknown],
       "effect" => %w[purchase_adjustment payment_adjustment unknown_adjustment],
       "kind" => ReceiptAdjustment::KINDS,
       "sign" => ReceiptAdjustment::SIGNS,

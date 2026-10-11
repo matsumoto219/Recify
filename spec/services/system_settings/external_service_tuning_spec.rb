@@ -19,14 +19,14 @@ RSpec.describe "External service tuning SystemSettings" do
     it "AI read timeoutを900秒まで設定可能にする" do
       definition = SystemSettings.definition_for("external_services.ai.read_timeout_seconds")
 
-      expect(definition).to have_attributes(default: 120, min: 15, max: 900)
+      expect(definition).to have_attributes(default: 300, min: 15, max: 900)
     end
 
     it "全keyのdefaultと安全範囲を固定する" do
       expected_ranges = {
         "external_services.ai.open_timeout_seconds" => [ 10, 1, 60 ],
-        "external_services.ai.read_timeout_seconds" => [ 120, 15, 900 ],
-        "external_services.ai.max_elapsed_seconds" => [ 600, 60, 1200 ],
+        "external_services.ai.read_timeout_seconds" => [ 300, 15, 900 ],
+        "external_services.ai.max_elapsed_seconds" => [ 1200, 60, 3600 ],
         "external_services.ai.max_retries" => [ 2, 0, 3 ],
         "external_services.ai.base_retry_delay_seconds" => [ 1.0, 0.1, 30.0 ],
         "external_services.ai.max_retry_delay_seconds" => [ 10.0, 0.1, 120.0 ],
@@ -50,7 +50,54 @@ RSpec.describe "External service tuning SystemSettings" do
     end
   end
 
+  describe "AI reasoning effort" do
+    {
+      "external_services.ai.reasoning_effort" => "low",
+      "external_services.ai.name_completion_reasoning_effort" => "high"
+    }.each do |key, default|
+      context key do
+        it "high-riskの編集可能enumとして既定値と確認必須を定義する" do
+          definition = SystemSettings.definition_for(key)
+
+          aggregate_failures do
+            expect(definition).to have_attributes(
+              category: "external_service_tuning",
+              value_type: "enum",
+              default: default,
+              allowed_values: %w[none low medium high xhigh max],
+              editable: true,
+              risk_level: "high",
+              requires_confirmation: true
+            )
+            expect(SystemSettings.value_for(key)).to eq(default)
+          end
+        end
+
+        %w[none low medium high xhigh max].each do |value|
+          it "#{value}を許可する" do
+            expect(SystemSettings.cast_update_value(key, value)).to eq(value)
+          end
+        end
+
+        [ nil, "", "LOW", "minimal", "unknown" ].each do |value|
+          it "#{value.inspect}を拒否する" do
+            expect do
+              SystemSettings.cast_update_value(key, value)
+            end.to raise_error(SystemSettings::ValidationError, "invalid_enum")
+          end
+        end
+      end
+    end
+  end
+
   describe "AI dependencies" do
+    it "既定値はretry回数を変えずtimeout系列の時間を確保する" do
+      aggregate_failures do
+        expect(SystemSettings.cast_update_value("external_services.ai.read_timeout_seconds", 300)).to eq(300)
+        expect(SystemSettings.value_for("external_services.ai.max_retries")).to eq(2)
+      end
+    end
+
     it "open timeoutがread timeoutを超える設定を拒否する" do
       create(
         :system_setting,
@@ -69,7 +116,9 @@ RSpec.describe "External service tuning SystemSettings" do
       end.to raise_error(SystemSettings::ValidationError, SystemSettings::AI_RETRY_DELAY_ORDER_ERROR)
     end
 
-    it "全試行時間見積りがmax elapsedを超える設定を拒否する" do
+    it "保存済みの短いmax elapsedを超えるread timeoutへの変更を拒否する" do
+      create(:system_setting, key: "external_services.ai.read_timeout_seconds", value: SystemSettings.stored_value(120))
+      create(:system_setting, key: "external_services.ai.max_elapsed_seconds", value: SystemSettings.stored_value(600))
       error = nil
 
       expect do
@@ -79,6 +128,32 @@ RSpec.describe "External service tuning SystemSettings" do
       aggregate_failures do
         expect(error.message).to eq(SystemSettings::AI_ELAPSED_BUDGET_ERROR)
         expect(error.details).to include(required_seconds: 950)
+      end
+    end
+
+    it "read上限でもretry回数を下げず必要なmax elapsedを設定できる" do
+      elapsed = SystemSettings.cast_update_value("external_services.ai.max_elapsed_seconds", 2750)
+      create(:system_setting, key: "external_services.ai.max_elapsed_seconds", value: SystemSettings.stored_value(elapsed))
+      read_timeout = SystemSettings.cast_update_value("external_services.ai.read_timeout_seconds", 900)
+      create(:system_setting, key: "external_services.ai.read_timeout_seconds", value: SystemSettings.stored_value(read_timeout))
+
+      aggregate_failures do
+        expect(SystemSettings.value_for("external_services.ai.max_retries")).to eq(2)
+        expect(SystemSettings.cast_update_value("external_services.ai.max_elapsed_seconds", 3600)).to eq(3600)
+        expect do
+          SystemSettings.cast_update_value("external_services.ai.max_elapsed_seconds", 2749)
+        end.to raise_error(SystemSettings::ValidationError, SystemSettings::AI_ELAPSED_BUDGET_ERROR)
+      end
+    end
+
+    {
+      "external_services.ai.read_timeout_seconds" => { 14 => "below_min", 901 => "above_max" },
+      "external_services.ai.max_elapsed_seconds" => { 59 => "below_min", 3601 => "above_max" }
+    }.each do |key, values|
+      values.each do |value, reason|
+        it "#{key}の範囲外#{value}を拒否する" do
+          expect { SystemSettings.cast_update_value(key, value) }.to raise_error(SystemSettings::ValidationError, reason)
+        end
       end
     end
 

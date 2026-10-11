@@ -12,7 +12,7 @@ class Receipts::Processing::Pipeline
     def initialize(run:, ocr_result:, ai_name_completion_enabled: false, before_provider_call: nil)
       @run = run
       @ocr_result = ocr_result
-      @ai_name_completion_enabled = ai_name_completion_enabled == true
+      @requested_ai_name_completion_enabled = ai_name_completion_enabled == true
       @before_provider_call = before_provider_call
     end
 
@@ -30,7 +30,7 @@ class Receipts::Processing::Pipeline
           ReceiptAiEnrichmentService.call(
             ocr_result,
             ai_name_completion_enabled: ai_name_completion_enabled,
-            runtime_config: Receipts::Processing.external_service_runtime_config(run).ai,
+            runtime_config: runtime_config,
             capture_input: ai_input_capture_callback,
             before_provider_call: before_provider_call
           )
@@ -44,10 +44,42 @@ class Receipts::Processing::Pipeline
 
     private
 
-    attr_reader :run, :ocr_result, :ai_name_completion_enabled, :before_provider_call
+    attr_reader :run, :ocr_result, :requested_ai_name_completion_enabled, :before_provider_call
+
+    def runtime_config
+      @runtime_config ||= Receipts::Processing.external_service_runtime_config(run).ai
+    end
+
+    def ai_name_completion_enabled
+      return @ai_name_completion_enabled if defined?(@ai_name_completion_enabled)
+
+      meta = run.ai_input_snapshot.to_h["meta"].to_h
+      return @ai_name_completion_enabled = requested_ai_name_completion_enabled unless meta.key?("ai_execution")
+
+      enabled = meta["ai_name_completion_enabled"]
+      unless [ true, false ].include?(enabled) && meta["ai_execution"] == ai_execution_snapshot(enabled)
+        raise ExternalServices::RuntimeConfigUnavailableError
+      end
+
+      @ai_name_completion_enabled = enabled
+    end
+
+    def ai_execution_snapshot(enabled = ai_name_completion_enabled)
+      {
+        "schema_version" => 1,
+        "model" => runtime_config.model,
+        "reasoning_effort" => enabled ? runtime_config.name_completion_reasoning_effort : runtime_config.reasoning_effort
+      }
+    end
 
     def ai_input_capture_callback
-      ->(input) { Receipts::Processing.record_ai_input(run, input) }
+      lambda do |input|
+        snapshot_input = input.deep_merge(meta: {
+          ai_name_completion_enabled: ai_name_completion_enabled,
+          ai_execution: ai_execution_snapshot
+        })
+        Receipts::Processing.record_ai_input(run, snapshot_input)
+      end
     end
 
     def ai_unavailable?

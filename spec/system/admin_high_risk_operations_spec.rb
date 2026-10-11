@@ -371,13 +371,13 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
 
       dependency_path = admin_system_setting_path("external_services.ai.read_timeout_seconds")
       visit dependency_path
-      fill_in "value", with: "300"
+      fill_in "value", with: "450"
       fill_in "reason", with: "system spec dependency failure"
       check "confirm"
       click_button I18n.t("admin.system_settings.show.update.submit")
 
       expect(page).to have_current_path(dependency_path, ignore_query: true)
-      expect(page).to have_content("最大処理時間を950秒以上")
+      expect(page).to have_content("最大処理時間を1400秒以上")
 
       failed_audit = AuditLog.find_by!(
         action: "system_settings.update",
@@ -385,7 +385,7 @@ RSpec.describe "管理画面の高リスク操作", type: :system do
       )
 
       aggregate_failures do
-        expect(page).to have_field("value", with: "300")
+        expect(page).to have_field("value", with: "450")
         expect(page).to have_field("reason", with: "system spec dependency failure")
         expect(page).to have_checked_field("confirm")
         expect(SystemSetting.find_by(key: "external_services.ai.read_timeout_seconds")).to be_nil

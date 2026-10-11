@@ -65,6 +65,7 @@ RSpec.describe ReceiptAnalysisProfiles do
         expect('再発行').to match(roles.fetch('reference'))
         expect('精算予定').to match(roles.fetch('reference'))
         expect('入庫券発行').to match(roles.fetch('reference'))
+        expect('オーダー時刻').to match(roles.fetch('reference'))
         expect('発行').not_to match(described_class.fetch('JPN').analysis_purchase_time_exclusion_pattern)
       end
     end
@@ -116,6 +117,50 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile payment metadata labels' do
+    it '取引識別子の見出しとiD支払を区別する地域語彙を所有する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        [ '取引ID', '取引 ID：', 'Transaction ID:', 'transaction id' ].each do |label|
+          expect(label).to match(profile.analysis_fallback_payment_metadata_label_pattern)
+          expect(label).to match(profile.analysis_payment_metadata_id_title_pattern)
+        end
+        expect('iD支払 864円').not_to match(profile.analysis_fallback_payment_metadata_label_pattern)
+        expect('iD支払 864円').not_to match(profile.analysis_payment_metadata_id_title_pattern)
+        expect('取引ID支払 864円').not_to match(profile.analysis_fallback_payment_metadata_label_pattern)
+      end
+    end
+
+    it '売上票と顧客控えの見出しを支払操作から区別する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect('[クレジットカード売上票]').to match(profile.analysis_payment_card_slip_title_pattern)
+        expect('クレジットカード売上票').to match(profile.analysis_payment_card_slip_title_pattern)
+        expect('(お客様控え)').to match(profile.analysis_payment_customer_copy_pattern)
+        expect('お客様控').to match(profile.analysis_payment_customer_copy_pattern)
+        expect('クレジットカード支払').not_to match(profile.analysis_payment_card_slip_title_pattern)
+        expect('お客様支払 864円').not_to match(profile.analysis_payment_customer_copy_pattern)
+      end
+    end
+  end
+
+  describe 'JPN profile payment method token boundaries' do
+    it 'd paymentは独立したtokenとして検出し他方式や英単語の内部へ部分一致しない' do
+      patterns = described_class.fetch('JPN').fallback_payment_method_patterns.fetch('qr_payment')
+
+      aggregate_failures do
+        [ 'd payment', 'D PAYMENT', 'dpayment', '決済 d payment', 'd払い' ].each do |label|
+          expect(patterns.any? { |pattern| label.match?(pattern) }).to be(true), label
+        end
+        [ 'iD payment', 'ID PAYMENT', 'oldpayment', 'third payment', 'd paymentcode' ].each do |label|
+          expect(patterns.any? { |pattern| label.match?(pattern) }).to be(false), label
+        end
+      end
+    end
+  end
+
   describe 'JPN profile OCR date patterns' do
     it 'OCR購入日のfallback表記をprofile側で定義する' do
       profile = described_class.fetch('JPN')
@@ -123,6 +168,17 @@ RSpec.describe ReceiptAnalysisProfiles do
       aggregate_failures do
         expect(profile.ocr_purchased_at_date_patterns.any? { |pattern| '2026年05月20日'.match?(pattern) }).to be(true)
         expect(profile.ocr_purchased_at_date_patterns.any? { |pattern| '2026-05-20'.match?(pattern) }).to be(true)
+      end
+    end
+
+    it '電話番号や識別子の内側を日付tokenとして切り出さない' do
+      patterns = described_class.fetch('JPN').ocr_purchased_at_date_patterns
+
+      aggregate_failures do
+        expect(patterns.any? { |pattern| 'TEL:0123-45-6789'.match?(pattern) }).to be(false)
+        expect(patterns.any? { |pattern| 'REF-123456-78-9012'.match?(pattern) }).to be(false)
+        expect(patterns.any? { |pattern| '購入日2026-09-01'.match?(pattern) }).to be(true)
+        expect(patterns.any? { |pattern| '2026-99-99'.match?(pattern) }).to be(true)
       end
     end
   end

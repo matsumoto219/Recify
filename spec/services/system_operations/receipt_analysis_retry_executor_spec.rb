@@ -763,6 +763,7 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
         expect(run.metadata.keys).to contain_exactly(
           'external_service_runtime_config',
           'external_service_runtime_config_origin',
+          'external_service_ai_config_origin',
           'amount_calculation_snapshot_limits_v1',
           'finalize_decision'
         )
@@ -770,6 +771,8 @@ RSpec.describe SystemOperations::ReceiptAnalysisRetryExecutor do
           'max_bytes' => 131_072, 'computed_items' => 100, 'evidence' => 200, 'candidates' => 3
         )
         expect(run.metadata['external_service_runtime_config_origin']).to eq('run_creation')
+        expect(run.metadata['external_service_ai_config_origin']).to eq('run_creation')
+        expect(run.ai_input_snapshot).to be_blank
         expect(run.metadata.dig('finalize_decision', 'strategy')).to eq('ai_success')
         expect(snapshot_json(run)).not_to include('full raw OCR text')
         expect(snapshot_json(run)).not_to include('do-not-copy')

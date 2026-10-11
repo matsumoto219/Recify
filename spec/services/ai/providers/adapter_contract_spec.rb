@@ -11,6 +11,10 @@ RSpec.describe 'AI provider adapter contract' do
       fallback_used
       final_provider
       model
+      requested_model
+      reasoning_effort
+      response_status
+      incomplete_reason
       provider
       provider_error_code
       provider_error_type
@@ -46,6 +50,7 @@ RSpec.describe 'AI provider adapter contract' do
   def openai_response(response_id: 'resp_contract')
     {
       'id' => response_id,
+      'status' => 'completed',
       'model' => 'gpt-test',
       'usage' => {
         'input_tokens' => 10,
@@ -68,10 +73,13 @@ RSpec.describe 'AI provider adapter contract' do
   end
 
   describe Ai::Providers::Openai::Client do
-    subject(:adapter) { described_class.new }
+    subject(:adapter) { described_class.new(runtime_config: runtime_config) }
+
+    let(:runtime_config) { ExternalServices.runtime_config_snapshot.ai }
 
     before do
-      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build).with(input).and_return(request_body)
+      allow(Ai::Providers::Openai::RequestBuilder).to receive(:build)
+        .with(input, runtime_config: runtime_config).and_return(request_body)
     end
 
     it 'call(input) は ProviderResult を返す' do
@@ -86,6 +94,8 @@ RSpec.describe 'AI provider adapter contract' do
         expect(result.metrics).to include(
           provider: 'openai',
           model: 'gpt-test',
+          requested_model: 'gpt-test',
+          response_status: 'completed',
           response_id: 'resp_contract',
           provider_status: '200',
           token_usage: {

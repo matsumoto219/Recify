@@ -5,6 +5,7 @@ module Analysis
     OCR_ADJUSTMENT_FALLBACK_CONFIDENCE_THRESHOLD = BigDecimal("0.75")
     PAYMENT_METHOD_REPRESENTATIVE_PRIORITY = %w[credit_card cash e_money qr_payment debit_card].freeze
     ADJUSTMENT_UNCERTAIN_REVIEW_REASON = "adjustment_uncertain"
+    AI_ITEM_NAME_MAX_LENGTH = 500
     OCR_ITEM_IDENTITY_MAX_BYTES = 160
     OCR_ITEM_LAYOUT_MAX_LINE_INDEX = 149
     OCR_ITEM_LAYOUT_MAX_PROVIDER_SPAN = 10_000_000
@@ -2583,9 +2584,10 @@ module Analysis
 
       def suggested_item_name_for(candidate_item, ai_item, ai_name_completion_enabled:)
         candidate_name = candidate_item[:suggested_name]
-        ai_name = ai_item[:suggested_name].presence
 
         return candidate_name unless ai_name_completion_enabled == true
+
+        ai_name = bounded_item_name_text(ai_item[:suggested_name])
         return candidate_name if ai_name.blank?
 
         ai_suggested_name_supported?(candidate_item, ai_name) ? ai_name : candidate_name
@@ -2594,7 +2596,10 @@ module Analysis
       def ai_suggested_name_rejected?(candidate_item, ai_item, suggested_name, ai_name_completion_enabled:)
         return false unless ai_name_completion_enabled == true
 
-        ai_name = ai_item[:suggested_name].presence
+        return false if ai_item[:suggested_name].nil?
+
+        ai_name = bounded_item_name_text(ai_item[:suggested_name])
+        return true if ai_name.nil?
         return false if ai_name.blank?
 
         suggested_name != ai_name && !ai_suggested_name_supported?(candidate_item, ai_name)
@@ -2610,12 +2615,41 @@ module Analysis
           candidate_item[:name]
         ]
         name_evidence.any? do |name|
-          evidence_text = compact_item_text(name)
+          evidence_name = bounded_item_name_text(name)
+          next false if evidence_name.nil?
+
+          evidence_text = compact_item_text(evidence_name)
           next false if evidence_text.blank?
           next false if evidence_text.match?(/\A[¥￥$€£]?[+-]?\d[\d,]*(?:\.\d+)?\z/)
 
-          ai_text == evidence_text
+          ai_text == evidence_text || ai_name_completes_existing_word?(evidence_name, ai_name, candidate_item[:product_code])
         end
+      end
+
+      def bounded_item_name_text(value)
+        return unless value.is_a?(String) && value.valid_encoding?
+        return if value.bytesize > AI_ITEM_NAME_MAX_LENGTH * 4 || value.length > AI_ITEM_NAME_MAX_LENGTH
+
+        text = value.encode(Encoding::UTF_8)
+        text unless text.match?(/[[:cntrl:]&&[^[:space:]]]/)
+      rescue EncodingError
+        nil
+      end
+
+      def ai_name_completes_existing_word?(source_name, ai_name, product_code)
+        source_parts = source_name.split(/([[:space:]]+)/)
+        completed_parts = ai_name.split(/([[:space:]]+)/)
+        return false unless source_parts.size == completed_parts.size
+
+        changed_parts = source_parts.zip(completed_parts).reject { |source, completed| source == completed }
+        return false unless changed_parts.one?
+
+        source, completed = changed_parts.sole
+        return false unless source.match?(/\A[\p{L}\p{M}]+\z/u) && completed.match?(/\A[\p{L}\p{M}]+\z/u)
+        return false if source == product_code || profile.resolve_quantity_unit(source).known?
+
+        # 構造上の追加範囲だけを制限する。欠落語の意味上の確かさはAIの補完判断で扱う。
+        completed.start_with?(source)
       end
 
       def raw_ai_item_indexes(ai_items)

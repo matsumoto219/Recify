@@ -82,6 +82,203 @@ RSpec.describe Amounts::CandidateGenerator do
     end
   end
 
+  describe '税詳細と購入調整の対応' do
+    let(:discounted_input) do
+      {
+        receipt: { subtotal_amount: 2_193, tax_amount: 163 },
+        items: [
+          { line_total: 3_240, tax_rate: nil },
+          { line_total: 33, tax_rate: BigDecimal('0.1') }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 2_160, amount: 160 },
+          { rate: BigDecimal('0.1'), net_amount: 33, amount: 3 }
+        ],
+        adjustments: [
+          { kind: 'receipt_discount', sign: 'discount', amount: 1_080, tax_rate: BigDecimal('0.08') }
+        ]
+      }
+    end
+
+    it '未対応の税率targetを税率不明の明細へ追加してexact扱いしない' do
+      candidates = generate(**discounted_input)
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      expect(mixed.hard_reject_reasons).to include(:tax_detail_mismatch)
+    end
+
+    it '横断探索でも税詳細の診断根拠を書き換えず税込総額と矛盾する候補を拒否する' do
+      discounted_input[:items].first[:tax_rate] = BigDecimal('0.08')
+      candidates = generate(**discounted_input)
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 2_196, tax: 163)
+        expect(mixed.hard_reject_reasons).to include(:tax_detail_mismatch)
+        expect(mixed.tax_rate_groups).to include(include(rate: BigDecimal('0.1'), gross: 36, net: 33, tax: 3))
+        expect(mixed.evidence).to include(include(source: 'receipt_tax_detail', index: 1, basis: :net, target_gross_amount: 36, target_net_amount: 33))
+      end
+    end
+
+    it '税抜補正なしの通常探索でも診断根拠と総額が矛盾する候補を拒否する' do
+      discounted_input[:items].first[:tax_rate] = BigDecimal('0.08')
+      candidates = generate(**discounted_input, tax_excluded_price_conversion_enabled: false)
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 2_196, tax: 163)
+        expect(mixed.hard_reject_reasons).to include(:tax_detail_mismatch)
+        expect(mixed.tax_rate_groups).to include(include(rate: BigDecimal('0.1'), gross: 36, net: 33, tax: 3))
+        expect(mixed.evidence).to include(include(source: 'receipt_tax_detail', index: 1, basis: :net, target_gross_amount: 36, target_net_amount: 33))
+      end
+    end
+
+    it '調整だけが構成する税率targetは二重計上せずexactに保つ' do
+      candidates = generate(
+        receipt: { total_amount: 218, tax_amount: 18 },
+        items: [ { line_total: 108, tax_rate: BigDecimal('0.08') } ],
+        tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 100, amount: 8 },
+          { rate: BigDecimal('0.1'), net_amount: 100, amount: 10 }
+        ],
+        adjustments: [ { kind: 'delivery_fee', sign: 'surcharge', amount: 110, tax_rate: BigDecimal('0.1') } ]
+      )
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 218, tax: 18)
+        expect(mixed.hard_reject_reasons).to be_empty
+      end
+    end
+
+    it '全税詳細が税込と税抜の両方に一致する場合はsubtotalだけでnet候補を拒否しない' do
+      candidates = generate(
+        receipt: { subtotal_amount: 33, tax_amount: 3 },
+        items: [ { line_total: 33, tax_rate: BigDecimal('0.1') } ],
+        tax_details: [ { rate: BigDecimal('0.1'), net_amount: 33, amount: 3 } ]
+      )
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 36, tax: 3)
+        expect(mixed.hard_reject_reasons).to be_empty
+      end
+    end
+
+    it '明示0%の明細を税込税詳細との総額一致だけで消さない' do
+      discounted_input[:items].first[:tax_rate] = BigDecimal('0')
+      candidates = generate(**discounted_input)
+      gross = candidates.find { |candidate| candidate.basis == 'printed_tax_details_gross' }
+
+      expect(gross.tax_rate_groups).to include(include(rate: BigDecimal('0'), gross: 3_240))
+    end
+
+    it '支払値引きを購入値引きとみなしてunknown明細の加算を省かない' do
+      discounted_input[:adjustments].first[:kind] = 'point_usage'
+      candidates = generate(**discounted_input)
+      gross = candidates.find { |candidate| candidate.basis == 'printed_tax_details_gross' }
+
+      aggregate_failures do
+        expect(gross.purchase_adjustment_total).to eq(0)
+        expect(gross.payment_adjustment_total).to eq(-1_080)
+        expect(gross.purchase_total).to eq(5_433)
+      end
+    end
+
+    it '正規化済みnetを総額一致だけでgrossへ再解釈しない' do
+      discounted_input[:items].first[:tax_rate] = BigDecimal('0.08')
+      discounted_input[:tax_details].last[:tax_detail_amount_basis] = 'net'
+      candidates = generate(**discounted_input)
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 2_196, tax: 163)
+        expect(mixed.hard_reject_reasons).to be_empty
+      end
+    end
+
+    it '明示外税の説明を総額一致だけでgrossへ再解釈しない' do
+      discounted_input[:items].first[:tax_rate] = BigDecimal('0.08')
+      discounted_input[:tax_details].last[:description] = '外税'
+      candidates = generate(**discounted_input)
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 2_196, tax: 163)
+        expect(mixed.hard_reject_reasons).to be_empty
+      end
+    end
+
+    it '不足した税詳細を持つ場合は全額のgross根拠にしない' do
+      discounted_input[:items].first[:tax_rate] = BigDecimal('0.08')
+      discounted_input[:tax_details] << { amount: 7 }
+      candidates = generate(**discounted_input)
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 2_196, tax: 163)
+        expect(mixed.hard_reject_reasons).to be_empty
+      end
+    end
+
+    it '既存profileの外税説明も税込への変更を防ぐ根拠として維持する' do
+      discounted_input[:items].first[:tax_rate] = BigDecimal('0.08')
+      discounted_input[:tax_details].last[:description] = 'sales tax'
+      candidates = generate(**discounted_input)
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 2_196, tax: 163)
+        expect(mixed.hard_reject_reasons).to be_empty
+      end
+    end
+
+    it '印字税額が一致しない場合はgross根拠を補わない' do
+      discounted_input[:items].first[:tax_rate] = BigDecimal('0.08')
+      discounted_input[:receipt][:tax_amount] = 170
+      candidates = generate(**discounted_input)
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 2_196, tax: 163)
+        expect(mixed.hard_reject_reasons).to be_empty
+      end
+    end
+
+    it '印字totalが説明する混在基準をsubtotal一致だけで税込へ変更しない' do
+      candidates = generate(
+        receipt: { subtotal_amount: 141, tax_amount: 11, total_amount: 144 },
+        items: [
+          { line_total: 108, tax_rate: BigDecimal('0.08') },
+          { line_total: 33, tax_rate: BigDecimal('0.1') }
+        ],
+        tax_details: [
+          { rate: BigDecimal('0.08'), net_amount: 108, amount: 8, description: '税込対象' },
+          { rate: BigDecimal('0.1'), net_amount: 33, amount: 3 }
+        ]
+      )
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 144, tax: 11)
+        expect(mixed.hard_reject_reasons).to be_empty
+        expect(mixed.computed_items.map { |item| item[:line_total] }).to eq([ 108, 36 ])
+      end
+    end
+
+    it '印字totalの0円を欠損としてsubtotal一致へ置き換えない' do
+      discounted_input[:items].first[:tax_rate] = BigDecimal('0.08')
+      discounted_input[:receipt][:total_amount] = 0
+      candidates = generate(**discounted_input)
+      mixed = candidates.find { |candidate| candidate.basis == 'mixed_by_tax_rate_group' }
+
+      aggregate_failures do
+        expect(mixed).to have_attributes(purchase_total: 2_196, tax: 163)
+        expect(mixed.hard_reject_reasons).to be_empty
+      end
+    end
+  end
+
   describe 'reference price tax projection' do
     it 'explicit authorityをdiagnostic referenceの税区分から再分類・税投影しない' do
       aggregate_failures do

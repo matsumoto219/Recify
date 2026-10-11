@@ -155,7 +155,8 @@ module Amounts
 
       def tax_detail_purchase_total_matches_item_total?(tax_detail_groups)
         tax_detail_purchase_total = Array(tax_detail_groups).sum { |group| group[:gross].to_i }
-        tax_detail_purchase_total.positive? && tax_detail_purchase_total == item_total
+        tax_detail_purchase_total.positive? &&
+          [ item_total, adjusted_item_total ].include?(tax_detail_purchase_total)
       end
 
       def tax_detail_purchase_total_matches_receipt_total?(tax_detail_groups)

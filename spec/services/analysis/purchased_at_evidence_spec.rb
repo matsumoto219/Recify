@@ -148,4 +148,15 @@ RSpec.describe Analysis::PurchasedAtEvidence do
     expect(result[:candidates].size).to eq(50)
     expect(described_class.call(JSON.parse(result.to_json))).to eq(result)
   end
+
+  it "行数上限の日時pairを一度だけ結合し保存候補数を制限する" do
+    lines = Array.new(5_000) { [ "2026/09/01", "07:36" ] }.flatten
+
+    result = described_class.from_lines(lines: lines, profile: ReceiptAnalysisProfiles.default)
+
+    expect(result).to include(complete: false, truncated: true, omitted_count: 4_950, invalid: false)
+    expect(result[:candidates].size).to eq(50)
+    expect(result[:candidates]).to all(include(precision: "datetime", date: "2026-09-01", time: "07:36"))
+    expect(result[:candidates].last).to include(line_index: 98, time_path: "lines[99]")
+  end
 end

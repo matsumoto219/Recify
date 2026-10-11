@@ -33,9 +33,11 @@ module Ai
     attr_reader :primary_provider, :fallback_provider, :runtime_config
 
     def run_primary(input, before_provider_call:, deadline:)
-      provider_executor(primary_provider, before_provider_call: before_provider_call, deadline: deadline).call(input)
+      provider_executor(primary_provider, input: input, before_provider_call: before_provider_call, deadline: deadline).call(input)
     rescue Ai::Errors::TimeoutError => error
       Rails.logger.error("[AI] primary_timeout class=#{error.class}")
+      raise error unless error.fallbackable?
+
       raise Ai::Errors::ProviderError.new(
         message: error.message,
         error_code: "ai_primary_failed",
@@ -61,7 +63,7 @@ module Ai
     def run_fallback(input, primary_error, fallback_decision, before_provider_call:, deadline:)
       Rails.logger.warn("[AI] fallback triggered: primary=#{primary_provider}")
 
-      result = provider_executor(fallback_provider, before_provider_call: before_provider_call, deadline: deadline).call(input)
+      result = provider_executor(fallback_provider, input: input, before_provider_call: before_provider_call, deadline: deadline).call(input)
 
       decorate_success_result(
         result,
@@ -85,13 +87,24 @@ module Ai
       ProviderRegistry.fetch(provider_name, runtime_config: runtime_config)
     end
 
-    def provider_executor(provider_name, before_provider_call:, deadline:)
+    def provider_executor(provider_name, input:, before_provider_call:, deadline:)
       Ai::ProviderExecutor.new(
         provider_client: provider_client(provider_name),
         provider_name: provider_name,
         before_provider_call: before_provider_call,
-        deadline: deadline
+        deadline: deadline,
+        request_metrics: request_metrics(input)
       )
+    end
+
+    def request_metrics(input)
+      metadata = input.with_indifferent_access[:meta] if input.is_a?(Hash)
+      name_completion_enabled = metadata.is_a?(Hash) && metadata[:ai_name_completion_enabled] == true
+
+      {
+        requested_model: runtime_config.model,
+        reasoning_effort: name_completion_enabled ? runtime_config.name_completion_reasoning_effort : runtime_config.reasoning_effort
+      }
     end
 
     def monotonic_now

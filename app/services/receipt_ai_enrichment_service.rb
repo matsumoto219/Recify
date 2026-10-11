@@ -94,7 +94,10 @@ class ReceiptAiEnrichmentService
     Ai::ResultTemplate.error(
       error_code: error_code,
       review_reasons: [ error_code ],
-      meta: { final_error_detail: detail }.compact
+      meta: {
+        final_error_detail: detail,
+        metrics: Ai::ProviderMetrics.build(e.metrics).presence
+      }.compact
     )
   rescue StandardError => e
     Rails.logger.error("[AIEnrichment] unexpected_error class=#{e.class}")

@@ -223,7 +223,9 @@ RSpec.describe Admin::SystemSettingsQuery do
       result = described_class.call(category: 'external_service_tuning')
 
       expect(result.records.map { |record| record[:key] }).to contain_exactly(
-        *SystemSettings::EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS
+        *SystemSettings::EXTERNAL_SERVICE_RUNTIME_TUNING_KEYS,
+        'external_services.ai.reasoning_effort',
+        'external_services.ai.name_completion_reasoning_effort'
       )
       expect(result.records).to all(include(risk_level: 'high', editable: true))
     end

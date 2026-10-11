@@ -80,9 +80,9 @@ module Ai
       return true if error.respond_to?(:fallbackable?) && error.fallbackable?
 
       case error
-      when Ai::Errors::TimeoutError, Ai::Errors::RateLimitError
+      when Ai::Errors::RateLimitError
         true
-      when Ai::Errors::AuthError, Ai::Errors::InvalidResponseError
+      when Ai::Errors::TimeoutError, Ai::Errors::AuthError, Ai::Errors::InvalidResponseError
         false
       when Ai::Errors::ProviderError
         %w[

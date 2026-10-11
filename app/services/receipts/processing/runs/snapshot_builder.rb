@@ -331,7 +331,11 @@ module Receipts::Processing::Runs
 
     def sanitized_stored_snapshot(snapshot)
       sanitized = sanitize_value(snapshot)
-      sanitized.is_a?(Hash) ? sanitized : {}
+      return {} unless sanitized.is_a?(Hash)
+
+      original = normalized_hash(snapshot)
+      preserve_ai_model_identifiers(sanitized, original) if original[:schema_version] == AI_RESULT_SCHEMA_VERSION
+      sanitized
     end
 
     def finalize_decision_snapshot(decision, at: Time.current)
@@ -507,6 +511,8 @@ module Receipts::Processing::Runs
         )
         snapshot["purchase"]["purchased_at_evidence"] = evidence.deep_stringify_keys
       end
+      execution = ai_execution_snapshot(normalized_hash(input[:meta])[:ai_execution])
+      snapshot["meta"]["ai_execution"] = execution if execution
       snapshot
     end
 
@@ -545,6 +551,7 @@ module Receipts::Processing::Runs
       )
       selection = Analysis.store_name_selection(normalized_hash(result[:meta])[:store_name_selection])
       snapshot["meta"]["store_name_selection"] = selection.deep_stringify_keys if selection
+      preserve_ai_model_identifiers(snapshot["meta"], result[:meta])
       snapshot
     end
 
@@ -552,7 +559,7 @@ module Receipts::Processing::Runs
       result = normalized_hash(ai_result)
       meta = normalized_hash(result[:meta])
 
-      sanitize_hash(
+      snapshot = sanitize_hash(
         {
           schema_version: AI_RESULT_SCHEMA_VERSION,
           success: result[:success] == true,
@@ -575,6 +582,8 @@ module Receipts::Processing::Runs
           receipt_attributes_keys: normalized_hash(result[:receipt_attributes]).keys.map(&:to_s).sort
         }.compact
       )
+      preserve_ai_model_identifiers(snapshot, meta)
+      snapshot
     end
 
     def final_result_summary(receipt: nil, receipt_attributes: nil, items_attributes: nil, payments_attributes: nil, tax_details_attributes: nil, adjustments_attributes: nil, amount_result: nil, amount_snapshot_limits: nil)
@@ -771,7 +780,8 @@ module Receipts::Processing::Runs
     end
 
     def ocr_line_source_truncation(result, key, limit)
-      return true if Array(result[key]).size > limit
+      lines = Array(result[key])
+      return true if lines.size > limit || lines.any? { |line| truncated?(line, max_bytes: snapshot_string_limit) }
       return if result.key?(:truncated) && !result[:truncated].is_a?(Hash)
 
       truncated = normalized_hash(result[:truncated])
@@ -3024,6 +3034,21 @@ module Receipts::Processing::Runs
       }.compact
     end
 
+    def ai_execution_snapshot(value)
+      execution = normalized_hash(value)
+      return if execution.empty?
+
+      model = execution[:model]
+      effort = execution[:reasoning_effort]
+      unless execution[:schema_version] == 1 && model.is_a?(String) &&
+          ExternalServices.sanitize_error_text(model, identifier: true) == model &&
+          effort.is_a?(String) && SystemSettings.definition_for("external_services.ai.reasoning_effort").allowed_values.include?(effort)
+        raise ExternalServices::RuntimeConfigUnavailableError
+      end
+
+      { "schema_version" => 1, "model" => model, "reasoning_effort" => effort }
+    end
+
     def limited_items(items)
       Array(items).first(snapshot_ai_input_items_limit).filter_map do |item|
         item = normalized_hash(item)
@@ -3097,6 +3122,30 @@ module Receipts::Processing::Runs
 
     def sanitized_ai_metrics(value)
       ReceiptAiEnrichmentService.provider_metrics(value)
+    end
+
+    def preserve_ai_model_identifiers(snapshot, value)
+      metadata = normalized_hash(value)
+      model = sanitized_ai_metrics(model: metadata[:model])[:model]
+      snapshot.delete("model")
+      snapshot["model"] = model if model
+
+      %w[primary_error_detail fallback_error_detail final_error_detail].each do |key|
+        next unless snapshot[key].is_a?(Hash)
+
+        model = provider_error_detail_snapshot(metadata[key])[:model]
+        snapshot[key].delete("model")
+        snapshot[key]["model"] = model if model
+      end
+
+      return unless snapshot["metrics"].is_a?(Hash)
+
+      metrics = sanitized_ai_metrics(metadata[:metrics])
+      %w[model requested_model].each do |key|
+        snapshot["metrics"].delete(key)
+        snapshot["metrics"][key] = metrics[key.to_sym] if metrics.key?(key.to_sym)
+      end
+      snapshot.delete("metrics") if snapshot["metrics"].empty?
     end
 
     def limited_hashes(value, max)

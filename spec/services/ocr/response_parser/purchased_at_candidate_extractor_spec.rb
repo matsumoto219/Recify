@@ -313,4 +313,215 @@ RSpec.describe Ocr::ResponseParser::PurchasedAtCandidateExtractor do
       expect(result[:purchased_at_evidence][:complete]).to be(true)
     end
   end
+
+  it "電話番号や長い識別子の途中を不正な購入日として扱わない" do
+    result = described_class.extract(
+      fields: {}, lines: [ "TEL:0123-45-6789", "REF-123456-78-9012", "2026/09/01 07:36" ], profile:
+    )
+
+    aggregate_failures do
+      expect(result[:purchased_at_text]).to eq("2026-09-01 07:36")
+      expect(result[:purchased_at_evidence][:complete]).to be(true)
+    end
+  end
+
+  it "同一rowの日時を結び、別rowの日付を指すstructured fieldから競合を作らない" do
+    lines = [ "2026/09/01", "07:36", "2026年9月1日" ]
+    response = layout(lines, positions: [ [ 0, 0, 10 ], [ 12, 0, 5 ], [ 0, 10, 12 ] ])
+    fields = {
+      "TransactionDate" => { "valueDate" => "2026-09-01", "spans" => response["pages"].first["lines"][2]["spans"] },
+      "TransactionTime" => { "valueTime" => "07:36:00", "spans" => response["pages"].first["lines"][1]["spans"] }
+    }
+
+    result = described_class.extract(fields:, lines:, profile:, analyze_result: response)
+    evidence = result[:purchased_at_evidence]
+
+    aggregate_failures do
+      expect(evidence[:complete]).to be(true)
+      expect(evidence[:candidates]).to include(
+        include(date: "2026-09-01", time: "07:36", precision: "datetime", source_path: "pages[0].lines[0]", time_path: "pages[0].lines[1]")
+      )
+      expect(evidence[:candidates]).not_to include(include(association: "invalid"))
+    end
+  end
+
+  it "provider配列に別rowが挟まっても同一rowの一意な日時だけを結ぶ" do
+    lines = [ "2026年9月1日", "レジNo:1234", "領収証", "07時36分", "オーダー時刻", "客No-A 1", "07時10分" ]
+    positions = [ [ 0, 2, 10 ], [ 12, 0, 6 ], [ 5, 4, 6 ], [ 14, 2, 4 ], [ 0, 6, 6 ], [ 0, 8, 5 ], [ 14, 6, 4 ] ]
+
+    result = described_class.extract(fields: {}, lines:, profile:, analyze_result: layout(lines, positions:))
+
+    aggregate_failures do
+      expect(result[:purchased_at_text]).to eq("2026-09-01 07:36")
+      expect(result[:purchased_at_evidence][:complete]).to be(true)
+      expect(result[:purchased_at_evidence][:candidates]).to include(
+        include(precision: "datetime", source_path: "pages[0].lines[0]", time_path: "pages[0].lines[3]"),
+        include(precision: "time_only", role: "reference", source_path: "pages[0].lines[6]", label_path: "pages[0].lines[4]")
+      )
+    end
+  end
+
+  it "同じrowに複数のclockがある場合は位置が近い方を選ばない" do
+    lines = [ "2026/09/01", "07:36", "08:15" ]
+    response = layout(lines, positions: [ [ 0, 0, 10 ], [ 12, 0, 4 ], [ 18, 0, 4 ] ])
+
+    result = described_class.extract(fields: {}, lines:, profile:, analyze_result: response)
+
+    expect(result[:purchased_at_evidence][:candidates]).not_to include(include(precision: "datetime"))
+  end
+
+  it "同じrowに別の日付候補があれば一つのclockを借用しない" do
+    lines = [ "2026/09/01", "2026/09/02", "07:36" ]
+    response = layout(lines, positions: [ [ 0, 0, 10 ], [ 12, 0, 10 ], [ 24, 0, 4 ] ])
+
+    result = described_class.extract(fields: {}, lines:, profile:, analyze_result: response)
+
+    expect(result[:purchased_at_evidence][:candidates]).not_to include(include(precision: "datetime"))
+  end
+
+  it "同一rowの入庫clockを購入日へ結ばない" do
+    lines = [ "購入日 2026/09/01", "入庫 07:36" ]
+    response = layout(lines, positions: [ [ 0, 0, 10 ], [ 12, 0, 6 ] ])
+
+    result = described_class.extract(fields: {}, lines:, profile:, analyze_result: response)
+
+    expect(result[:purchased_at_evidence][:candidates]).not_to include(include(precision: "datetime"))
+  end
+
+  it "provider配列でclockが先でも同一rowの対応を保持して重複させない" do
+    lines = [ "07:36", "2026/09/01" ]
+    response = layout(lines, positions: [ [ 12, 0, 4 ], [ 0, 0, 10 ] ])
+
+    result = described_class.extract(fields: {}, lines:, profile:, analyze_result: response)
+
+    expect(result[:purchased_at_evidence][:candidates]).to contain_exactly(
+      include(date: "2026-09-01", time: "07:36", source_path: "pages[0].lines[1]", time_path: "pages[0].lines[0]")
+    )
+  end
+
+  it "注文時刻の除外も注入profileの語彙だけを使う" do
+    custom_profile = double(
+      "receipt analysis profile",
+      ocr_purchased_at_date_patterns: profile.ocr_purchased_at_date_patterns,
+      ocr_purchased_at_time_pattern: profile.ocr_purchased_at_time_pattern,
+      ocr_purchased_at_role_patterns: { "reference" => /queued/ }
+    )
+
+    result = described_class.extract(fields: {}, lines: [ "queued 06:10", "オーダー時刻 07:36", "2026/09/01 08:00" ], profile: custom_profile)
+
+    expect(result[:purchased_at_evidence][:candidates].map { |entry| entry[:role] }).to eq(%w[reference unknown unknown])
+  end
+
+  it "同じ座標でも別pageのclockを結ばない" do
+    lines = [ "2026/09/01", "07:36" ]
+    response = layout(lines, positions: [ [ 0, 0, 10 ], [ 12, 0, 4 ] ])
+    response["pages"] << { "lines" => [ response["pages"].first["lines"].pop ] }
+
+    result = described_class.extract(fields: {}, lines:, profile:, analyze_result: response)
+
+    expect(result[:purchased_at_evidence][:candidates]).not_to include(include(precision: "datetime"))
+  end
+
+  it "間に別の印字がある同一rowを日時の一組へまとめない" do
+    lines = [ "2026/09/01", "参考", "07:36" ]
+    response = layout(lines, positions: [ [ 0, 0, 10 ], [ 11, 0, 4 ], [ 16, 0, 4 ] ])
+
+    result = described_class.extract(fields: {}, lines:, profile:, analyze_result: response)
+
+    expect(result[:purchased_at_evidence][:candidates]).not_to include(include(precision: "datetime"))
+  end
+
+  it "二桁年はexactなfield spanとproviderの四桁年が一致する場合だけ正規化する" do
+    lines = [ "26/09/01 07:36 No12" ]
+    response = layout(lines)
+    fields = {
+      "TransactionDate" => { "valueDate" => "2026-09-01", "spans" => [ { "offset" => 0, "length" => 8 } ] },
+      "TransactionTime" => { "valueTime" => "07:36:00", "spans" => [ { "offset" => 9, "length" => 5 } ] }
+    }
+
+    result = described_class.extract(fields:, lines:, profile:, analyze_result: response)
+
+    aggregate_failures do
+      expect(result[:purchased_at_text]).to eq("2026-09-01 07:36")
+      expect(result[:purchased_at_evidence][:complete]).to be(true)
+      expect(result[:purchased_at_evidence][:candidates]).to contain_exactly(
+        include(date: "2026-09-01", time: "07:36", precision: "datetime", source_path: "pages[0].lines[0]")
+      )
+    end
+  end
+
+  it "二桁年の世紀を現在年や固定pivotから補わない" do
+    lines = [ "26/09/01 07:36" ]
+
+    result = described_class.extract(fields: {}, lines:, profile:, analyze_result: layout(lines))
+
+    aggregate_failures do
+      expect(result[:purchased_at_text]).to be_nil
+      expect(result[:purchased_at_evidence][:complete]).to be(false)
+    end
+  end
+
+  it "四桁年のprovider値に対して固定の二十一世紀を上書きしない" do
+    lines = [ "26/09/01 07:36" ]
+    fields = {
+      "TransactionDate" => { "valueDate" => "1926-09-01", "spans" => [ { "offset" => 0, "length" => 8 } ] }
+    }
+
+    result = described_class.extract(fields:, lines:, profile:, analyze_result: layout(lines))
+
+    expect(result[:purchased_at_text]).to eq("1926-09-01 07:36")
+  end
+
+  it "二桁年の日付と異なるprovider値やfield spanを正規化に使わない" do
+    lines = [ "26/09/01 07:36" ]
+    response = layout(lines)
+    fields = {
+      "TransactionDate" => { "valueDate" => "2025-09-01", "spans" => [ { "offset" => 0, "length" => 8 } ] }
+    }
+
+    result = described_class.extract(fields:, lines:, profile:, analyze_result: response)
+
+    aggregate_failures do
+      expect(result[:purchased_at_text]).to be_nil
+      expect(result[:purchased_at_evidence][:complete]).to be(false)
+    end
+  end
+
+  it "二桁年をfield span欠損・別位置・別月日から復元しない" do
+    lines = [ "26/09/01 07:36" ]
+    invalid_fields = [
+      { "valueDate" => "2026-09-01" },
+      { "valueDate" => "2026-09-01", "spans" => [ { "offset" => 9, "length" => 5 } ] },
+      { "valueDate" => "2026-09-02", "spans" => [ { "offset" => 0, "length" => 8 } ] }
+    ]
+
+    invalid_fields.each do |field|
+      result = described_class.extract(fields: { "TransactionDate" => field }, lines:, profile:, analyze_result: layout(lines))
+
+      aggregate_failures do
+        expect(result[:purchased_at_text]).to be_nil
+        expect(result[:purchased_at_evidence][:complete]).to be(false)
+      end
+    end
+  end
+
+  it "二桁年のprovider値があってもprofileの未対応表記は有効化しない" do
+    custom_profile = double(
+      "receipt analysis profile",
+      ocr_purchased_at_date_patterns: [ /\d{4}年\d{1,2}月\d{1,2}日/ ],
+      ocr_purchased_at_time_pattern: profile.ocr_purchased_at_time_pattern,
+      ocr_purchased_at_role_patterns: {}
+    )
+    lines = [ "26/09/01 07:36" ]
+    fields = {
+      "TransactionDate" => { "valueDate" => "2026-09-01", "spans" => [ { "offset" => 0, "length" => 8 } ] }
+    }
+
+    result = described_class.extract(fields:, lines:, profile: custom_profile, analyze_result: layout(lines))
+
+    aggregate_failures do
+      expect(result[:purchased_at_text]).to be_nil
+      expect(result[:purchased_at_evidence][:complete]).to be(false)
+    end
+  end
 end

@@ -4,8 +4,7 @@ module Ai
     OPERATION_ENV_KEY = ProductionEnvValidator::AI_ENABLED_ENV_KEY
     PROVIDER_CONFIG = {
       "openai" => {
-        api_key_env: "OPENAI_API_KEY",
-        model_env: "OPENAI_AI_MODEL"
+        api_key_env: "OPENAI_API_KEY"
       }
     }.freeze
 
@@ -61,7 +60,7 @@ module Ai
       return false if config.blank?
 
       required_env_present?(config[:api_key_env]) &&
-        required_env_present?(config[:model_env]) &&
+        ExternalServices.openai_model_name.present? &&
         provider_implemented?(normalized_provider)
     end
 

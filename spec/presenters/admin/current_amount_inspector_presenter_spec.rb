@@ -106,6 +106,22 @@ RSpec.describe Admin::CurrentAmountInspectorPresenter do
     expect(presenter.omitted?).to be(true)
   end
 
+  it "preserves known printed tax basis codes and omits unknown values" do
+    profile["amount_engine"]["selected_candidate"]["evidence"] = [
+      { "source" => "receipt_tax_detail", "printed_amount_basis" => "gross_target" },
+      { "source" => "receipt_tax_detail", "printed_amount_basis" => "net_subtotal" },
+      { "source" => "receipt_tax_detail", "printed_amount_basis" => "PRIVATE_BASIS" }
+    ]
+
+    expect(presenter.evidence).to eq([
+      { "source" => "receipt_tax_detail", "printed_amount_basis" => "gross_target" },
+      { "source" => "receipt_tax_detail", "printed_amount_basis" => "net_subtotal" },
+      { "source" => "receipt_tax_detail" }
+    ])
+    expect(presenter.data.to_json).not_to include("PRIVATE_BASIS")
+    expect(presenter.omitted?).to be(true)
+  end
+
   it "refuses incompatible encodings and control characters without raising or dumping values" do
     [ "12".encode(Encoding::UTF_16BE), "\xFF".force_encoding(Encoding::UTF_8), "12\u0000", "12\n" ].each do |invalid|
       profile["amount_engine"]["selected_candidate"]["subtotal"] = invalid

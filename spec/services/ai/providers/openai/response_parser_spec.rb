@@ -154,6 +154,7 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
         {
           'id' => 'resp_456',
           'model' => 'gpt-test',
+          'status' => 'completed',
           'output' => [
             {
               'content' => [
@@ -193,8 +194,187 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
         expect(Ai::ResponseParser).to have_received(:parse).with(
           expected_payload,
           provider: provider,
-          meta: { provider: 'openai', response_id: 'resp_456', model: 'gpt-test' }
+          meta: {
+            provider: 'openai',
+            response_id: 'resp_456',
+            model: 'gpt-test',
+            metrics: { response_id: 'resp_456', model: 'gpt-test', response_status: 'completed' }
+          }
         )
+      end
+    end
+
+    context 'Responses APIのenvelopeの場合' do
+      let(:payload) do
+        {
+          'is_receipt' => true,
+          'document_type' => 'receipt',
+          'rejection_reason' => nil,
+          'store' => {},
+          'purchase' => {},
+          'payment' => {},
+          'items' => [],
+          'receipt_adjustments' => [],
+          'needs_review' => false,
+          'review_reasons' => []
+        }
+      end
+      let(:response) do
+        {
+          'object' => 'response',
+          'model' => 'gpt-returned',
+          'status' => 'completed',
+          'usage' => {
+            'input_tokens' => 10,
+            'input_tokens_details' => { 'cached_tokens' => 4 },
+            'output_tokens' => 20,
+            'output_tokens_details' => { 'reasoning_tokens' => 8 },
+            'total_tokens' => 30
+          },
+          Ai::ProviderMetrics::METADATA_KEY => {
+            requested_model: 'gpt-requested',
+            reasoning_effort: 'high',
+            provider_status: '200',
+            raw_response: 'private response'
+          },
+          'output' => [
+            {
+              'type' => 'message',
+              'content' => [ { 'type' => 'output_text', 'text' => payload.to_json } ]
+            }
+          ]
+        }
+      end
+      let(:safe_metrics) do
+        {
+          model: 'gpt-returned',
+          requested_model: 'gpt-requested',
+          reasoning_effort: 'high',
+          provider_status: '200',
+          response_status: 'completed',
+          token_usage: { input_tokens: 10, cached_input_tokens: 4, output_tokens: 20, reasoning_tokens: 8, total_tokens: 30 }
+        }
+      end
+
+      it 'completedのJSONだけを採用しsafe metricsを保持する' do
+        response['output'].unshift('type' => 'reasoning', 'summary' => [ { 'text' => 'private reasoning' } ])
+
+        result = described_class.parse(response, provider_response: true)
+
+        aggregate_failures do
+          expect(result[:success]).to be(true)
+          expect(result.dig(:meta, :metrics)).to eq(safe_metrics)
+          expect(result.to_s).not_to include('private reasoning', 'private response')
+        end
+      end
+
+      %w[incomplete failed cancelled queued in_progress unknown].each do |status|
+        it "#{status} の有効JSONも採用せずretry不可にする" do
+          response['status'] = status
+          response['incomplete_details'] = { 'reason' => 'max_output_tokens' } if status == 'incomplete'
+          allow(Ai::ResponseParser).to receive(:parse)
+
+          expect do
+            described_class.parse(response, provider_response: true)
+          end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+            aggregate_failures do
+              expect(error.error_code).to eq('ai_invalid_response')
+              expect(error.retryable?).to be(false)
+              expect(error.fallbackable?).to be(false)
+              expect(error.metrics[:token_usage]).to eq(safe_metrics[:token_usage])
+              expect(error.metrics[:response_status]).to eq(status == 'unknown' ? nil : status)
+              expect(error.metrics[:incomplete_reason]).to eq(status == 'incomplete' ? 'max_output_tokens' : nil)
+            end
+          }
+          expect(Ai::ResponseParser).not_to have_received(:parse)
+        end
+      end
+
+      it 'API envelopeのstatus欠損を内部helper扱いせず拒否する' do
+        response.delete('status')
+
+        expect { described_class.parse(response) }.to raise_error(Ai::Errors::InvalidResponseError)
+      end
+
+      it 'HTTP応答のoutput_text helper形でもstatus欠損を拒否する' do
+        response = { 'output_text' => payload.to_json }
+
+        expect { described_class.parse(response, provider_response: true) }.to raise_error(Ai::Errors::InvalidResponseError)
+      end
+
+      it 'HTTP応答の正規化済みHash形でもstatus欠損を拒否する' do
+        expect { described_class.parse(payload, provider_response: true) }.to raise_error(Ai::Errors::InvalidResponseError)
+      end
+
+      it 'HTTP応答の正規化済みHashにcompletedがあってもhelperとして採用しない' do
+        response = payload.merge('status' => 'completed')
+
+        expect { described_class.parse(response, provider_response: true) }.to raise_error(Ai::Errors::InvalidResponseError)
+      end
+
+      it 'completedのAPI envelopeに出力がなければ直下のstoreを採用しない' do
+        response.merge!(payload)
+        response['output'] = []
+
+        expect do
+          described_class.parse(response)
+        end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+          aggregate_failures do
+            expect(error.error_code).to eq('ai_invalid_response')
+            expect(error.retryable?).to be(false)
+            expect(error.fallbackable?).to be(false)
+            expect(error.metrics).to include(safe_metrics)
+          end
+        }
+      end
+
+      it 'JSON文字列とrefusalが混在しても採用しない' do
+        response['output_text'] = payload.to_json
+        response['output'].first['content'] << { 'type' => 'refusal', 'refusal' => 'private refusal' }
+
+        expect do
+          described_class.parse(response, provider_response: true)
+        end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+          aggregate_failures do
+            expect(error.error_code).to eq('ai_invalid_response')
+            expect(error.retryable?).to be(false)
+            expect(error.fallbackable?).to be(false)
+            expect(error.metrics).to include(safe_metrics)
+            expect(error.metrics.to_s).not_to include('private refusal', 'private response')
+          end
+        }
+      end
+
+      it 'reasoning項目のtextをJSON payloadとして採用しない' do
+        response['output'] = [ { 'type' => 'reasoning', 'content' => [ { 'type' => 'reasoning_text', 'text' => payload.to_json } ] } ]
+
+        expect { described_class.parse(response, provider_response: true) }.to raise_error(Ai::Errors::InvalidResponseError)
+      end
+
+      it '不正JSONでもusageと要求設定を失わない' do
+        response['output'].first['content'].first['text'] = '{invalid-json}'
+
+        expect do
+          described_class.parse(response, provider_response: true)
+        end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+          expect(error.metrics).to include(safe_metrics)
+        }
+      end
+
+      it 'domain parse errorの分類とretry不可をsafe metrics付きで維持する' do
+        response['output'].first['content'].first['text'] = payload.except('items').to_json
+
+        expect do
+          described_class.parse(response, provider_response: true)
+        end.to raise_error(Ai::Errors::ProviderError) { |error|
+          aggregate_failures do
+            expect(error.class).to eq(Ai::Errors::ProviderError)
+            expect(error.error_code).to eq('analysis_missing_keys')
+            expect(error.retryable?).to be(false)
+            expect(error.fallbackable?).to be(false)
+            expect(error.metrics).to include(safe_metrics)
+          end
+        }
       end
     end
 

@@ -246,6 +246,26 @@ module SystemSettings
         max: 20
       ),
       Definition.new(
+        key: "external_services.ai.reasoning_effort",
+        category: "external_service_tuning",
+        value_type: "enum",
+        default: "low",
+        editable: true,
+        risk_level: "high",
+        allowed_values: %w[none low medium high xhigh max],
+        requires_confirmation: true
+      ),
+      Definition.new(
+        key: "external_services.ai.name_completion_reasoning_effort",
+        category: "external_service_tuning",
+        value_type: "enum",
+        default: "high",
+        editable: true,
+        risk_level: "high",
+        allowed_values: %w[none low medium high xhigh max],
+        requires_confirmation: true
+      ),
+      Definition.new(
         key: "external_services.ai.open_timeout_seconds",
         category: "external_service_tuning",
         value_type: "integer",
@@ -259,7 +279,7 @@ module SystemSettings
         key: "external_services.ai.read_timeout_seconds",
         category: "external_service_tuning",
         value_type: "integer",
-        default: 120,
+        default: 300,
         editable: true,
         risk_level: "high",
         min: 15,
@@ -269,11 +289,11 @@ module SystemSettings
         key: "external_services.ai.max_elapsed_seconds",
         category: "external_service_tuning",
         value_type: "integer",
-        default: 600,
+        default: 1200,
         editable: true,
         risk_level: "high",
         min: 60,
-        max: 1200
+        max: 3600
       ),
       Definition.new(
         key: "external_services.ai.max_retries",

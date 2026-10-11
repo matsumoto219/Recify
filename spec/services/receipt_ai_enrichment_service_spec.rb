@@ -322,6 +322,42 @@ RSpec.describe ReceiptAiEnrichmentService do
         end
       end
 
+      it 'AI parse失敗でもsafe metricsを失敗結果へ保持する' do
+        error = Ai::Errors::InvalidResponseError.new(
+          provider: 'openai',
+          metrics: {
+            model: 'gpt-returned',
+            requested_model: 'gpt-requested',
+            reasoning_effort: 'high',
+            response_status: 'incomplete',
+            incomplete_reason: 'max_output_tokens',
+            token_usage: { output_tokens: 20, reasoning_tokens: 8 },
+            raw_response: 'private response',
+            reasoning: 'private reasoning'
+          }
+        )
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
+        allow(client).to receive(:call).with({ filtered_content: 'test' }).and_raise(error)
+
+        result = described_class.call(valid_ocr_result)
+
+        aggregate_failures do
+          expect(result[:success]).to be(false)
+          expect(result[:error_code]).to eq('ai_invalid_response')
+          expect(result[:needs_review]).to be(true)
+          expect(result.dig(:meta, :metrics)).to eq(
+            provider: 'openai',
+            model: 'gpt-returned',
+            requested_model: 'gpt-requested',
+            reasoning_effort: 'high',
+            response_status: 'incomplete',
+            incomplete_reason: 'max_output_tokens',
+            token_usage: { output_tokens: 20, reasoning_tokens: 8 }
+          )
+          expect(result.to_s).not_to include('private response', 'private reasoning')
+        end
+      end
+
       it 'AIがnot receiptと正常判定した場合はfailureを記録しない' do
         not_receipt_result = {
           success: false,

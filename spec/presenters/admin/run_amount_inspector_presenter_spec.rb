@@ -29,6 +29,18 @@ RSpec.describe Admin::RunAmountInspectorPresenter do
     end
   end
 
+  it "印字税額のbasisをCurrentと同じ元コードで表示する" do
+    snapshot = run_amount_snapshot
+    evidence = snapshot["engine"]["amount_engine"]["selected_candidate"]["evidence"]
+    evidence[0]["printed_amount_basis"] = "gross_target"
+    presenter = described_class.new(snapshot)
+
+    expect(presenter.state).to eq(:available)
+    expect(presenter.evidence.first["printed_amount_basis"]).to eq("gross_target")
+    expect(presenter.rows(presenter.evidence.first)).to include([ "printed_amount_basis", "gross_target" ])
+    expect(presenter.omitted?).to be(false)
+  end
+
   it "保存時の上限を保持し現在設定を参照しない" do
     expect(SystemSettings).not_to receive(:limit_for)
     expect(SystemSettings).not_to receive(:limits_for)
