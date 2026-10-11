@@ -561,7 +561,7 @@ RSpec.describe 'Admin system settings', type: :request do
         expect(response.body).to include('external_services.ai.read_timeout_seconds')
         expect(response.body).to include('external_service_tuning')
         expect(response.body).to include('high')
-        expect(response.body).to include('120')
+        expect(response.body).to include('300')
         expect(response.body).to include('900')
         expect(note.text).to include('次の解析から変更')
         expect(note.text).to include('API費用やworker占有時間')
@@ -585,7 +585,7 @@ RSpec.describe 'Admin system settings', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(input['inputmode']).to eq('numeric')
-        expect(hint.text).to include('15', '900', '120', 'アプリ既定値')
+        expect(hint.text).to include('15', '900', '300', 'アプリ既定値')
         expect(response.body).not_to include('>default<')
       end
     end
@@ -1395,7 +1395,7 @@ RSpec.describe 'Admin system settings', type: :request do
       expect {
         patch admin_system_setting_path('external_services.ai.max_elapsed_seconds'),
               params: {
-                value: '1200',
+                value: '3600',
                 reason: 'allow long product name completion',
                 confirm: '1'
               },
@@ -1407,15 +1407,15 @@ RSpec.describe 'Admin system settings', type: :request do
 
       aggregate_failures do
         expect(response).to redirect_to(admin_system_setting_path('external_services.ai.max_elapsed_seconds'))
-        expect(setting.value).to eq('value' => 1200)
+        expect(setting.value).to eq('value' => 3600)
         expect(audit_log).to have_attributes(
           action: 'system_settings.update',
           outcome: 'succeeded',
           target_uid: 'external_services.ai.max_elapsed_seconds',
           reason: 'allow long product name completion'
         )
-        expect(audit_log.before_state).to eq('value' => 600, 'source' => 'default')
-        expect(audit_log.after_state).to eq('value' => 1200, 'source' => 'db')
+        expect(audit_log.before_state).to eq('value' => 1200, 'source' => 'default')
+        expect(audit_log.after_state).to eq('value' => 3600, 'source' => 'db')
         expect(audit_log.metadata).to include(
           'category' => 'external_service_tuning',
           'risk_level' => 'high',
@@ -1432,7 +1432,7 @@ RSpec.describe 'Admin system settings', type: :request do
       expect {
         patch admin_system_setting_path('external_services.ai.read_timeout_seconds'),
               params: {
-                value: '300',
+                value: '450',
                 reason: 'extend AI read timeout',
                 confirm: '1'
               }
@@ -1442,8 +1442,8 @@ RSpec.describe 'Admin system settings', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include('最大処理時間を950秒以上')
-        expect(document.at_css('input[name="value"]')['value']).to eq('300')
+        expect(response.body).to include('最大処理時間を1400秒以上')
+        expect(document.at_css('input[name="value"]')['value']).to eq('450')
         expect(document.at_css('textarea[name="reason"]').text.strip).to eq('extend AI read timeout')
         expect(document.at_css('input[name="confirm"][type="checkbox"]')['checked']).to eq('checked')
         expect(SystemSetting.find_by(key: 'external_services.ai.read_timeout_seconds')).to be_nil

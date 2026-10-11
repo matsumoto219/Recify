@@ -14,12 +14,12 @@ RSpec.describe Receipts::Processing::Runs::RuntimeConfigSnapshot do
     create(
       :system_setting,
       key: "external_services.ai.max_elapsed_seconds",
-      value: SystemSettings.stored_value(1200)
+      value: SystemSettings.stored_value(1800)
     )
     create(
       :system_setting,
       key: "external_services.ai.read_timeout_seconds",
-      value: SystemSettings.stored_value(300)
+      value: SystemSettings.stored_value(450)
     )
     create(:system_setting, key: "external_services.ai.reasoning_effort", value: SystemSettings.stored_value("medium"))
     create(:system_setting, key: "external_services.ai.name_completion_reasoning_effort", value: SystemSettings.stored_value("xhigh"))
@@ -28,7 +28,7 @@ RSpec.describe Receipts::Processing::Runs::RuntimeConfigSnapshot do
     snapshot = Receipts::Processing::Runs.external_service_runtime_config(started_run.reload)
 
     aggregate_failures do
-      expect(snapshot.ai.read_timeout_seconds).to eq(120)
+      expect(snapshot.ai).to have_attributes(read_timeout_seconds: 300, max_elapsed_seconds: 1200, max_retries: 2)
       expect(snapshot.ai).to have_attributes(model: "gpt-6-luna", reasoning_effort: "low", name_completion_reasoning_effort: "high")
       expect(started_run.metadata.fetch("external_service_runtime_config"))
         .to eq(snapshot.serializable_hash)
@@ -38,26 +38,21 @@ RSpec.describe Receipts::Processing::Runs::RuntimeConfigSnapshot do
     end
   end
 
-  it "新しいrunでは最新の設定を取得する" do
+  it "旧timeoutで作ったrunのretryは固定値を維持し新しいrunだけ現在の既定値を取得する" do
+    read_timeout = create(:system_setting, key: "external_services.ai.read_timeout_seconds", value: SystemSettings.stored_value(120))
+    elapsed = create(:system_setting, key: "external_services.ai.max_elapsed_seconds", value: SystemSettings.stored_value(600))
     first_run = Receipts::Processing::Runs.start(receipt:, source: "upload").run
     first_snapshot = Receipts::Processing::Runs.external_service_runtime_config(first_run)
-    create(
-      :system_setting,
-      key: "external_services.ai.max_elapsed_seconds",
-      value: SystemSettings.stored_value(1200)
-    )
-    create(
-      :system_setting,
-      key: "external_services.ai.read_timeout_seconds",
-      value: SystemSettings.stored_value(300)
-    )
+    elapsed.destroy!
+    read_timeout.destroy!
     next_run = Receipts::Processing::Runs.start(receipt: create(:receipt), source: "upload").run
 
     second_snapshot = Receipts::Processing::Runs.external_service_runtime_config(next_run)
 
     aggregate_failures do
-      expect(first_snapshot.ai.read_timeout_seconds).to eq(120)
-      expect(second_snapshot.ai.read_timeout_seconds).to eq(300)
+      expect(first_snapshot.ai).to have_attributes(read_timeout_seconds: 120, max_elapsed_seconds: 600, max_retries: 2)
+      expect(Receipts::Processing::Runs.external_service_runtime_config(first_run.reload)).to eq(first_snapshot)
+      expect(second_snapshot.ai).to have_attributes(read_timeout_seconds: 300, max_elapsed_seconds: 1200, max_retries: 2)
     end
   end
 
@@ -83,6 +78,7 @@ RSpec.describe Receipts::Processing::Runs::RuntimeConfigSnapshot do
 
   it "旧timing snapshotは15値と起点を変えず不足するAI設定だけ一度固定する" do
     stored = ExternalServices.runtime_config_snapshot.serializable_hash
+    stored.fetch("ai").merge!("read_timeout_seconds" => 120, "max_elapsed_seconds" => 600)
     stored.delete("ai_execution_config_version")
     stored.fetch("ai").except!("model", "reasoning_effort", "name_completion_reasoning_effort")
     run.update!(metadata: {

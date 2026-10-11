@@ -61,6 +61,18 @@ RSpec.describe Ai::FallbackDecision do
       end
     end
 
+    it '再送不可のtimeoutは別providerへもfallbackしない' do
+      error = Ai::Errors::TimeoutError.new(message: 'timeout', retryable: false, fallbackable: false)
+
+      decision = described_class.call(error: error, provider: 'openai', fallback_provider: 'fallback_ai')
+
+      aggregate_failures do
+        expect(decision).to be_fail
+        expect(decision).not_to be_fallbackable
+        expect(decision.reason).to eq('ai_timeout')
+      end
+    end
+
     it 'ProviderErrorのfallbackable flagを利用できる' do
       error = Ai::Errors::ProviderError.new(
         message: 'overloaded',

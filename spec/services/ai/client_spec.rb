@@ -36,6 +36,49 @@ RSpec.describe Ai::Client do
   end
 
   describe '#call' do
+    context 'provider全体の時間予算へ到達した場合' do
+      let(:fallback_provider) { nil }
+      let(:runtime_config) do
+        ExternalServices.runtime_config_snapshot.ai.with(
+          model: 'gpt-frozen', reasoning_effort: 'low', name_completion_reasoning_effort: 'high'
+        )
+      end
+
+      [ false, true ].each do |name_completion_enabled|
+        it "商品名補完#{name_completion_enabled ? 'ON' : 'OFF'}の要求条件を保持し使用modelやusageを推測しない" do
+          configured_input = input.merge(meta: { ai_name_completion_enabled: name_completion_enabled })
+          allow(Timeout).to receive(:timeout).and_raise(Timeout::Error)
+          allow(primary_client).to receive(:call)
+
+          expect do
+            client.call(configured_input)
+          end.to raise_error(Ai::Errors::TimeoutError) { |error|
+            aggregate_failures do
+              expect(error.error_code).to eq('ai_timeout')
+              expect(error).not_to be_fallbackable
+              expect(error.metrics).to include(
+                requested_model: 'gpt-frozen',
+                reasoning_effort: name_completion_enabled ? 'high' : 'low',
+                retry_count: 0
+              )
+              expect(error.metrics).not_to include(:model, :token_usage, :response_id)
+              expect(primary_client).not_to have_received(:call)
+            end
+          }
+        end
+      end
+
+      it '不正なmetaでも要求metricsの組立て自体は例外を起こさない' do
+        allow(Timeout).to receive(:timeout).and_raise(Timeout::Error)
+
+        expect do
+          client.call(input.merge(meta: []))
+        end.to raise_error(Ai::Errors::TimeoutError) { |error|
+          expect(error.metrics).to include(requested_model: 'gpt-frozen', reasoning_effort: 'low')
+        }
+      end
+    end
+
     context 'primary provider が成功する場合' do
       let(:primary_result) do
         {

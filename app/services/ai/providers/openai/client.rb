@@ -36,6 +36,8 @@ module Ai
             message: e.message,
             provider: PROVIDER_NAME,
             cause: e,
+            retryable: e.is_a?(Net::OpenTimeout),
+            fallbackable: e.is_a?(Net::OpenTimeout),
             metrics: error_metrics(provider_status: "timeout", request_body: body)
           )
         rescue Ai::Errors::ProviderError => e

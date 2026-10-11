@@ -232,7 +232,7 @@ RSpec.describe Ai::Providers::Openai::Client do
       ) do
         aggregate_failures do
           expect(client.send(:open_timeout)).to eq(10)
-          expect(client.send(:read_timeout)).to eq(120)
+          expect(client.send(:read_timeout)).to eq(300)
           expect(client.send(:max_retries)).to eq(2)
           expect(client.send(:base_retry_delay)).to eq(1.0)
           expect(client.send(:max_retry_delay)).to eq(10.0)
@@ -659,13 +659,70 @@ RSpec.describe Ai::Providers::Openai::Client do
       }
     end
 
-    it 'HTTP timeoutでも要求したmodelとeffortを保持する' do
+    it '応答待ちtimeoutはexecutorでも再送せず要求したmodelとeffortを保持する' do
       allow(http).to receive(:request).with(request).and_raise(Net::ReadTimeout.new('timeout'))
+      executor = Ai::ProviderExecutor.new(provider_client: client, provider_name: 'openai')
+      allow(executor).to receive(:sleep)
 
       expect do
-        client.call(input)
+        executor.call(input)
       end.to raise_error(Ai::Errors::TimeoutError) { |error|
-        expect(error.metrics).to include(requested_model: 'gpt-test', reasoning_effort: 'low', provider_status: 'timeout')
+        aggregate_failures do
+          expect(error).not_to be_retryable
+          expect(error).not_to be_fallbackable
+          expect(error.metrics).to include(requested_model: 'gpt-test', reasoning_effort: 'low', provider_status: 'timeout', retry_count: 0)
+          expect(error.metrics).not_to include(:token_usage, :response_id)
+          expect(http).to have_received(:request).once
+          expect(executor).not_to have_received(:sleep)
+        end
+      }
+    end
+
+    it '応答待ちtimeoutは別providerへ再送せず既存review用の失敗結果へ渡す' do
+      fallback_client = instance_double('FallbackProviderClient')
+      callback = instance_double(Proc)
+      allow(fallback_client).to receive(:call)
+      allow(callback).to receive(:call)
+      allow(Ai::ProviderRegistry).to receive(:fetch).with(:openai, runtime_config: runtime_config).and_return(client)
+      allow(Ai::ProviderRegistry).to receive(:fetch).with(:fallback_ai, runtime_config: runtime_config).and_return(fallback_client)
+      allow(http).to receive(:request).with(request).and_raise(Net::ReadTimeout.new('prompt=private-value'))
+      ai_client = Ai::Client.new(primary_provider: :openai, fallback_provider: :fallback_ai, runtime_config: runtime_config)
+      ocr_result = { success: true, lines: [], candidates: {} }
+      allow(Ai::PromptBuilder).to receive(:build).and_return(input)
+      allow(ExternalServices).to receive(:mark_failure!)
+
+      result = ReceiptAiEnrichmentService.new(ocr_result, client: ai_client, before_provider_call: callback).call
+
+      aggregate_failures do
+        expect(result[:success]).to be(false)
+        expect(result[:error_code]).to eq('ai_timeout')
+        expect(result[:needs_review]).to be(true)
+        expect(result[:review_reasons]).to eq([ 'ai_timeout' ])
+        expect(result.dig(:meta, :metrics)).to include(requested_model: 'gpt-test', reasoning_effort: 'low', retry_count: 0)
+        expect(result.dig(:meta, :final_error_detail)).to include(service: 'ai', provider: 'openai', model: 'gpt-test')
+        expect(http).to have_received(:request).once
+        expect(callback).to have_received(:call).once
+        expect(fallback_client).not_to have_received(:call)
+        expect(result.to_s).not_to include('private-value')
+        expect(ExternalServices).to have_received(:mark_failure!).with(:ai, error_code: 'ai_timeout', detail: anything)
+      end
+    end
+
+    it '接続前timeoutは既存retry上限まで再試行できる' do
+      allow(http).to receive(:request).with(request).and_raise(Net::OpenTimeout.new('timeout'))
+      executor = Ai::ProviderExecutor.new(provider_client: client, provider_name: 'openai')
+      allow(executor).to receive(:sleep)
+
+      expect do
+        executor.call(input)
+      end.to raise_error(Ai::Errors::TimeoutError) { |error|
+        aggregate_failures do
+          expect(error).to be_retryable
+          expect(error).to be_fallbackable
+          expect(error.metrics).to include(requested_model: 'gpt-test', reasoning_effort: 'low', retry_count: 2)
+          expect(http).to have_received(:request).exactly(3).times
+          expect(executor).to have_received(:sleep).twice
+        end
       }
     end
 

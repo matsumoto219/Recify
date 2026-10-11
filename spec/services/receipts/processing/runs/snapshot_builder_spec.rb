@@ -14,6 +14,79 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     expect(snapshot.to_json).not_to include('not retained')
   end
 
+  describe 'AI model identifiers' do
+    before do
+      allow(described_class).to receive(:snapshot_string_max_bytes).and_return(100)
+    end
+
+    [ 150, 500 ].each do |length|
+      it "preserves #{length}-byte model identifiers without expanding other snapshot strings" do
+        model = 'model-' + ('x' * (length - 6))
+        requested_model = 'requested-' + ('y' * (length - 10))
+        result = {
+          success: true,
+          meta: {
+            model: model,
+            primary_error_detail: { service: 'ai', provider: 'openai', model: model },
+            fallback_error_detail: { service: 'ai', provider: 'openai', model: model },
+            final_error_detail: { service: 'ai', provider: 'openai', model: model },
+            metrics: {
+              model: model, requested_model: requested_model, reasoning_effort: 'high',
+              provider_message: 'm' * 150, prompt: 'not retained'
+            }
+          }
+        }
+
+        summary = described_class.ai_result_summary(result)
+        normalized = described_class.ai_normalized_result_snapshot(result)
+
+        aggregate_failures do
+          [ summary, normalized.fetch('meta') ].each do |metadata|
+            expect(metadata['model']).to eq(model)
+            expect(metadata.fetch('metrics')).to include(
+              'model' => model, 'requested_model' => requested_model, 'reasoning_effort' => 'high'
+            )
+            expect(metadata.dig('metrics', 'provider_message').bytesize).to eq(100)
+            %w[primary_error_detail fallback_error_detail final_error_detail].each do |key|
+              expect(metadata.dig(key, 'model')).to eq(model)
+            end
+          end
+          expect(summary.to_json).not_to include('not retained')
+          expect(normalized.to_json).not_to include('not retained')
+        end
+      end
+    end
+
+    [ 'model-' + ('x' * 495), "model\ninvalid", 'sk-secret-token-value', { name: 'model' } ].each do |model|
+      it "omits an unsafe or oversized model as a whole (#{model.class}, #{model.to_s.bytesize} bytes)" do
+        result = { success: true, meta: { model: model, metrics: { model: model, requested_model: model, elapsed_ms: 12 } } }
+
+        summary = described_class.ai_result_summary(result)
+        normalized = described_class.ai_normalized_result_snapshot(result)
+
+        [ summary, normalized.fetch('meta') ].each do |metadata|
+          expect(metadata).not_to have_key('model')
+          expect(metadata.fetch('metrics')).to eq('elapsed_ms' => 12)
+        end
+      end
+    end
+
+    it 'revalidates stored error models without retaining unsafe identifiers or expanding messages' do
+      original = {
+        'schema_version' => described_class::AI_RESULT_SCHEMA_VERSION,
+        'final_error_detail' => {
+          'service' => 'ai', 'provider' => 'openai', 'model' => 'sk-secret-token-value',
+          'provider_message_safe' => 'm' * 150
+        }
+      }
+
+      copied = described_class.sanitized_stored_snapshot(original)
+
+      expect(copied.fetch('final_error_detail')).not_to have_key('model')
+      expect(copied.dig('final_error_detail', 'provider_message_safe').bytesize).to eq(100)
+    end
+  end
+
   it '支払の物理sourceだけをsnapshotへ保持し再試行で同額別印字を区別する' do
     original = {
       success: true, lines: [ '合計 864円', 'eGift適用 500円', 'eGift適用 500円', '釣銭 0円' ],

@@ -123,13 +123,13 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
     create(
       :system_setting,
       key: "external_services.ai.max_elapsed_seconds",
-      value: SystemSettings.stored_value(1200),
+      value: SystemSettings.stored_value(1800),
       updated_by_user: actor
     )
     create(
       :system_setting,
       key: "external_services.ai.read_timeout_seconds",
-      value: SystemSettings.stored_value(300),
+      value: SystemSettings.stored_value(450),
       updated_by_user: actor
     )
     allow(SystemSettings).to receive(:with_dependency_lock).and_call_original
@@ -146,7 +146,7 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
     aggregate_failures do
       expect(result).to be_failure
       expect(result.error_code).to eq("external_service_ai_elapsed_budget")
-      expect(SystemSetting.find_by!(key: "external_services.ai.max_elapsed_seconds").value).to eq("value" => 1200)
+      expect(SystemSetting.find_by!(key: "external_services.ai.max_elapsed_seconds").value).to eq("value" => 1800)
       expect(SystemSettings).to have_received(:with_dependency_lock)
         .with(key: "external_services.ai.max_elapsed_seconds")
     end
@@ -193,13 +193,13 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
     create(
       :system_setting,
       key: "external_services.ai.max_elapsed_seconds",
-      value: SystemSettings.stored_value(1200),
+      value: SystemSettings.stored_value(1800),
       updated_by_user: actor
     )
     create(
       :system_setting,
       key: "external_services.ai.read_timeout_seconds",
-      value: SystemSettings.stored_value(300),
+      value: SystemSettings.stored_value(450),
       updated_by_user: actor
     )
 
@@ -224,11 +224,11 @@ RSpec.describe SystemOperations::SystemSettingResetExecutor do
       expect(read_result).to be_success
       expect(elapsed_result).to be_success
       expect(SystemSettings.fetch("external_services.ai.read_timeout_seconds")).to have_attributes(
-        current_value: 120,
+        current_value: 300,
         source: "default"
       )
       expect(SystemSettings.fetch("external_services.ai.max_elapsed_seconds")).to have_attributes(
-        current_value: 600,
+        current_value: 1200,
         source: "default"
       )
     end

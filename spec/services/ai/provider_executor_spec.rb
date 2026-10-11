@@ -5,6 +5,7 @@ RSpec.describe Ai::ProviderExecutor do
   let(:backoff_policy) { Ai::BackoffPolicy.new(base_delay: 1.0, max_delay: 10.0, jitter: -> { 0.0 }) }
   let(:retry_policy) { Ai::RetryPolicy.new(max_retries: 2, backoff_policy: backoff_policy) }
   let(:input) { { filtered_content: 'sample receipt text' } }
+  let(:request_metrics) { { requested_model: 'gpt-test', reasoning_effort: 'high' } }
   let(:payload) do
     {
       success: true,
@@ -203,7 +204,8 @@ RSpec.describe Ai::ProviderExecutor do
         provider_client: provider_client,
         provider_name: :openai,
         retry_policy: retry_policy,
-        deadline: 10.0
+        deadline: 10.0,
+        request_metrics: request_metrics
       )
       allow(budget_executor).to receive(:monotonic_now).and_return(11.0)
       allow(provider_client).to receive(:call)
@@ -214,7 +216,9 @@ RSpec.describe Ai::ProviderExecutor do
         aggregate_failures do
           expect(error.error_code).to eq('ai_timeout')
           expect(error.retryable?).to eq(false)
-          expect(error.fallbackable?).to eq(true)
+          expect(error.fallbackable?).to eq(false)
+          expect(error.metrics).to include(request_metrics)
+          expect(error.metrics).not_to include(:model, :token_usage, :response_id)
           expect(provider_client).not_to have_received(:call)
         end
       }
@@ -225,7 +229,8 @@ RSpec.describe Ai::ProviderExecutor do
         provider_client: provider_client,
         provider_name: :openai,
         retry_policy: retry_policy,
-        deadline: 10.0
+        deadline: 10.0,
+        request_metrics: request_metrics
       )
       allow(budget_executor).to receive(:remaining_elapsed_seconds).and_return(0.5)
       allow(budget_executor).to receive(:sleep)
@@ -234,7 +239,8 @@ RSpec.describe Ai::ProviderExecutor do
           message: 'server error',
           error_code: 'ai_api_error',
           provider: 'openai',
-          retryable: true
+          retryable: true,
+          metrics: { provider_status: '503', request_id: 'req_retry', token_usage: { input_tokens: 12 } }
         )
       )
 
@@ -243,6 +249,13 @@ RSpec.describe Ai::ProviderExecutor do
       end.to raise_error(Ai::Errors::TimeoutError) { |error|
         aggregate_failures do
           expect(error.error_code).to eq('ai_timeout')
+          expect(error.metrics).to include(
+            **request_metrics,
+            provider_status: '503',
+            request_id: 'req_retry',
+            token_usage: { input_tokens: 12 },
+            retry_count: 0
+          )
           expect(provider_client).to have_received(:call).once
           expect(budget_executor).not_to have_received(:sleep)
         end
@@ -293,7 +306,8 @@ RSpec.describe Ai::ProviderExecutor do
         provider_client: provider_client,
         provider_name: :openai,
         retry_policy: retry_policy,
-        deadline: 10.0
+        deadline: 10.0,
+        request_metrics: request_metrics
       )
       allow(budget_executor).to receive(:monotonic_now).and_return(7.0)
       allow(provider_client).to receive(:call).with(input).and_return(provider_result)
@@ -305,8 +319,76 @@ RSpec.describe Ai::ProviderExecutor do
         aggregate_failures do
           expect(error.error_code).to eq('ai_timeout')
           expect(error.retryable?).to eq(false)
-          expect(error.fallbackable?).to eq(true)
+          expect(error.fallbackable?).to eq(false)
+          expect(error.metrics).to include(request_metrics)
+          expect(error.metrics).not_to include(:model, :token_usage, :response_id)
           expect(provider_client).not_to have_received(:call)
+        end
+      }
+    end
+
+    it '応答後の時間切れでも取得済みのsafe metricsを保持する' do
+      budget_executor = described_class.new(
+        provider_client: provider_client,
+        provider_name: :openai,
+        retry_policy: retry_policy,
+        deadline: 10.0,
+        request_metrics: request_metrics
+      )
+      allow(budget_executor).to receive(:remaining_elapsed_seconds).and_return(3.0, 3.0, 0.0)
+      allow(provider_client).to receive(:call).with(input).and_return(provider_result)
+
+      expect do
+        budget_executor.call(input)
+      end.to raise_error(Ai::Errors::TimeoutError) { |error|
+        aggregate_failures do
+          expect(error.metrics).to include(
+            **request_metrics,
+            model: 'gpt-test',
+            provider_status: '200',
+            response_id: 'resp_123'
+          )
+          expect(error.metrics).not_to include(:token_usage)
+          expect(provider_client).to have_received(:call).once
+        end
+      }
+    end
+
+    it '再試行中の時間切れへ前回応答のmodelやusageを混入しない' do
+      budget_executor = described_class.new(
+        provider_client: provider_client,
+        provider_name: :openai,
+        retry_policy: retry_policy,
+        deadline: 10.0,
+        request_metrics: request_metrics
+      )
+      allow(budget_executor).to receive(:remaining_elapsed_seconds).and_return(3.0)
+      allow(budget_executor).to receive(:sleep)
+      allow(provider_client).to receive(:call).with(input).and_raise(
+        Ai::Errors::ProviderError.new(
+          message: 'server error',
+          error_code: 'ai_api_error',
+          provider: 'openai',
+          retryable: true,
+          metrics: { model: 'previous-model', response_id: 'resp_previous', token_usage: { input_tokens: 12 } }
+        )
+      )
+      attempts = 0
+      allow(Timeout).to receive(:timeout).with(3.0) do |_remaining, &block|
+        attempts += 1
+        raise Timeout::Error if attempts == 2
+
+        block.call
+      end
+
+      expect do
+        budget_executor.call(input)
+      end.to raise_error(Ai::Errors::TimeoutError) { |error|
+        aggregate_failures do
+          expect(error.metrics).to include(**request_metrics, retry_count: 1, total_retry_sleep_ms: 1000)
+          expect(error.metrics).not_to include(:model, :token_usage, :response_id)
+          expect(provider_client).to have_received(:call).once
+          expect(budget_executor).to have_received(:sleep).with(1.0).once
         end
       }
     end

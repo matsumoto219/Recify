@@ -518,6 +518,44 @@ RSpec.describe Receipts::Processing::Runs do
       end
     end
 
+    it 'finalize retryは現在の文字列上限が小さくても親のAI model識別子を変更しない' do
+      builder = Receipts::Processing::Runs::SnapshotBuilder
+      model = 'model-' + ('x' * 144)
+      requested_model = 'requested-' + ('y' * 140)
+      result = {
+        success: true,
+        receipt_attributes: { currency_code: 'JPY' },
+        receipt_items_attributes: [ { suggested_name: '検証品', category_id: nil } ],
+        meta: {
+          model: model,
+          metrics: { model: model, requested_model: requested_model, reasoning_effort: 'high' },
+          final_error_detail: { service: 'ai', provider: 'openai', model: model }
+        }
+      }
+      parent_run = create(
+        :receipt_analysis_run, :succeeded, receipt:,
+        ai_result_summary: builder.ai_result_summary(result),
+        ai_normalized_result_snapshot: builder.ai_normalized_result_snapshot(result)
+      )
+      parent_summary = parent_run.ai_result_summary.deep_dup
+      retry_run = create(:receipt_analysis_run, receipt:, parent_run: parent_run, attempt_number: 2)
+      allow(builder).to receive(:snapshot_string_max_bytes).and_return(100)
+
+      described_class.copy_retry_snapshots(retry_run, parent_run:, include_ai: true)
+      retry_run.reload
+
+      aggregate_failures do
+        expect(retry_run.ai_result_summary).to eq(parent_summary)
+        expect(parent_run.reload.ai_result_summary).to eq(parent_summary)
+        expect(retry_run.ai_normalized_result_snapshot.fetch('meta')).to include(
+          'model' => model,
+          'metrics' => { 'model' => model, 'requested_model' => requested_model, 'reasoning_effort' => 'high' }
+        )
+        expect(retry_run.ai_normalized_result_snapshot.dig('meta', 'final_error_detail', 'model')).to eq(model)
+        expect(retry_run.ai_input_snapshot).to be_blank
+      end
+    end
+
     it 'typed adoption proposalをretry snapshotへexactにコピーして再sanitizeする' do
       snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(
         ocr_fixture('ocr_azure_measurement_line_group_destination_anonymized')

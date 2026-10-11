@@ -43,8 +43,8 @@ RSpec.describe ExternalServices::RuntimeConfig do
         expect(snapshot.ocr).to be_frozen
         expect(snapshot.ai).to have_attributes(
           open_timeout_seconds: 10,
-          read_timeout_seconds: 120,
-          max_elapsed_seconds: 600,
+          read_timeout_seconds: 300,
+          max_elapsed_seconds: 1200,
           max_retries: 2,
           base_retry_delay_seconds: 1.0,
           max_retry_delay_seconds: 10.0,
@@ -86,16 +86,30 @@ RSpec.describe ExternalServices::RuntimeConfig do
     it "DBに保存されたSystemSettingsを既定値より優先する" do
       create(
         :system_setting,
-        key: "external_services.ai.max_elapsed_seconds",
-        value: SystemSettings.stored_value(1200)
+        key: "external_services.ai.read_timeout_seconds",
+        value: SystemSettings.stored_value(120)
       )
       create(
         :system_setting,
-        key: "external_services.ai.read_timeout_seconds",
-        value: SystemSettings.stored_value(300)
+        key: "external_services.ai.max_elapsed_seconds",
+        value: SystemSettings.stored_value(600)
       )
 
-      expect(described_class.load.ai.read_timeout_seconds).to eq(300)
+      expect(described_class.load.ai).to have_attributes(read_timeout_seconds: 120, max_elapsed_seconds: 600, max_retries: 2)
+    end
+
+    it "新しいread既定値と旧elapsed overrideが混在しても保存値を自動補正しない" do
+      read_timeout = create(:system_setting, key: "external_services.ai.read_timeout_seconds", value: SystemSettings.stored_value(120))
+      elapsed = create(:system_setting, key: "external_services.ai.max_elapsed_seconds", value: SystemSettings.stored_value(600))
+      read_timeout.destroy!
+
+      snapshot = described_class.load
+
+      aggregate_failures do
+        expect(snapshot.ai).to have_attributes(read_timeout_seconds: 300, max_elapsed_seconds: 600, max_retries: 2)
+        expect(elapsed.reload.value).to eq("value" => 600)
+        expect(SystemSetting.find_by(key: "external_services.ai.read_timeout_seconds")).to be_nil
+      end
     end
   end
 
