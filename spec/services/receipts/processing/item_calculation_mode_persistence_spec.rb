@@ -334,10 +334,12 @@ RSpec.describe 'OCR item calculation mode persistence' do
     }
   end
 
-  def count_total_mismatch_ocr_result
+  def count_total_mismatch_ocr_result(item_indexes: nil)
     raw = JSON.parse(Rails.root.join('spec/fixtures/ocr/single_tax_receipt.json').read)
     analyze_result = raw.fetch('analyzeResult')
-    analyze_result.dig('documents', 0, 'fields', 'Items', 'valueArray').each do |item|
+    analyze_result.dig('documents', 0, 'fields', 'Items', 'valueArray').each_with_index do |item, index|
+      next if item_indexes && !item_indexes.include?(index)
+
       total = item.dig('valueObject', 'TotalPrice')
       amount = total.dig('valueCurrency', 'amount') + 1
       content = "¥#{amount}"
@@ -664,6 +666,47 @@ RSpec.describe 'OCR item calculation mode persistence' do
         )
       )
       expect(run.reload.status).to eq('succeeded')
+    end
+  end
+
+  it '計算方式reviewを別のconfirmed明細へ継承せず、AIの商品名reviewと各sourceを保存する' do
+    ocr_result = count_total_mismatch_ocr_result(item_indexes: [ 0 ])
+    normalized_ai_result = ai_result.merge(
+      needs_review: true,
+      review_reasons: [ 'item_name_uncertain' ],
+      meta: { ai_name_completion_enabled: false },
+      receipt_items_attributes: Array(ocr_result.dig(:candidates, :items)).each_with_index.map do |_item, index|
+        {
+          index: index,
+          category: 'other',
+          needs_review: index == 1,
+          review_reasons: []
+        }
+      end
+    )
+    receipt = create(:receipt, :processing, :with_image, country_region: 'JPN')
+    run = build_ready_run(receipt, ocr_result:, normalized_ai_result:, strategy: :ai_success)
+
+    result = Receipts::Processing.run_finalize(run)
+    items = receipt.reload.receipt_items.order(:position_index).to_a
+
+    aggregate_failures do
+      expect(result.next_step).to eq(:done)
+      expect(run.reload.status).to eq('succeeded')
+      expect(receipt).to have_attributes(status: 'review_needed', total_amount: 770)
+      expect(receipt.review_reasons).to include('item_name_uncertain', 'item_pricing_mode_uncertain')
+      expect(items.pluck(:pricing_source_kind)).to eq(
+        %w[explicit_line_total count_unit_price count_unit_price count_unit_price]
+      )
+      expect(items.pluck(:original_line_total, :line_total)).to eq(
+        [ 221, 132, 110, 308 ].map { |amount| [ amount, amount ] }
+      )
+      expect(items.first).to have_attributes(
+        needs_review: true,
+        review_reasons: [ 'item_pricing_mode_uncertain' ]
+      )
+      expect(items.second).to have_attributes(needs_review: true, review_reasons: [ 'item_name_uncertain' ])
+      expect(items.drop(2)).to all(have_attributes(needs_review: false, review_reasons: []))
     end
   end
 

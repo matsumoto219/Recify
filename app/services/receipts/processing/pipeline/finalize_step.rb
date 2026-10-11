@@ -23,11 +23,10 @@ class Receipts::Processing::Pipeline
     ITEM_NAME_UNCERTAIN_REVIEW_REASON = "item_name_uncertain"
     ITEMS_MISSING_REVIEW_REASON = "items_missing"
     ITEM_TAX_RATE_UNCERTAIN_REVIEW_REASON = "item_tax_rate_uncertain"
-    ITEM_REVIEW_REASONS = %w[
+    INHERITABLE_ITEM_REVIEW_REASONS = %w[
       item_name_uncertain
       item_category_uncertain
       item_quantity_uncertain
-      item_pricing_mode_uncertain
       item_tax_rate_uncertain
     ].freeze
     ITEM_TAX_RATE_RESOLUTION_BLOCKING_REASONS = %w[
@@ -1264,7 +1263,7 @@ class Receipts::Processing::Pipeline
     end
 
     def materialize_item_review_reasons(items_attributes, originally_reviewed_item_indexes:, receipt_review_reasons:)
-      inherited_reasons = normalize_review_reasons(receipt_review_reasons) & ITEM_REVIEW_REASONS
+      inherited_reasons = normalize_review_reasons(receipt_review_reasons) & INHERITABLE_ITEM_REVIEW_REASONS
       return items_attributes if inherited_reasons.empty? || originally_reviewed_item_indexes.empty?
 
       Array(items_attributes).map.with_index do |item, index|
