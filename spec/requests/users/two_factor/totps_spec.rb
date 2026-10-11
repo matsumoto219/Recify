@@ -3,6 +3,13 @@ require 'rails_helper'
 RSpec.describe 'User TOTP step-up', type: :request do
   include ActiveSupport::Testing::TimeHelpers
 
+  around do |example|
+    freeze_time
+    example.run
+  ensure
+    travel_back
+  end
+
   def create_confirmed_totp(user, secret: nil)
     create(:totp_credential, user: user, totp_secret: secret || ROTP::Base32.random, confirmed_at: Time.current)
   end
@@ -146,9 +153,10 @@ RSpec.describe 'User TOTP step-up', type: :request do
       user = create(:user)
       credential = create_confirmed_totp(user)
       start_pending_totp(user)
+      invalid_code = format('%06d', (totp_code(credential).to_i + 1) % 1_000_000)
 
       expect do
-        post users_two_factor_totp_create_path, params: { code: '000000' }
+        post users_two_factor_totp_create_path, params: { code: invalid_code }
       end.not_to change { user.reload.failed_attempts }
 
       aggregate_failures do
@@ -185,10 +193,12 @@ RSpec.describe 'User TOTP step-up', type: :request do
     end
 
     it '他ユーザーのTOTP codeを拒否する' do
+      travel_to(Time.zone.local(2026, 10, 11, 12, 0, 0))
       user = create(:user)
       other_user = create(:user)
-      credential = create_confirmed_totp(user)
-      other_credential = create_confirmed_totp(other_user)
+      credential = create_confirmed_totp(user, secret: 'JBSWY3DPEHPK3PXP')
+      other_credential = create_confirmed_totp(other_user, secret: 'GEZDGNBVGY3TQOJQ')
+      expect(totp_code(other_credential)).not_to eq(totp_code(credential))
       start_pending_totp(user)
 
       post users_two_factor_totp_create_path, params: { code: totp_code(other_credential) }

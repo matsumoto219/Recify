@@ -181,6 +181,7 @@ RSpec.describe "アカウントとsecurityの実Chrome回帰", type: :system do
   end
 
   it "TOTPを設定し、TOTPとrecovery codeの両方でstep-upできる" do
+    freeze_time
     user = create_system_test_user
     sign_in_through_browser(user)
 
