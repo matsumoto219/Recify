@@ -65,6 +65,7 @@ RSpec.describe ReceiptAnalysisProfiles do
         expect('再発行').to match(roles.fetch('reference'))
         expect('精算予定').to match(roles.fetch('reference'))
         expect('入庫券発行').to match(roles.fetch('reference'))
+        expect('オーダー時刻').to match(roles.fetch('reference'))
         expect('発行').not_to match(described_class.fetch('JPN').analysis_purchase_time_exclusion_pattern)
       end
     end
@@ -123,6 +124,17 @@ RSpec.describe ReceiptAnalysisProfiles do
       aggregate_failures do
         expect(profile.ocr_purchased_at_date_patterns.any? { |pattern| '2026年05月20日'.match?(pattern) }).to be(true)
         expect(profile.ocr_purchased_at_date_patterns.any? { |pattern| '2026-05-20'.match?(pattern) }).to be(true)
+      end
+    end
+
+    it '電話番号や識別子の内側を日付tokenとして切り出さない' do
+      patterns = described_class.fetch('JPN').ocr_purchased_at_date_patterns
+
+      aggregate_failures do
+        expect(patterns.any? { |pattern| 'TEL:0123-45-6789'.match?(pattern) }).to be(false)
+        expect(patterns.any? { |pattern| 'REF-123456-78-9012'.match?(pattern) }).to be(false)
+        expect(patterns.any? { |pattern| '購入日2026-09-01'.match?(pattern) }).to be(true)
+        expect(patterns.any? { |pattern| '2026-99-99'.match?(pattern) }).to be(true)
       end
     end
   end

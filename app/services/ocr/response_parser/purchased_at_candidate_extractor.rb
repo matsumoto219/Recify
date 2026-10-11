@@ -75,7 +75,17 @@ class Ocr::ResponseParser::PurchasedAtCandidateExtractor
         first[:source][:association] = "invalid"
         second[:source][:association] = "invalid"
       end
+    add_normalized_date_source(entries)
     entries
+  end
+
+  def add_normalized_date_source(entries)
+    field = fields["TransactionDate"] if fields.is_a?(Hash)
+    return unless field.is_a?(Hash) && field["valueDate"].is_a?(String) && field.key?("spans")
+    return unless field_span_supported?(field, entries)
+
+    owners = field_source_owners(field, entries)
+    owners.first[:source][:normalized_date] = field["valueDate"] if owners.one?
   end
 
   def span_evidence(line, text)
@@ -134,7 +144,7 @@ class Ocr::ResponseParser::PurchasedAtCandidateExtractor
     return entries.map { |entry| entry[:source].merge(association: "invalid") } if labels.size > 100
 
     association_count = 0
-    entries.map do |entry|
+    sources = entries.map do |entry|
       source = entry[:source].merge(join_next: next_line_same_block?(entry, entries[entry[:index] + 1]))
       next source if source[:association] == "invalid" || role_for(entry[:text]) != "unknown"
       next source unless profile.ocr_purchased_at_date_patterns.any? { |pattern| entry[:text].match?(pattern) } ||
@@ -148,12 +158,50 @@ class Ocr::ResponseParser::PurchasedAtCandidateExtractor
         source.merge(label_role: label[:role], label_path: label[:source][:source_path], association: "exact")
       elsif matching.any?
         source.merge(association: "invalid")
-      elsif labels.any? { |label| label[:source][:page_index] == source[:page_index] && (label[:index] - entry[:index]).abs <= 2 }
+      elsif labels.any? { |label| nearby_label?(label, entry) }
         source.merge(association: "invalid")
       else
         source
       end
     end
+    add_same_row_time_sources(entries, sources)
+    sources
+  end
+
+  def add_same_row_time_sources(entries, sources)
+    temporal = entries.select do |entry|
+      profile.ocr_purchased_at_date_patterns.any? { |pattern| entry[:text].match?(pattern) } ||
+        entry[:text].match?(profile.ocr_purchased_at_time_pattern)
+    end
+    return if temporal.size > 50
+
+    temporal.each do |date|
+      next unless profile.ocr_purchased_at_date_patterns.any? { |pattern| date[:text].match?(pattern) }
+      next if date[:text].match?(profile.ocr_purchased_at_time_pattern)
+
+      row = temporal.select { |other| same_printed_row?(date, other) }
+      next unless row.size == 2
+
+      time = row.find { |other| !other.equal?(date) }
+      next unless time[:text].match?(profile.ocr_purchased_at_time_pattern)
+      next if profile.ocr_purchased_at_date_patterns.any? { |pattern| time[:text].match?(pattern) }
+      next unless temporal.count { |other| same_printed_row?(time, other) } == 2
+      next unless date[:box][:right] <= time[:box][:left]
+      next if entries.any? { |other| between_in_column?(other, date, time) }
+
+      sources[date[:index]][:same_row_time_index] = time[:index]
+    end
+  end
+
+  def same_printed_row?(first, second)
+    return false unless first[:source][:page_index] == second[:source][:page_index]
+    return false unless first[:box] && second[:box]
+
+    left = first[:box]
+    right = second[:box]
+    height = [ left[:bottom] - left[:top], right[:bottom] - right[:top] ].max
+    overlap = [ left[:bottom], right[:bottom] ].min - [ left[:top], right[:top] ].max
+    overlap.fdiv(height) >= Rational(1, 2)
   end
 
   def next_line_same_block?(entry, following)
@@ -192,19 +240,32 @@ class Ocr::ResponseParser::PurchasedAtCandidateExtractor
     label_box = label[:box]
     value_box = entry[:box]
     if label_box && value_box
-      height = [ label_box[:bottom] - label_box[:top], value_box[:bottom] - value_box[:top] ].max
-      vertical_overlap = [ label_box[:bottom], value_box[:bottom] ].min - [ label_box[:top], value_box[:top] ].max
-      horizontal_overlap = [ label_box[:right], value_box[:right] ].min - [ label_box[:left], value_box[:left] ].max
-      same_row = vertical_overlap.fdiv(height) >= Rational(1, 2) && label_box[:right] <= value_box[:left]
-      next_row = label_box[:bottom] <= value_box[:top] && value_box[:top] - label_box[:bottom] <= height * 2 &&
-        horizontal_overlap.positive?
-      return false unless same_row || next_row
+      return false unless label_layout_matches?(label, entry)
       return false if entries.any? { |other| between_in_column?(other, label, entry) }
 
       true
     else
       label[:index] + 1 == entry[:index] && label[:box].nil? && entry[:box].nil?
     end
+  end
+
+  def nearby_label?(label, entry)
+    return false unless label[:source][:page_index] == entry[:source][:page_index]
+    return false unless (label[:index] - entry[:index]).abs <= 2
+    return true unless label[:box] && entry[:box]
+
+    label_layout_matches?(label, entry)
+  end
+
+  def label_layout_matches?(label, entry)
+    label_box = label[:box]
+    value_box = entry[:box]
+    height = [ label_box[:bottom] - label_box[:top], value_box[:bottom] - value_box[:top] ].max
+    horizontal_overlap = [ label_box[:right], value_box[:right] ].min - [ label_box[:left], value_box[:left] ].max
+    same_row = same_printed_row?(label, entry) && label_box[:right] <= value_box[:left]
+    next_row = label_box[:bottom] <= value_box[:top] && value_box[:top] - label_box[:bottom] <= height * 2 &&
+      horizontal_overlap.positive?
+    same_row || next_row
   end
 
   def between_in_column?(other, label, entry)
@@ -315,7 +376,13 @@ class Ocr::ResponseParser::PurchasedAtCandidateExtractor
 
     text = index_mapper.slice(provider_content, **span)
     return false unless text.present?
-    parsed = Analysis.purchased_at_evidence_from_lines(lines: [ text.delete("\r\n") ], profile:)[:candidates]
+    source = {
+      candidate_id: "datetime_structured_0", source_path: field.key?("valueDate") ? "fields.TransactionDate" : "fields.TransactionTime",
+      normalized_date: field["valueDate"]
+    }
+    parsed = Analysis.purchased_at_evidence_from_lines(
+      lines: [ text.delete("\r\n") ], profile:, line_sources: [ source ]
+    )[:candidates]
     return false unless parsed.one?
     if field.key?("valueDate")
       return false unless parsed.first[:date] == field["valueDate"]

@@ -62,7 +62,7 @@ module Analysis
       else
         "unknown"
       end
-      date = canonical_date(date_matches.first&.to_s)
+      date = canonical_date(date_matches.first&.to_s, source_for(index)[:normalized_date])
       time = canonical_time(time_matches.first)
       excluded = PurchasedAtEvidence::EXCLUDED_ROLES.include?(role)
       malformed_clock = clock_tokens.any? do |token|
@@ -77,7 +77,7 @@ module Analysis
       { text:, index:, date:, time:, role:, label: roles.any?, invalid: }
     end
 
-    def canonical_date(value)
+    def canonical_date(value, normalized_date = nil)
       return unless value
 
       parts = value.scan(/\d+/)
@@ -88,11 +88,19 @@ module Analysis
       elsif parts[2].length == 4
         [ parts[2], parts[0], parts[1] ]
       else
-        return
+        return normalized_short_date(parts, normalized_date)
       end
       Date.new(year.to_i, month.to_i, day.to_i).iso8601
     rescue Date::Error
       nil
+    end
+
+    def normalized_short_date(parts, value)
+      return unless parts[0].length == 2 && parts[1].length <= 2 && parts[2].length <= 2
+      return unless value.is_a?(String) && value.bytesize == 10 && value.valid_encoding? && value.match?(PurchasedAtEvidence::DATE_PATTERN)
+
+      date = Date.iso8601(value)
+      date.iso8601 if [ date.year % 100, date.month, date.day ] == parts.map(&:to_i)
     end
 
     def canonical_time(match)
@@ -144,18 +152,26 @@ module Analysis
     end
 
     def combine_partial_candidates(candidates, entries)
-      candidates.each_with_index.filter_map do |candidate, index|
-        next if candidate[:consumed]
+      candidates_by_line = candidates.index_by { |candidate| candidate[:line_index] }
+      combined = {}
+      consumed = {}
+      candidates.each_with_index do |candidate, index|
+        same_row_time_index = source_for(candidate[:line_index])[:same_row_time_index]
+        following = same_row_time_index ? candidates_by_line[same_row_time_index] : candidates[index + 1]
+        next if following && consumed.key?(following[:candidate_id])
 
-        following = candidates[index + 1]
         if combinable?(candidate, following, entries)
-          candidate = candidate.merge(
+          combined[candidate[:candidate_id]] = candidate.merge(
             time: following[:time], precision: "datetime", time_path: following[:source_path],
             association: candidate[:association] == "exact" ? "exact" : "unlabeled"
           )
-          following[:consumed] = true
+          consumed[following[:candidate_id]] = true
         end
-        candidate.except(:consumed)
+      end
+      candidates.filter_map do |candidate|
+        next if consumed.key?(candidate[:candidate_id])
+
+        combined.fetch(candidate[:candidate_id], candidate)
       end
     end
 
@@ -164,9 +180,12 @@ module Analysis
       return false if candidate[:association] == "invalid" || following[:association] == "invalid"
       return false unless candidate[:page_index] == following[:page_index]
       gap = following[:line_index] - candidate[:line_index]
-      return false unless gap == 1 || (gap == 2 && safe_bridge?(candidate, following, entries))
-      return false if line_sources && source_for(candidate[:line_index])[:join_next] == false
-      return false if line_sources && gap == 2 && source_for(candidate[:line_index] + 1)[:join_next] == false
+      same_row = source_for(candidate[:line_index])[:same_row_time_index] == following[:line_index]
+      unless same_row
+        return false unless gap == 1 || (gap == 2 && safe_bridge?(candidate, following, entries))
+        return false if line_sources && source_for(candidate[:line_index])[:join_next] == false
+        return false if line_sources && gap == 2 && source_for(candidate[:line_index] + 1)[:join_next] == false
+      end
       return false unless following[:role] == "unknown" || following[:role] == candidate[:role]
       if following[:label_path] && following[:label_path] != candidate[:label_path]
         return false unless gap == 2 && explicit_time_label?(candidate, following, entries)

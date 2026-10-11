@@ -269,15 +269,15 @@ module ReceiptAnalysisProfiles
     OCR_VOUCHER_PAYMENT_PATTERN = /e[\s-]*gift|イーギフト|電子ギフト|ストアクレジット|store\s*credit|商品券|金券|ギフト券|お買物券|買物券|voucher|giftcertificate|giftcard|coupon/i.freeze
     OCR_SETTLEMENT_LINE_PATTERN = /お預かり|お預り|預かり|預り|現金預り|お釣り|おつり|釣銭|つり銭|change|返金/i.freeze
     OCR_PURCHASED_AT_DATE_PATTERNS = [
-      /\d{4}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,2}/,
-      /\A\s*\d{1,2}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,4}/,
-      /\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日?/
+      /(?<![\d\/\-])\d{4}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,2}(?![\d\/\-])/,
+      /\A\s*\d{1,2}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{1,4}(?![\d\/\-])/,
+      /(?<!\d)\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日?(?!\d)/
     ].freeze
     OCR_PURCHASED_AT_TIME_PATTERN = /(?<![\d:：])(\d{1,2})\s*(?:[:：]|時)\s*(\d{2})(?:\s*(?:[:：]|分)\s*(\d{2})\s*秒?)?\s*分?(?![\d:：分秒]|[.．]\d)/.freeze
     OCR_PURCHASED_AT_TIME_CONTINUATION_PATTERN = /\A(?:\d{1,6}[ \t]+)?#{OCR_PURCHASED_AT_TIME_PATTERN}\s*\z/.freeze
     OCR_PURCHASED_AT_BRIDGE_LINE_PATTERN = /\A\s*レジ\s*\d{1,4}\s*\z/.freeze
     OCR_PURCHASED_AT_ROLE_PATTERNS = {
-      "reference" => /再発行|再印刷|再プリント|予約|予定|期限|営業時間|販売期間|日次精算|締め|取消|キャンセル|カード承認|与信|注文(?:日時|日|時刻|受付)|受付(?:日時|日|時刻)|(?:入庫|入場|整理|予約)(?:券|票).*発行/i,
+      "reference" => /再発行|再印刷|再プリント|予約|予定|期限|営業時間|販売期間|日次精算|締め|取消|キャンセル|カード承認|与信|(?:注文|オーダー)(?:日時|日|時刻|受付)|受付(?:日時|日|時刻)|(?:入庫|入場|整理|予約)(?:券|票).*発行/i,
       "duration" => /駐車時間|利用時間|経過時間|滞在時間|所要時間/i,
       "service_start" => /入庫|入場|利用開始|チェックイン/i,
       "service_end" => /出庫|退場|利用終了|チェックアウト/i,
