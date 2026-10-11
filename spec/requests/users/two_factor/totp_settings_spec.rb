@@ -5,6 +5,13 @@ RSpec.describe 'User TOTP settings', type: :request do
 
   let(:user) { create(:user) }
 
+  around do |example|
+    freeze_time
+    example.run
+  ensure
+    travel_back
+  end
+
   def start_totp_setup!
     get new_settings_security_totp_path
     expect(response).to have_http_status(:success)
@@ -143,9 +150,10 @@ RSpec.describe 'User TOTP settings', type: :request do
 
     it 'setup失敗ではconfirmed credentialを作らずpending secretを維持する' do
       secret = start_totp_setup!
+      invalid_code = format('%06d', (totp_code(secret).to_i + 1) % 1_000_000)
 
       expect do
-        post settings_security_totp_path, params: { code: '000000' }
+        post settings_security_totp_path, params: { code: invalid_code }
       end.not_to change(TotpCredential, :count)
 
       aggregate_failures do

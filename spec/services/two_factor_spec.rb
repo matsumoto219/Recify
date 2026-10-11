@@ -4,6 +4,15 @@ RSpec.describe TwoFactor do
   uses_transaction '同じrecovery codeの並行検証を1回だけ成功させる'
 
   describe 'TOTP' do
+    include ActiveSupport::Testing::TimeHelpers
+
+    around do |example|
+      freeze_time
+      example.run
+    ensure
+      travel_back
+    end
+
     it 'secretを生成する' do
       secret = described_class.generate_totp_secret
 
@@ -91,9 +100,12 @@ RSpec.describe TwoFactor do
 
     it 'setup確認失敗ではcredentialを作成しない' do
       user = create(:user)
+      secret = described_class.generate_totp_secret
+      code = ROTP::TOTP.new(secret, issuer: 'Recify').now
+      invalid_code = format('%06d', (code.to_i + 1) % 1_000_000)
 
       expect {
-        described_class.confirm_totp_setup(user: user, secret: described_class.generate_totp_secret, code: '000000')
+        described_class.confirm_totp_setup(user: user, secret: secret, code: invalid_code)
       }.to raise_error(TwoFactor::VerificationError, 'totp_code_invalid')
 
       aggregate_failures do
@@ -113,6 +125,30 @@ RSpec.describe TwoFactor do
       expect {
         described_class.verify_totp(user: user, code: code)
       }.to raise_error(TwoFactor::VerificationError, 'totp_code_invalid')
+    end
+
+    it '30秒境界を過ぎたコードを拒否し、次のtime stepのコードを受け付ける' do
+      travel_to(Time.zone.local(2026, 10, 11, 12, 0, 29))
+      user = create(:user)
+      secret = 'JBSWY3DPEHPK3PXP'
+      credential = create(:totp_credential, user: user, totp_secret: secret)
+      expired_code = ROTP::TOTP.new(secret, issuer: 'Recify').now
+
+      travel 1.second
+
+      expect {
+        described_class.verify_totp(user: user, code: expired_code)
+      }.to raise_error(TwoFactor::VerificationError, 'totp_code_invalid')
+      aggregate_failures do
+        expect(credential.reload.last_used_at).to be_nil
+        expect(credential.last_accepted_time_step).to be_nil
+      end
+
+      current_code = ROTP::TOTP.new(secret, issuer: 'Recify').now
+      expect(current_code).not_to eq(expired_code)
+      described_class.verify_totp(user: user, code: current_code)
+
+      expect(credential.reload.last_accepted_time_step).to eq(Time.current.to_i / 30)
     end
 
     it '未確認credentialの通常verifyを拒否する' do
