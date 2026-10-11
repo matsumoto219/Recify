@@ -780,7 +780,8 @@ module Receipts::Processing::Runs
     end
 
     def ocr_line_source_truncation(result, key, limit)
-      return true if Array(result[key]).size > limit
+      lines = Array(result[key])
+      return true if lines.size > limit || lines.any? { |line| truncated?(line, max_bytes: snapshot_string_limit) }
       return if result.key?(:truncated) && !result[:truncated].is_a?(Hash)
 
       truncated = normalized_hash(result[:truncated])

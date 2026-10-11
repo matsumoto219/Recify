@@ -87,6 +87,41 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     end
   end
 
+  describe 'OCR line string truncation' do
+    before do
+      allow(described_class).to receive(:snapshot_string_max_bytes).and_return(100)
+    end
+
+    it '文字列byte上限ちょうどの行は内容と完全性を維持する' do
+      lines = [ 'a' * 100, ('あ' * 33) + 'a' ]
+
+      snapshot = described_class.ocr_result_snapshot(success: true, lines: lines, case_preserved_lines: lines)
+
+      aggregate_failures do
+        expect(snapshot.fetch('lines')).to eq(lines)
+        expect(snapshot.fetch('case_preserved_lines')).to eq(lines)
+        expect(snapshot.fetch('truncated')).to include('lines' => false, 'case_preserved_lines' => false)
+      end
+    end
+
+    %i[lines case_preserved_lines].each do |key|
+      it "#{key}の文字列短縮を記録し、retryの上限拡大でも完全な根拠へ戻さない" do
+        snapshot = described_class.ocr_result_snapshot(success: true, key => [ 'あ' * 34 ])
+        restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+        allow(described_class).to receive(:snapshot_string_max_bytes).and_return(200)
+        repeated = described_class.ocr_result_snapshot(restored)
+
+        aggregate_failures do
+          expect(snapshot.fetch(key.to_s)).to eq([ 'あ' * 33 ])
+          expect(snapshot.dig('truncated', key.to_s)).to be(true)
+          expect(restored.dig(:truncated, key.to_s)).to be(true)
+          expect(repeated.fetch(key.to_s)).to eq([ 'あ' * 33 ])
+          expect(repeated.dig('truncated', key.to_s)).to be(true)
+        end
+      end
+    end
+  end
+
   it '支払の物理sourceだけをsnapshotへ保持し再試行で同額別印字を区別する' do
     original = {
       success: true, lines: [ '合計 864円', 'eGift適用 500円', 'eGift適用 500円', '釣銭 0円' ],

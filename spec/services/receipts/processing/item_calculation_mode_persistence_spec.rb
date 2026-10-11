@@ -669,11 +669,11 @@ RSpec.describe 'OCR item calculation mode persistence' do
     end
   end
 
-  it '計算方式reviewを別のconfirmed明細へ継承せず、AIの商品名reviewと各sourceを保存する' do
+  it '計算方式reviewを別のconfirmed明細へ継承せず、AIの数量reviewと各sourceを保存する' do
     ocr_result = count_total_mismatch_ocr_result(item_indexes: [ 0 ])
     normalized_ai_result = ai_result.merge(
       needs_review: true,
-      review_reasons: [ 'item_name_uncertain' ],
+      review_reasons: [ 'item_quantity_uncertain' ],
       meta: { ai_name_completion_enabled: false },
       receipt_items_attributes: Array(ocr_result.dig(:candidates, :items)).each_with_index.map do |_item, index|
         {
@@ -694,7 +694,7 @@ RSpec.describe 'OCR item calculation mode persistence' do
       expect(result.next_step).to eq(:done)
       expect(run.reload.status).to eq('succeeded')
       expect(receipt).to have_attributes(status: 'review_needed', total_amount: 770)
-      expect(receipt.review_reasons).to include('item_name_uncertain', 'item_pricing_mode_uncertain')
+      expect(receipt.review_reasons).to include('item_quantity_uncertain', 'item_pricing_mode_uncertain')
       expect(items.pluck(:pricing_source_kind)).to eq(
         %w[explicit_line_total count_unit_price count_unit_price count_unit_price]
       )
@@ -705,7 +705,7 @@ RSpec.describe 'OCR item calculation mode persistence' do
         needs_review: true,
         review_reasons: [ 'item_pricing_mode_uncertain' ]
       )
-      expect(items.second).to have_attributes(needs_review: true, review_reasons: [ 'item_name_uncertain' ])
+      expect(items.second).to have_attributes(needs_review: true, review_reasons: [ 'item_quantity_uncertain' ])
       expect(items.drop(2)).to all(have_attributes(needs_review: false, review_reasons: []))
     end
   end
