@@ -6,6 +6,7 @@ module Analysis
     SUMMARY_AMOUNT_ONLY_PATTERN = /\A\s*[¥￥]?\s*(?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:円)?\s*[)）]?\s*\z/.freeze
     RATE_ONLY_PATTERN = /\A\s*\d+(?:\.\d+)?\s*[%％]\s*\z/.freeze
     METADATA_VALUE_PATTERN = /\A[\sA-Za-z0-9*#().-]+\z/.freeze
+    WRAPPED_METHOD_HEADING_PATTERN = /\A\s*<([^<>]+)>\s*\z/.freeze
 
     class << self
       def call(...)
@@ -27,6 +28,7 @@ module Analysis
       payments = line_payments
       payments = add_card_amount_label_payment(payments)
       payments = merge_structured_payments(payments)
+      payments = remove_card_slip_method_headings(payments)
       payments = add_cash_settlement(payments)
       @payments = payments
       method_conflict = inspect_full_payment_collisions(payments)
@@ -115,7 +117,8 @@ module Analysis
       end
       return if excluded_method_line?(line)
       return if line.match?(profile.ocr_card_slip_context_pattern)
-      return if index.positive? && lines[index - 1].match?(profile.analysis_fallback_payment_metadata_label_pattern)
+      return if index.positive? && lines[index - 1].match?(profile.analysis_fallback_payment_metadata_label_pattern) &&
+        line.match?(METADATA_VALUE_PATTERN) && !line.match?(profile.analysis_payment_affirmative_pattern)
       return unless line.match?(profile.analysis_fallback_payment_line_pattern)
       voucher = line.match?(profile.analysis_voucher_payment_pattern)
       return if voucher && section_start_index.present? && !in_section?(index)
@@ -435,6 +438,42 @@ module Analysis
         source_span_start: amount_span&.begin,
         source_span_end: amount_span&.end
       }
+    end
+
+    def remove_card_slip_method_headings(payments)
+      applied = payments.select { |payment| payment[:amount_role] == "applied" && payment[:amount].present? }
+      return payments unless applied.one?
+
+      source = applied.first
+      return payments unless source[:source_provider] == "ocr_line"
+
+      source_indexes = [ source[:method_source_line_index], source[:source_line_index] ]
+      return payments unless source_indexes.all? { |index| index.is_a?(Integer) }
+
+      key = instrument_key(source[:method])
+      return payments if key.blank?
+      alias_pattern = profile.analysis_payment_category_alias_patterns[source[:method_identity]]
+      return payments if alias_pattern && key.match?(alias_pattern)
+
+      payments.reject do |payment|
+        card_slip_method_heading?(payment, source_indexes.max, source[:method_identity], key)
+      end
+    end
+
+    def card_slip_method_heading?(payment, source_index, identity, key)
+      return false unless payment[:amount_role] == "unknown" && payment[:settlement_use] == false
+      return false unless payment[:source_provider] == "ocr_line"
+
+      index = payment[:method_source_line_index]
+      return false unless index.is_a?(Integer) && index >= 2 && source_index < index - 2
+      return false unless payment[:source_line_index] == index
+      return false unless lines[index - 2].match?(profile.analysis_payment_card_slip_title_pattern)
+      return false unless lines[index - 1].match?(profile.analysis_payment_customer_copy_pattern)
+
+      heading = lines[index].match(WRAPPED_METHOD_HEADING_PATTERN)&.captures&.first
+      return false unless heading && !heading.match?(MONEY_PATTERN) && !heading.match?(profile.analysis_payment_affirmative_pattern)
+
+      method_identity(heading) == identity && instrument_key(heading) == key
     end
 
     def merge_structured_payments(payments)

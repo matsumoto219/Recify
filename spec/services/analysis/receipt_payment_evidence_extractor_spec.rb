@@ -359,6 +359,212 @@ RSpec.describe Analysis::ReceiptPaymentEvidenceExtractor do
     expect(result[:settlement]).to include(complete: true, ambiguous: false)
   end
 
+  it '取引ID見出しをiD決済と誤認せず識別子を支払額へ借用しない' do
+    result = evidence([ '合計 864円', 'PayPay支払 864円', '取引ID', 'AB123456', '釣銭 0円' ])
+
+    expect(result[:payments]).to contain_exactly(include(method_identity: 'qr_payment', amount: 864))
+    expect(result[:settlement]).to include(complete: true, ambiguous: false)
+  end
+
+  it '日本のレシートにある英語transaction ID見出しも支払として扱わない' do
+    result = evidence([ '合計 864円', 'PayPay支払 864円', 'Transaction ID:', 'ZX987654', '釣銭 0円' ])
+
+    expect(result[:payments]).to contain_exactly(include(method_identity: 'qr_payment', amount: 864))
+    expect(result[:settlement]).to include(complete: true, ambiguous: false)
+  end
+
+  it '真正のiD支払は取引識別子として除外しない' do
+    result = evidence([ '合計 864円', 'iD支払 864円', '取引ID', 'AB123456', '釣銭 0円' ])
+
+    expect(result[:payments]).to contain_exactly(include(method_identity: 'e_money', amount: 864, amount_role: 'applied'))
+    expect(result[:settlement]).to include(complete: true, ambiguous: false)
+  end
+
+  it '識別子値が欠けた見出しの直後でも独立した支払行は保持する' do
+    result = evidence([ '合計 864円', '取引ID', 'iD支払 864円', '釣銭 0円' ])
+
+    expect(result[:payments]).to contain_exactly(include(method_identity: 'e_money', amount: 864, amount_role: 'applied'))
+  end
+
+  it '識別子見出し直後の英数字だけの行でも明示された支払操作は保持する' do
+    result = evidence([ '合計 864円', 'Transaction ID:', 'iD paid 864', '釣銭 0円' ])
+
+    expect(result[:payments]).to contain_exactly(include(method_identity: 'e_money', amount: 864, amount_role: 'applied'))
+    expect(result[:settlement]).to include(complete: true, ambiguous: false)
+  end
+
+  it '英語のiD paymentをd paymentとの部分一致で別方式へ変えない' do
+    aggregate_failures do
+      [ 'iD payment', 'ID PAYMENT', 'ｉＤ ｐａｙｍｅｎｔ' ].each do |method|
+        result = evidence([ '合計 864円', "#{method} 864円", '釣銭 0円' ])
+
+        expect(result[:payments]).to contain_exactly(include(method_identity: 'e_money', amount: 864, amount_role: 'applied'))
+        expect(result[:settlement]).to include(complete: true, ambiguous: false)
+      end
+    end
+  end
+
+  it '独立したd paymentとd払いの表記揺れはQR方式として維持する' do
+    aggregate_failures do
+      [ 'd payment', 'D PAYMENT', 'ｄ ｐａｙｍｅｎｔ', 'd払い' ].each do |method|
+        result = evidence([ '合計 864円', "#{method} 864円", '釣銭 0円' ])
+
+        expect(result[:payments]).to contain_exactly(include(method_identity: 'qr_payment', amount: 864, amount_role: 'applied'))
+      end
+    end
+  end
+
+  it '注入profileの支払tokenだけで分類し旧d payment語彙へ依存しない' do
+    replacement = profile.dup
+    allow(replacement).to receive(:fallback_payment_method_patterns).and_return(
+      profile.fallback_payment_method_patterns.merge('qr_payment' => [ /検証決済/ ])
+    )
+    allow(replacement).to receive(:analysis_fallback_payment_line_pattern).and_return(/検証決済|d payment/)
+    recognized = evidence([ '合計 864円', '検証決済 864円', '釣銭 0円' ], profile: replacement)
+    old = evidence([ '合計 864円', 'd payment 864円', '釣銭 0円' ], profile: replacement)
+
+    expect(recognized[:payments]).to contain_exactly(include(method_identity: 'qr_payment', amount: 864))
+    expect(old[:payments]).to be_empty
+  end
+
+  it '取引識別子の見出しを注入profileで認識し旧語彙へ直接依存しない' do
+    replacement = profile.dup
+    allow(replacement).to receive(:analysis_fallback_payment_metadata_label_pattern).and_return(/\A検証ID\z/)
+    allow(replacement).to receive(:analysis_payment_metadata_id_title_pattern).and_return(/\A検証ID\z/)
+    prefix = [ '合計 864円', 'PayPay支払 864円' ]
+    recognized = evidence(prefix + [ '検証ID', 'AB123456', '釣銭 0円' ], profile: replacement)
+    old = evidence(prefix + [ '取引ID', 'AB123456', '釣銭 0円' ], profile: replacement)
+
+    expect(recognized[:payments]).to contain_exactly(include(method_identity: 'qr_payment', amount: 864))
+    expect(recognized[:settlement][:ambiguous]).to be(false)
+    expect(old[:payments]).to include(include(method_identity: 'e_money', amount_role: 'unknown'))
+    expect(old[:settlement][:ambiguous]).to be(true)
+  end
+
+  context '購入精算に続くカード売上票の顧客控え' do
+    let(:payment_prefix) { [ '合計 864円', 'QUICPay利用 864円', '釣銭 0円' ] }
+    let(:copy_heading) { [ '[クレジットカード売上票]', '(お客様控え)', '<QUICPay>' ] }
+
+    it '唯一の実支払と一致するinstrument見出しを別の金額不明支払として追加しない' do
+      result = evidence(payment_prefix + copy_heading + [ 'ありがとうございました' ])
+
+      expect(result[:payments]).to contain_exactly(include(method_identity: 'e_money', amount: 864))
+      expect(result[:settlement]).to include(complete: true, ambiguous: false)
+    end
+
+    it 'カード売上票だけの場合は金額不明の方法を保持する' do
+      result = evidence(copy_heading + [ 'ありがとうございました' ])
+
+      expect(result[:payments]).to contain_exactly(include(method_identity: 'e_money', amount_role: 'unknown'))
+    end
+
+    it 'カードbrandの見出しも同じ構造とinstrument一致で情報行として扱う' do
+      result = evidence([
+        '合計 864円', 'VISA利用 864円', '釣銭 0円',
+        *copy_heading.first(2), '<VISA>', 'ありがとうございました'
+      ])
+
+      expect(result[:payments]).to contain_exactly(include(method_identity: 'credit_card', amount: 864))
+      expect(result[:settlement]).to include(complete: true, ambiguous: false)
+    end
+
+    it '売上票のtitleがなければ裸の方法を同じ支払へまとめない' do
+      result = evidence(payment_prefix + copy_heading.drop(1) + [ 'ありがとうございました' ])
+
+      expect(result[:payments]).to include(include(method_identity: 'e_money', amount_role: 'unknown'))
+      expect(result[:settlement][:ambiguous]).to be(true)
+    end
+
+    it '顧客控えの表示がなければ同じ方法でもまとめない' do
+      result = evidence(payment_prefix + [ copy_heading.first, copy_heading.last, 'ありがとうございました' ])
+
+      expect(result[:payments]).to include(include(method_identity: 'e_money', amount_role: 'unknown'))
+    end
+
+    it '見出しのwrapperがなければ同じ方法でもまとめない' do
+      result = evidence(payment_prefix + copy_heading.first(2) + [ 'QUICPay', 'ありがとうございました' ])
+
+      expect(result[:payments]).to include(include(method_identity: 'e_money', amount_role: 'unknown'))
+    end
+
+    it '同じe_money分類でも異なるinstrumentはまとめない' do
+      result = evidence(payment_prefix + copy_heading.first(2) + [ '<Suica>', 'ありがとうございました' ])
+
+      expect(result[:payments]).to include(include(method: '<Suica>', amount_role: 'unknown'))
+      expect(result[:settlement][:ambiguous]).to be(true)
+    end
+
+    it 'instrumentが特定できない分類名だけでは同じ支払へまとめない' do
+      result = evidence(payment_prefix + copy_heading.first(2) + [ '<電子マネー>', 'ありがとうございました' ])
+
+      expect(result[:payments]).to include(include(method: '<電子マネー>', amount_role: 'unknown'))
+      expect(result[:settlement][:ambiguous]).to be(true)
+    end
+
+    it '実支払と控えの双方が同じ分類名でもinstrumentが確定したと扱わない' do
+      aggregate_failures do
+        [ '電子マネー', 'QR' ].each do |method|
+          result = evidence([
+            '合計 864円', "#{method}支払 864円", '釣銭 0円',
+            *copy_heading.first(2), "<#{method}>", 'ありがとうございました'
+          ])
+
+          expect(result[:payments]).to include(include(method: "<#{method}>", amount_role: 'unknown'))
+          expect(result[:settlement]).to include(complete: false, ambiguous: true)
+        end
+      end
+    end
+
+    it '分類名だけかどうかを注入profileのalias契約で判定する' do
+      replacement = profile.dup
+      allow(replacement).to receive(:analysis_payment_category_alias_patterns).and_return(
+        profile.analysis_payment_category_alias_patterns.merge('e_money' => /\AQUICPay\z/i)
+      )
+      result = evidence(payment_prefix + copy_heading + [ 'ありがとうございました' ], profile: replacement)
+
+      expect(result[:payments]).to include(include(method: '<QUICPay>', amount_role: 'unknown'))
+      expect(result[:settlement]).to include(complete: false, ambiguous: true)
+    end
+
+    it '見出し内に金額があれば独立した支払として保持する' do
+      result = evidence(payment_prefix + copy_heading.first(2) + [ '<QUICPay 100円>', 'ありがとうございました' ])
+
+      expect(result[:payments].map { |payment| payment[:amount] }).to eq([ 864, 100 ])
+    end
+
+    it '見出し内に支払操作が明示されていれば金額不明でも保持する' do
+      result = evidence(payment_prefix + copy_heading.first(2) + [ '<QUICPay支払>', 'ありがとうございました' ])
+
+      expect(result[:payments]).to include(include(amount_role: 'unknown', settlement_use: true))
+    end
+
+    it '後続に実支払がある場合は一件目だけへ見出しを帰属させない' do
+      result = evidence(payment_prefix + copy_heading + [ 'QUICPay支払 100円', 'ありがとうございました' ])
+
+      expect(result[:payments].map { |payment| payment[:amount] }).to eq([ 864, nil, 100 ])
+    end
+
+    it 'structuredの別支払がある場合も一件目だけへ見出しを帰属させない' do
+      result = evidence(
+        payment_prefix + copy_heading + [ 'ありがとうございました' ],
+        payments: [ { method: 'VISA支払', amount: 100 } ]
+      )
+
+      expect(result[:payments].map { |payment| payment[:amount] }).to eq([ 864, nil, 100 ])
+    end
+
+    it '売上票と顧客控えの役割を注入profileで認識し旧語彙を直接使わない' do
+      replacement = profile.dup
+      allow(replacement).to receive(:analysis_payment_card_slip_title_pattern).and_return(/\A検証票\z/)
+      allow(replacement).to receive(:analysis_payment_customer_copy_pattern).and_return(/\A検証控\z/)
+      recognized = evidence(payment_prefix + [ '検証票', '検証控', '<QUICPay>', 'ありがとうございました' ], profile: replacement)
+      old = evidence(payment_prefix + copy_heading + [ 'ありがとうございました' ], profile: replacement)
+
+      expect(recognized[:payments]).to contain_exactly(include(amount: 864))
+      expect(old[:payments]).to include(include(amount_role: 'unknown'))
+    end
+  end
+
   it '税の見出しと軽減税率に帰属する対象額と税額を精算の競合にしない' do
     result = evidence([ 'お預かり', '6000', 'お釣り', '-720', '合計', '税', '軽8%', '¥5280', '¥391' ])
 

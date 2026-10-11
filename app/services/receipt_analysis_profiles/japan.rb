@@ -64,7 +64,7 @@ module ReceiptAnalysisProfiles
         /楽天(?:ペイ|pay)/i,
         /rakuten\s*pay/i,
         /d払い/i,
-        /d\s*payment/i,
+        /(?<![A-Za-z0-9])d\s*payment(?![A-Za-z0-9])/i,
         /au\s*pay/i,
         /aupay/i,
         /メルペイ/i,
@@ -370,13 +370,15 @@ module ReceiptAnalysisProfiles
     ANALYSIS_FALLBACK_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|we\s+accept/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_TRANSACTION_CONTEXT_PATTERN = /支払|お支払|支払い|決済|会計|精算|売上|利用額|支払額|現\s*計|cash\s*total|payment|paid|tender|settlement|charge/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_AMOUNT_LABEL_PATTERN = /金額|合計金額|利用額|支払額|お支払額|売上金額|amount|total\s*amount|payment\s*amount/i.freeze
-    ANALYSIS_FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal/i.freeze
+    ANALYSIS_FALLBACK_PAYMENT_METADATA_LABEL_PATTERN = /カード会社|カード番号|端末番号|伝票番号|承認番号|処理通番|商品区分|取扱区分|会員番号|有効期限|加盟店名|merchant|approval|terminal|\A\s*(?:取引|transaction)\s*ID\s*[:：]?\s*\z/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_AMOUNT_NOISE_PATTERN = /住所|所在地|丁目|番地|登録番号|事業者番号|伝票番号|処理番号|処理通番|承認番号|取引番号|レシート番号|カード番号|会員番号|端末番号|電話|tel|phone|〒|郵便|レジ\s*#?\s*\d|加盟店名|店舗|店名|支店|\d+\s*号店|merchant|address|approval|terminal|member/i.freeze
     ANALYSIS_FALLBACK_PAYMENT_ADDRESS_AMOUNT_NOISE_PATTERN = /(?:都|道|府|県).*\d|(?:市|区|町|村).*\d/.freeze
     ANALYSIS_VOUCHER_PAYMENT_PATTERN = /e[\s-]*gift|イーギフト|電子ギフト|ストアクレジット|store\s*credit|商品券|金券|ギフト(?:カード|券)?|お買物券|買物券|株主優待券|優待券|gift\s*certificate|gift\s*card|store\s*credit|voucher/i.freeze
     ANALYSIS_PAYMENT_SECTION_START_PATTERN = /\A\s*(?:支払方法|お支払い方法|お支払方法|支払内訳|決済内訳|お支払い|payment\s*(?:method|details))\s*[:：]?\s*\z|クレジットカード売上票/i.freeze
     ANALYSIS_PAYMENT_SECTION_TOTAL_PATTERN = /\A\s*(?:総\s*合\s*計|合\s*計(?:金額)?|税込合計|お買上(?:げ)?金額|total)(?:\s*[（(](?:税込|税抜|内税)[)）])?\s*[:：]?(?:\s|[¥￥]|\d|\z)/i.freeze
     ANALYSIS_PAYMENT_SECTION_END_PATTERN = /ありがとう|毎度|ご来店|またの|領収(?:書)?番号|レシート番号|取引番号|thank\s*you|receipt\s*(?:no|number)/i.freeze
+    ANALYSIS_PAYMENT_CARD_SLIP_TITLE_PATTERN = /\A\s*(?:クレジットカード売上票|\[\s*クレジットカード売上票\s*\])\s*\z/i.freeze
+    ANALYSIS_PAYMENT_CUSTOMER_COPY_PATTERN = /\A\s*(?:お客様控(?:え)?|\(\s*お客様控(?:え)?\s*\))\s*\z/i.freeze
     ANALYSIS_PAYMENT_AFFIRMATIVE_PATTERN = /適用|利用|使用|充当|支払|決済|精算|領収額|現\s*計|現金計|現金合計|paid|redeemed|applied|payment|cash\s*total/i.freeze
     ANALYSIS_PAYMENT_APPLIED_AMOUNT_PATTERN = /充当(?:額|金額)?|利用額|支払額|支払(?:い)?\s*[¥￥]?\s*\d|applied\s*amount|redeemed\s*amount/i.freeze
     ANALYSIS_PAYMENT_TENDER_AMOUNT_PATTERN = /額面|お預かり|お預り|預かり|預り|tender|face\s*value/i.freeze
@@ -388,7 +390,7 @@ module ReceiptAnalysisProfiles
     ANALYSIS_PAYMENT_TAX_BLOCK_HEADING_PATTERN = /\A\s*税\s*\z/.freeze
     ANALYSIS_PAYMENT_TAX_BLOCK_RATE_PATTERN = /\A\s*(?:軽|軽減)?\s*\d+(?:\.\d+)?\s*[%％]\s*\z/.freeze
     ANALYSIS_PAYMENT_TAX_SUMMARY_PATTERN = /\A\s*[（(]?\s*(?:消費税|内消費税|税額|税率|内税|外税|\d+(?:\.\d+)?\s*[%％]\s*(?:対象|税|tax))/i.freeze
-    ANALYSIS_PAYMENT_METADATA_ID_TITLE_PATTERN = /\A\s*(?:処理番号|処理通番|伝票番号|承認番号|取引番号|レシート番号|カード番号|会員番号|端末番号|登録番号|invoice\s*number|approval\s*number|terminal\s*number)\s*[:：]?\s*\z/i.freeze
+    ANALYSIS_PAYMENT_METADATA_ID_TITLE_PATTERN = /\A\s*(?:処理番号|処理通番|伝票番号|承認番号|取引番号|(?:取引|transaction)\s*ID|レシート番号|カード番号|会員番号|端末番号|登録番号|invoice\s*number|approval\s*number|terminal\s*number)\s*[:：]?\s*\z/i.freeze
     ANALYSIS_PAYMENT_INSTRUMENT_QUALIFIER_PATTERN = /クレジット(?:カード)?|credit\s*(?:card)?/i.freeze
     ANALYSIS_PAYMENT_CATEGORY_ALIAS_PATTERNS = {
       "cash" => /\A(?:現金|現\s*計|cash)\z/i,
@@ -1177,6 +1179,14 @@ module ReceiptAnalysisProfiles
 
       def analysis_payment_section_end_pattern
         ANALYSIS_PAYMENT_SECTION_END_PATTERN
+      end
+
+      def analysis_payment_card_slip_title_pattern
+        ANALYSIS_PAYMENT_CARD_SLIP_TITLE_PATTERN
+      end
+
+      def analysis_payment_customer_copy_pattern
+        ANALYSIS_PAYMENT_CUSTOMER_COPY_PATTERN
       end
 
       def analysis_payment_affirmative_pattern
