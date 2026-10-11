@@ -105,15 +105,15 @@ RSpec.describe "レシート処理カードの実Chrome同期", type: :system do
     wait_for_stimulus_controller("receipt-processing-sync")
     expect(page).to have_css("#{card_selector}[data-receipt-card-phase='ocr']")
 
-    initial_revision = find(card_selector)["data-receipt-card-state-revision"]
+    initial_revision = find(card_selector).native.dom_attribute("data-receipt-card-state-revision")
+    expect(initial_revision).to match(/\A\d+\z/)
     page.execute_script("document.querySelector(arguments[0]).dataset.syncSentinel = 'unchanged'", card_selector)
     force_processing_card_sync
 
-    unchanged_card = find(card_selector)
-    aggregate_failures do
-      expect(unchanged_card["data-sync-sentinel"]).to eq("unchanged")
-      expect(unchanged_card["data-receipt-card-state-revision"]).to eq(initial_revision)
-    end
+    expect(page).to have_css(
+      "#{card_selector}[data-sync-sentinel='unchanged']" \
+      "[data-receipt-card-state-revision='#{initial_revision}']"
+    )
 
     clear_scheduled_processing_card_sync
     changed_at = [ Time.current, run.updated_at, receipt.updated_at ].max + 2.seconds
@@ -125,14 +125,12 @@ RSpec.describe "レシート処理カードの実Chrome同期", type: :system do
     )
     force_processing_card_sync
 
-    expect(page).to have_css("#{card_selector}[data-receipt-card-phase='ai']")
-    updated_card = find(card_selector)
-    aggregate_failures do
-      expect(updated_card["data-sync-sentinel"]).to be_nil
-      expect(updated_card["data-receipt-card-state-revision"]).not_to eq(initial_revision)
-      expect(updated_card["data-receipt-card-terminal"]).to eq("false")
-      expect(updated_card["data-receipt-processing-sync-target"]).to eq("card")
-    end
+    expect(page).to have_css(
+      "#{card_selector}[data-receipt-card-phase='ai'][data-receipt-card-terminal='false']" \
+      "[data-receipt-processing-sync-target='card'][data-receipt-card-state-revision]" \
+      ":not([data-receipt-card-state-revision='']):not([data-receipt-card-state-revision='#{initial_revision}'])" \
+      ":not([data-sync-sentinel])"
+    )
     expect_browser_console_clean
   end
 
@@ -156,11 +154,11 @@ RSpec.describe "レシート処理カードの実Chrome同期", type: :system do
     receipt.update_columns(status: "completed", updated_at: terminal_at)
     force_processing_card_sync(require_poll: false)
 
-    expect(page).to have_css("#{card_selector}[data-receipt-card-phase='completed']")
-    terminal_card = find(card_selector)
+    terminal_card_selector = "#{card_selector}[data-receipt-card-phase='completed']" \
+      "[data-receipt-card-terminal='true']:not([data-receipt-processing-sync-target])"
+    expect(page).to have_css(terminal_card_selector)
+    terminal_card = find(terminal_card_selector)
     aggregate_failures do
-      expect(terminal_card["data-receipt-card-terminal"]).to eq("true")
-      expect(terminal_card["data-receipt-processing-sync-target"]).to be_nil
       expect(terminal_card).to have_link(I18n.t("receipt_cards.actions.show"))
       expect(terminal_card).to have_link(I18n.t("receipt_cards.actions.edit"))
     end

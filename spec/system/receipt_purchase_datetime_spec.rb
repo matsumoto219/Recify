@@ -75,10 +75,11 @@ RSpec.describe "解析した購入日時の表示と編集", type: :system do
 
       %w[light dark].each do |theme|
         page.execute_script("document.documentElement.dataset.theme = arguments[0]", theme)
-        expect(find("#receipt_purchased_on").value).to eq("2026-09-01")
+        expect(page).to have_field("receipt_purchased_on", with: "2026-09-01")
+        expect(page).to have_css("#receipt_purchased_time.input-field.input-field-datetime:not(.input-field-error)") do |input|
+          input.value == "07:36"
+        end
         time_input = find("#receipt_purchased_time")
-        expect(time_input.value).to eq("07:36")
-        expect(time_input[:class].split).not_to include("input-field-error")
         time_input.click
         time_input.send_keys(:tab)
         expect(page.evaluate_script("document.documentElement.scrollWidth <= window.innerWidth")).to be(true)
@@ -86,12 +87,12 @@ RSpec.describe "解析した購入日時の表示と編集", type: :system do
       end
 
       page.refresh
-      expect(find("#receipt_purchased_time").value).to eq("07:36")
+      expect(page).to have_field("receipt_purchased_time", with: "07:36")
       click_link I18n.t("receipts.form.breadcrumbs.show"), match: :first
       expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
       page.go_back
       expect(page).to have_current_path(edit_receipt_path(receipt), ignore_query: true)
-      expect(find("#receipt_purchased_time").value).to eq("07:36")
+      expect(page).to have_field("receipt_purchased_time", with: "07:36")
       page.go_forward
       expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)
       expect(page).to have_text("07:36")
@@ -109,8 +110,8 @@ RSpec.describe "解析した購入日時の表示と編集", type: :system do
     sign_in_through_browser(user)
     visit edit_receipt_path(receipt)
     wait_for_stimulus_controller("receipt-form")
-    expect(find("#receipt_purchased_on").value).to eq("2026-09-01")
-    expect(find("#receipt_purchased_time")[:class].split).to include("input-field-error")
+    expect(page).to have_field("receipt_purchased_on", with: "2026-09-01")
+    expect(page).to have_css("#receipt_purchased_time.input-field.input-field-datetime.input-field-error")
     fill_in "receipt_purchased_time", with: "08:10"
     click_button I18n.t("receipts.form.buttons.save"), match: :first
     expect(page).to have_current_path(receipt_path(receipt))
