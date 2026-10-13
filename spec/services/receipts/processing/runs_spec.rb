@@ -113,6 +113,44 @@ RSpec.describe Receipts::Processing::Runs do
   end
 
   describe '.enqueue' do
+    it 'enqueueがfalseを返した場合もrunとreceiptをfailedへ補償する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = described_class.start(receipt:, source: 'upload').run
+      allow(ReceiptOcrJob).to receive(:perform_later).with(run_id: run.id).and_return(false)
+
+      expect do
+        described_class.enqueue(run, job_class: ReceiptOcrJob)
+      end.to raise_error(Receipts::Processing::EnqueueError, 'analysis job enqueue failed')
+
+      aggregate_failures do
+        expect(run.reload).to have_attributes(
+          status: 'failed',
+          error_stage: 'enqueue',
+          error_code: 'analysis_enqueue_failed',
+          error_message: 'analysis_enqueue_failed'
+        )
+        expect(receipt.reload).to have_attributes(
+          status: 'failed',
+          processing_error_code: 'analysis_enqueue_failed'
+        )
+        expect(receipt.image).to be_attached
+      end
+    end
+
+    it 'enqueue成功時はjobを返してrunとreceiptの状態を維持する' do
+      receipt = create(:receipt, :processing, :with_image)
+      run = described_class.start(receipt:, source: 'upload').run
+
+      result = described_class.enqueue(run, job_class: ReceiptOcrJob)
+
+      aggregate_failures do
+        expect(result).to be_a(ReceiptOcrJob)
+        expect(result.arguments).to eq([ { run_id: run.id } ])
+        expect(run.reload).to have_attributes(status: 'queued', error_code: nil)
+        expect(receipt.reload).to have_attributes(status: 'processing', processing_error_code: nil)
+      end
+    end
+
     it 'enqueue失敗時はrunとprocessing receiptをfailedへ補償して安全な例外を返す' do
       receipt = create(:receipt, :processing, :with_image)
       run = described_class.start(receipt:, source: 'upload').run

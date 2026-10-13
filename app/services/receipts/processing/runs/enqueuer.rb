@@ -15,7 +15,10 @@ module Receipts::Processing::Runs
     end
 
     def call
-      job_class.perform_later(run_id: run.id)
+      result = job_class.perform_later(run_id: run.id)
+      raise Receipts::Processing::EnqueueError, "analysis job enqueue failed" if result == false
+
+      result
     rescue StandardError => error
       compensate_failure!
       Rails.logger.error(
