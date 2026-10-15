@@ -29,6 +29,10 @@ module Storage
       QuotaReservation.call(byte_size:, user:, excluding_blob:, &operation)
     end
 
+    def with_prepared_images(records:, attachment_name:, user: nil, registration_key: nil, &operation)
+      PreparedImages.call(records:, attachment_name:, user:, registration_key:, &operation)
+    end
+
     def orphan_blob_scan(...)
       OrphanBlobScanner.call(...)
     end

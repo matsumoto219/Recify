@@ -51,6 +51,7 @@ module Storage
 
     def candidate_blobs
       scope = ActiveStorage::Blob.unattached
+        .where("NOT jsonb_exists(COALESCE(metadata::jsonb, '{}'::jsonb), ?)", PreparedImages::METADATA_KEY)
         .where("active_storage_blobs.created_at < ?", threshold)
         .order(:created_at, :id)
 

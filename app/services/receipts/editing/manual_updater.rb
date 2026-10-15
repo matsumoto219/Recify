@@ -23,7 +23,7 @@ class Receipts::Editing::ManualUpdater
 
   def call
     if items_missing
-      receipt.assign_attributes(source_attributes)
+      receipt.assign_attributes(source_attributes.except("image", :image))
       return result(saved: false)
     end
 
@@ -43,11 +43,8 @@ class Receipts::Editing::ManualUpdater
 
     return receipt.update(attributes) unless uploaded_image
 
-    Storage.with_quota_reservation(
-      byte_size: uploaded_image.size,
-      user: receipt.user,
-      excluding_blob: existing_image_blob
-    ) { receipt.update(attributes) }
+    receipt.assign_attributes(attributes)
+    Storage.with_prepared_images(records: [ receipt ], attachment_name: :image, user: receipt.user) { receipt.save }
   rescue Storage::QuotaExceeded
     receipt.errors.add(:image, :storage_quota_exceeded)
     false
@@ -82,15 +79,11 @@ class Receipts::Editing::ManualUpdater
     attributes["image"]
   end
 
-  def existing_image_blob
-    receipt.image.blob if receipt.image.attached?
-  end
-
   def restore_source_after_failure
     error_snapshot = validation_error_snapshot
 
     receipt.reload
-    receipt.assign_attributes(source_attributes)
+    receipt.assign_attributes(source_attributes.except("image", :image))
     restore_record_errors(receipt, error_snapshot[:receipt])
     error_snapshot[:children].each do |association_name, child_snapshot|
       restore_child_errors(receipt.public_send(association_name), child_snapshot)

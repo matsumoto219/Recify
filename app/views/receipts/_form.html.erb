@@ -583,6 +583,9 @@
                 accept: receipt_image_accept,
                 storage_usage: current_user.storage_usage,
                 review_target: ReceiptsHelper::RECEIPT_REVIEW_TARGET_IMAGE_PREVIEW %>
+          <% if @receipt_form_image_reselection_required %>
+            <p class="mt-2 text-xs token-text-muted" role="status"><%= t("shared.receipt_image_card.reselect_image") %></p>
+          <% end %>
         </div>
       </div>
     </div>

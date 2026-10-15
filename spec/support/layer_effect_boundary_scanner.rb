@@ -115,7 +115,7 @@ module LayerEffectBoundary
         update_manual
       ],
       "Receipts::Uploads" => %i[batch single],
-      "Storage" => %i[purge_attachment purge_receipt_images],
+      "Storage" => %i[purge_attachment purge_receipt_images with_prepared_images],
       "SystemOperations" => %i[
         execute_ip_access_operation
         execute_receipt_analysis_cleanup

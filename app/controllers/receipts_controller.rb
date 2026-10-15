@@ -434,6 +434,7 @@ class ReceiptsController < ApplicationController
       return
     end
 
+    @receipt_form_image_reselection_required = !result.saved? && uploaded_receipt_image.present?
     if result.items_missing?
       prepare_manual_receipt_items_missing_error!(source_params)
       build_receipt_adjustment_row_for_render if rebuild_blank_adjustment_row_after_failure
@@ -846,13 +847,13 @@ class ReceiptsController < ApplicationController
     uploaded_file.present? &&
       (
         !current_user.storage_can_add?(uploaded_file.size, excluding_blob: excluding_blob) ||
-        !Storage.global_quota_can_add?(uploaded_file.size, excluding_blob: excluding_blob)
+        !Storage.global_quota_can_add?(uploaded_file.size)
       )
   end
 
   def storage_quota_exceeded_message_for(uploaded_file, excluding_blob: nil)
     if uploaded_file.present? &&
-       !Storage.global_quota_can_add?(uploaded_file.size, excluding_blob: excluding_blob)
+       !Storage.global_quota_can_add?(uploaded_file.size)
       t("flash.storage.global_hard_stop")
     else
       t("flash.storage.quota_exceeded")

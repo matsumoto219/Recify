@@ -1194,7 +1194,7 @@ RSpec.describe 'Settings', type: :request do
     end
 
     it '事前判定後のlock内quota再判定で超過したavatarを保存しない' do
-      allow(Storage).to receive(:with_quota_reservation)
+      allow(Storage).to receive(:with_prepared_images)
         .and_raise(Storage::QuotaExceeded.new(scope: :global))
 
       patch user_registration_path,

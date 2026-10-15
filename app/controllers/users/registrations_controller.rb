@@ -314,14 +314,12 @@ class Users::RegistrationsController < Devise::RegistrationsController
     excluding_blob = resource.avatar.blob if resource.avatar.attached?
 
     !resource.storage_can_add?(uploaded_avatar.size, excluding_blob: excluding_blob) ||
-      !Storage.global_quota_can_add?(uploaded_avatar.size, excluding_blob: excluding_blob)
+      !Storage.global_quota_can_add?(uploaded_avatar.size)
   end
 
   def avatar_storage_quota_exceeded_message(resource, uploaded_avatar)
-    excluding_blob = resource.avatar.blob if resource.avatar.attached?
-
     if uploaded_avatar.present? &&
-       !Storage.global_quota_can_add?(uploaded_avatar.size, excluding_blob: excluding_blob)
+       !Storage.global_quota_can_add?(uploaded_avatar.size)
       t("flash.storage.global_hard_stop")
     else
       t("flash.storage.quota_exceeded")
@@ -332,14 +330,15 @@ class Users::RegistrationsController < Devise::RegistrationsController
     uploaded_avatar = profile_params[:avatar]
     return resource.update_without_password(profile_params) if uploaded_avatar.blank?
 
-    excluding_blob = resource.avatar.blob if resource.avatar.attached?
-    Storage.with_quota_reservation(
-      byte_size: uploaded_avatar.size,
-      user: resource,
-      excluding_blob: excluding_blob
-    ) { resource.update_without_password(profile_params) }
+    resource.assign_attributes(profile_params)
+    Storage.with_prepared_images(records: [ resource ], attachment_name: :avatar, user: resource) do
+      resource.update_without_password(profile_params.except(:avatar))
+    end
   rescue Storage::QuotaExceeded
     resource.errors.add(:avatar, :storage_quota_exceeded)
+    false
+  rescue ActiveRecord::StaleObjectError
+    resource.errors.add(:avatar, :stale_image)
     false
   end
 
