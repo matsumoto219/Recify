@@ -52,6 +52,7 @@ RSpec.describe 'Receipt manual core validation', type: :request do
 
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           image: uploaded_image,
@@ -75,6 +76,7 @@ RSpec.describe 'Receipt manual core validation', type: :request do
   it '店舗名・合計金額が揃った画像付き要確認データは手動作成できる' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           image: uploaded_image,

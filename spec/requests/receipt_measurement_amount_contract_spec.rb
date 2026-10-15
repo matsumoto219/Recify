@@ -171,6 +171,7 @@ RSpec.describe 'Receipt measurement amount contract', type: :request do
 
   it 'JSが空hidden小計を0へ同期した手動measurementを0円で保存する' do
     post receipts_path, params: {
+      receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
       receipt_calculation_context: calculation_context,
       receipt: {
         store_name: '手動計量0円店',
@@ -213,6 +214,7 @@ RSpec.describe 'Receipt measurement amount contract', type: :request do
   it 'JSを通さない空hidden小計の手動measurementを保存しない' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '手動計量空欄店',

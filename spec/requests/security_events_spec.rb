@@ -113,6 +113,7 @@ RSpec.describe 'Security events', type: :request do
     expect {
       post upload_receipts_path,
            params: {
+             receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
              receipt: {
                image: Rack::Test::UploadedFile.new(invalid_file.path, 'image/jpeg')
              }
@@ -146,6 +147,7 @@ RSpec.describe 'Security events', type: :request do
     expect {
       post upload_receipts_path,
            params: {
+             receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
              receipt: {
                image: uploaded_file
              }

@@ -162,6 +162,7 @@ RSpec.describe 'Manual receipt usage limit pricing state', type: :request do
 
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '日次上限source保持店',
@@ -220,6 +221,7 @@ RSpec.describe 'Manual receipt usage limit pricing state', type: :request do
 
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '',

@@ -1,4 +1,6 @@
 class ReceiptsController < ApplicationController
+  include Receipts::RegistrationOperation
+
   before_action :authenticate_user!
   before_action :set_receipt, only: [ :show, :edit, :update, :destroy ]
   before_action :block_processing_receipt, only: [ :show, :edit, :update ]
@@ -10,6 +12,8 @@ class ReceiptsController < ApplicationController
              name: "receipt-upload/user",
              only: :upload,
              if: :rate_limit_signed_in?
+  before_action :issue_receipt_registration_token, only: [ :new, :new_upload ]
+  around_action :with_receipt_registration_operation, only: [ :create, :upload ]
 
   MAX_SEARCH_QUERY_LENGTH = 100
   RECEIPT_FORM_FINGERPRINT_MAX_BYTES = 65_536
@@ -116,7 +120,7 @@ class ReceiptsController < ApplicationController
     end
 
     begin
-      result = Receipts::Uploads.single(user: current_user, image: uploaded_receipt_image)
+      result = Receipts::Uploads.single(user: current_user, image: uploaded_receipt_image, operation: @registration_operation)
     rescue Usage::LimitExceeded
       render_upload_usage_limit_exceeded
       return
@@ -245,7 +249,8 @@ class ReceiptsController < ApplicationController
         attributes: persistence_params,
         source_attributes: source_params,
         user: current_user,
-        items_missing: items_missing
+        items_missing: items_missing,
+        operation: @registration_operation
       )
     rescue Usage::LimitExceeded
       render_manual_receipt_usage_limit_exceeded(
@@ -814,7 +819,8 @@ class ReceiptsController < ApplicationController
   def handle_batch_upload
     result = Receipts::Uploads.batch(
       user: current_user,
-      files: uploaded_receipt_images
+      files: uploaded_receipt_images,
+      operation: @registration_operation
     )
     @receipt = current_user.receipts.new
 

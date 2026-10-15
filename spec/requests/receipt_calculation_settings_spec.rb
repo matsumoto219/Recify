@@ -35,6 +35,7 @@ RSpec.describe 'Receipt calculation settings', type: :request do
 
   def create_parameters(item = count_item)
     {
+      receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
       receipt_calculation_context: context_for,
       receipt: {
         store_name: '入力店舗',

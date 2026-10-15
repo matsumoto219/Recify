@@ -25,6 +25,7 @@ RSpec.describe 'Manual explicit quantity contract', type: :request do
 
   def post_explicit_receipt(quantity:, name: 'explicit quantity商品')
     post receipts_path, params: {
+      receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
       receipt_calculation_context: calculation_context,
       receipt: {
         store_name: "explicit quantity #{quantity.inspect}",

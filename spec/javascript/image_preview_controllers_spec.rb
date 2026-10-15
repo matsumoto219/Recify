@@ -37,7 +37,9 @@ RSpec.shared_examples "an image preview source owner" do |controller_name|
         }
         URL.createObjectURL = () => `blob:selected-${++nextUrl}`
         URL.revokeObjectURL = (url) => released.push({ url, currentSource: imageSource })
+        const form = new EventTarget()
         const input = {
+          form,
           files: [],
           set value (value) { if (value === '') this.files = [] }
         }
@@ -58,7 +60,7 @@ RSpec.shared_examples "an image preview source owner" do |controller_name|
         })
         controller.dispatch = (name, options) => events.push({ name, fromImage: options.target === image, source: imageSource })
         const snapshot = () => ({ source: imageSource, hidden: classes.has('hidden'), assignments, fileCount: input.files.length })
-        return { controller, image, input, removeCheckbox, events, released, snapshot }
+        return { controller, form, image, input, removeCheckbox, events, released, snapshot }
       }
 
       #{script}
@@ -157,6 +159,58 @@ RSpec.shared_examples "an image preview source owner" do |controller_name|
       "source" => "", "fileCount" => 0,
       "event" => { "name" => "source-changed", "fromImage" => true, "source" => "" }
     )
+  end
+
+  it "restores the saved image before releasing browser references when its form discards the selection" do
+    result = run_preview_script(<<~JAVASCRIPT)
+      const { controller, form, input, released, snapshot } = buildPreview()
+      controller.connect()
+      input.files = [{ type: 'image/png', size: 100 }]
+      controller.preview()
+      input.value = ''
+      form.dispatchEvent(new Event('upload-guard:discard'))
+      process.stdout.write(JSON.stringify({ ...snapshot(), released, objectUrl: controller.objectUrl }))
+    JAVASCRIPT
+
+    expect(result).to include(
+      "source" => "/saved-image.jpg", "fileCount" => 0, "objectUrl" => nil,
+      "released" => [ { "url" => "blob:selected-1", "currentSource" => "/saved-image.jpg" } ]
+    )
+  end
+
+  it "clears the preview and releases browser references when no saved image exists" do
+    result = run_preview_script(<<~JAVASCRIPT)
+      const { controller, form, input, released, snapshot } = buildPreview({ persisted: '' })
+      controller.connect()
+      input.files = [{ type: 'image/png', size: 100 }]
+      controller.preview()
+      input.value = ''
+      form.dispatchEvent(new Event('upload-guard:discard'))
+      process.stdout.write(JSON.stringify({ ...snapshot(), released, objectUrl: controller.objectUrl }))
+    JAVASCRIPT
+
+    expect(result).to include(
+      "source" => "", "fileCount" => 0, "objectUrl" => nil,
+      "released" => [ { "url" => "blob:selected-1", "currentSource" => "" } ]
+    )
+  end
+
+  it "ignores other forms and removes its discard listener when disconnected" do
+    result = run_preview_script(<<~JAVASCRIPT)
+      const { controller, form, input, events, released, snapshot } = buildPreview()
+      controller.connect()
+      input.files = [{ type: 'image/png', size: 100 }]
+      controller.preview()
+      new EventTarget().dispatchEvent(new Event('upload-guard:discard'))
+      const unrelated = { ...snapshot(), released: released.length }
+      controller.disconnect()
+      const afterDisconnect = events.length
+      form.dispatchEvent(new Event('upload-guard:discard'))
+      process.stdout.write(JSON.stringify({ unrelated, extraEvents: events.length - afterDisconnect }))
+    JAVASCRIPT
+
+    expect(result.fetch("unrelated")).to include("source" => "blob:selected-1", "fileCount" => 1, "released" => 0)
+    expect(result.fetch("extraEvents")).to eq(0)
   end
 end
 

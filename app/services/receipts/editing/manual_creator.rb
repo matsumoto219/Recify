@@ -10,17 +10,18 @@ class Receipts::Editing::ManualCreator
   end
   private_constant :Result
 
-  def self.call(receipt:, attributes:, user:, items_missing:, source_attributes: attributes)
-    new(receipt:, attributes:, source_attributes:, user:, items_missing:).call
+  def self.call(receipt:, attributes:, user:, items_missing:, source_attributes: attributes, operation: nil)
+    new(receipt:, attributes:, source_attributes:, user:, items_missing:, operation:).call
   end
 
-  def initialize(receipt:, attributes:, source_attributes:, user:, items_missing:)
+  def initialize(receipt:, attributes:, source_attributes:, user:, items_missing:, operation:)
     @receipt = receipt
     @attributes = attributes
     @source_attributes = source_attributes
     @user = user
     @items_missing = items_missing == true
     @initial_attributes = receipt.attributes.deep_dup
+    @operation = operation
   end
 
   def call
@@ -30,6 +31,9 @@ class Receipts::Editing::ManualCreator
 
     saved = persist_receipt
     restore_source_after_failure unless saved
+    if !saved && operation && uploaded_image && receipt.errors.of_kind?(:image, :upload_failed)
+      Receipts::Registrations.report_failure(operation:, reason: "storage_failed")
+    end
 
     result(saved: saved)
   rescue Usage::LimitExceeded
@@ -39,7 +43,7 @@ class Receipts::Editing::ManualCreator
 
   private
 
-  attr_reader :receipt, :attributes, :source_attributes, :user, :items_missing, :initial_attributes
+  attr_reader :receipt, :attributes, :source_attributes, :user, :items_missing, :initial_attributes, :operation
 
   def restore_source_after_failure
     error_snapshot = validation_error_snapshot
@@ -86,7 +90,12 @@ class Receipts::Editing::ManualCreator
   def persist_receipt
     return persist_with_usage unless uploaded_image
 
-    Storage.with_quota_reservation(byte_size: uploaded_image.size, user: user) { persist_with_usage }
+    Storage.with_prepared_images(
+      records: [ receipt ],
+      attachment_name: :image,
+      user: user,
+      registration_key: operation&.operation_key
+    ) { persist_with_usage }
   rescue Storage::QuotaExceeded
     receipt.errors.add(:image, :storage_quota_exceeded)
     false
@@ -98,12 +107,15 @@ class Receipts::Editing::ManualCreator
     receipt.manual_core_fields_required = true
 
     ActiveRecord::Base.transaction(requires_new: true) do
+      User.lock.find(user.id)
       if receipt.valid?
         Usage.consume_manual_receipt!(user: user)
         saved = receipt.save
       end
 
       raise ActiveRecord::Rollback unless saved
+
+      Receipts::Registrations.accept!(operation:, receipts: [ receipt ]) if operation
     end
 
     saved

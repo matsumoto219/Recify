@@ -225,6 +225,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
   it 'manual gross formulaのexact sourceを保存し、tampered hidden totalをderivedへ置き換える' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '手動基準価格店',
@@ -272,6 +273,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
   it '基準価格の3桁区切りと全角小数を金額sourceとしてexactに保存する' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '基準価格桁区切り店',
@@ -328,6 +330,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
 
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '非authority無視店',
@@ -360,6 +363,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
 
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '個数formula店',
@@ -390,6 +394,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
   it 'formulaの実計算結果がline total上限を超える場合は422で保存しない' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '計算上限超過店',
@@ -467,6 +472,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     cases.each do |test_case|
       expect do
         post receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
           receipt_calculation_context: calculation_context,
           receipt: {
             store_name: test_case.fetch(:store_name),
@@ -488,6 +494,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
   it '全measurement pricing source fieldがblankの新規行を0円itemへ昇格させない' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: 'blank source除外店',
@@ -520,6 +527,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     %w[count_unit_price reference_quantity_price explicit_line_total].each do |pricing_source_kind|
       expect do
         post receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
           receipt_calculation_context: calculation_context,
           receipt: {
             store_name: "modeのみ除外店 #{pricing_source_kind}",
@@ -555,6 +563,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
   it '商品名のある新規explicit rowのblank authorityを422にして保存しない' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: 'authority未入力店',
@@ -579,6 +588,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
   it 'explicitな0円sourceをmodeだけの空行と区別して保存する' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '0円explicit店',
@@ -612,6 +622,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
   it 'explicitのhidden line total改ざんを無視し、可視original line totalから再計算する' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: 'explicit authority店',
@@ -1739,6 +1750,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
   it 'manual HTTPからauthority-free raw evidenceを作成せず422にする' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: 'raw unit拒否店',
@@ -1767,6 +1779,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
   it 'manual HTTPからauthority-free canonical diagnostic evidenceを作成せず422にする' do
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '診断情報拒否店',
@@ -1906,6 +1919,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
 
     expect do
       post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
         receipt_calculation_context: calculation_context,
         receipt: {
           store_name: '不正基準価格店',

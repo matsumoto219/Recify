@@ -502,7 +502,10 @@ RSpec.describe 'Rails rate limits', type: :request do
 
       10.times do
         post upload_receipts_path,
-             params: { receipt: { image: uploaded_receipt_image } }
+             params: {
+               receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+               receipt: { image: uploaded_receipt_image }
+             }
 
         expect(response).not_to have_http_status(:too_many_requests)
       end
@@ -513,12 +516,16 @@ RSpec.describe 'Rails rate limits', type: :request do
 
       expect do
         post upload_receipts_path,
-             params: { receipt: { image: uploaded_receipt_image } }
+             params: {
+               receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+               receipt: { image: uploaded_receipt_image }
+             }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
         expect_rate_limited_response
         expect(ReceiptOcrJob).to have_received(:perform_later).exactly(10).times
+        expect(Notification.where(kind: 'receipt_upload_failed')).to be_empty
       end
     end
   end

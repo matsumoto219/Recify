@@ -11,12 +11,12 @@ module Receipts
     end
 
     class << self
-      def single(user:, image:)
-        Single.call(user:, image:)
+      def single(user:, image:, operation: nil)
+        Single.call(user:, image:, operation:)
       end
 
-      def batch(user:, files:)
-        Batch.call(user: user, files: files)
+      def batch(user:, files:, operation: nil)
+        Batch.call(user:, files:, operation:)
       end
 
       def max_files

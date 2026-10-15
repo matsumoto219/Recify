@@ -63,6 +63,7 @@ RSpec.describe 'Receipt manual edit review state', type: :request do
 
   it '手動作成時のblank購入日時・支払方法は通常のitem編集後もcompletedのまま維持する' do
     post receipts_path, params: {
+      receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
       receipt_calculation_context: Receipts::CalculationContext.build(user: user, receipt: Receipt.new(user: user)).token,
       receipt: {
         store_name: '手動作成店舗',

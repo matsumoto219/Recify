@@ -254,7 +254,7 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     find("[data-receipt-upload-target='cameraInput']", visible: :all).attach_file(Rails.root.join("spec/fixtures/files/receipt_sample.jpg"))
     install_synthetic_camera
     page.execute_script(<<~JAVASCRIPT)
-      const form = document.querySelector('[data-controller=receipt-upload]')
+      const form = document.querySelector('[data-controller~=receipt-upload]')
       const originalFetch = window.fetch
       const state = { calls: 0, ended: 0, errors: 0, pending: [] }
       window.fetch = (input, options = {}) => {
@@ -270,7 +270,7 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     JAVASCRIPT
 
     click_button I18n.t("receipts.new_upload.buttons.upload")
-    expect(page).to have_css("form[data-controller=receipt-upload][aria-busy=true]")
+    expect(page).to have_css("form[data-controller~=receipt-upload][aria-busy=true]")
     expect(page.evaluate_script("window.receiptUploadTest.calls")).to eq(1)
     page.execute_script(<<~JAVASCRIPT)
       Object.defineProperty(document, 'hidden', { configurable: true, value: true })
@@ -284,7 +284,7 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     expect(page).to have_button(I18n.t("receipts.new_upload.buttons.camera"), disabled: true)
     prevented = page.evaluate_script(<<~JAVASCRIPT)
       (() => {
-        const form = document.querySelector('[data-controller=receipt-upload]')
+        const form = document.querySelector('[data-controller~=receipt-upload]')
         const submit = new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: form.querySelector('[type=submit]') })
         form.dispatchEvent(submit)
         return submit.defaultPrevented
@@ -295,17 +295,17 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     expect(page.evaluate_script("window.receiptCameraTest.calls.length")).to eq(0)
 
     page.execute_script("window.receiptUploadTest.pending.shift().resolve(new Response('', { status: 422, headers: { 'Content-Type': 'text/vnd.turbo-stream.html' } }))")
-    expect(page).not_to have_css("form[data-controller=receipt-upload][aria-busy=true]")
+    expect(page).not_to have_css("form[data-controller~=receipt-upload][aria-busy=true]")
     expect(page).to have_button(I18n.t("receipts.new_upload.buttons.upload"), disabled: false)
     expect(page).to have_button(I18n.t("receipts.new_upload.buttons.camera"), disabled: false)
     expect(page).to have_css("[data-receipt-upload-target='previewWrapper']:not(.hidden)")
     expect(page.evaluate_script("window.receiptUploadTest.ended")).to eq(1)
 
     click_button I18n.t("receipts.new_upload.buttons.upload")
-    expect(page).to have_css("form[data-controller=receipt-upload][aria-busy=true]")
+    expect(page).to have_css("form[data-controller~=receipt-upload][aria-busy=true]")
     expect(page.evaluate_script("window.receiptUploadTest.calls")).to eq(2)
     page.execute_script("window.receiptUploadTest.pending.shift().reject(new TypeError('Synthetic upload failure'))")
-    expect(page).not_to have_css("form[data-controller=receipt-upload][aria-busy=true]")
+    expect(page).not_to have_css("form[data-controller~=receipt-upload][aria-busy=true]")
     expect(page).to have_button(I18n.t("receipts.new_upload.buttons.upload"), disabled: false)
     expect(page).to have_button(I18n.t("receipts.new_upload.buttons.camera"), disabled: false)
     expect(page.evaluate_script("[window.receiptUploadTest.ended, window.receiptUploadTest.errors]")).to eq([ 2, 1 ])
@@ -313,10 +313,10 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     click_button I18n.t("receipts.new_upload.camera.cancel")
     expect(page).to have_button(I18n.t("receipts.new_upload.buttons.upload"), disabled: false)
     click_button I18n.t("receipts.new_upload.buttons.upload")
-    expect(page).to have_css("form[data-controller=receipt-upload][aria-busy=true]")
+    expect(page).to have_css("form[data-controller~=receipt-upload][aria-busy=true]")
     expect(page.evaluate_script("window.receiptUploadTest.calls")).to eq(3)
     page.execute_script("window.receiptUploadTest.pending.shift().resolve(new Response('', { status: 422, headers: { 'Content-Type': 'text/vnd.turbo-stream.html' } }))")
-    expect(page).not_to have_css("form[data-controller=receipt-upload][aria-busy=true]")
+    expect(page).not_to have_css("form[data-controller~=receipt-upload][aria-busy=true]")
     expect(page.evaluate_script("[window.receiptUploadTest.ended, window.receiptUploadTest.pending.length]")).to eq([ 3, 0 ])
     expect(user.receipts.count).to eq(0)
     severe_entries = browser_console_entries.select do |entry|

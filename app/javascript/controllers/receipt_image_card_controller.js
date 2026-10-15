@@ -68,9 +68,11 @@ export default class extends Controller {
     this.modalElement = this.hasModalTarget ? this.modalTarget : null
     this.modalImageElement = this.hasModalImageTarget ? this.modalImageTarget : null
     this.modalFallbackElement = this.hasModalFallbackTarget ? this.modalFallbackTarget : null
+    this.uploadForm = this.hasFileInputTarget ? this.fileInputTarget.form : null
     this.defaultUploadErrorMessage = this.hasUploadErrorTarget ? this.uploadErrorTarget.textContent.trim() : ''
     this.modalPlaceholder = document.createComment('receipt-image-modal-placeholder')
     this.handleBeforeCache = this.handleBeforeCache.bind(this)
+    this.handleDiscardUpload = this.handleDiscardUpload.bind(this)
     this.handlePageShow = this.handlePageShow.bind(this)
     this.handleBreakpointChange = this.handleBreakpointChange.bind(this)
     this.handleReviewTargetClick = this.handleReviewTargetClick.bind(this)
@@ -89,6 +91,7 @@ export default class extends Controller {
     document.addEventListener('turbo:before-cache', this.handleBeforeCache)
     document.addEventListener('click', this.handleReviewTargetClick)
     document.addEventListener('receipt-review:navigate', this.handleReviewNavigation)
+    this.uploadForm?.addEventListener('upload-guard:discard', this.handleDiscardUpload)
     window.addEventListener('hashchange', this.handleReviewTargetHashChange)
     window.addEventListener('pageshow', this.handlePageShow)
     this.addBreakpointListener()
@@ -98,6 +101,7 @@ export default class extends Controller {
   }
 
   disconnect () {
+    this.uploadForm?.removeEventListener('upload-guard:discard', this.handleDiscardUpload)
     this.removeBreakpointListener()
     this.removeModalEventListeners()
     this.closeModal()
@@ -504,6 +508,11 @@ export default class extends Controller {
     if (!this.modalElement || this.modalElement.classList.contains('hidden')) return
 
     this.closeModal()
+  }
+
+  handleDiscardUpload () {
+    this.closeModal()
+    this.clearFileInput()
   }
 
   handleBeforeCache () {
