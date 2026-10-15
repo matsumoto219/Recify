@@ -6,6 +6,7 @@ class User < ApplicationRecord
          :trackable, :confirmable, :lockable
 
   has_many :receipts, dependent: :destroy
+  has_many :receipt_registration_operations, dependent: :destroy
   has_many :notifications, dependent: :destroy
   has_many :contact_requests, dependent: :nullify
   has_many :passkeys, dependent: :destroy

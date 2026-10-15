@@ -92,6 +92,22 @@ RSpec.describe Users::AccountDeletionService do
     end.not_to change(AuditLog, :count)
   end
 
+  it '同じuserの受付記録を削除し他userの受付記録を保持する' do
+    user = create(:user)
+    other_user = create(:user)
+    [ user, other_user ].each do |owner|
+      token = Receipts::Registrations.issue_token(user: owner, kind: 'manual')
+      Receipts::Registrations.with_operation(user: owner, token: token, kind: 'manual', input: {}) { false }
+    end
+
+    described_class.call(user: user)
+
+    aggregate_failures do
+      expect(ReceiptRegistrationOperation.where(user_id: user.id)).not_to exist
+      expect(ReceiptRegistrationOperation.where(user_id: other_user.id).count).to eq(1)
+    end
+  end
+
   it 'Users親入口から呼び出せる' do
     user = create(:user)
 

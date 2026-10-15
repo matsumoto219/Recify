@@ -7,7 +7,7 @@ RSpec.describe "Receipt workflow dependency boundary" do
       namespace: "Receipts::Uploads",
       facade_path: "app/services/receipts/uploads.rb",
       private_root: "app/services/receipts/uploads",
-      allowed_workflow_facades: %w[processing],
+      allowed_workflow_facades: %w[processing registrations],
       public_constants: %w[Receipts::Uploads::Result]
     },
     "processing" => {
@@ -33,15 +33,33 @@ RSpec.describe "Receipt workflow dependency boundary" do
       namespace: "Receipts::Editing",
       facade_path: "app/services/receipts/editing.rb",
       private_root: "app/services/receipts/editing",
-      allowed_workflow_facades: [],
+      allowed_workflow_facades: %w[registrations],
       public_constants: %w[
         Receipts::Editing::ConflictError
         Receipts::Editing::InvalidItemSourceError
+      ]
+    },
+    "registrations" => {
+      namespace: "Receipts::Registrations",
+      facade_path: "app/services/receipts/registrations.rb",
+      private_root: "app/services/receipts/registrations",
+      allowed_workflow_facades: [],
+      public_constants: %w[
+        Receipts::Registrations::Handle
+        Receipts::Registrations::InvalidOperation
+        Receipts::Registrations::Result
       ]
     }
   }.freeze
 
   PUBLIC_FACADE_METHODS = {
+    Receipts::Registrations => %i[
+      accept!
+      cleanup_expired
+      issue_token
+      report_failure
+      with_operation
+    ],
     Receipts::Uploads => %i[
       batch
       max_files
