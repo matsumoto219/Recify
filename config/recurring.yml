@@ -25,6 +25,12 @@ production:
     queue: default
     schedule: at 3:30am every day
 
+  upload_preparation_cleanup:
+    class: UploadPreparationCleanupJob
+    queue: default
+    args: [ { limit: 100 } ]
+    schedule: every hour at minute 17
+
   orphan_blob_cleanup_dry_run:
     class: Storage::OrphanBlobCleanupJob
     queue: default

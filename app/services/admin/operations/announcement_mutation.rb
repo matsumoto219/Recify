@@ -58,17 +58,11 @@ module Admin
 
     def update(announcement:, attributes:)
       before_state = audit_state(announcement)
-      existing_image_blob = announcement.image.blob if announcement.image.attached?
       announcement.assign_attributes(attributes)
       announcement.status = "draft"
       announcement.updated_by = actor
 
-      saved = persist(
-        announcement,
-        action: "announcement.update",
-        before_state: before_state,
-        excluding_blob: existing_image_blob
-      )
+      saved = persist(announcement, action: "announcement.update", before_state: before_state)
       finalize_input_mutation(announcement, saved: saved)
     end
 
@@ -105,17 +99,17 @@ module Admin
       Result.new(announcement: announcement, saved: saved)
     end
 
-    def persist(announcement, action:, before_state:, excluding_blob: nil)
+    def persist(announcement, action:, before_state:)
       return persist_with_audit(announcement, action: action, before_state: before_state) if uploaded_image.blank?
 
-      Storage.with_quota_reservation(
-        byte_size: uploaded_image.size,
-        excluding_blob: excluding_blob
-      ) do
+      Storage.with_prepared_images(records: [ announcement ], attachment_name: :image) do
         persist_with_audit(announcement, action: action, before_state: before_state)
       end
     rescue Storage::QuotaExceeded
       announcement.errors.add(:image, :storage_quota_exceeded)
+      false
+    rescue ActiveRecord::StaleObjectError
+      announcement.errors.add(:image, :stale_image)
       false
     end
 

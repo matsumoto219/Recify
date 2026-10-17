@@ -246,7 +246,7 @@ RSpec.describe Receipts::Editing::ManualUpdater do
       Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
       'image/jpeg'
     )
-    allow(Storage).to receive(:with_quota_reservation)
+    allow(Storage).to receive(:with_prepared_images)
       .and_raise(Storage::QuotaExceeded.new(scope: :global))
 
     result = described_class.call(
@@ -260,6 +260,67 @@ RSpec.describe Receipts::Editing::ManualUpdater do
       expect(result.receipt.errors).to be_of_kind(:image, :storage_quota_exceeded)
       expect(result.receipt.errors[:image].size).to eq(1)
       expect(receipt.reload.image).not_to be_attached
+    end
+  end
+
+  it '画像差し替え失敗では旧画像を戻り値に保持しテキスト入力だけを復元する' do
+    receipt.image.attach(
+      Rack::Test::UploadedFile.new(
+        Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
+        'image/jpeg'
+      )
+    )
+    original_blob = receipt.image.blob
+    replacement = Rack::Test::UploadedFile.new(
+      Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
+      'image/jpeg'
+    )
+    allow(Storage).to receive(:with_prepared_images)
+      .and_raise(Storage::QuotaExceeded.new(scope: :global))
+
+    result = described_class.call(
+      receipt: receipt,
+      attributes: { 'image' => replacement, 'memo' => 'after' },
+      items_missing: false
+    )
+
+    aggregate_failures do
+      expect(result).not_to be_saved
+      expect(result.receipt.image.attachment).to be_persisted
+      expect(result.receipt.image.blob).to eq(original_blob)
+      expect(result.receipt.memo).to eq('after')
+      expect(result.receipt.errors).to be_of_kind(:image, :storage_quota_exceeded)
+      expect(receipt.reload.memo).to eq('before')
+    end
+  end
+
+  it '明細不足で保存に進まない場合も旧画像とテキスト入力を保持する' do
+    receipt.image.attach(
+      Rack::Test::UploadedFile.new(
+        Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
+        'image/jpeg'
+      )
+    )
+    original_blob = receipt.image.blob
+    replacement = Rack::Test::UploadedFile.new(
+      Rails.root.join('spec/fixtures/files/receipt_sample.jpg'),
+      'image/jpeg'
+    )
+    expect(Storage).not_to receive(:with_prepared_images)
+
+    result = described_class.call(
+      receipt: receipt,
+      attributes: { 'image' => replacement, 'memo' => 'after' },
+      items_missing: true
+    )
+
+    aggregate_failures do
+      expect(result).not_to be_saved
+      expect(result).to be_items_missing
+      expect(result.receipt.image.attachment).to be_persisted
+      expect(result.receipt.image.blob).to eq(original_blob)
+      expect(result.receipt.memo).to eq('after')
+      expect(receipt.reload.memo).to eq('before')
     end
   end
 end

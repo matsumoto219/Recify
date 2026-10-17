@@ -37,6 +37,7 @@ RSpec.describe "Receipt upload camera controller" do
         })
         let files = [], value = ''
         Object.defineProperties(element, {
+          src: { get: () => attributes.get('src') || '', set: (next) => attributes.set('src', next) },
           files: { get: () => files, set: (next) => { if (element.assignmentFails) throw new Error('private detail'); files = next } },
           value: { get: () => value, set: (next) => { value = next; if (next === '') files = [] } }
         })
@@ -460,6 +461,27 @@ RSpec.describe "Receipt upload camera controller" do
     expect(result).to eq(%w[hidden pagehide cache preview].map { |action| [ action, false, true, true, true ] })
   end
 
+  it "does not cache a revoked preview URL and rebuilds the preview from the browser-retained file" do
+    result = run_upload_script(<<~JAVASCRIPT)
+      const controller = setup(), revoked = []
+      let sequence = 0
+      URL.createObjectURL = () => `blob:synthetic-${++sequence}`
+      URL.revokeObjectURL = (url) => revoked.push(url)
+      const prior = selectPrior(controller), first = controller.previewTarget.src
+      document.dispatchEvent(new Event('turbo:before-cache'))
+      const cachedSource = controller.previewTarget.hasAttribute('src')
+      const preserved = controller.cameraInputTarget.files[0] === prior
+      controller.disconnect()
+      controller.connect()
+      return { cachedSource, preserved, first, restored: controller.previewTarget.src, revoked }
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "cachedSource" => false, "preserved" => true, "first" => "blob:synthetic-1",
+      "restored" => "blob:synthetic-2", "revoked" => [ "blob:synthetic-1" ]
+    )
+  end
+
   it "rejects another submit and camera start while the upload is busy" do
     result = run_upload_script(<<~JAVASCRIPT)
       const results = []
@@ -751,6 +773,25 @@ RSpec.describe "Receipt upload camera controller" do
     expect(result).to eq(
       "before" => "600px", "resized" => "600px", "cancelled" => "600px", "active" => true,
       "writes" => 1, "observed" => 3, "disconnected" => true, "after" => "", "remaining" => 0
+    )
+  end
+
+  it "releases the selected file preview when the leave guard discards browser selection" do
+    result = run_upload_script(<<~JAVASCRIPT)
+      const controller = setup(), revoked = []
+      URL.revokeObjectURL = (url) => revoked.push(url)
+      controller.showPreview([new File(['image'], 'synthetic.jpg', { type: 'image/jpeg' })])
+      controller.element.dispatchEvent(new Event('upload-guard:discard'))
+      return {
+        revoked, selected: controller.selectedFiles.length, preview: controller.previewTarget.src,
+        hidden: controller.previewWrapperTarget.classList.contains('hidden'), disabled: controller.submitButtonTarget.disabled,
+        sourceAttribute: controller.previewTarget.hasAttribute('src')
+      }
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "revoked" => [ "blob:synthetic-preview" ], "selected" => 0, "preview" => "", "hidden" => true, "disabled" => true,
+      "sourceAttribute" => false
     )
   end
 

@@ -294,7 +294,7 @@ RSpec.describe "画像プレビューと画面内移動の実Chrome回帰", type
     expect_browser_console_clean
   end
 
-  it "別画面から複製キャッシュへ戻ると選択Fileの有無に応じて画像を復元する" do
+  it "離脱を承認して別画面から複製キャッシュへ戻ると選択画像を破棄して保存済み画像を復元する" do
     user = create_system_test_user
     receipt = create(:receipt, :completed, :with_image, user:)
     sign_in_and_edit(user, receipt)
@@ -306,7 +306,9 @@ RSpec.describe "画像プレビューと画面内移動の実Chrome回帰", type
     page.execute_script("window.imageLifecycle.selectedSource = window.imageLifecycle.image.src")
 
     find("a[href='#{settings_path}']", visible: true).click
+    find("dialog[data-confirm-dialog][open] [data-confirm-dialog-confirm]").click
     expect(page).to have_current_path(settings_path)
+    expect(page).not_to have_css("form[data-controller~='receipt-form']")
     expect_browser_console_clean
     page.go_back
     expect(page).to have_current_path(edit_receipt_path(receipt))
@@ -320,22 +322,22 @@ RSpec.describe "画像プレビューと画面内移動の実Chrome回帰", type
       (() => {
         const card = document.querySelector('[data-controller~="receipt-image-card"]')
         const image = card.querySelector('[data-receipt-image-card-target~="previewImage"]')
-        const file = card.querySelector('input[type="file"]').files[0]
         const original = new URL(card.dataset.receiptImageCardOriginalSourceValue, location.href).href
         return {
           cloned: image !== window.imageLifecycle.image,
           cached: window.imageLifecycle.cacheEvents > 0,
-          sourceRestored: file ? image.src.startsWith('blob:') : image.src === original,
+          fileCount: card.querySelector('input[type="file"]').files.length,
+          sourceRestored: image.src === original,
           sourceReplaced: image.src !== window.imageLifecycle.selectedSource
         }
       })()
     JAVASCRIPT
-    expect(restored).to eq("cloned" => true, "cached" => true, "sourceRestored" => true, "sourceReplaced" => true)
+    expect(restored).to eq("cloned" => true, "cached" => true, "fileCount" => 0, "sourceRestored" => true, "sourceReplaced" => true)
     expect_usable_modal
     expect_browser_console_clean
   end
 
-  it "選択画像の読み込み前に別画面へ離脱してもキャッシュ画像を復元できる" do
+  it "選択画像の読み込み中に離脱を要求して承認しても保存済み画像を復元できる" do
     user = create_system_test_user
     receipt = create(:receipt, :completed, :with_image, user:)
     sign_in_and_edit(user, receipt)
@@ -344,13 +346,15 @@ RSpec.describe "画像プレビューと画面内移動の実Chrome回帰", type
       const destination = arguments[0]
       document.querySelector('input[name="receipt[image]"]').addEventListener('change', () => {
         const image = document.querySelector('[data-receipt-image-card-target~="previewImage"]')
-        window.leftDuringImageLoad = !image.complete
+        window.requestedLeaveDuringImageLoad = !image.complete
         Turbo.visit(destination)
       }, { once: true })
     JAVASCRIPT
     select_receipt_image
+    find("dialog[data-confirm-dialog][open] [data-confirm-dialog-confirm]").click
     expect(page).to have_current_path(settings_path)
-    expect(page.evaluate_script("window.leftDuringImageLoad")).to be(true)
+    expect(page).not_to have_css("form[data-controller~='receipt-form']")
+    expect(page.evaluate_script("window.requestedLeaveDuringImageLoad")).to be(true)
     expect_browser_console_clean
 
     page.go_back
@@ -358,6 +362,8 @@ RSpec.describe "画像プレビューと画面内移動の実Chrome回帰", type
     wait_for_stimulus_controller("receipt-image-card")
     set_preview_open(true)
     expect_usable_preview
+    expect(page.evaluate_script("document.querySelector('input[name=\"receipt[image]\"]').files.length")).to eq(0)
+    expect(find("[data-receipt-image-card-target~='previewImage']")["src"]).to include(receipt.image.blob.signed_id)
     expect_usable_modal
     expect_browser_console_clean
   end
@@ -365,12 +371,22 @@ RSpec.describe "画像プレビューと画面内移動の実Chrome回帰", type
   it "画像差し替えの422再表示では再選択を案内し、再選択するとプレビューが復帰する" do
     user = create_system_test_user
     receipt = create(:receipt, :completed, :with_image, user:)
+    original_blob = receipt.image.blob
     sign_in_and_edit(user, receipt)
-    select_receipt_image
+    expect(page).not_to have_content(I18n.t("shared.receipt_image_card.reselect_image"))
     page.execute_script("document.querySelector('textarea[name=\"receipt[memo]\"]').value = 'x'.repeat(1001)")
+    find("button[type='submit']", text: I18n.t("receipts.form.buttons.save"), match: :first).click
+    expect(page).to have_css("#flash [data-controller~='notice-surface']", text: Receipt.human_attribute_name(:memo))
+    expect(page).not_to have_content(I18n.t("shared.receipt_image_card.reselect_image"))
+
+    select_receipt_image
     find("button[type='submit']", text: I18n.t("receipts.form.buttons.save"), match: :first).click
     expect(page).to have_content(I18n.t("shared.receipt_image_card.reselect_image"))
     expect(page.evaluate_script("document.querySelector('input[name=\"receipt[image]\"]').files.length")).to eq(0)
+    set_preview_open(true)
+    expect_usable_preview
+    expect(find("[data-receipt-image-card-target~='previewImage']")["src"]).to include(original_blob.signed_id)
+    expect(receipt.reload.image.blob).to eq(original_blob)
     select_receipt_image
     expect_loaded_image
     cache_without_leaving

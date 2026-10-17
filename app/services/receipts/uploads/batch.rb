@@ -3,8 +3,8 @@ class Receipts::Uploads::Batch
   MAX_FILES = DEFAULT_MAX_FILES
   private_constant :MAX_FILES
 
-  def self.call(user:, files:)
-    new(user:, files:).call
+  def self.call(user:, files:, operation: nil)
+    new(user:, files:, operation:).call
   end
 
   def self.max_files
@@ -13,9 +13,10 @@ class Receipts::Uploads::Batch
     DEFAULT_MAX_FILES
   end
 
-  def initialize(user:, files:)
+  def initialize(user:, files:, operation:)
     @user = user
     @files = Array(files).compact_blank
+    @operation = operation
   end
 
   def call
@@ -33,38 +34,46 @@ class Receipts::Uploads::Batch
 
   private
 
-  attr_reader :user, :files
+  attr_reader :user, :files, :operation
 
   def max_files
     self.class.max_files
   end
 
   def create_receipts
-    created_receipts = []
+    created_receipts = files.map do |file|
+      user.receipts.new(image: file, status: "processing", keep_image: user.effective_keep_receipt_images)
+    end
     validation_errors = []
 
-    Storage.with_quota_reservation(byte_size: total_upload_size, user: user) do
+    prepared = Storage.with_prepared_images(
+      records: created_receipts,
+      attachment_name: :image,
+      user: user,
+      registration_key: operation&.operation_key
+    ) do
       ActiveRecord::Base.transaction(requires_new: true) do
         consume_batch_upload_limits!
 
-        files.each do |file|
-          receipt = user.receipts.new(
-            image: file,
-            status: "processing",
-            keep_image: user.effective_keep_receipt_images
-          )
-
+        created_receipts.each do |receipt|
           unless receipt.save
             validation_errors = receipt.errors.full_messages
             raise ActiveRecord::Rollback
           end
-
-          created_receipts << receipt
         end
+
+        Receipts::Registrations.accept!(operation:, receipts: created_receipts) if operation
       end
+      validation_errors.empty?
     end
 
     return failure(validation_errors) if validation_errors.any?
+    unless prepared
+      if operation && created_receipts.any? { |receipt| receipt.errors.of_kind?(:image, :upload_failed) }
+        Receipts::Registrations.report_failure(operation:, reason: "storage_failed")
+      end
+      return failure(created_receipts.flat_map { |receipt| receipt.errors.full_messages })
+    end
 
     enqueue_errors = enqueue_analysis_jobs(created_receipts)
     success(created_receipts, errors: enqueue_errors)

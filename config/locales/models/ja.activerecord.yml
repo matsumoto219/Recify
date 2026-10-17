@@ -137,6 +137,8 @@ ja:
               future_date: "は未来の日付・時刻を入力できません"
             image:
               invalid_content_type: "対応していないファイル形式です"
+              upload_failed: "を保存できませんでした。時間をおいて再度お試しください"
+              upload_in_progress: "は現在ほかの保存処理と競合しています。少し待ってから再度お試しください"
               file_too_large: "ファイルサイズは%{max_size}以下にしてください"
               image_too_small: "画像サイズが小さすぎます（%{min_dimension}px以上にしてください）"
               image_too_large: "画像サイズが大きすぎます（%{max_dimension}px以下にしてください）"
@@ -164,6 +166,9 @@ ja:
               blank: "を入力してください"
             avatar:
               invalid_content_type: "はPNG/JPEG/WebP形式でアップロードしてください"
+              upload_failed: "を保存できませんでした。時間をおいて再度お試しください"
+              upload_in_progress: "は現在ほかの保存処理と競合しています。少し待ってから再度お試しください"
+              stale_image: "は別の操作で変更されました。画面を再読み込みして、もう一度お試しください"
               file_too_large: "は%{max_size}以下にしてください"
               storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"
             legal_agreement:
@@ -176,6 +181,9 @@ ja:
           attributes:
             image:
               invalid_content_type: "はJPEG/PNG/WebP形式でアップロードしてください"
+              upload_failed: "を保存できませんでした。時間をおいて再度お試しください"
+              upload_in_progress: "は現在ほかの保存処理と競合しています。少し待ってから再度お試しください"
+              stale_image: "は別の操作で変更されました。画面を再読み込みして、もう一度お試しください"
               file_too_large: "は%{max_size}以下にしてください"
               image_too_small: "は%{min_dimension}px以上の画像をアップロードしてください"
               storage_quota_exceeded: "はストレージ容量の上限を超えるためアップロードできません"

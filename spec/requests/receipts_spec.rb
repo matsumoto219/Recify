@@ -16,7 +16,10 @@ RSpec.describe 'Receipts', type: :request do
 
   def post_manual_receipt(params:, as_user: user)
     context = Receipts::CalculationContext.build(user: as_user, receipt: Receipt.new(user: as_user))
-    post receipts_path, params: { receipt_calculation_context: context.token }.merge(params)
+    post receipts_path, params: {
+      receipt_registration_token: Receipts::Registrations.issue_token(user: as_user, kind: 'manual'),
+      receipt_calculation_context: context.token
+    }.merge(params)
   end
 
   def png_bytes(width:, height:, minimum_byte_size: nil)
@@ -2130,7 +2133,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.to change(Receipt, :count).by(1)
         .and change(ReceiptAnalysisRun, :count).by(1)
 
@@ -2157,7 +2163,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
       allow(ReceiptOcrJob).to receive(:perform_later).and_raise(StandardError, 'queue unavailable')
 
-      post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      post upload_receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+        receipt: { image: uploaded_image }
+      }
 
       receipt = Receipt.order(:id).last
       run = receipt.receipt_analysis_runs.sole
@@ -2184,7 +2193,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:runtime_config_snapshot)
         .and_raise(ExternalServices::RuntimeConfigUnavailableError)
 
-      post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      post upload_receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+        receipt: { image: uploaded_image }
+      }
 
       receipt = Receipt.order(:id).last
 
@@ -2206,7 +2218,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
-      post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      post upload_receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+        receipt: { image: uploaded_image }
+      }
 
       receipt = Receipt.order(:id).last
 
@@ -2224,7 +2239,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { images: files } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { images: files }
+        }
       end.to change(Receipt, :count).by(1)
         .and change(ReceiptAnalysisRun, :count).by(1)
 
@@ -2253,7 +2271,10 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.to change(Receipt, :count).by(1)
 
       aggregate_failures do
@@ -2278,7 +2299,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { images: files } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { images: files }
+        }
       end.to change(Receipt, :count).by(3)
         .and change(ReceiptAnalysisRun, :count).by(3)
 
@@ -2312,7 +2336,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { images: files } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { images: files }
+        }
       end.to change(Receipt, :count).by(2)
         .and change(ReceiptAnalysisRun, :count).by(2)
 
@@ -2330,7 +2357,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { images: files } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { images: files }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2354,7 +2384,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { images: files } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { images: files }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2377,7 +2410,10 @@ RSpec.describe 'Receipts', type: :request do
       disguised_files.each do |label, file|
         aggregate_failures label do
           expect do
-            post upload_receipts_path, params: { receipt: { image: file } }
+            post upload_receipts_path, params: {
+              receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+              receipt: { image: file }
+            }
           end.not_to change { [ Receipt.count, ReceiptAnalysisRun.count ] }
 
           expect(response).to have_http_status(:unprocessable_content)
@@ -2399,7 +2435,10 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: file } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: file }
+        }
       end.not_to change { [ Receipt.count, ReceiptAnalysisRun.count ] }
 
       aggregate_failures do
@@ -2421,7 +2460,10 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: file } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: file }
+        }
       end.not_to change { [ Receipt.count, ReceiptAnalysisRun.count ] }
 
       aggregate_failures do
@@ -2443,7 +2485,10 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: file } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: file }
+        }
       end.to change(Receipt, :count).by(1)
         .and change(ReceiptAnalysisRun, :count).by(1)
 
@@ -2466,7 +2511,10 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: file } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: file }
+        }
       end.to change(Receipt, :count).by(1)
         .and change(ReceiptAnalysisRun, :count).by(1)
 
@@ -2489,7 +2537,10 @@ RSpec.describe 'Receipts', type: :request do
       )
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: file } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: file }
+        }
       end.not_to change { [ Receipt.count, ReceiptAnalysisRun.count ] }
 
       aggregate_failures do
@@ -2505,7 +2556,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_png(width: 1, height: 1) } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_png(width: 1, height: 1) }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2531,7 +2585,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { images: files } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { images: files }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2548,7 +2605,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2565,7 +2625,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2582,7 +2645,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2600,7 +2666,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.to change(Receipt, :count).by(1)
         .and change(ReceiptAnalysisRun, :count).by(1)
 
@@ -2628,7 +2697,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: guest, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2648,7 +2720,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: guest, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.to change(Receipt, :count).by(1)
         .and change(ReceiptAnalysisRun, :count).by(1)
 
@@ -2675,7 +2750,10 @@ RSpec.describe 'Receipts', type: :request do
 
       expect do
         post upload_receipts_path,
-             params: { receipt: { image: uploaded_image } },
+             params: {
+               receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+               receipt: { image: uploaded_image }
+             },
              headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
       end.not_to change(Receipt, :count)
 
@@ -2694,7 +2772,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2708,7 +2789,10 @@ RSpec.describe 'Receipts', type: :request do
       create(:system_setting, key: 'operations.ocr_enabled', value: SystemSettings.stored_value(false))
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.not_to change(Receipt, :count)
 
       aggregate_failures do
@@ -2726,7 +2810,10 @@ RSpec.describe 'Receipts', type: :request do
 
       expect do
         post upload_receipts_path,
-             params: { receipt: { image: uploaded_image } },
+             params: {
+               receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+               receipt: { image: uploaded_image }
+             },
              headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
       end.not_to change(Receipt, :count)
 
@@ -2745,7 +2832,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'down' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.to change(Receipt, :count).by(1)
 
       aggregate_failures do
@@ -2762,7 +2852,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ocr).and_return({ state: 'ok' })
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
-      post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+      post upload_receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+        receipt: { image: uploaded_image }
+      }
 
       follow_redirect!
       document = Nokogiri::HTML(response.body)
@@ -2787,7 +2880,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ReceiptAiEnrichmentService).to receive(:call)
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.to change(Receipt, :count).by(1)
 
       receipt = Receipt.order(:id).last
@@ -2845,7 +2941,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ReceiptAiEnrichmentService).to receive(:call).and_return(failed_ai_result)
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.to change(Receipt, :count).by(1)
 
       receipt = Receipt.order(:id).last
@@ -2904,7 +3003,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ReceiptAiEnrichmentService).to receive(:call)
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.to change(Receipt, :count).by(1)
 
       receipt = Receipt.order(:id).last
@@ -3055,7 +3157,10 @@ RSpec.describe 'Receipts', type: :request do
       allow(ExternalServices).to receive(:snapshot).with(:ai).and_return({ state: 'ok' })
 
       expect do
-        post upload_receipts_path, params: { receipt: { image: uploaded_image } }
+        post upload_receipts_path, params: {
+          receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+          receipt: { image: uploaded_image }
+        }
       end.to change(Receipt, :count).by(1)
 
       expect(UsageCounter.find_by!(user: user, key: 'manual_receipts_per_day').used_count).to eq(10)
@@ -3597,7 +3702,7 @@ RSpec.describe 'Receipts', type: :request do
     it 'Turbo requestでもvalidation errorはglobal error pageへ飛ばさず入力フォームを維持する' do
       expect do
         post receipts_path,
-             params: invalid_params,
+             params: invalid_params.merge(receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual')),
              headers: { 'ACCEPT' => 'text/vnd.turbo-stream.html' }
       end.not_to change(Receipt, :count)
 
@@ -4924,7 +5029,7 @@ RSpec.describe 'Receipts', type: :request do
       end
 
       it 'ログイン画面へリダイレクトされる' do
-        post_manual_receipt params: valid_params
+        post receipts_path, params: valid_params
 
         expect(response).to redirect_to(new_user_session_path)
       end

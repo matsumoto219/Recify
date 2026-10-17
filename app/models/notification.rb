@@ -9,6 +9,7 @@ class Notification < ApplicationRecord
     receipt_completed
     receipt_review_needed
     receipt_failed
+    receipt_upload_failed
   ].freeze
 
   belongs_to :user

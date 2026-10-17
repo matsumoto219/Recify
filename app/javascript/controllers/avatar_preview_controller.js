@@ -19,11 +19,15 @@ export default class extends Controller {
   connect () {
     this.objectUrl = null
     this.persistedImageUrl = this.hasImageTarget ? this.imageTarget.dataset.persistedUrl || '' : ''
+    this.uploadForm = this.hasInputTarget ? this.inputTarget.form : null
+    this.discardUpload = this.showPersistedOrFallback.bind(this)
+    this.uploadForm?.addEventListener('upload-guard:discard', this.discardUpload)
     this.hideError()
     this.refreshPreview()
   }
 
   disconnect () {
+    this.uploadForm?.removeEventListener('upload-guard:discard', this.discardUpload)
     if (this.objectUrl) this.showPersistedOrFallback()
   }
 

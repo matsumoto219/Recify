@@ -7,7 +7,17 @@
   datetime_value = ->(value) { value.present? ? value.strftime("%Y-%m-%dT%H:%M") : nil }
 %>
 
-<%= form_with model: announcement, url: action_path, method: method, local: true, html: { multipart: true }, class: "space-y-6" do |form| %>
+<%= form_with model: announcement, url: action_path, method: method, local: true, html: {
+      multipart: true,
+      data: {
+        controller: "upload-guard",
+        upload_guard_title_value: t("upload_guard.title"),
+        upload_guard_message_value: t("upload_guard.message"),
+        upload_guard_pending_message_value: t("upload_guard.pending_message"),
+        upload_guard_leave_label_value: t("upload_guard.leave_label"),
+        upload_guard_stay_label_value: t("upload_guard.stay_label")
+      }
+    }, class: "space-y-6" do |form| %>
   <% if announcement.errors.any? %>
     <%= render "shared/ui/feedback/notice_surface",
           notice_type: :alert,

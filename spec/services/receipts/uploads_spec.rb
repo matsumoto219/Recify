@@ -9,7 +9,18 @@ RSpec.describe Receipts::Uploads do
       allow(Receipts::Uploads::Single).to receive(:call).and_return(result)
 
       expect(described_class.single(user: user, image: image)).to eq(result)
-      expect(Receipts::Uploads::Single).to have_received(:call).with(user: user, image: image)
+      expect(Receipts::Uploads::Single).to have_received(:call).with(user: user, image: image, operation: nil)
+    end
+
+    it "受付handleを同じobjectのままsingle uploadへ渡す" do
+      user = build_stubbed(:user)
+      image = instance_double(ActionDispatch::Http::UploadedFile)
+      operation = instance_double(Receipts::Registrations::Handle)
+      result = instance_double("Receipts::Uploads::Single result")
+      allow(Receipts::Uploads::Single).to receive(:call).and_return(result)
+
+      expect(described_class.single(user: user, image: image, operation: operation)).to eq(result)
+      expect(Receipts::Uploads::Single).to have_received(:call).with(user: user, image: image, operation: operation)
     end
   end
 
@@ -21,7 +32,18 @@ RSpec.describe Receipts::Uploads do
       allow(Receipts::Uploads::Batch).to receive(:call).and_return(result)
 
       expect(described_class.batch(user: user, files: files)).to eq(result)
-      expect(Receipts::Uploads::Batch).to have_received(:call).with(user: user, files: files)
+      expect(Receipts::Uploads::Batch).to have_received(:call).with(user: user, files: files, operation: nil)
+    end
+
+    it "受付handleを同じobjectのままbatch uploadへ渡す" do
+      user = build_stubbed(:user)
+      files = [ instance_double(ActionDispatch::Http::UploadedFile) ]
+      operation = instance_double(Receipts::Registrations::Handle)
+      result = instance_double(Receipts::Uploads::Result)
+      allow(Receipts::Uploads::Batch).to receive(:call).and_return(result)
+
+      expect(described_class.batch(user: user, files: files, operation: operation)).to eq(result)
+      expect(Receipts::Uploads::Batch).to have_received(:call).with(user: user, files: files, operation: operation)
     end
   end
 

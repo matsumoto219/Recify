@@ -46,6 +46,7 @@ module Users
       result = nil
 
       User.transaction do
+        user.lock!
         summary = safe_summary(user)
         user.destroy!
         result = Result.new(summary: summary, audit_log: nil)

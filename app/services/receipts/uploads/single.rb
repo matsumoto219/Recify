@@ -10,13 +10,14 @@ class Receipts::Uploads::Single
   end
   private_constant :Result
 
-  def self.call(user:, image:)
-    new(user:, image:).call
+  def self.call(user:, image:, operation: nil)
+    new(user:, image:, operation:).call
   end
 
-  def initialize(user:, image:)
+  def initialize(user:, image:, operation:)
     @user = user
     @image = image
+    @operation = operation
   end
 
   def call
@@ -26,27 +27,40 @@ class Receipts::Uploads::Single
       status: "processing"
     )
     saved = save_with_usage!(receipt)
-    return Result.new(receipt:, saved: false, enqueue_succeeded: false) unless saved
+    unless saved
+      if operation && receipt.errors.of_kind?(:image, :upload_failed)
+        Receipts::Registrations.report_failure(operation:, reason: "storage_failed")
+      end
+      return Result.new(receipt:, saved: false, enqueue_succeeded: false)
+    end
 
     Result.new(receipt:, saved: true, enqueue_succeeded: enqueue_analysis(receipt))
   end
 
   private
 
-  attr_reader :user, :image
+  attr_reader :user, :image, :operation
 
   def save_with_usage!(receipt)
     saved = false
 
-    Storage.with_quota_reservation(byte_size: image.size, user: user) do
+    prepared = Storage.with_prepared_images(
+      records: [ receipt ],
+      attachment_name: :image,
+      user: user,
+      registration_key: operation&.operation_key
+    ) do
       ActiveRecord::Base.transaction(requires_new: true) do
         Usage.consume_receipt_upload!(user: user)
         saved = receipt.save
         raise ActiveRecord::Rollback unless saved
+
+        Receipts::Registrations.accept!(operation:, receipts: [ receipt ]) if operation
       end
+      saved
     end
 
-    saved
+    saved && prepared
   rescue Storage::QuotaExceeded
     receipt.errors.add(:image, :storage_quota_exceeded)
     false

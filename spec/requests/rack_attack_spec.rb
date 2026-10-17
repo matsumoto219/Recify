@@ -11,6 +11,7 @@ RSpec.describe 'Rack::Attack', type: :request do
     Rack::Attack.cache.store = ActiveSupport::Cache::MemoryStore.new
     Rack::Attack.reset!
 
+    freeze_time
     example.run
   ensure
     travel_back

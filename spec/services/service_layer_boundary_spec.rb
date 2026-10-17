@@ -71,6 +71,10 @@ RSpec.describe "Service layer child implementation boundary" do
         Receipts::Editing
         Receipts::Editing::ConflictError
         Receipts::Editing::InvalidItemSourceError
+        Receipts::Registrations
+        Receipts::Registrations::Handle
+        Receipts::Registrations::InvalidOperation
+        Receipts::Registrations::Result
         Receipts::Processing
         Receipts::Uploads
         Receipts::Uploads::Result

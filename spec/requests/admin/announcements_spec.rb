@@ -1,4 +1,5 @@
 require 'rails_helper'
+require 'vips'
 require 'zlib'
 
 RSpec.describe 'Admin announcements', type: :request do
@@ -63,19 +64,8 @@ RSpec.describe 'Admin announcements', type: :request do
     png + ("\0".b * (minimum_byte_size - png.bytesize))
   end
 
-  def uint24_le(value)
-    [ value & 0xFF, (value >> 8) & 0xFF, (value >> 16) & 0xFF ].pack('C3')
-  end
-
-  def webp_vp8x_bytes(width:, height:)
-    payload = "\0\0\0\0".b + uint24_le(width - 1) + uint24_le(height - 1)
-
-    "RIFF".b +
-      [ 4 + 8 + payload.bytesize ].pack('V') +
-      "WEBP".b +
-      "VP8X".b +
-      [ payload.bytesize ].pack('V') +
-      payload
+  def webp_bytes(width:, height:)
+    Vips::Image.black(width, height, bands: 3).webpsave_buffer
   end
 
   def uploaded_file_from_bytes(bytes:, filename:, content_type:)
@@ -340,7 +330,7 @@ RSpec.describe 'Admin announcements', type: :request do
              params: {
                announcement: announcement_params(
                  image: uploaded_file_from_bytes(
-                   bytes: webp_vp8x_bytes(width: 320, height: 180),
+                   bytes: webp_bytes(width: 320, height: 180),
                    filename: 'announcement.webp',
                    content_type: 'image/webp'
                  ),

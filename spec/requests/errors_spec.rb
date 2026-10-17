@@ -452,7 +452,10 @@ RSpec.describe 'Error pages', type: :request do
     sign_in user
     allow_any_instance_of(ActionView::Base).to receive(:image_tag).and_return('')
 
-    post upload_receipts_path, params: { receipt: { image: invalid_file } }
+    post upload_receipts_path, params: {
+      receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+      receipt: { image: invalid_file }
+    }
 
     aggregate_failures do
       expect(response).to have_http_status(:unprocessable_content)

@@ -68,6 +68,57 @@ RSpec.describe "Receipt image card Stimulus controller" do
     JSON.parse(stdout)
   end
 
+  def run_discard_script(script)
+    targets = File.read(File.expand_path("../../app/javascript/receipts/review_targets.js", __dir__)).gsub(/^export /, "")
+    controller = source
+      .sub("import { Controller } from '@hotwired/stimulus'", "class Controller {}")
+      .sub(/import \{.*?\} from 'receipts\/review_targets'/m, "")
+      .sub(/import \{.*?\} from 'receipts\/review_navigation'/m, "")
+      .sub("export default class extends Controller", "class ImageCardController extends Controller")
+    encoded = Base64.strict_encode64("#{targets}\n#{controller}")
+    harness = <<~JAVASCRIPT
+      eval(Buffer.from(#{encoded.inspect}, 'base64').toString('utf8') + '\\nglobalThis.ImageCardController = ImageCardController')
+      globalThis.window = Object.assign(new EventTarget(), { location: new URL('https://example.test/receipts/example/edit') })
+      globalThis.document = Object.assign(new EventTarget(), { createComment: () => ({}) })
+      function image () {
+        const attributes = new Map()
+        return Object.assign(new EventTarget(), {
+          complete: true, naturalWidth: 100,
+          getAttribute: (name) => attributes.get(name) || '',
+          setAttribute: (name, value) => attributes.set(name, value),
+          removeAttribute: (name) => attributes.delete(name),
+          closest: () => null, classList: { toggle () {} }
+        })
+      }
+      function buildPreview (persisted = '/saved-image.jpg') {
+        const form = new EventTarget(), preview = image(), modal = image(), released = []
+        const input = { form, files: [], set value (value) { if (value === '') this.files = [] } }
+        const fileName = { dataset: { initialLabel: 'saved-image.jpg' }, textContent: '', removeAttribute (name) { delete this[name] } }
+        URL.createObjectURL = () => 'blob:selected'
+        URL.revokeObjectURL = (url) => released.push({ url, currentSource: preview.getAttribute('src') })
+        const controller = Object.create(ImageCardController.prototype)
+        Object.assign(controller, {
+          hasFileInputTarget: true, fileInputTarget: input, hasPreviewImageTarget: true, previewImageTarget: preview,
+          hasModalImageTarget: true, modalImageTarget: modal, hasFileNameTarget: true, fileNameTarget: fileName,
+          originalSourceValue: persisted, storageLimitBytesValue: 0, reviewTargetValue: '', emptyFileLabelValue: 'No file'
+        })
+        controller.connect()
+        input.files = [{ type: 'image/png', size: 100, name: 'selected.png' }]
+        controller.previewSelectedImage({ target: input })
+        const snapshot = () => ({
+          preview: preview.getAttribute('src'), modal: modal.getAttribute('src'),
+          files: input.files.length, fileName: fileName.textContent, objectUrl: controller.objectUrl
+        })
+        return { controller, form, input, released, snapshot }
+      }
+      #{script}
+    JAVASCRIPT
+    stdout, stderr, status = Open3.capture3("node", "-e", harness)
+    raise stderr unless status.success?
+
+    JSON.parse(stdout)
+  end
+
   it "opens the image preview from image review target hashes without toggling it closed" do
     aggregate_failures do
       expect(source).to include("reviewTarget: String")
@@ -155,5 +206,49 @@ RSpec.describe "Receipt image card Stimulus controller" do
       expect(source).to include("this.previewTriggerTarget.setAttribute('aria-label', this.unavailableImageLabelValue)")
       expect(source).to include("if (!this.imageIsAvailable) return")
     end
+  end
+
+  it "restores saved preview sources and file label before releasing a discarded selection" do
+    result = run_discard_script(<<~JAVASCRIPT)
+      const { form, input, released, snapshot } = buildPreview()
+      input.value = ''
+      form.dispatchEvent(new Event('upload-guard:discard'))
+      process.stdout.write(JSON.stringify({ ...snapshot(), released }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "preview" => "/saved-image.jpg", "modal" => "/saved-image.jpg", "files" => 0,
+      "fileName" => "saved-image.jpg", "objectUrl" => nil,
+      "released" => [ { "url" => "blob:selected", "currentSource" => "/saved-image.jpg" } ]
+    )
+  end
+
+  it "removes discarded preview sources when no saved image exists" do
+    result = run_discard_script(<<~JAVASCRIPT)
+      const { form, input, released, snapshot } = buildPreview('')
+      input.value = ''
+      form.dispatchEvent(new Event('upload-guard:discard'))
+      process.stdout.write(JSON.stringify({ ...snapshot(), released }))
+    JAVASCRIPT
+
+    expect(result).to include(
+      "preview" => "", "modal" => "", "files" => 0, "objectUrl" => nil,
+      "released" => [ { "url" => "blob:selected", "currentSource" => "" } ]
+    )
+  end
+
+  it "ignores other forms and removes its discard listener when disconnected" do
+    result = run_discard_script(<<~JAVASCRIPT)
+      const { controller, form, released, snapshot } = buildPreview()
+      new EventTarget().dispatchEvent(new Event('upload-guard:discard'))
+      const unrelated = { ...snapshot(), released: released.length }
+      controller.disconnect()
+      controller.fileNameTarget.textContent = 'untouched'
+      form.dispatchEvent(new Event('upload-guard:discard'))
+      process.stdout.write(JSON.stringify({ unrelated, fileName: controller.fileNameTarget.textContent }))
+    JAVASCRIPT
+
+    expect(result.fetch("unrelated")).to include("preview" => "blob:selected", "modal" => "blob:selected", "files" => 1, "released" => 0)
+    expect(result.fetch("fileName")).to eq("untouched")
   end
 end

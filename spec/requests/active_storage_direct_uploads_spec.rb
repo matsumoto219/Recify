@@ -81,7 +81,10 @@ RSpec.describe 'ActiveStorage direct uploads', type: :request do
     )
 
     expect do
-      post upload_receipts_path, params: { receipt: { image: image } }
+      post upload_receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'upload'),
+        receipt: { image: image }
+      }
     end.to change(Receipt, :count).by(1)
 
     expect(response).to redirect_to(receipts_path)

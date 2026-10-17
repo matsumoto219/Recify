@@ -323,7 +323,7 @@ RSpec.describe Receipts::Uploads::Batch, type: :service do
 
   it '事前判定後のlock内再判定で超過した場合もall-or-nothingで拒否する' do
     files = [ uploaded_receipt_fixture, uploaded_receipt_fixture ]
-    allow(Storage).to receive(:with_quota_reservation)
+    allow(Storage).to receive(:with_prepared_images)
       .and_raise(Storage::QuotaExceeded.new(scope: :global))
 
     result = described_class.call(user:, files:)
@@ -331,7 +331,7 @@ RSpec.describe Receipts::Uploads::Batch, type: :service do
     aggregate_failures do
       expect(result).not_to be_success
       expect(result.errors).to include(I18n.t('receipts.batch_upload.errors.global_hard_stop'))
-      expect(user.receipts).to be_empty
+      expect(user.receipts.reload).to be_empty
       expect(UsageCounter.where(user: user, key: 'batch_files_per_day')).to be_empty
       expect(ReceiptOcrJob).not_to have_received(:perform_later)
     end

@@ -116,14 +116,22 @@ export default class extends Controller {
     this.prepareUploadForCache = () => {
       this.stopCamera()
       this.resetUploadHeight()
+      this.previewTarget.removeAttribute('src')
     }
     this.stopCameraWhenHidden = () => {
       if (document.hidden) this.stopCamera()
     }
     this.refreshUploadControls = () => this.setCameraState(this.cameraState)
+    this.discardSelectedImage = () => {
+      this.stopCamera()
+      this.clearPreview()
+      this.previewTarget.removeAttribute('src')
+      this.submitButtonTarget.disabled = true
+    }
     this.cameraTrackEnded = () => this.showCameraError('unavailable')
     this.element.addEventListener('turbo:submit-start', this.refreshUploadControls)
     this.element.addEventListener('turbo:submit-end', this.refreshUploadControls)
+    this.element.addEventListener('upload-guard:discard', this.discardSelectedImage)
     document.addEventListener('turbo:before-cache', this.prepareUploadForCache)
     document.addEventListener('visibilitychange', this.stopCameraWhenHidden)
     window.addEventListener('pagehide', this.stopCameraForNavigation)
@@ -142,6 +150,7 @@ export default class extends Controller {
     this.resetUploadHeight()
     this.element.removeEventListener('turbo:submit-start', this.refreshUploadControls)
     this.element.removeEventListener('turbo:submit-end', this.refreshUploadControls)
+    this.element.removeEventListener('upload-guard:discard', this.discardSelectedImage)
     document.removeEventListener('turbo:before-cache', this.prepareUploadForCache)
     document.removeEventListener('visibilitychange', this.stopCameraWhenHidden)
     window.removeEventListener('pagehide', this.stopCameraForNavigation)

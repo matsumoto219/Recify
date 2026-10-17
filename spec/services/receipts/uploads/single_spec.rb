@@ -26,8 +26,10 @@ RSpec.describe Receipts::Uploads::Single, type: :service do
   end
 
   it 'creates a processing receipt and enqueues analysis after persistence' do
+    expect(ActiveStorage::AnalyzeJob).not_to receive(:perform_later)
     allow(Receipts::Processing).to receive(:start).and_wrap_original do |method, **arguments|
       expect(arguments.fetch(:receipt)).to be_persisted
+      expect(arguments.fetch(:receipt).image.blob).to be_analyzed
       method.call(**arguments)
     end
 
@@ -71,7 +73,7 @@ RSpec.describe Receipts::Uploads::Single, type: :service do
   end
 
   it 'lock後のquota再判定で超過した場合はreceiptもusageも保存しない' do
-    allow(Storage).to receive(:with_quota_reservation)
+    allow(Storage).to receive(:with_prepared_images)
       .and_raise(Storage::QuotaExceeded.new(scope: :global))
 
     result = described_class.call(user: user, image: uploaded_receipt_fixture)

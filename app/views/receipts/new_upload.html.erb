@@ -53,8 +53,13 @@
         <%= form_with model: @receipt, url: upload_receipts_path, method: :post, local: true, html: {
               multipart: true,
               data: {
-                controller: "receipt-upload",
+                controller: "receipt-upload upload-guard receipt-registration",
                 action: "submit->receipt-upload#disableSubmit",
+                upload_guard_title_value: t("upload_guard.title"),
+                upload_guard_message_value: t("upload_guard.message"),
+                upload_guard_pending_message_value: t("upload_guard.pending_message"),
+                upload_guard_leave_label_value: t("upload_guard.leave_label"),
+                upload_guard_stay_label_value: t("upload_guard.stay_label"),
                 service_status_polling_target: "uploadRoot",
                 receipt_upload_ocr_available_value: upload_page.ocr_available?,
                 receipt_upload_camera_messages_value: t("receipts.new_upload.camera.messages"),
@@ -70,6 +75,12 @@
                 receipt_upload_storage_limit_bytes_value: upload_page.storage_limit_bytes
               }
             } do |form| %>
+          <%= hidden_field_tag :receipt_registration_token, @receipt_registration_token %>
+          <div hidden class="mb-4" data-receipt-registration-target="error">
+            <%= render "shared/ui/feedback/notice_surface",
+              notice_type: :alert,
+              message: t("receipt_registration.transport_unknown") %>
+          </div>
           <div class="space-y-6">
             <div>
               <p class="block text-sm font-medium token-text-base"><%= t("receipts.new_upload.image_label") %></p>

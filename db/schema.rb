@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_17_141145) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_13_103239) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -345,6 +345,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_17_141145) do
     t.index ["receipt_id"], name: "index_receipt_payments_on_receipt_id"
   end
 
+  create_table "receipt_registration_operations", force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.string "attempt_key", limit: 32, null: false
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.string "input_fingerprint", limit: 64, null: false
+    t.datetime "issued_at", null: false
+    t.string "kind", limit: 16, null: false
+    t.boolean "notification_reported", default: false, null: false
+    t.string "operation_key", limit: 64, null: false
+    t.bigint "receipt_ids", default: [], null: false, array: true
+    t.string "state", limit: 16, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["expires_at"], name: "index_receipt_registration_operations_on_expires_at"
+    t.index ["user_id", "operation_key"], name: "index_receipt_registration_operations_on_owner_and_key", unique: true
+    t.index ["user_id"], name: "index_receipt_registration_operations_on_user_id"
+    t.check_constraint "array_ndims(receipt_ids) IS NULL OR array_ndims(receipt_ids) = 1 AND array_length(receipt_ids, 1) >= 1 AND array_length(receipt_ids, 1) <= 20 AND array_position(receipt_ids, NULL::bigint) IS NULL AND (0 < ALL (receipt_ids))", name: "check_receipt_registration_operation_receipt_ids"
+    t.check_constraint "expires_at = (issued_at + 'PT24H'::interval)", name: "check_receipt_registration_operation_lifetime"
+    t.check_constraint "kind::text = ANY (ARRAY['upload'::character varying, 'batch_upload'::character varying, 'manual'::character varying]::text[])", name: "check_receipt_registration_operation_kind"
+    t.check_constraint "operation_key::text ~ '^[0-9a-f]{64}$'::text AND input_fingerprint::text ~ '^[0-9a-f]{64}$'::text AND attempt_key::text ~ '^[0-9a-f]{32}$'::text", name: "check_receipt_registration_operation_identifiers"
+    t.check_constraint "state::text = 'accepted'::text AND accepted_at IS NOT NULL AND cardinality(receipt_ids) >= 1 AND cardinality(receipt_ids) <=\nCASE\n    WHEN kind::text = 'batch_upload'::text THEN 20\n    ELSE 1\nEND OR state::text <> 'accepted'::text AND accepted_at IS NULL AND cardinality(receipt_ids) = 0", name: "check_receipt_registration_operation_acceptance"
+    t.check_constraint "state::text = ANY (ARRAY['processing'::character varying, 'accepted'::character varying, 'failed'::character varying]::text[])", name: "check_receipt_registration_operation_state"
+  end
+
   create_table "receipt_tax_details", force: :cascade do |t|
     t.bigint "amount"
     t.datetime "created_at", null: false
@@ -649,6 +674,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_17_141145) do
   add_foreign_key "receipt_analysis_runs", "users", column: "requested_by_user_id", on_delete: :nullify
   add_foreign_key "receipt_items", "receipts"
   add_foreign_key "receipt_payments", "receipts"
+  add_foreign_key "receipt_registration_operations", "users"
   add_foreign_key "receipt_tax_details", "receipts"
   add_foreign_key "receipts", "security_events", column: "quarantine_source_security_event_id"
   add_foreign_key "receipts", "users"

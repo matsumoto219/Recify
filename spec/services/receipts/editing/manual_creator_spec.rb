@@ -236,7 +236,7 @@ RSpec.describe Receipts::Editing::ManualCreator, type: :service do
   it 'Storage quota failureではsourceとquota errorを保持しderivedを残さない' do
     source = reference_source_attributes.merge('image' => uploaded_image)
     persistence = reference_persistence_attributes(source)
-    allow(Storage).to receive(:with_quota_reservation)
+    allow(Storage).to receive(:with_prepared_images)
       .and_raise(Storage::QuotaExceeded.new(scope: :user))
 
     result = described_class.call(
@@ -313,7 +313,7 @@ RSpec.describe Receipts::Editing::ManualCreator, type: :service do
 
   it 'lock後のquota再判定で超過した画像を保存せずusageも消費しない' do
     attributes['image'] = uploaded_image
-    allow(Storage).to receive(:with_quota_reservation)
+    allow(Storage).to receive(:with_prepared_images)
       .and_raise(Storage::QuotaExceeded.new(scope: :user))
 
     result = described_class.call(

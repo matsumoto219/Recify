@@ -218,7 +218,11 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     }
 
     expect do
-      post receipts_path, params: { receipt_calculation_context: calculation_context, receipt: submitted_receipt }
+      post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
+        receipt_calculation_context: calculation_context,
+        receipt: submitted_receipt
+      }
     end.not_to change(Receipt, :count)
 
     document = Nokogiri::HTML(response.body)
@@ -242,7 +246,11 @@ RSpec.describe 'Receipt measurement pricing 422 form state', type: :request do
     corrected_receipt[:receipt_items_attributes]['0'][:discount_rate] = rendered_discount_rate
 
     expect do
-      post receipts_path, params: { receipt_calculation_context: calculation_context, receipt: corrected_receipt }
+      post receipts_path, params: {
+        receipt_registration_token: Receipts::Registrations.issue_token(user: user, kind: 'manual'),
+        receipt_calculation_context: calculation_context,
+        receipt: corrected_receipt
+      }
     end.to change(Receipt, :count).by(1)
 
     saved_item = user.receipts.find_by!(store_name: '百分率再送店').receipt_items.sole
