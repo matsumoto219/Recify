@@ -29,10 +29,10 @@ RSpec.describe 'Solid Cable receipt stream delivery' do
   end
 
   before do
-    raise 'Solid Cable integration requires the test environment' unless Rails.env.test?
-    unless %w[recify_test recify_bot_cable_test].include?(ActiveRecord::Base.connection_db_config.database)
-      raise 'Solid Cable integration requires an approved test database'
-    end
+    Recify::TestDatabaseGuard.validate!(
+      environment: Rails.env.to_s,
+      configurations: [ ActiveRecord::Base.connection_db_config ]
+    )
 
     if SolidCable::Record.connection_specification_name != ActiveRecord::Base.connection_specification_name
       @original_connection = SolidCable::Record.connection_db_config
