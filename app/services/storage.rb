@@ -44,6 +44,10 @@ module Storage
       ).exists?
     end
 
+    def cleanup_prepared_images(...)
+      PreparedImageCleanup.call(...)
+    end
+
     def orphan_blob_scan(...)
       OrphanBlobScanner.call(...)
     end
