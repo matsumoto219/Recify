@@ -25,6 +25,12 @@ module Storage::ImageReadability
 
       options = { access: :sequential, fail_on: :error }
       options[:n] = -1 if MULTIPAGE_CONTENT_TYPES.include?(content_type)
+      if content_type == "image/tiff"
+        # Some libvips versions stop counting at a damaged directory without failing.
+        # Require every directory from the file, not only those the decoder counted.
+        options[:n] = Storage::TiffPageCount.call(binary)
+        return false unless options[:n]
+      end
       image = Vips::Image.new_from_buffer(binary, "", **options)
       return false unless bounded_dimensions?(image, max_dimension:)
 

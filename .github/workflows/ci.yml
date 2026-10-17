@@ -249,7 +249,7 @@ jobs:
       - name: Install and verify libvips
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y libvips-tools
+          sudo apt-get install --no-install-recommends -y libheif-plugin-libde265 libvips-tools
           vips --version
 
       - name: Check for duplicate workspace files

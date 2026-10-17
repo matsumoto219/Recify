@@ -2,12 +2,14 @@ require "spec_helper"
 require "stringio"
 require "image_processing/vips"
 require_relative "../../../app/services/storage"
+require_relative "../../../app/services/storage/tiff_page_count"
 require_relative "../../../app/services/storage/image_readability"
 
 RSpec.describe Storage::ImageReadability do
   let(:max_bytes) { 20 * 1024 * 1024 }
   let(:max_dimension) { 10_000 }
   let(:image) { Vips::Image.black(120, 160, bands: 3) }
+  let(:heic_bytes) { File.binread(File.expand_path("../../fixtures/files/readable_image.heic", __dir__)) }
 
   def readable?(bytes, content_type:, max_bytes: self.max_bytes, max_dimension: self.max_dimension)
     described_class.valid?(io: StringIO.new(bytes), content_type:, max_bytes:, max_dimension:)
@@ -39,7 +41,7 @@ RSpec.describe Storage::ImageReadability do
 
   %w[image/heif image/heic].each do |content_type|
     it "#{content_type}の全pixelが読み取れる画像を受け付ける" do
-      expect(readable?(image.heifsave_buffer(effort: 0), content_type:)).to be(true)
+      expect(readable?(heic_bytes, content_type:)).to be(true)
     end
   end
 
@@ -68,9 +70,7 @@ RSpec.describe Storage::ImageReadability do
   end
 
   it "不完全なHEIC containerを受け付けない" do
-    bytes = image.heifsave_buffer(effort: 0)
-
-    expect(readable?(bytes.byteslice(0, bytes.bytesize - 100), content_type: "image/heic")).to be(false)
+    expect(readable?(heic_bytes.byteslice(0, heic_bytes.bytesize - 100), content_type: "image/heic")).to be(false)
   end
 
   it "上限を1byte超える部分だけを読み込み、無制限readをしない" do
