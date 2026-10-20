@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
+import { isAllowedImageFile } from 'image_file_type'
 
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg',
@@ -97,7 +98,7 @@ export default class extends Controller {
   }
 
   validateFile (file) {
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    if (!isAllowedImageFile(file, ALLOWED_IMAGE_TYPES)) {
       return this.invalidTypeMessageValue
     }
 

@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
+import { isAllowedImageFile } from 'image_file_type'
 
 // Connects to data-controller="avatar-preview"
 export default class extends Controller {
@@ -92,7 +93,7 @@ export default class extends Controller {
 
   validateFile (file) {
     const allowedTypes = ['image/png', 'image/jpeg', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
+    if (!isAllowedImageFile(file, allowedTypes)) {
       return this.invalidTypeMessageValue
     }
 

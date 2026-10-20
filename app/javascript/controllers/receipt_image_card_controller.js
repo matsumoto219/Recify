@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
+import { isAllowedImageFile } from 'image_file_type'
 import {
   reviewTargetIdFromHash,
   reviewTargetLinkForClick,
@@ -16,28 +17,7 @@ const ALLOWED_RECEIPT_IMAGE_TYPES = [
   'image/heic'
 ]
 
-const ALLOWED_RECEIPT_IMAGE_EXTENSIONS = [
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.bmp',
-  '.tif',
-  '.tiff',
-  '.heif',
-  '.heic'
-]
-
 const DESKTOP_PREVIEW_MEDIA_QUERY = '(min-width: 1024px)'
-
-function isAllowedReceiptImageFile (file) {
-  if (!file) return false
-
-  const type = file.type?.toLowerCase()
-  if (type) return ALLOWED_RECEIPT_IMAGE_TYPES.includes(type)
-
-  const name = file.name?.toLowerCase() || ''
-  return ALLOWED_RECEIPT_IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension))
-}
 
 // Connects to data-controller="receipt-image-card"
 export default class extends Controller {
@@ -169,7 +149,7 @@ export default class extends Controller {
       return
     }
 
-    if (!isAllowedReceiptImageFile(file)) {
+    if (!isAllowedImageFile(file, ALLOWED_RECEIPT_IMAGE_TYPES)) {
       this.clearFileInput()
       this.showUploadError()
       return
@@ -190,7 +170,7 @@ export default class extends Controller {
 
   restoreImageSource () {
     const file = this.hasFileInputTarget ? this.fileInputTarget.files?.[0] : null
-    if (file && isAllowedReceiptImageFile(file)) {
+    if (file && isAllowedImageFile(file, ALLOWED_RECEIPT_IMAGE_TYPES)) {
       this.updateFileName(file.name)
       this.setSelectedImageSource(file)
     } else {
@@ -306,7 +286,7 @@ export default class extends Controller {
     this.hideDropOverlay()
 
     const file = event.dataTransfer?.files?.[0]
-    if (!isAllowedReceiptImageFile(file)) {
+    if (!isAllowedImageFile(file, ALLOWED_RECEIPT_IMAGE_TYPES)) {
       this.showUploadError()
       return
     }

@@ -9,8 +9,10 @@ RSpec.describe "Receipt upload camera controller" do
 
   def run_upload_script(script)
     camera = File.read(File.expand_path("../../app/javascript/receipts/camera_capture.js", __dir__)).gsub(/^export /, "")
+    file_type_source = File.read(File.expand_path("../../app/javascript/image_file_type.js", __dir__)).gsub(/^export /, "")
     controller = source
       .sub("import { Controller } from '@hotwired/stimulus'", "class Controller {}")
+      .sub("import { isAllowedImageFile } from 'image_file_type'") { file_type_source }
       .sub("import { CameraCapture, supportsInlineCamera } from 'receipts/camera_capture'", "")
       .sub("export default class extends Controller", "class ReceiptUploadController extends Controller")
     encoded = Base64.strict_encode64("#{camera}\n#{controller}")
@@ -122,6 +124,43 @@ RSpec.describe "Receipt upload camera controller" do
     raise stderr unless status.success?
 
     JSON.parse(stdout)
+  end
+
+  it "keeps camera and library images with browser MIME aliases or generic types" do
+    result = run_upload_script(<<~JAVASCRIPT)
+      const controller = setup()
+      const cameraFile = new File(['image'], 'camera.JPG', { type: 'image/pjpeg' })
+      controller.cameraInputTarget.files = [cameraFile]
+      controller.previewCamera()
+      const camera = { selected: controller.selectedFiles[0] === cameraFile, disabled: controller.submitButtonTarget.disabled }
+      const libraryFiles = [
+        new File(['image'], 'first.PNG', { type: 'image/x-png' }),
+        new File(['image'], 'second.heic', { type: 'application/octet-stream' })
+      ]
+      controller.libraryInputTarget.files = libraryFiles
+      controller.previewLibrary()
+      return { camera, names: controller.selectedFiles.map((file) => file.name), disabled: controller.submitButtonTarget.disabled }
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "camera" => { "selected" => true, "disabled" => false },
+      "names" => [ "first.PNG", "second.heic" ], "disabled" => false
+    )
+  end
+
+  it "accepts an unspecified MIME through drop without bypassing file count or storage limits" do
+    result = run_upload_script(<<~JAVASCRIPT)
+      const controller = setup()
+      const file = new File(['image'], 'selected.tif', { type: 'application/octet-stream' })
+      controller.handleDrop({ preventDefault () {}, dataTransfer: { files: [file] } })
+      const selected = controller.selectedFiles[0] === file && controller.libraryInputTarget.files[0] === file
+      controller.maxFileCountValue = 1
+      const count = controller.fileValidationMessage([file, file])
+      controller.storageLimitBytesValue = 1
+      return { selected, count, quota: controller.fileValidationMessage([file]) }
+    JAVASCRIPT
+
+    expect(result).to eq("selected" => true, "count" => "count", "quota" => "quota")
   end
 
   it "opens an inline video only after an explicit click and disables submit while it is open" do

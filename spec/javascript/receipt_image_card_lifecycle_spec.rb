@@ -7,10 +7,11 @@ require "spec_helper"
 
 RSpec.describe "Receipt image card lifecycle" do
   def run_controller_script(script)
+    file_type_source = File.read(File.expand_path("../../app/javascript/image_file_type.js", __dir__)).gsub(/^export /, "")
     source = File.read(File.expand_path("../../app/javascript/controllers/receipt_image_card_controller.js", __dir__))
       .gsub(/^import .*? from '[^']+'\n/m, "")
       .sub("export default class extends Controller", "class ImageCardController extends Controller")
-    encoded = Base64.strict_encode64(source)
+    encoded = Base64.strict_encode64("#{file_type_source}\n#{source}")
     harness = <<~JAVASCRIPT
       class Controller {}
       eval(Buffer.from(#{encoded.inspect}, 'base64').toString('utf8') + '\\nglobalThis.ImageCardController = ImageCardController')
@@ -75,6 +76,47 @@ RSpec.describe "Receipt image card lifecycle" do
     raise stderr unless status.success?
 
     JSON.parse(stdout)
+  end
+
+  it "retains aliased and generic MIME selections through preview and restoration" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      URL.createObjectURL = () => 'blob:selected'
+      URL.revokeObjectURL = () => {}
+      const files = [
+        { name: 'selected.JPG', type: 'image/jpg', size: 100 },
+        { name: 'selected.tiff', type: 'application/octet-stream', size: 100 }
+      ]
+      process.stdout.write(JSON.stringify(files.map((file) => {
+        const controller = buildController()
+        controller.fileInputTarget.files = [file]
+        controller.previewSelectedImage({ target: controller.fileInputTarget })
+        controller.restoreImageSource()
+        return { source: controller.previewImageTarget.getAttribute('src'), selected: controller.fileInputTarget.files[0] === file }
+      })))
+    JAVASCRIPT
+
+    expect(result).to eq(Array.new(2) { { "source" => "blob:selected", "selected" => true } })
+  end
+
+  it "allows a supported dropped image without accepting an unknown MIME over a prior selection" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      URL.createObjectURL = () => 'blob:selected'
+      URL.revokeObjectURL = () => {}
+      globalThis.DataTransfer = class {
+        constructor () { this.files = []; this.items = { add: (file) => this.files.push(file) } }
+      }
+      const controller = buildController()
+      const file = { name: 'selected.bmp', type: 'image/x-ms-bmp', size: 100 }
+      controller.handleDrop({ preventDefault () {}, dataTransfer: { files: [file] } })
+      const selected = controller.fileInputTarget.files[0] === file
+      controller.handleDrop({ preventDefault () {}, dataTransfer: { files: [{ name: 'other.jpg', type: 'image/svg+xml', size: 100 }] } })
+      process.stdout.write(JSON.stringify({
+        selected, preserved: controller.fileInputTarget.files[0] === file,
+        source: controller.previewImageTarget.getAttribute('src')
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq("selected" => true, "preserved" => true, "source" => "blob:selected")
   end
 
   it "keeps a loaded image and its controls available when cache preparation leaves the same DOM visible" do
