@@ -128,8 +128,19 @@ module Storage::ImageDimensions
     def bmp_dimensions(data)
       return unless data.bytesize >= 26 && data.start_with?("BM")
 
-      width, height = data.byteslice(18, 8).unpack("l<l<")
-      positive_dimensions(width&.abs, height&.abs)
+      header_size = read_uint32(data, 14, true)
+      return unless header_size && data.bytesize >= 14 + header_size
+
+      case header_size
+      when 12
+        width, height = data.byteslice(18, 4).unpack("v2")
+      when 16, 40, 52, 56, 64, 108, 124
+        width, height = data.byteslice(18, 8).unpack("l<l<")
+        height = height.abs
+      else
+        return
+      end
+      positive_dimensions(width, height)
     end
 
     def tiff_dimensions(data)
@@ -142,33 +153,39 @@ module Storage::ImageDimensions
         when "MM" then false
         else return
         end
-      return unless read_uint16(data, 2, little_endian) == 42
+      version = read_uint16(data, 2, little_endian)
+      return unless [ 42, 43 ].include?(version)
 
-      ifd_offset = read_uint32(data, 4, little_endian)
-      return if ifd_offset.blank? || ifd_offset + 2 > data.bytesize
+      bigtiff = version == 43
+      if bigtiff
+        return unless read_uint16(data, 4, little_endian) == 8 && read_uint16(data, 6, little_endian) == 0
+      end
 
-      entry_count = read_uint16(data, ifd_offset, little_endian)
-      return if entry_count.blank?
+      header_size, count_size, entry_size, offset_size = bigtiff ? [ 16, 8, 20, 8 ] : [ 8, 2, 12, 4 ]
+      ifd_offset = bigtiff ? read_uint64(data, 8, little_endian) : read_uint32(data, 4, little_endian)
+      return unless ifd_offset && ifd_offset >= header_size
+
+      entry_count = bigtiff ? read_uint64(data, ifd_offset, little_endian) : read_uint16(data, ifd_offset, little_endian)
+      return unless entry_count&.positive?
+      return if ifd_offset + count_size + entry_count * entry_size + offset_size > data.bytesize
 
       width = nil
       height = nil
-      entry_offset = ifd_offset + 2
+      entry_offset = ifd_offset + count_size
       entry_count.times do
-        break if entry_offset + 12 > data.bytesize
-
         tag = read_uint16(data, entry_offset, little_endian)
         type = read_uint16(data, entry_offset + 2, little_endian)
-        count = read_uint32(data, entry_offset + 4, little_endian)
-        value = tiff_inline_value(data, entry_offset + 8, type, count, little_endian)
+        count = bigtiff ? read_uint64(data, entry_offset + 4, little_endian) : read_uint32(data, entry_offset + 4, little_endian)
+        value = tiff_inline_value(data, entry_offset + (bigtiff ? 12 : 8), type, count, little_endian, bigtiff:)
         width = value if tag == 256
         height = value if tag == 257
-        entry_offset += 12
+        entry_offset += entry_size
       end
 
       positive_dimensions(width, height)
     end
 
-    def tiff_inline_value(data, offset, type, count, little_endian)
+    def tiff_inline_value(data, offset, type, count, little_endian, bigtiff:)
       return unless count == 1
 
       case type
@@ -176,6 +193,8 @@ module Storage::ImageDimensions
         read_uint16(data, offset, little_endian)
       when 4
         read_uint32(data, offset, little_endian)
+      when 16
+        read_uint64(data, offset, little_endian) if bigtiff
       end
     end
 
@@ -245,6 +264,12 @@ module Storage::ImageDimensions
       return if offset + 4 > data.bytesize
 
       data.byteslice(offset, 4).unpack1(little_endian ? "V" : "N")
+    end
+
+    def read_uint64(data, offset, little_endian)
+      return if offset + 8 > data.bytesize
+
+      data.byteslice(offset, 8).unpack1(little_endian ? "Q<" : "Q>")
     end
 
     def read_uint24_le(data, offset)
