@@ -900,6 +900,8 @@ RSpec.describe Ocr::Client do
       expect do
         client.send(:poll_result, operation_location)
       end.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout') { |error|
+        expect(error.provider_error_detail).to include(phase: 'poll')
+        expect(error.provider_error_detail.dig(:diagnostic, :local_issue)).to eq('timeout')
         expect(error.polling_metrics).to include(
           'poll_count' => runtime_config.max_poll_attempts,
           'final_status' => 'running',
@@ -1141,6 +1143,360 @@ RSpec.describe Ocr::Client do
       it 'ocr_api_error を投げる' do
         expect { handle_status }.to raise_error(Ocr::OcrError, 'ocr_api_error')
       end
+    end
+  end
+
+  describe 'provider failure diagnostics' do
+    before do
+      allow(client).to receive(:sleep)
+    end
+
+    {
+      'InvalidContentLength' => 'image_provider_size_exceeded',
+      'InvalidContentDimensions' => 'image_provider_dimensions_invalid',
+      'UnsupportedContent' => 'image_invalid_format',
+      'InvalidContent' => 'image_provider_content_invalid'
+    }.each do |provider_code, error_code|
+      it "#{provider_code}の内側codeを画像エラーへ分類し、原因を保持する" do
+        response = faraday_response(
+          status: 400,
+          headers: { 'apim-request-id' => 'ocr-request-1' },
+          body: {
+            error: {
+              code: 'InvalidRequest',
+              message: 'Invalid request.',
+              innererror: { code: provider_code, message: 'The input image does not meet the provider requirements.' }
+            }
+          }.to_json
+        )
+        connection = stub_connection_post(client, response)
+
+        expect { client.call }.to raise_error(Ocr::OcrError, error_code) { |error|
+          detail = error.provider_error_detail
+          aggregate_failures do
+            expect(detail).to include(
+              phase: 'submit',
+              http_status: 400,
+              request_id: 'ocr-request-1',
+              provider_error_code: 'InvalidRequest'
+            )
+            expect(detail.dig(:diagnostic, :nodes)).to include(
+              include(
+                path: 'error.innererror',
+                code: provider_code,
+                message_safe: 'The input image does not meet the provider requirements.'
+              )
+            )
+          end
+        }
+
+        expect(connection).to have_received(:post).once
+        expect(client).not_to have_received(:sleep)
+      end
+    end
+
+    it '未知の400を画像エラーへ推測変換しない' do
+      connection = stub_connection_post(
+        client,
+        faraday_response(status: 400, body: { error: { code: 'InvalidRequest', message: 'Invalid request.' } }.to_json)
+      )
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_api_error')
+      expect(connection).to have_received(:post).once
+    end
+
+    it 'HTTP413はproviderの容量制限codeがある場合だけ画像容量エラーにする' do
+      response = faraday_response(
+        status: 413,
+        body: { error: { code: 'InvalidContentLength', message: 'The input image is too large.' } }.to_json
+      )
+      stub_connection_post(client, response)
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'image_provider_size_exceeded')
+    end
+
+    it '異なる画像原因から単一の画像原因を推測しない' do
+      response = faraday_response(
+        status: 400,
+        body: {
+          error: {
+            code: 'InvalidRequest',
+            details: [ { code: 'InvalidContentLength' }, { code: 'InvalidContentDimensions' } ]
+          }
+        }.to_json
+      )
+      stub_connection_post(client, response)
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_api_error') { |error|
+        expect(error.provider_error_detail.dig(:diagnostic, :nodes).map { |node| node[:code] })
+          .to eq(%w[InvalidRequest InvalidContentLength InvalidContentDimensions])
+      }
+    end
+
+    it '件数上限で別の原因が省略された場合は画像だけの問題と断定しない' do
+      details = Array.new(15) { { code: 'InvalidContentLength' } } + [ { code: 'InternalServerError' } ]
+      stub_connection_post(
+        client,
+        faraday_response(
+          status: 400,
+          body: { error: { code: 'InvalidRequest', details: details } }.to_json
+        )
+      )
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_api_error') { |error|
+        expect(error.provider_error_detail.dig(:diagnostic, :omissions))
+          .to include(path: 'error.details', reason: 'node_limit')
+      }
+    end
+
+    it 'root codeが不正で省略された場合は内側の画像原因だけで分類しない' do
+      stub_connection_post(
+        client,
+        faraday_response(
+          status: 400,
+          body: { error: { code: [ 'InternalServerError' ], innererror: { code: 'InvalidContentLength' } } }.to_json
+        )
+      )
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_api_error') { |error|
+        expect(error.provider_error_detail.dig(:diagnostic, :omissions))
+          .to include(path: 'error.code', reason: 'invalid_type')
+      }
+    end
+
+    {
+      'redaction' => 'Contact synthetic@example.test for help.',
+      'byte limit' => 'Image size exceeds the limit. ' * 200
+    }.each do |reason, message|
+      it "messageだけの#{reason}は確定した画像codeの分類を変えない" do
+        stub_connection_post(
+          client,
+          faraday_response(
+            status: 400,
+            body: {
+              error: { code: 'InvalidRequest', innererror: { code: 'InvalidContentLength', message: message } }
+            }.to_json
+          )
+        )
+
+        expect { client.call }.to raise_error(Ocr::OcrError, 'image_provider_size_exceeded') { |error|
+          expect(error.provider_error_detail.dig(:diagnostic, :omissions))
+            .to include(include(path: 'error.innererror.message'))
+        }
+      end
+    end
+
+    it 'InvalidContentは破損と未対応形式のどちらとも断定しない' do
+      stub_connection_post(
+        client,
+        faraday_response(
+          status: 400,
+          body: {
+            error: {
+              code: 'InvalidRequest',
+              innererror: { code: 'InvalidContent', message: 'The file is corrupted or format is unsupported.' }
+            }
+          }.to_json
+        )
+      )
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'image_provider_content_invalid') { |error|
+        expect(error.provider_error_detail.dig(:diagnostic, :nodes)).to include(
+          include(code: 'InvalidContent', message_safe: 'The file is corrupted or format is unsupported.')
+        )
+      }
+    end
+
+    %w[InternalServerError FutureProviderFailure].each do |provider_code|
+      it "#{provider_code}と画像原因が混在した非同期失敗を画像だけの問題と断定しない" do
+        stub_connection_post(client, accepted_response)
+        allow(Faraday).to receive(:get).and_return(
+          faraday_response(
+            status: 200,
+            body: {
+              status: 'failed',
+              error: {
+                code: provider_code,
+                message: 'Analysis failed.',
+                details: [ { code: 'InvalidContentDimensions', message: 'Invalid dimensions.', target: '1' } ]
+              }
+            }.to_json
+          )
+        )
+
+        expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_failed') { |error|
+          expect(error.provider_error_detail.dig(:diagnostic, :nodes).map { |node| node[:code] })
+            .to eq([ provider_code, 'InvalidContentDimensions' ])
+        }
+        expect(Faraday).to have_received(:get).once
+      end
+    end
+
+    it 'HTTP成功でも非同期解析失敗のdetailsとpoll情報を保持する' do
+      stub_connection_post(client, accepted_response)
+      allow(Faraday).to receive(:get).and_return(
+        faraday_response(
+          status: 200,
+          headers: { 'apim-request-id' => 'ocr-poll-1' },
+          body: {
+            status: 'failed',
+            error: {
+              code: 'InvalidRequest',
+              message: 'Analysis failed.',
+              details: [
+                { code: 'InvalidContentDimensions', message: 'The input image dimensions are invalid.', target: '1' }
+              ]
+            }
+          }.to_json
+        )
+      )
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'image_provider_dimensions_invalid') { |error|
+        aggregate_failures do
+          expect(error.provider_error_detail).to include(phase: 'poll', http_status: 200, request_id: 'ocr-poll-1', poll_count: 1)
+          expect(error.provider_error_detail.dig(:diagnostic, :nodes)).to include(
+            include(path: 'error.details[0]', code: 'InvalidContentDimensions', target: '1')
+          )
+          expect(error.polling_metrics).to include('poll_count' => 1, 'final_status' => 'failed')
+        end
+      }
+      expect(Faraday).to have_received(:get).once
+    end
+
+    it '非同期のprovider内部失敗も汎用codeへ変換する前の原因を保持する' do
+      stub_connection_post(client, accepted_response)
+      allow(Faraday).to receive(:get).and_return(
+        faraday_response(
+          status: 200,
+          body: {
+            status: 'failed',
+            error: { code: 'InternalServerError', message: 'The document analysis could not be completed.' }
+          }.to_json
+        )
+      )
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_failed') { |error|
+        expect(error.provider_error_detail).to include(
+          phase: 'poll',
+          http_status: 200,
+          provider_error_code: 'InternalServerError',
+          provider_message_safe: 'The document analysis could not be completed.'
+        )
+        expect(error.provider_error_detail.dig(:diagnostic, :nodes)).to include(include(code: 'InternalServerError'))
+      }
+      expect(Faraday).to have_received(:get).once
+    end
+
+    it 'pollの不正JSONは本文を残さず応答形式の診断を保持する' do
+      stub_connection_post(client, accepted_response)
+      allow(Faraday).to receive(:get).and_return(faraday_response(status: 200, body: 'not-json-private-content'))
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_invalid_response') { |error|
+        aggregate_failures do
+          expect(error.provider_error_detail).to include(phase: 'poll', http_status: 200)
+          expect(error.provider_error_detail.dig(:diagnostic, :local_issue)).to eq('invalid_json')
+          expect(error.provider_error_detail.to_s).not_to include('not-json-private-content')
+        end
+      }
+      expect(Faraday).to have_received(:get).once
+    end
+
+    [ '[]', '{"status":"unrecognized-private-value"}' ].each do |body|
+      it "#{body.start_with?('[') ? '配列' : '未知status'}のpoll応答を不正形式として保持する" do
+        stub_connection_post(client, accepted_response)
+        allow(Faraday).to receive(:get).and_return(faraday_response(status: 200, body: body))
+
+        expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_invalid_response') { |error|
+          expect(error.provider_error_detail.dig(:diagnostic, :local_issue)).to eq('invalid_response')
+          expect(error.provider_error_detail.to_s).not_to include('unrecognized-private-value')
+        }
+        expect(Faraday).to have_received(:get).once
+      end
+    end
+
+    {
+      '欠損' => {},
+      '未知' => { status: 'unrecognized-private-value' }
+    }.each do |condition, status_fields|
+      it "status#{condition}のpoll応答でも安全なerror treeを保持する" do
+        connection = stub_connection_post(client, accepted_response)
+        body = status_fields.merge(
+          error: {
+            code: 'InternalServerError',
+            message: 'The document analysis could not be completed.',
+            innererror: {
+              code: 'InvalidContentDimensions',
+              message: 'The input image dimensions are invalid.'
+            }
+          }
+        )
+        allow(Faraday).to receive(:get).and_return(
+          faraday_response(status: 200, body: body.to_json)
+        )
+
+        expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_invalid_response') { |error|
+          detail = error.provider_error_detail
+          aggregate_failures do
+            expect(detail).to include(
+              phase: 'poll',
+              http_status: 200,
+              poll_count: 1,
+              provider_error_code: 'InternalServerError'
+            )
+            expect(detail.dig(:diagnostic, :local_issue)).to eq('invalid_response')
+            expect(detail.dig(:diagnostic, :nodes)).to include(
+              include(
+                path: 'error',
+                code: 'InternalServerError',
+                message_safe: 'The document analysis could not be completed.'
+              ),
+              include(
+                path: 'error.innererror',
+                code: 'InvalidContentDimensions',
+                message_safe: 'The input image dimensions are invalid.'
+              )
+            )
+            expect(detail.to_s).not_to include('unrecognized-private-value')
+          end
+        }
+        expect(connection).to have_received(:post).once
+        expect(Faraday).to have_received(:get).once
+      end
+    end
+
+    it 'operation-location欠落をresponse statusとともに記録する' do
+      stub_connection_post(client, faraday_response(status: 202))
+
+      expect { client.call }.to raise_error(Ocr::OcrError, 'ocr_invalid_response') { |error|
+        expect(error.provider_error_detail).to include(phase: 'submit', http_status: 202)
+        expect(error.provider_error_detail.dig(:diagnostic, :local_issue)).to eq('invalid_operation_location')
+      }
+    end
+
+    it 'submit timeoutのphaseと原因種別を保持し再送しない' do
+      connection = stub_connection_post(client, Faraday::TimeoutError.new('private timeout detail'))
+
+      expect { client.call }.to raise_error(Ocr::OcrTimeoutError, 'ocr_timeout') { |error|
+        expect(error.provider_error_detail).to include(phase: 'submit', poll_count: 0)
+        expect(error.provider_error_detail.dig(:diagnostic, :local_issue)).to eq('timeout')
+        expect(error.provider_error_detail.to_s).not_to include('private timeout detail')
+      }
+      expect(connection).to have_received(:post).once
+    end
+
+    it 'poll接続失敗のphaseを保持しsubmitを再実行しない' do
+      request_client = client_with_runtime_config(max_retries: 0)
+      connection = stub_connection_post(request_client, accepted_response)
+      allow(request_client).to receive(:sleep)
+      allow(Faraday).to receive(:get).and_raise(Faraday::ConnectionFailed.new('private connection detail'))
+
+      expect { request_client.call }.to raise_error(Ocr::OcrError, 'external_service_unavailable') { |error|
+        expect(error.provider_error_detail).to include(phase: 'poll', poll_count: 1)
+        expect(error.provider_error_detail.dig(:diagnostic, :local_issue)).to eq('connection_failed')
+        expect(error.provider_error_detail.to_s).not_to include('private connection detail')
+      }
+      expect(connection).to have_received(:post).once
+      expect(Faraday).to have_received(:get).once
     end
   end
 

@@ -12,6 +12,12 @@ module Ocr
     POLLING_METRICS_KEY = "recify_polling_metrics".freeze
     QUERY_FIELDS_FEATURE = "queryFields"
     QUERY_FIELDS = [ "PaymentMethods" ].freeze
+    IMAGE_ERROR_CODE_MAPPING = {
+      "InvalidContentLength" => "image_provider_size_exceeded",
+      "InvalidContentDimensions" => "image_provider_dimensions_invalid",
+      "UnsupportedContent" => "image_invalid_format",
+      "InvalidContent" => "image_provider_content_invalid"
+    }.freeze
 
     def initialize(image:, provider: "azure_document_intelligence", runtime_config: nil, before_provider_call: nil, after_provider_success_response: nil)
       @image = image
@@ -35,10 +41,18 @@ module Ocr
       result
     rescue Faraday::TimeoutError
       Rails.logger.error("[OCR::Client] timeout")
-      raise OcrTimeoutError.new("ocr_timeout", polling_metrics: polling_metrics(final_status: "timeout"))
+      raise OcrTimeoutError.new(
+        "ocr_timeout",
+        polling_metrics: polling_metrics(final_status: "timeout"),
+        provider_error_detail: local_error_detail("timeout")
+      )
     rescue Faraday::ConnectionFailed => e
       Rails.logger.error("[OCR::Client] connection failed class=#{e.class} error_code=external_service_unavailable")
-      raise OcrError.new("external_service_unavailable", polling_metrics: polling_metrics(final_status: "external_service_unavailable"))
+      raise OcrError.new(
+        "external_service_unavailable",
+        polling_metrics: polling_metrics(final_status: "external_service_unavailable"),
+        provider_error_detail: local_error_detail("connection_failed")
+      )
     rescue OcrError, OcrTimeoutError => e
       raise enrich_error_with_polling_metrics(e)
     rescue Usage::LimitExceeded
@@ -71,6 +85,7 @@ module Ocr
     end
 
     def submit_request
+      @request_phase = "submit"
       body = request_body
       validate_endpoint_configuration!
       validate_api_key_configuration!
@@ -90,15 +105,16 @@ module Ocr
       end
 
       op_location = res.headers["operation-location"] || res.headers["Operation-Location"]
-      raise OcrError, "ocr_invalid_response" if op_location.blank?
+      raise_invalid_response!("invalid_operation_location", response: res) if op_location.blank?
 
       @next_poll_retry_after = retry_after_from_headers(res.headers)
-      validated_operation_location(op_location)
+      validated_operation_location(op_location, response: res)
     end
 
     def poll_result(op_location)
-      op_location = validated_operation_location(op_location)
       ensure_polling_metrics!
+      @request_phase = "poll"
+      op_location = validated_operation_location(op_location)
       @polling_started_at ||= monotonic_now
       @last_poll_status = nil
       next_poll_retry_after = @next_poll_retry_after
@@ -125,7 +141,7 @@ module Ocr
         # Azure のレスポンス本文は一旦そのまま受け取り、後段 parser で必要部分だけ使う方針。
         # 現時点ではここで本文を切り詰めない。
         # 将来ボトルネックになる場合は、受信サイズそのものより parser / 保存方針 / polling を先に見直す。
-        body = JSON.parse(res.body)
+        body = parse_poll_response(res)
         status = body["status"]
         @last_poll_status = status
 
@@ -134,17 +150,34 @@ module Ocr
           notify_provider_success_response(res.body, body)
           return body.merge(POLLING_METRICS_KEY => polling_metrics(final_status: status))
         when "failed"
-          raise OcrError.new("ocr_failed", polling_metrics: polling_metrics(final_status: status))
-        else
+          error_detail = provider_error_detail_for(res, phase: "poll")
+          raise OcrError.new(
+            image_error_code(error_detail) || "ocr_failed",
+            polling_metrics: polling_metrics(final_status: status),
+            provider_error_detail: error_detail
+          )
+        when "running", "notStarted"
           next
+        else
+          raise_invalid_response!("invalid_response", response: res, body: body.slice("error"))
         end
       end
 
       @reached_max_poll = true
       raise OcrTimeoutError.new(
         "ocr_timeout",
-        polling_metrics: polling_metrics(final_status: @last_poll_status || "timeout", reached_max_poll: true)
+        polling_metrics: polling_metrics(final_status: @last_poll_status || "timeout", reached_max_poll: true),
+        provider_error_detail: local_error_detail("timeout")
       )
+    end
+
+    def parse_poll_response(response)
+      body = JSON.parse(response.body)
+      raise_invalid_response!("invalid_response", response: response) unless body.is_a?(Hash)
+
+      body
+    rescue JSON::ParserError
+      raise_invalid_response!("invalid_json", response: response)
     end
 
     def request_body
@@ -242,6 +275,7 @@ module Ocr
       @polling_started_at = nil
       @next_poll_retry_after = nil
       @elapsed_budget_exhausted = false
+      @request_phase = nil
     end
 
     def ensure_polling_metrics!
@@ -351,7 +385,8 @@ module Ocr
       @elapsed_budget_exhausted = true
       raise OcrTimeoutError.new(
         "ocr_timeout",
-        polling_metrics: polling_metrics(final_status: "timeout")
+        polling_metrics: polling_metrics(final_status: "timeout"),
+        provider_error_detail: local_error_detail("timeout")
       )
     end
 
@@ -397,8 +432,8 @@ module Ocr
           "input_invalid"
         when 408
           "ocr_timeout"
-        when 415
-          "input_invalid"
+        when 400, 413, 415, 422
+          image_error_code(error_detail) || (res.status == 415 ? "input_invalid" : "ocr_api_error")
         when 429
           "external_service_rate_limited"
         when 500..599
@@ -420,6 +455,20 @@ module Ocr
       status == 408 || status == 429 || status.between?(500, 599)
     end
 
+    def image_error_code(error_detail)
+      omissions = Array(error_detail.dig(:diagnostic, :omissions))
+      return unless omissions.all? do |entry|
+        entry[:path].end_with?(".message") && %w[redacted byte_limit].include?(entry[:reason])
+      end
+
+      nodes = error_detail.dig(:diagnostic, :nodes)
+      provider_codes = Array(nodes).filter_map { |node| node[:code] }
+      return unless provider_codes.all? { |code| code == "InvalidRequest" || IMAGE_ERROR_CODE_MAPPING.key?(code) }
+
+      codes = provider_codes.filter_map { |code| IMAGE_ERROR_CODE_MAPPING[code] }.uniq
+      codes.first if codes.one?
+    end
+
     def provider_error_detail_for(response, phase:)
       ExternalServices.error_detail(
         service: :ocr,
@@ -430,6 +479,26 @@ module Ocr
         headers: response.headers,
         retry_after: retry_after_from_headers(response.headers),
         poll_count: @poll_count
+      )
+    end
+
+    def local_error_detail(issue, response: nil, body: nil)
+      ExternalServices.error_detail(
+        service: :ocr,
+        provider: provider,
+        phase: @request_phase,
+        http_status: response&.status,
+        body: body,
+        headers: response&.headers,
+        poll_count: @poll_count,
+        local_issue: issue
+      )
+    end
+
+    def raise_invalid_response!(issue, response: nil, body: nil)
+      raise OcrError.new(
+        "ocr_invalid_response",
+        provider_error_detail: local_error_detail(issue, response: response, body: body)
       )
     end
 
@@ -505,7 +574,7 @@ module Ocr
       )
     end
 
-    def validated_operation_location(value)
+    def validated_operation_location(value, response: nil)
       uri = URI.parse(value.to_s)
       endpoint_uri = URI.parse(ENV[ENDPOINT_ENV_KEY].to_s.strip)
       valid =
@@ -518,11 +587,11 @@ module Ocr
         uri.host.casecmp?(endpoint_uri.host) &&
         uri.port == endpoint_uri.port
 
-      raise OcrError, "ocr_invalid_response" unless valid
+      raise_invalid_response!("invalid_operation_location", response: response) unless valid
 
       uri.to_s
     rescue URI::InvalidURIError
-      raise OcrError, "ocr_invalid_response"
+      raise_invalid_response!("invalid_operation_location", response: response)
     end
 
     def valid_provider_endpoint_uri?(uri)

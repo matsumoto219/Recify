@@ -230,6 +230,33 @@ RSpec.describe ReceiptOcrService do
           expect(ExternalServices).to have_received(:mark_failure!).with(:ocr, error_code: 'input_invalid')
         end
       end
+
+      %w[image_provider_size_exceeded image_provider_dimensions_invalid image_provider_content_invalid image_invalid_format image_corrupted].each do |error_code|
+        it "#{error_code}の診断を維持し、外部サービス障害数を増やさない" do
+          cache_store = ActiveSupport::Cache::MemoryStore.new
+          allow(Rails).to receive(:cache).and_return(cache_store)
+          allow(ExternalServices).to receive(:mark_failure!).and_call_original
+          detail = ExternalServices.error_detail(
+            service: :ocr,
+            provider: provider,
+            phase: 'poll',
+            http_status: 200,
+            body: { error: { code: 'InvalidRequest', innererror: { code: 'InvalidContentLength', message: 'The input image is too large.' } } }
+          )
+          allow(client).to receive(:call).and_raise(Ocr::OcrError.new(error_code, provider_error_detail: detail))
+          initial_state = ExternalServices.snapshot(:ocr)
+
+          result = described_class.call(image, provider: provider)
+
+          aggregate_failures do
+            expect(result[:error_code]).to eq(error_code)
+            expect(result.dig(:meta, :provider_error_detail)).to eq(detail)
+            expect(ExternalServices.snapshot(:ocr)).to eq(initial_state)
+            expect(ExternalServices).not_to have_received(:mark_success!)
+            expect(Ocr::ResponseParser).not_to have_received(:new)
+          end
+        end
+      end
     end
 
     context 'タイムアウトが発生した場合' do

@@ -61,6 +61,9 @@ en:
       unexpected_failure: "An error occurred while analyzing the receipt. Please try again."
       ai_fallback_saved: "Saved with OCR results because AI assistance failed (%{details})"
     processing_error_codes:
+      image_provider_size_exceeded: "The image exceeds the OCR service file size limit. Reduce its file size and try again, or continue with manual entry."
+      image_provider_dimensions_invalid: "The image dimensions do not meet the OCR service requirements. Resize the image and try again, or continue with manual entry."
+      image_provider_content_invalid: "The OCR service could not read the image. Convert it to a supported format and try again, or continue with manual entry."
       no_text_detected: "No text could be read from the image. Check the lighting and focus, then try another image."
       receipt_not_detected: "The receipt could not be recognized. Try an image that includes the entire receipt."
       unsupported_country: "Only receipts from Japan are currently supported. Please try a receipt image from Japan."

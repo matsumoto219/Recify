@@ -24,6 +24,9 @@ module Analysis
       "image_missing" => "image_error",
       "image_invalid_format" => "image_error",
       "image_corrupted" => "image_error",
+      "image_provider_size_exceeded" => "image_error",
+      "image_provider_dimensions_invalid" => "image_error",
+      "image_provider_content_invalid" => "image_error",
       "unsupported_country" => "image_error",
 
       # AI系
