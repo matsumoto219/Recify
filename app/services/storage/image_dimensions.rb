@@ -6,7 +6,6 @@ module Storage::ImageDimensions
     0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
     0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF
   ].freeze
-  HEIF_CONTAINER_BOX_TYPES = %w[meta iprp ipco].freeze
 
   class << self
     def extract(blob:, attached_change: nil)
@@ -181,7 +180,7 @@ module Storage::ImageDimensions
     end
 
     def heif_dimensions(data)
-      find_ispe_dimensions(data, 0, data.bytesize)
+      Storage::HeifImageInfo.extract(binary: data)&.slice(:width, :height)
     end
 
     def webp_dimensions(data)
@@ -233,49 +232,6 @@ module Storage::ImageDimensions
 
       width = read_uint16(data, payload_offset + 6, true)&.then { |value| value & 0x3FFF }
       height = read_uint16(data, payload_offset + 8, true)&.then { |value| value & 0x3FFF }
-      positive_dimensions(width, height)
-    end
-
-    def find_ispe_dimensions(data, start_offset, end_offset)
-      offset = start_offset
-      while offset + 8 <= end_offset
-        box_size = read_uint32(data, offset, false)
-        box_type = data.byteslice(offset + 4, 4)
-        return if box_size.blank? || box_size < 8
-
-        header_size = 8
-        if box_size == 1
-          return if offset + 16 > end_offset
-
-          box_size = data.byteslice(offset + 8, 8).unpack1("Q>")
-          header_size = 16
-        end
-
-        box_end = offset + box_size
-        return if box_end > end_offset
-
-        if box_type == "ispe"
-          return parse_ispe_box(data, offset + header_size, box_end)
-        end
-
-        if HEIF_CONTAINER_BOX_TYPES.include?(box_type)
-          child_start = offset + header_size
-          child_start += 4 if box_type == "meta"
-          dimensions = find_ispe_dimensions(data, child_start, box_end)
-          return dimensions if dimensions
-        end
-
-        offset = box_end
-      end
-
-      nil
-    end
-
-    def parse_ispe_box(data, content_offset, box_end)
-      return if content_offset + 12 > box_end
-
-      width = read_uint32(data, content_offset + 4, false)
-      height = read_uint32(data, content_offset + 8, false)
       positive_dimensions(width, height)
     end
 

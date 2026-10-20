@@ -25,6 +25,7 @@ module Storage
       if registration_key && !(user && registration_key.is_a?(String) && registration_key.match?(/\A[0-9a-f]{64}\z/))
         raise ArgumentError, "invalid registration identity"
       end
+      identify_heif_images
       return false unless records.map(&:valid?).all?
       return false unless build_entries
 
@@ -45,6 +46,42 @@ module Storage
     private
 
     attr_reader :records, :attachment_name, :user, :attempt, :entries, :registration_key
+
+    def identify_heif_images
+      records.each do |record|
+        change = record.attachment_changes[attachment_name]
+        next unless change
+
+        blob = record.public_send(attachment_name).blob
+        next if blob.nil? || blob.persisted?
+        next unless %w[image/heic image/heif video/quicktime application/octet-stream].include?(blob.content_type)
+
+        max_bytes, = image_limits(record)
+        next if blob.byte_size > max_bytes
+
+        binary = bounded_image_binary(upload_io(change.attachable), max_bytes:)
+        info = HeifImageInfo.extract(binary:)
+        next unless info
+
+        blob.content_type = info.fetch(:content_type) unless %w[image/heic image/heif].include?(blob.content_type)
+        blob.metadata = blob.metadata.merge("width" => info.fetch(:width), "height" => info.fetch(:height))
+      end
+    end
+
+    def bounded_image_binary(io, max_bytes:)
+      return unless %i[read rewind pos seek].all? { |method| io.respond_to?(method) }
+
+      position = io.pos
+      begin
+        io.rewind
+        binary = io.read(max_bytes + 1)
+        binary if binary.is_a?(String) && binary.bytesize.between?(1, max_bytes)
+      ensure
+        io.seek(position)
+      end
+    rescue IOError, SystemCallError
+      nil
+    end
 
     def build_entries
       records.each do |record|

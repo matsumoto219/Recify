@@ -674,6 +674,7 @@ class Receipt < ApplicationRecord
   def validate_image_dimensions
     return unless image.attached?
     return unless ALLOWED_IMAGE_CONTENT_TYPES.include?(image.blob.content_type)
+    return if image.blob.byte_size > self.class.image_max_file_size
 
     dimensions = Storage.extract_image_dimensions(blob: image.blob, attached_change: attachment_changes["image"])
     unless dimensions

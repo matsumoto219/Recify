@@ -88,6 +88,80 @@ RSpec.describe Storage::PreparedImages do
     expect(ActiveStorage::Blob.count).to eq(0)
   end
 
+  context 'HEIFの形式と主画像' do
+    let(:variants) { JSON.parse(File.read(Rails.root.join('spec/fixtures/files/heif_image_variants.json'))) }
+
+    def attach_heif(name)
+      bytes = Base64.strict_decode64(variants.fetch(name))
+      io = StringIO.new(bytes)
+      receipt.image = { io: io, filename: 'synthetic.heic', content_type: 'image/heic' }
+      [ bytes, io ]
+    end
+
+    it '型validation前にheixを実bytesで識別し、元画像と主画像寸法を保存する' do
+      bytes, io = attach_heif('heix_10')
+      expect(receipt.image.blob.content_type).to eq('video/quicktime')
+      io.seek(17)
+
+      expect(prepare { receipt.save! }).to be(true)
+      blob = receipt.reload.image.blob
+      expect(blob.content_type).to eq('image/heic')
+      expect(blob.metadata).to include('width' => 120, 'height' => 160, 'identified' => true, 'analyzed' => true)
+      expect(blob.download).to eq(bytes)
+    end
+
+    it 'gridのtile寸法や未検証metadataではなく主画像寸法を保存する' do
+      attach_heif('grid_2x2_small_tiles')
+      receipt.image.blob.metadata.merge!('width' => 64, 'height' => 64)
+
+      expect(prepare { receipt.save! }).to be(true)
+      expect(receipt.reload.image.blob.metadata).to include('width' => 128, 'height' => 128)
+    end
+
+    it 'byte上限を超えるHEIFをheader解析や保存へ渡さない' do
+      bytes, = attach_heif('heix_10')
+      allow(Receipt).to receive(:image_max_file_size).and_return(bytes.bytesize - 1)
+      expect(Storage::HeifImageInfo).not_to receive(:extract)
+      expect(ActiveStorage::Blob.service).not_to receive(:upload)
+
+      expect(prepare { raise 'must not accept' }).to be(false)
+      expect(receipt.errors).to be_of_kind(:image, :file_too_large)
+      expect(ActiveStorage::Blob.count).to eq(0)
+    end
+
+    it '形式判定済みでもbyte上限を超えるHEICをheader解析へ渡さない' do
+      bytes = File.binread(Rails.root.join('spec/fixtures/files/readable_image.heic'))
+      receipt.image = { io: StringIO.new(bytes), filename: 'synthetic.heic', content_type: 'image/heic' }
+      allow(Receipt).to receive(:image_max_file_size).and_return(bytes.bytesize - 1)
+      expect(Storage::HeifImageInfo).not_to receive(:extract)
+      expect(ActiveStorage::Blob.service).not_to receive(:upload)
+
+      expect(prepare { raise 'must not accept' }).to be(false)
+      expect(receipt.errors).to be_of_kind(:image, :file_too_large)
+      expect(ActiveStorage::Blob.count).to eq(0)
+    end
+
+    it 'validation失敗でも形式調査前のIO位置を維持する' do
+      _, io = attach_heif('heix_10')
+      receipt.user = nil
+      io.seek(17)
+      expect(ActiveStorage::Blob.service).not_to receive(:upload)
+
+      expect(prepare { raise 'must not accept' }).to be(false)
+      expect(io.pos).to eq(17)
+      expect(ActiveStorage::Blob.count).to eq(0)
+    end
+
+    it 'HEICとして申告されたAVIFを保存しない' do
+      attach_heif('avif')
+      expect(ActiveStorage::Blob.service).not_to receive(:upload)
+
+      expect(prepare { raise 'must not accept' }).to be(false)
+      expect(receipt.errors).to be_of_kind(:image, :invalid_content_type)
+      expect(ActiveStorage::Blob.count).to eq(0)
+    end
+  end
+
   it '画像保存以外のI/O例外は握り潰さず、受付をrollbackする' do
     expect do
       prepare do
