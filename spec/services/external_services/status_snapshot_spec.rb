@@ -16,6 +16,19 @@ RSpec.describe ExternalServices::StatusSnapshot do
   end
 
   describe '.call' do
+    it '内部原因はadminだけへ保持しpublicには含めない' do
+      detail = ExternalServices.error_detail(
+        service: :ocr,
+        http_status: 500,
+        body: { error: { code: 'InternalServerError', innererror: { code: 'ProcessingFailed', message: 'The service could not finish processing.' } } }
+      )
+      ExternalServices.mark_failure!(:ocr, error_code: 'external_service_unavailable', detail: detail)
+
+      admin_detail = described_class.call(include_details: true).dig(:ocr, :last_error_detail)
+      expect(admin_detail.deep_symbolize_keys).to eq(detail)
+      expect(described_class.call.to_json).not_to include('ProcessingFailed', 'diagnostic', 'last_error_detail')
+    end
+
     it '初期状態ではpresentationを含まないupload可能なraw payloadを返す' do
       payload = described_class.call
 

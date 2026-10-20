@@ -23,7 +23,9 @@ RSpec.describe ExternalServices::ErrorTextSanitizer do
       'https://example.test/private?token=credential-value',
       '/private/evidence/response.json',
       'C:\\private\\evidence\\response.json',
-      'prompt=private receipt content'
+      'prompt=private receipt content',
+      "input: 'private receipt content'",
+      'value="private input value"'
     ].each do |sensitive_value|
       it 'message内の機密値を保存しない' do
         sanitized = described_class.call("Provider failed: #{sensitive_value}")

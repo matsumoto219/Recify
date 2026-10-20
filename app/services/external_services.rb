@@ -77,6 +77,17 @@ module ExternalServices
       ErrorDetail.build(...)
     end
 
+    def sanitize_error_detail(value)
+      return nil unless value.is_a?(Hash)
+
+      attributes = ErrorDetail::SAFE_KEYS.each_with_object({}) do |key, selected|
+        selected[key] = value.key?(key) ? value[key] : value[key.to_s] if value.key?(key) || value.key?(key.to_s)
+      end
+      return nil if attributes.empty?
+
+      ErrorDetail.build(**attributes).presence
+    end
+
     def sanitize_error_text(...)
       ErrorTextSanitizer.call(...)
     end
@@ -118,6 +129,7 @@ module ExternalServices
         rate_limited: detail[:rate_limited],
         quota_exceeded: detail[:quota_exceeded],
         auth_error: detail[:auth_error],
+        diagnostic: detail[:diagnostic],
         disabled: normalized[:disabled],
         source: normalized[:source],
         reason: normalized[:reason]

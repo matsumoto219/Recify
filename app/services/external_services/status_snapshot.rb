@@ -43,7 +43,7 @@ module ExternalServices
 
     def service_payload(snapshot, state)
       normalized = snapshot.with_indifferent_access
-      detail = normalized_hash(normalized[:last_error_detail])
+      detail = normalized_hash(ExternalServices.sanitize_error_detail(normalized[:last_error_detail]))
 
       payload = {
         state: state,
