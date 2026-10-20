@@ -169,6 +169,7 @@ RSpec.describe "ゲスト本登録の実Chrome回帰", type: :system do
     original_session_version = guest.session_version
     original_confirmation_token = guest.confirmation_token
     tracked_session = guest.user_sessions.order(:id).last
+    expect_browser_console_clean
 
     allow_any_instance_of(User).to receive(:complete_guest_registration!)
       .and_raise(ActiveRecord::StatementInvalid, "local fault injection")
@@ -176,8 +177,9 @@ RSpec.describe "ゲスト本登録の実Chrome回帰", type: :system do
     visit user_confirmation_path(confirmation_token: token)
 
     server_error = page.server.error
-    expected_console_entries = browser_console_entries.reject do |entry|
-      blocked_external_font_entry?(entry)
+    page.server.reset_error!
+    expected_console_entries = browser_console_entries.select do |entry|
+      entry.level == "SEVERE" && !blocked_external_font_entry?(entry)
     end
 
     aggregate_failures do
@@ -187,7 +189,6 @@ RSpec.describe "ゲスト本登録の実Chrome回帰", type: :system do
         an_object_having_attributes(level: "SEVERE", message: include("500 (Internal Server Error)"))
       )
     end
-    page.server.reset_error!
 
     aggregate_failures do
       expect(guest.reload).to be_guest
