@@ -45,6 +45,41 @@ RSpec.describe Storage::ImageReadability do
     end
   end
 
+  it "gain mapを持つ正常なHDR JPEGを受け付ける" do
+    # Synthetic scRGB image encoded once; CI only needs its JPEG decoder.
+    bytes = File.binread(File.expand_path("../../fixtures/files/readable_hdr_image.jpg", __dir__))
+
+    expect(readable?(bytes, content_type: "image/jpeg")).to be(true)
+  end
+
+  %w[dimensions depth color].each do |variant|
+    it "ページの#{variant}が異なる正常TIFFを個別に読み取る" do
+      bytes = File.binread(File.expand_path("../../fixtures/files/mixed_#{variant}_image.tiff", __dir__))
+
+      expect(readable?(bytes, content_type: "image/tiff", max_dimension: 200)).to be(true)
+    end
+  end
+
+  it "異なる寸法のページも累積画素数の上限へ含める" do
+    bytes = File.binread(File.expand_path("../../fixtures/files/mixed_dimensions_image.tiff", __dir__))
+
+    expect(readable?(bytes, content_type: "image/tiff", max_dimension: 160)).to be(false)
+  end
+
+  it "形式不一致と読取不能を別の安全なerror codeで返す" do
+    options = { content_type: "image/jpeg", max_bytes:, max_dimension: }
+
+    expect(described_class.validation_error(io: StringIO.new(image.pngsave_buffer), **options)).to eq(:invalid_content_type)
+    expect(described_class.validation_error(io: StringIO.new(image.jpegsave_buffer.byteslice(0, 200)), **options)).to eq(:unreadable_image)
+  end
+
+  it "総画素数上限による拒否を形式エラーにしない" do
+    bytes = image.join(image, :vertical).tiffsave_buffer(page_height: 160)
+
+    expect(described_class.validation_error(io: StringIO.new(bytes), content_type: "image/tiff", max_bytes:, max_dimension: 160))
+      .to eq(:image_pixel_limit_exceeded)
+  end
+
   it "複数ページの各寸法と合計pixel数が上限内なら受け付ける" do
     bytes = image.join(image, :vertical).tiffsave_buffer(page_height: 160)
 

@@ -54,10 +54,13 @@ module Storage
         max_bytes, max_dimension = image_limits(record)
         # Keep BMP compatibility until its planned deprecation. Rails blocks its untrusted decoder;
         # existing format/dimension checks do not guarantee full-image readability.
-        readable = io && (blob.content_type == "image/bmp" ||
-          ImageReadability.valid?(io:, content_type: blob.content_type, max_bytes:, max_dimension:))
-        unless readable
-          record.errors.add(attachment_name, :invalid_content_type)
+        error = if !io
+          :unreadable_image
+        elsif blob.content_type != "image/bmp"
+          ImageReadability.validation_error(io:, content_type: blob.content_type, max_bytes:, max_dimension:)
+        end
+        if error
+          record.errors.add(attachment_name, error)
           return false
         end
 

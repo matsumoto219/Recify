@@ -25,11 +25,54 @@ RSpec.describe Storage::TiffPageCount do
       it "#{endian}の#{bigtiff ? 'BigTIFF' : 'TIFF'}の全directoryを数える" do
         expect(described_class.call(tiff_bytes(endian:, bigtiff:))).to eq(2)
       end
+
+      it "#{endian}の#{bigtiff ? 'BigTIFF' : 'TIFF'}を元bytes不変の単一ページviewで列挙する" do
+        bytes = tiff_bytes(endian:, bigtiff:).freeze
+        original = bytes.dup
+        views = []
+        view_ids = []
+        yielded_file = nil
+
+        count = described_class.each_page(bytes) do |file|
+          yielded_file = file
+          view = file.read
+          views << view
+          view_ids << file.object_id
+          expect(File.file?(file.path)).to be(false)
+          expect(described_class.call(view)).to eq(1)
+        end
+
+        aggregate_failures do
+          expect(count).to eq(2)
+          expect(views.uniq.size).to eq(2)
+          expect(view_ids.uniq.size).to eq(1)
+          expect(bytes).to eq(original)
+          expect(yielded_file).to be_closed
+        end
+      end
     end
   end
 
   it "単一ページの正常終端を認識する" do
     expect(described_class.call(tiff_bytes(pages: 1))).to eq(1)
+  end
+
+  it "既定の内部encodingがUTF-8でも画像bytesを変換せず列挙する" do
+    original_encoding = Encoding.default_internal
+    Encoding.default_internal = Encoding::UTF_8
+    bytes = (tiff_bytes + "\xFF".b).freeze
+    views = []
+
+    count = described_class.each_page(bytes) { |file| views << file.read }
+
+    aggregate_failures do
+      expect(count).to eq(2)
+      expect(views.map(&:encoding)).to eq([ Encoding::BINARY, Encoding::BINARY ])
+      expect(views).to all(end_with("\xFF".b))
+      expect(bytes).to eq(tiff_bytes + "\xFF".b)
+    end
+  ensure
+    Encoding.default_internal = original_encoding
   end
 
   it "ページ上限ちょうどを受け付け、超過を拒否する" do
@@ -64,6 +107,27 @@ RSpec.describe Storage::TiffPageCount do
     bytes[40, 4] = [ 8 ].pack("V")
 
     expect(described_class.call(bytes)).to be_nil
+  end
+
+  it "後続directoryが不正なら先頭ページもyieldしない" do
+    bytes = tiff_bytes
+    bytes[40, 4] = [ 8 ].pack("V")
+
+    expect { |block| described_class.each_page(bytes, &block) }.not_to yield_control
+  end
+
+  it "decoderが失敗しても元bytesを変更せず匿名の作業fileを閉じる" do
+    bytes = tiff_bytes.freeze
+    yielded_view = nil
+
+    expect do
+      described_class.each_page(bytes) do |file|
+        yielded_view = file
+        raise IOError, "synthetic decode failure"
+      end
+    end.to raise_error(IOError, "synthetic decode failure")
+    expect(yielded_view).to be_closed
+    expect(bytes).to eq(tiff_bytes)
   end
 
   it "header内を指すdirectoryを拒否する" do

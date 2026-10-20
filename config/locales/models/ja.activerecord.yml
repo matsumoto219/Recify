@@ -137,6 +137,8 @@ ja:
               future_date: "は未来の日付・時刻を入力できません"
             image:
               invalid_content_type: "対応していないファイル形式です"
+              unreadable_image: "を読み取れませんでした。JPEGやPNGへ変換するか、別の画像を選んでください"
+              image_pixel_limit_exceeded: "の寸法または全ページの合計画素数が上限を超えています。画像を縮小するか、ページ数を減らしてください"
               upload_failed: "を保存できませんでした。時間をおいて再度お試しください"
               upload_in_progress: "は現在ほかの保存処理と競合しています。少し待ってから再度お試しください"
               file_too_large: "ファイルサイズは%{max_size}以下にしてください"
@@ -166,6 +168,8 @@ ja:
               blank: "を入力してください"
             avatar:
               invalid_content_type: "はPNG/JPEG/WebP形式でアップロードしてください"
+              unreadable_image: "を読み取れませんでした。JPEGやPNGへ変換するか、別の画像を選んでください"
+              image_pixel_limit_exceeded: "の寸法または全ページの合計画素数が上限を超えています。画像を縮小するか、ページ数を減らしてください"
               upload_failed: "を保存できませんでした。時間をおいて再度お試しください"
               upload_in_progress: "は現在ほかの保存処理と競合しています。少し待ってから再度お試しください"
               stale_image: "は別の操作で変更されました。画面を再読み込みして、もう一度お試しください"
@@ -181,6 +185,8 @@ ja:
           attributes:
             image:
               invalid_content_type: "はJPEG/PNG/WebP形式でアップロードしてください"
+              unreadable_image: "を読み取れませんでした。JPEGやPNGへ変換するか、別の画像を選んでください"
+              image_pixel_limit_exceeded: "の寸法または全ページの合計画素数が上限を超えています。画像を縮小するか、ページ数を減らしてください"
               upload_failed: "を保存できませんでした。時間をおいて再度お試しください"
               upload_in_progress: "は現在ほかの保存処理と競合しています。少し待ってから再度お試しください"
               stale_image: "は別の操作で変更されました。画面を再読み込みして、もう一度お試しください"
