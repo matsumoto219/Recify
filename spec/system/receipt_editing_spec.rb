@@ -1169,6 +1169,19 @@ RSpec.describe "レシート編集の実Chrome入力回帰", type: :system, mobi
     expect(page.evaluate_script("window.location.hash")).to eq("##{target_id}")
     expect(page.evaluate_script("Boolean(window.history.state?.turbo)")).to be(true)
 
+    field = find("#receipt_store_name")
+    review_link = review_card.find("a[data-review-reason-target-adjustment='#{target_id}']")
+    field_kept_focus = page.evaluate_async_script(<<~JAVASCRIPT, review_link, field)
+      const link = arguments[0]
+      const field = arguments[1]
+      const done = arguments[arguments.length - 1]
+      link.click()
+      field.focus()
+      window.requestAnimationFrame(() => done(document.activeElement === field))
+    JAVASCRIPT
+
+    expect(field_kept_focus).to be(true)
+
     fill_in "receipt_store_name", with: "別画面から復元する未保存店名"
 
     find("a[href='#{settings_path}']", visible: true).click
