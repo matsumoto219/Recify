@@ -1060,6 +1060,34 @@ RSpec.describe 'Settings', type: :request do
       end
     end
 
+    it 'プロフィール更新は画像を保存してもメールとパスワードを変更しない' do
+      original_email = user.email
+      original_encrypted_password = user.encrypted_password
+
+      patch user_registration_path,
+            params: {
+              update_context: 'account',
+              user: {
+                name: 'Updated Profile',
+                avatar: avatar_upload,
+                email: 'profile-injected@example.com',
+                current_password: 'password',
+                password: 'new-password123',
+                password_confirmation: 'new-password123'
+              }
+            }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_path)
+        expect(user.reload.name).to eq('Updated Profile')
+        expect(user.avatar).to be_attached
+        expect(user.email).to eq(original_email)
+        expect(user.unconfirmed_email).to be_nil
+        expect(user.encrypted_password).to eq(original_encrypted_password)
+        expect(ActionMailer::Base.deliveries).to be_empty
+      end
+    end
+
     it 'account update ignores spoofed admin param' do
       patch user_registration_path,
             params: {
@@ -1280,6 +1308,47 @@ RSpec.describe 'Settings', type: :request do
   end
 
   describe 'PATCH /users security' do
+    it 'パスワード変更に混入した画像・削除指定・プロフィール項目を保存しない' do
+      user.update!(name: 'Original Profile')
+      user.avatar.attach(avatar_upload)
+      original_avatar = user.avatar.blob
+      original_attachment_id = user.avatar.attachment.id
+      original_email = user.email
+      original_usage = user.storage_used_bytes
+      allow(Storage).to receive(:with_prepared_images).and_call_original
+
+      expect do
+        patch user_registration_path,
+              params: {
+                update_context: 'security',
+                remove_avatar: '1',
+                user: {
+                  current_password: 'password',
+                  password: 'new-password123',
+                  password_confirmation: 'new-password123',
+                  name: 'Injected Profile',
+                  email: 'password-injected@example.com',
+                  avatar: avatar_upload,
+                  admin: true
+                }
+              }
+      end.not_to change { [ ActiveStorage::Blob.count, ActiveStorage::Attachment.count ] }
+
+      aggregate_failures do
+        expect(response).to redirect_to(settings_security_path)
+        expect(user.reload).to be_valid_password('new-password123')
+        expect(user.name).to eq('Original Profile')
+        expect(user.email).to eq(original_email)
+        expect(user.unconfirmed_email).to be_nil
+        expect(user).not_to be_admin
+        expect(user.avatar.blob).to eq(original_avatar)
+        expect(user.avatar.attachment.id).to eq(original_attachment_id)
+        expect(user.storage_used_bytes).to eq(original_usage)
+        expect(Storage).not_to have_received(:with_prepared_images)
+        expect(ActionMailer::Base.deliveries.map(&:subject)).to eq([ I18n.t('devise.mailer.password_change.subject') ])
+      end
+    end
+
     it 'blank password update shows locale-backed field errors' do
       patch user_registration_path,
             params: {
@@ -1959,6 +2028,8 @@ RSpec.describe 'Settings', type: :request do
     end
 
     it 'パスワード変更のcurrent_passwordエラーはパスワード変更カードだけに表示する' do
+      original_encrypted_password = user.encrypted_password
+
       patch user_registration_path,
             params: {
               update_context: 'security',
@@ -1975,6 +2046,7 @@ RSpec.describe 'Settings', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload.encrypted_password).to eq(original_encrypted_password)
         expect(email_current_password['class']).not_to include('input-field-error')
         expect(password_current_password['class']).to include('input-field-error')
       end

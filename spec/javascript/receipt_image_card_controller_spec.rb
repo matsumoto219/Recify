@@ -14,6 +14,7 @@ RSpec.describe "Receipt image card Stimulus controller" do
     end.join("\n")
     controller = source
       .sub("import { Controller } from '@hotwired/stimulus'", "class Controller {}")
+      .sub("import { isAllowedImageFile } from 'image_file_type'", "")
       .sub(/import \{.*?\} from 'receipts\/review_targets'/m, "")
       .sub(/import \{.*?\} from 'receipts\/review_navigation'/m, "")
       .sub("export default class extends Controller", "class ImageCardController extends Controller")
@@ -70,8 +71,10 @@ RSpec.describe "Receipt image card Stimulus controller" do
 
   def run_discard_script(script)
     targets = File.read(File.expand_path("../../app/javascript/receipts/review_targets.js", __dir__)).gsub(/^export /, "")
+    file_type_source = File.read(File.expand_path("../../app/javascript/image_file_type.js", __dir__)).gsub(/^export /, "")
     controller = source
       .sub("import { Controller } from '@hotwired/stimulus'", "class Controller {}")
+      .sub("import { isAllowedImageFile } from 'image_file_type'") { file_type_source }
       .sub(/import \{.*?\} from 'receipts\/review_targets'/m, "")
       .sub(/import \{.*?\} from 'receipts\/review_navigation'/m, "")
       .sub("export default class extends Controller", "class ImageCardController extends Controller")

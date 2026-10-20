@@ -112,7 +112,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
     resource_updated = (
       if account_update
-        profile_params = account_update_params.except(:current_password, :password, :password_confirmation)
+        profile_params = profile_update_params
         if avatar_storage_quota_exceeded?(resource, profile_params[:avatar])
           resource.errors.add(:avatar, :storage_quota_exceeded)
           flash.now[:alert] = avatar_storage_quota_exceeded_message(resource, profile_params[:avatar])
@@ -124,7 +124,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
         Storage.purge_attachment(resource.avatar) if resource_updated && remove_avatar_requested? && !profile_params[:avatar].present?
         resource_updated
       else
-        update_resource(resource, account_update_params)
+        update_resource(resource, password_update_params)
       end
     )
 
@@ -387,6 +387,14 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   def configure_account_update_params
     devise_parameter_sanitizer.permit(:account_update, keys: [ :name, :avatar, :legal_agreement ])
+  end
+
+  def profile_update_params
+    account_update_params.slice(:name, :avatar)
+  end
+
+  def password_update_params
+    account_update_params.slice(:current_password, :password, :password_confirmation)
   end
 
   def email_update_params

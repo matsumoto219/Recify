@@ -240,6 +240,8 @@ module Admin
 
     def image_security_event_reason(errors)
       return "invalid_content_type" if errors.of_kind?(:image, :invalid_content_type)
+      return "unreadable_image" if errors.of_kind?(:image, :unreadable_image)
+      return "image_pixel_limit_exceeded" if errors.of_kind?(:image, :image_pixel_limit_exceeded)
       return "file_too_large" if errors.of_kind?(:image, :file_too_large)
       return "image_too_small" if errors.of_kind?(:image, :image_too_small)
 

@@ -435,6 +435,7 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     install_synthetic_camera(devices: 2)
     start_camera
     expect(page).to have_css("[data-camera-guide]")
+    page.scroll_to(find_button(I18n.t("receipts.new_upload.camera.capture")), align: :bottom)
     before = camera_geometry
     expect_camera_regions_separated(before)
     expect(page.evaluate_script("document.querySelector('[data-receipt-upload-target=dropzone]').getBoundingClientRect().height")).to eq(536)

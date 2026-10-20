@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
+import { isAllowedImageFile } from 'image_file_type'
 import { CameraCapture, supportsInlineCamera } from 'receipts/camera_capture'
 
 const ALLOWED_RECEIPT_IMAGE_TYPES = [
@@ -9,27 +10,6 @@ const ALLOWED_RECEIPT_IMAGE_TYPES = [
   'image/heif',
   'image/heic'
 ]
-
-const ALLOWED_RECEIPT_IMAGE_EXTENSIONS = [
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.bmp',
-  '.tif',
-  '.tiff',
-  '.heif',
-  '.heic'
-]
-
-function isAllowedReceiptImageFile (file) {
-  if (!file) return false
-
-  const type = file.type?.toLowerCase()
-  if (type) return ALLOWED_RECEIPT_IMAGE_TYPES.includes(type)
-
-  const name = file.name?.toLowerCase() || ''
-  return ALLOWED_RECEIPT_IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension))
-}
 
 function cameraGuideBounds ({ videoWidth, videoHeight, video, frame, panel, inset }) {
   if (![videoWidth, videoHeight].every((value) => Number.isFinite(value) && value > 0)) return null
@@ -767,7 +747,7 @@ export default class extends Controller {
   }
 
   isImageFile (file) {
-    return isAllowedReceiptImageFile(file)
+    return isAllowedImageFile(file, ALLOWED_RECEIPT_IMAGE_TYPES)
   }
 
   exceedsStorageQuota (files) {

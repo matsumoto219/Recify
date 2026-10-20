@@ -9,7 +9,9 @@ RSpec.shared_examples "an image preview source owner" do |controller_name|
   let(:source) { File.read(File.expand_path("../../app/javascript/controllers/#{controller_name}_controller.js", __dir__)) }
 
   def run_preview_script(script)
-    encoded_source = Base64.strict_encode64(source)
+    file_type_source = File.read(File.expand_path("../../app/javascript/image_file_type.js", __dir__)).gsub(/^export /, "")
+    controller = source.sub("import { isAllowedImageFile } from 'image_file_type'") { file_type_source }
+    encoded_source = Base64.strict_encode64(controller)
     harness = <<~JAVASCRIPT
       const source = Buffer.from(#{encoded_source.inspect}, 'base64').toString('utf8')
         .replace("import { Controller } from '@hotwired/stimulus'", 'class Controller {}')
@@ -108,6 +110,40 @@ RSpec.shared_examples "an image preview source owner" do |controller_name|
       "released" => [ { "url" => "blob:selected-1", "currentSource" => "blob:selected-2" } ],
       "removed" => false
     )
+  end
+
+  it "keeps supported image selections with aliased, empty or generic browser MIME types" do
+    result = run_preview_script(<<~JAVASCRIPT)
+      const selections = [
+        { name: 'selected.JPG', type: 'image/pjpeg' },
+        { name: 'selected.png', type: '' },
+        { name: 'selected.webp', type: 'application/octet-stream' }
+      ]
+      process.stdout.write(JSON.stringify(selections.map((file) => {
+        const { controller, input, removeCheckbox, snapshot } = buildPreview()
+        controller.connect()
+        input.files = [{ ...file, size: 100 }]
+        removeCheckbox.checked = true
+        controller.preview()
+        controller.refreshPreview()
+        return { ...snapshot(), removed: removeCheckbox.checked }
+      })))
+    JAVASCRIPT
+
+    expect(result).to eq(Array.new(3) { { "source" => "blob:selected-1", "hidden" => true, "assignments" => 1, "fileCount" => 1, "removed" => false } })
+  end
+
+  it "still rejects receipt-only formats, unknown MIME and oversized fallback images" do
+    result = run_preview_script(<<~JAVASCRIPT)
+      const { controller } = buildPreview()
+      process.stdout.write(JSON.stringify([
+        controller.validateFile({ name: 'selected.heic', type: '', size: 100 }),
+        controller.validateFile({ name: 'selected.jpg', type: 'application/pdf', size: 100 }),
+        controller.validateFile({ name: 'selected.png', type: 'application/octet-stream', size: 1001 })
+      ]))
+    JAVASCRIPT
+
+    expect(result).to eq([ "invalid", "invalid", "too large" ])
   end
 
   it "restores the persisted source and releases the selection after the file input is cleared" do

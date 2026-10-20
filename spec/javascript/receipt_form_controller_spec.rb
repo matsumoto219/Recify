@@ -726,6 +726,66 @@ RSpec.describe "Receipt form Stimulus controller" do
     )
   end
 
+  it "does not move focus away from a field entered before the adjustment focus frame runs" do
+    result = run_review_target_script(<<~JAVASCRIPT)
+      const frames = []
+      window.requestAnimationFrame = (callback) => frames.push(callback)
+      const target = makeRow({ id: 'receipt-adjustment-42', type: 'adjustment' })
+      const link = makeLink(target.id)
+      const field = { value: 'unsaved store name' }
+      const controller = makeController()
+      document.activeElement = link
+
+      controller.handleReviewTargetClick(makeClickEvent(link))
+      document.activeElement = field
+      frames.splice(0).forEach((callback) => callback())
+
+      process.stdout.write(JSON.stringify({
+        fieldFocused: document.activeElement === field,
+        fieldValue: field.value,
+        targetOpen: target.panel.classList.contains('is-open'),
+        toggleFocusCount: target.visibleToggle.focusCount,
+        hash: window.location.hash
+      }))
+    JAVASCRIPT
+
+    expect(result).to eq(
+      "fieldFocused" => true,
+      "fieldValue" => "unsaved store name",
+      "targetOpen" => true,
+      "toggleFocusCount" => 0,
+      "hash" => "#receipt-adjustment-42"
+    )
+  end
+
+  %w[link body].each do |focus_origin|
+    it "keeps delayed adjustment focus when focus remains on the #{focus_origin}" do
+      result = run_review_target_script(<<~JAVASCRIPT)
+        const frames = []
+        window.requestAnimationFrame = (callback) => frames.push(callback)
+        const target = makeRow({ id: 'receipt-adjustment-42', type: 'adjustment' })
+        const link = makeLink(target.id)
+        const controller = makeController()
+        document.activeElement = #{focus_origin == "link" ? "link" : "{ tagName: 'BODY' }"}
+
+        controller.handleReviewTargetClick(makeClickEvent(link))
+        frames.splice(0).forEach((callback) => callback())
+
+        process.stdout.write(JSON.stringify({
+          toggleFocused: document.activeElement === target.visibleToggle,
+          focusCount: target.visibleToggle.focusCount,
+          preventScroll: target.visibleToggle.focusOptions
+        }))
+      JAVASCRIPT
+
+      expect(result).to eq(
+        "toggleFocused" => true,
+        "focusCount" => 1,
+        "preventScroll" => [ { "preventScroll" => true } ]
+      )
+    end
+  end
+
   it "falls back to the adjustment section for unusable same-page adjustment targets" do
     result = run_review_target_script(<<~JAVASCRIPT)
       makeRow({ id: 'receipt-adjustment-deleted', type: 'adjustment', destroyed: true })

@@ -898,8 +898,11 @@ export default class extends Controller {
   }
 
   focusVisibleAdjustmentDetailsToggle (row) {
+    const activeElement = document.activeElement
+
     window.requestAnimationFrame(() => {
       if (!row?.isConnected || !this.element.contains(row)) return
+      if (document.activeElement !== activeElement) return
 
       const toggle = Array.from(
         row.querySelectorAll('[data-receipt-form-target="adjustmentDetailsToggle"]')

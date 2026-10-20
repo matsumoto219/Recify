@@ -139,10 +139,15 @@ RSpec.describe 'Receipt upload failure notifications', type: :request do
   end
 
   it '入力画像がない場合は通常エラーだけにする' do
+    expect(Receipts::Processing).not_to receive(:start)
+    original_counts = [ Receipt.count, ReceiptAnalysisRun.count, UsageCounter.count, ActiveStorage::Blob.count ]
+
     expect do
       post upload_receipts_path, params: { receipt_registration_token: token, receipt: { image: nil } }
     end.not_to change(Notification, :count)
 
+    expect(response).to have_http_status(:unprocessable_content)
+    expect([ Receipt.count, ReceiptAnalysisRun.count, UsageCounter.count, ActiveStorage::Blob.count ]).to eq(original_counts)
     expect(user.receipts.reload).to be_empty
   end
 
