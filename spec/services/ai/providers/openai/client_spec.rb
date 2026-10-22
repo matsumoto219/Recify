@@ -462,6 +462,35 @@ RSpec.describe Ai::Providers::Openai::Client do
       }
     end
 
+    it 'invalid requestの対象parameterと長い安全な原因をexecutor経由でも保持する' do
+      message = 'The requested format does not support this option. ' * 12
+      allow(response).to receive(:code).and_return('400')
+      allow(response).to receive(:body).and_return(
+        { error: { code: 'unsupported_value', type: 'invalid_request_error', param: 'reasoning.effort', message: message } }.to_json
+      )
+      executor = Ai::ProviderExecutor.new(provider_client: client, provider_name: 'openai')
+      allow(executor).to receive(:sleep)
+
+      expect do
+        executor.call(input)
+      end.to raise_error(Ai::Errors::ProviderError) { |error|
+        aggregate_failures do
+          expect(error.error_code).to eq('ai_invalid_request')
+          expect(error.metrics.dig(:diagnostic, :nodes)).to include(
+            path: 'error',
+            code: 'unsupported_value',
+            type: 'invalid_request_error',
+            param: 'reasoning.effort',
+            message_safe: message.strip
+          )
+          expect(error).not_to be_retryable
+          expect(error).not_to be_fallbackable
+          expect(http).to have_received(:request).once
+          expect(executor).not_to have_received(:sleep)
+        end
+      }
+    end
+
     it '429 は RateLimitError を送出する' do
       allow(response).to receive(:code).and_return('429')
       allow(response).to receive(:body).and_return({ error: { type: 'rate_limit_error', code: 'rate_limit_exceeded', message: 'Rate limit exceeded' } }.to_json)
@@ -624,6 +653,77 @@ RSpec.describe Ai::Providers::Openai::Client do
       expect(executor).not_to have_received(:sleep)
     end
 
+    it 'HTTP成功でもfailedの原因とrequest idを失敗結果として保持する' do
+      headers['x-request-id'] = 'req_failed_response'
+      headers['authorization'] = 'Bearer private-credential'
+      payload = valid_openai_response.merge(
+        'status' => 'failed',
+        'error' => { 'code' => 'server_error', 'message' => 'The response could not be completed.', 'param' => 'input' }
+      )
+      allow(response).to receive(:body).and_return(payload.to_json)
+      executor = Ai::ProviderExecutor.new(provider_client: client, provider_name: 'openai')
+      expected_nodes = [ { path: 'error', code: 'server_error', message_safe: 'The response could not be completed.', param: 'input' } ]
+
+      expect do
+        executor.call(input)
+      end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+        aggregate_failures do
+          expect(error.metrics).to include(request_id: 'req_failed_response', provider_status: '200', response_status: 'failed')
+          expect(error.metrics.dig(:diagnostic, :nodes)).to eq(expected_nodes)
+          expect(error.metrics.to_s).not_to include('private-credential', 'output_text')
+          expect(http).to have_received(:request).once
+        end
+      }
+    end
+
+    it '不正JSONは本文を保存せずrequest idと解析不能の区分を保持する' do
+      headers['x-request-id'] = 'req_invalid_json'
+      allow(response).to receive(:body).and_return('{private invalid response')
+
+      expect do
+        client.call(input)
+      end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+        aggregate_failures do
+          expect(error.metrics[:request_id]).to eq('req_invalid_json')
+          expect(error.metrics.dig(:diagnostic, :local_issue)).to eq('invalid_json')
+          expect(error.metrics.to_s).not_to include('private invalid response')
+          expect(error).not_to be_retryable
+        end
+      }
+    end
+
+    it '接続失敗の区分だけを保存し元の例外messageを診断へ流さない' do
+      allow(http).to receive(:request).and_raise(SocketError.new('private endpoint or credential'))
+
+      expect do
+        client.call(input)
+      end.to raise_error(Ai::Errors::ProviderError) { |error|
+        aggregate_failures do
+          expect(error.error_code).to eq('ai_api_error')
+          expect(error.metrics.dig(:diagnostic, :local_issue)).to eq('connection_failed')
+          expect(error.metrics.to_s).not_to include('private endpoint or credential')
+          expect(error).to be_retryable
+          expect(error).to be_fallbackable
+        end
+      }
+    end
+
+    it 'TLS失敗を接続失敗として診断し証明書や接続先の詳細を保存しない' do
+      allow(http).to receive(:request).and_raise(OpenSSL::SSL::SSLError.new('private certificate or endpoint'))
+
+      expect do
+        client.call(input)
+      end.to raise_error(Ai::Errors::ProviderError) { |error|
+        aggregate_failures do
+          expect(error.error_code).to eq('ai_api_error')
+          expect(error.metrics.dig(:diagnostic, :local_issue)).to eq('connection_failed')
+          expect(error.metrics.to_s).not_to include('private certificate or endpoint')
+          expect(error).to be_retryable
+          expect(error).to be_fallbackable
+        end
+      }
+    end
+
     it 'refusalは有効なreceipt JSONを含んでも採用せず要求条件を保持する' do
       payload = valid_openai_response.merge('output' => [ { 'content' => [ { 'type' => 'refusal', 'refusal' => 'private text' } ] } ])
       allow(response).to receive(:body).and_return(payload.to_json)
@@ -671,6 +771,7 @@ RSpec.describe Ai::Providers::Openai::Client do
           expect(error).not_to be_retryable
           expect(error).not_to be_fallbackable
           expect(error.metrics).to include(requested_model: 'gpt-test', reasoning_effort: 'low', provider_status: 'timeout', retry_count: 0)
+          expect(error.metrics.dig(:diagnostic, :local_issue)).to eq('timeout')
           expect(error.metrics).not_to include(:token_usage, :response_id)
           expect(http).to have_received(:request).once
           expect(executor).not_to have_received(:sleep)
@@ -700,6 +801,7 @@ RSpec.describe Ai::Providers::Openai::Client do
         expect(result[:review_reasons]).to eq([ 'ai_timeout' ])
         expect(result.dig(:meta, :metrics)).to include(requested_model: 'gpt-test', reasoning_effort: 'low', retry_count: 0)
         expect(result.dig(:meta, :final_error_detail)).to include(service: 'ai', provider: 'openai', model: 'gpt-test')
+        expect(result.dig(:meta, :final_error_detail, :diagnostic, :local_issue)).to eq('timeout')
         expect(http).to have_received(:request).once
         expect(callback).to have_received(:call).once
         expect(fallback_client).not_to have_received(:call)

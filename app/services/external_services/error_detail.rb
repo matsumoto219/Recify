@@ -1,7 +1,7 @@
 module ExternalServices
   class ErrorDetail
     MAX_CLASSIFICATION_BYTES = 4_096
-    MAX_BODY_BYTES = 16_384
+    MAX_BODY_BYTES = ErrorDiagnostic::MAX_BODY_BYTES
     MAX_NUMERIC_VALUE = (2**63) - 1
     QUOTA_ERROR_IDENTIFIERS = %w[
       insufficientquota
@@ -48,6 +48,7 @@ module ExternalServices
       disabled
       source
       reason
+      diagnostic
     ].freeze
 
     class << self
@@ -80,7 +81,9 @@ module ExternalServices
       source: nil,
       reason: nil,
       body: nil,
-      headers: nil
+      headers: nil,
+      diagnostic: nil,
+      local_issue: nil
     )
       @attributes = {
         service: safe_string(service),
@@ -110,6 +113,8 @@ module ExternalServices
       @provider_message = provider_message || provider_message_safe
       @provider_error_code = provider_error_code
       @provider_error_type = provider_error_type
+      @diagnostic = diagnostic
+      @local_issue = local_issue
     end
 
     def to_h
@@ -131,7 +136,8 @@ module ExternalServices
         retry_after_at: @attributes[:retry_after_at] || retry_after_at_for(retry_after),
         quota_exceeded: boolean_or(@attributes[:quota_exceeded], quota_exceeded?(classification_data)),
         rate_limited: boolean_or(@attributes[:rate_limited], rate_limited?(classification_data)),
-        auth_error: boolean_or(@attributes[:auth_error], auth_error?(classification_data))
+        auth_error: boolean_or(@attributes[:auth_error], auth_error?(classification_data)),
+        diagnostic: ErrorDiagnostic.build(body: @body, diagnostic: @diagnostic, local_issue: @local_issue)
       )
 
       detail.slice(*SAFE_KEYS).compact
@@ -166,7 +172,7 @@ module ExternalServices
 
       JSON.parse(value)
     rescue JSON::ParserError, TypeError, EncodingError, ArgumentError
-      { message: value }
+      {}
     end
 
     def normalized_hash(value)

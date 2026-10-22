@@ -322,6 +322,60 @@ RSpec.describe ReceiptAiEnrichmentService do
         end
       end
 
+      it '例外属性が空でもmetricsのHTTP情報と原因を最終detailへ引き継ぐ' do
+        diagnostic = {
+          schema_version: 'external_service_error_diagnostic_v1',
+          nodes: [ { path: 'error', code: 'server_error', param: 'input' } ],
+          omissions: [],
+          local_issue: 'invalid_response'
+        }
+        error = Ai::Errors::InvalidResponseError.new(
+          provider: 'openai',
+          metrics: {
+            provider_status: '200',
+            request_id: 'req_failed_response',
+            provider_error_code: 'server_error',
+            provider_error_type: 'server_error',
+            provider_message: 'The response could not be completed.',
+            phase: 'ai_response',
+            retry_after: 0,
+            rate_limited: false,
+            quota_exceeded: false,
+            auth_error: false,
+            diagnostic: diagnostic
+          }
+        )
+        allow(Ai::PromptBuilder).to receive(:build).with(valid_ocr_result, ai_name_completion_enabled: false).and_return({ filtered_content: 'test' })
+        allow(client).to receive(:call).with({ filtered_content: 'test' }).and_raise(error)
+
+        result = described_class.call(valid_ocr_result)
+
+        aggregate_failures do
+          expect(result[:success]).to be(false)
+          expect(result[:error_code]).to eq('ai_invalid_response')
+          expect(result.dig(:meta, :final_error_detail)).to include(
+            service: 'ai',
+            provider: 'openai',
+            http_status: 200,
+            request_id: 'req_failed_response',
+            provider_error_code: 'server_error',
+            provider_error_type: 'server_error',
+            provider_message_safe: 'The response could not be completed.',
+            phase: 'ai_response',
+            retry_after: 0,
+            rate_limited: false,
+            quota_exceeded: false,
+            auth_error: false,
+            diagnostic: diagnostic
+          )
+          expect(ExternalServices).to have_received(:mark_failure!).with(
+            :ai,
+            error_code: 'ai_invalid_response',
+            detail: result.dig(:meta, :final_error_detail)
+          )
+        end
+      end
+
       it 'AI parse失敗でもsafe metricsを失敗結果へ保持する' do
         error = Ai::Errors::InvalidResponseError.new(
           provider: 'openai',

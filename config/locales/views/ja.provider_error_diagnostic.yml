@@ -1,0 +1,34 @@
+ja:
+  admin:
+    provider_error_diagnostic:
+      title: Provider causes
+      description: APIが返した原因を保存順で表示します。機密情報・入力内容は除去し、取得・表示できない箇所は理由を示します。
+      not_recorded: 内側の原因は記録されていません。
+      omissions: 取得・表示の制限
+      fields:
+        code: code
+        type: type
+        param: param
+        target: target
+        reason: reason
+        message_safe: message
+      omission_reasons:
+        redacted: 機密情報・入力内容を除去しました。
+        invalid_type: 値の型が未対応のため表示できません。
+        invalid_encoding: 文字コードが不正なため修復または省略しました。
+        byte_limit: 容量上限を超えたため省略しました。
+        depth_limit: 入れ子の深さが上限を超えたため省略しました。
+        node_limit: 原因の件数が上限を超えたため省略しました。
+        unknown_version: 保存形式が未対応のため表示できません。
+        invalid_structure: 許可されていない形式を除外しました。
+        invalid_json: 応答をJSONとして読み取れませんでした。本文は保存しません。
+        omission_limit: 省略理由の件数が上限を超えました。
+        unsupported_fields: 未対応の項目が含まれるため、その項目は取得していません。
+      local_issues:
+        invalid_json: 応答をJSONとして読み取れませんでした。本文は保存しません。
+        refusal: プロバイダーが回答を拒否しました。拒否本文は保存しません。
+        incomplete: プロバイダーの応答が完了していません。
+        timeout: 応答待ちが制限時間を超えました。
+        invalid_response: 応答が必要な形式を満たしていません。
+        connection_failed: プロバイダーとの接続に失敗しました。
+        invalid_operation_location: 解析結果の取得先が許可された形式ではありません。

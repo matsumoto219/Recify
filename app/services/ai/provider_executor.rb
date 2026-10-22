@@ -121,6 +121,7 @@ module Ai
         provider_error_code: error.respond_to?(:provider_error_code) ? error.provider_error_code : nil,
         provider_error_type: error.respond_to?(:provider_error_type) ? error.provider_error_type : nil,
         provider_message: error.respond_to?(:provider_message) ? error.provider_message : nil,
+        diagnostic: error.respond_to?(:diagnostic) ? error.diagnostic : nil,
         request_id: error.respond_to?(:request_id) ? error.request_id : nil,
         quota_exceeded: error.respond_to?(:quota_exceeded) ? error.quota_exceeded : nil,
         rate_limited: error.respond_to?(:rate_limited) ? error.rate_limited : nil,
@@ -163,6 +164,7 @@ module Ai
         cause: cause,
         provider_status: timeout_metrics[:provider_status] || "timeout",
         phase: "ai_request",
+        diagnostic: ExternalServices.error_detail(diagnostic: timeout_metrics[:diagnostic], local_issue: "timeout")[:diagnostic],
         metrics: Ai::ProviderMetrics.merge(timeout_metrics, elapsed_ms: elapsed_ms)
       )
     end

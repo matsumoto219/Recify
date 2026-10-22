@@ -93,7 +93,8 @@ RSpec.describe ExternalServices::ErrorDetail do
       )
 
       aggregate_failures do
-        expect(detail[:provider_message_safe]).to include('[FILTERED]')
+        expect(detail[:provider_message_safe]).to be_nil
+        expect(detail.dig(:diagnostic, :omissions)).to include(path: 'body', reason: 'invalid_json')
         expect(detail[:retry_after]).to be_nil
         expect(detail.keys).not_to include(:authorization, :api_key, :raw_response, :body)
       end

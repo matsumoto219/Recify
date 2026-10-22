@@ -260,34 +260,10 @@ module ExternalServices
       end
 
       def safe_error_detail(service, detail)
-        return nil unless detail.respond_to?(:to_h)
+        return nil unless detail.is_a?(Hash)
+        return nil if detail.empty?
 
-        normalized = detail.to_h.with_indifferent_access
-        return nil if normalized.blank?
-
-        ExternalServices.error_detail(
-          service: normalized[:service] || service,
-          provider: normalized[:provider],
-          phase: normalized[:phase],
-          http_status: normalized[:http_status],
-          provider_error_code: normalized[:provider_error_code],
-          provider_error_type: normalized[:provider_error_type],
-          provider_message_safe: normalized[:provider_message_safe],
-          request_id: normalized[:request_id],
-          region: normalized[:region],
-          policy_id: normalized[:policy_id],
-          retry_after: normalized[:retry_after],
-          retry_after_at: normalized[:retry_after_at],
-          latency_ms: normalized[:latency_ms],
-          poll_count: normalized[:poll_count],
-          model: normalized[:model],
-          rate_limited: normalized[:rate_limited],
-          quota_exceeded: normalized[:quota_exceeded],
-          auth_error: normalized[:auth_error],
-          disabled: normalized[:disabled],
-          source: normalized[:source],
-          reason: normalized[:reason]
-        ).presence
+        ExternalServices.sanitize_error_detail(detail)&.reverse_merge(service: service.to_s)
       end
 
       def safe_reason(value)

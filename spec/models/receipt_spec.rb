@@ -1577,6 +1577,17 @@ RSpec.describe Receipt, type: :model do
       end
     end
 
+    it 'providerの画像容量・寸法制限を安全な日本語で案内する' do
+      aggregate_failures do
+        expect(build_stubbed(:receipt, :failed, processing_error_code: 'image_provider_size_exceeded').processing_error_user_message)
+          .to eq('画像の容量がOCRサービスの上限を超えています。画像の容量を小さくして再試行するか、手動入力で続行してください。')
+        expect(build_stubbed(:receipt, :failed, processing_error_code: 'image_provider_dimensions_invalid').processing_error_user_message)
+          .to eq('画像の縦横サイズがOCRサービスの要件を満たしていません。画像のサイズを変更して再試行するか、手動入力で続行してください。')
+        expect(build_stubbed(:receipt, :failed, processing_error_code: 'image_provider_content_invalid').processing_error_user_message)
+          .to eq('OCRサービスで画像を読み取れませんでした。対応形式へ変換した別の画像で再試行するか、手動入力で続行してください。')
+      end
+    end
+
     it '海外レシートは日本レシートのみ対応文言にする' do
       receipt = build_stubbed(:receipt, :failed, processing_error_code: 'unsupported_country')
 
@@ -1598,6 +1609,12 @@ RSpec.describe Receipt, type: :model do
             .to eq('The image could not be loaded. Try another image or continue by entering the details manually.')
           expect(build_stubbed(:receipt, :failed, processing_error_code: 'ai_api_error').processing_error_user_message)
             .to eq('AI assistance is currently unavailable. Please review and edit the OCR results.')
+          expect(build_stubbed(:receipt, :failed, processing_error_code: 'image_provider_size_exceeded').processing_error_user_message)
+            .to eq('The image exceeds the OCR service file size limit. Reduce its file size and try again, or continue with manual entry.')
+          expect(build_stubbed(:receipt, :failed, processing_error_code: 'image_provider_dimensions_invalid').processing_error_user_message)
+            .to eq('The image dimensions do not meet the OCR service requirements. Resize the image and try again, or continue with manual entry.')
+          expect(build_stubbed(:receipt, :failed, processing_error_code: 'image_provider_content_invalid').processing_error_user_message)
+            .to eq('The OCR service could not read the image. Convert it to a supported format and try again, or continue with manual entry.')
         end
       end
     end

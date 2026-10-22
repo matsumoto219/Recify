@@ -95,6 +95,22 @@ RSpec.describe Analysis::ReceiptProcessingErrorMapper do
       )
     end
 
+    %w[image_provider_size_exceeded image_provider_dimensions_invalid image_provider_content_invalid].each do |error_code|
+      it "#{error_code}を画像エラーとして分類する" do
+        expect(described_class.map(error_code)).to eq(
+          error_code: error_code,
+          error_category: "image_error"
+        )
+      end
+    end
+
+    it '404や415の未分類input_invalidを一律に画像起因へ変更しない' do
+      expect(described_class.map("input_invalid")).to eq(
+        error_code: "input_invalid",
+        error_category: "system_error"
+      )
+    end
+
     it '未定義エラーは system_error にフォールバックする' do
       result = described_class.map("unknown_error")
 

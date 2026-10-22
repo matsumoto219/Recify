@@ -17,9 +17,10 @@ module Ai
                   :rate_limited,
                   :auth_error,
                   :phase,
+                  :diagnostic,
                   :metrics
 
-      def initialize(message: nil, error_code: nil, provider: nil, category: nil, retryable: false, fallbackable: false, cause: nil, retry_after: nil, provider_status: nil, provider_error_code: nil, provider_error_type: nil, provider_message: nil, request_id: nil, quota_exceeded: nil, rate_limited: nil, auth_error: nil, phase: nil, metrics: nil)
+      def initialize(message: nil, error_code: nil, provider: nil, category: nil, retryable: false, fallbackable: false, cause: nil, retry_after: nil, provider_status: nil, provider_error_code: nil, provider_error_type: nil, provider_message: nil, request_id: nil, quota_exceeded: nil, rate_limited: nil, auth_error: nil, phase: nil, diagnostic: nil, metrics: nil)
         super(message || default_message(error_code, provider))
         @error_code = error_code
         @provider = provider
@@ -49,8 +50,10 @@ module Ai
           quota_exceeded: quota_exceeded,
           rate_limited: rate_limited,
           auth_error: auth_error,
-          phase: phase
+          phase: phase,
+          diagnostic: diagnostic
         )
+        @diagnostic = @metrics[:diagnostic]
       end
 
       def retryable?

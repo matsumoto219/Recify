@@ -32,6 +32,7 @@ module Ai
             message: "Failed to parse OpenAI JSON payload",
             error_code: "ai_invalid_response",
             provider: "openai",
+            **diagnostic_attributes(local_issue: "invalid_json"),
             metrics: metrics,
             cause: e
           )
@@ -43,6 +44,7 @@ module Ai
             message: "Failed to parse OpenAI response",
             error_code: "ai_invalid_response",
             provider: "openai",
+            **diagnostic_attributes(local_issue: "invalid_response"),
             metrics: metrics,
             cause: e
           )
@@ -59,7 +61,8 @@ module Ai
           raise Ai::Errors::InvalidResponseError.new(
             message: "OpenAI response must be a Hash or JSON string",
             error_code: "ai_invalid_response",
-            provider: "openai"
+            provider: "openai",
+            **diagnostic_attributes(local_issue: "invalid_response")
           )
         end
 
@@ -77,7 +80,8 @@ module Ai
           raise Ai::Errors::InvalidResponseError.new(
             message: "OpenAI response did not contain a JSON payload",
             error_code: "ai_invalid_response",
-            provider: "openai"
+            provider: "openai",
+            **diagnostic_attributes(local_issue: "invalid_response")
           )
         end
 
@@ -87,15 +91,39 @@ module Ai
           unless (body["status"] || body[:status]) == "completed"
             raise Ai::Errors::InvalidResponseError.new(
               message: "OpenAI response was not completed",
-              provider: "openai"
+              provider: "openai",
+              **diagnostic_attributes(
+                body: body,
+                local_issue: (body["status"] || body[:status]) == "incomplete" ? "incomplete" : "invalid_response"
+              )
             )
           end
           return unless refusal_response?(body)
 
           raise Ai::Errors::InvalidResponseError.new(
             message: "OpenAI response contained a refusal",
-            provider: "openai"
+            provider: "openai",
+            **diagnostic_attributes(local_issue: "refusal")
           )
+        end
+
+        def diagnostic_attributes(body: nil, local_issue:)
+          error_body = body.slice("error", :error, "incomplete_details", :incomplete_details).compact if body.is_a?(Hash)
+          detail = ExternalServices.error_detail(
+            service: :ai,
+            provider: "openai",
+            phase: :ai_response,
+            body: error_body,
+            local_issue: local_issue
+          )
+
+          {
+            provider_error_code: detail[:provider_error_code],
+            provider_error_type: detail[:provider_error_type],
+            provider_message: detail[:provider_message_safe],
+            phase: detail[:phase],
+            diagnostic: detail[:diagnostic]
+          }.compact
         end
 
         def response_envelope?(body)

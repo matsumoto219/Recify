@@ -372,6 +372,9 @@ ja:
       unexpected_failure: 解析処理中にエラーが発生しました。再試行してください。
       ai_fallback_saved: "AI補完に失敗したためOCR結果で保存しました (%{details})"
     processing_error_codes:
+      image_provider_size_exceeded: 画像の容量がOCRサービスの上限を超えています。画像の容量を小さくして再試行するか、手動入力で続行してください。
+      image_provider_dimensions_invalid: 画像の縦横サイズがOCRサービスの要件を満たしていません。画像のサイズを変更して再試行するか、手動入力で続行してください。
+      image_provider_content_invalid: OCRサービスで画像を読み取れませんでした。対応形式へ変換した別の画像で再試行するか、手動入力で続行してください。
       no_text_detected: 画像から文字を読み取れませんでした。明るさやピントを確認して、別の画像でお試しください。
       receipt_not_detected: レシートを認識できませんでした。レシート全体が写っている画像でお試しください。
       unsupported_country: 現在は日本のレシートのみ対応しています。日本国内のレシート画像でお試しください。

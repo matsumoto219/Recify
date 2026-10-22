@@ -334,7 +334,16 @@ module Receipts::Processing::Runs
       return {} unless sanitized.is_a?(Hash)
 
       original = normalized_hash(snapshot)
-      preserve_ai_model_identifiers(sanitized, original) if original[:schema_version] == AI_RESULT_SCHEMA_VERSION
+      case original[:schema_version]
+      when OCR_SUMMARY_SCHEMA_VERSION
+        preserve_provider_error_details(sanitized, original)
+      when OCR_RESULT_SCHEMA_VERSION
+        preserve_provider_error_details(sanitized["meta"], original[:meta]) if sanitized["meta"].is_a?(Hash)
+      when AI_RESULT_SCHEMA_VERSION
+        preserve_ai_metadata(sanitized, original)
+      when AI_NORMALIZED_RESULT_SCHEMA_VERSION
+        preserve_ai_metadata(sanitized["meta"], original[:meta]) if sanitized["meta"].is_a?(Hash)
+      end
       sanitized
     end
 
@@ -385,7 +394,7 @@ module Receipts::Processing::Runs
       candidates = normalized_hash(result[:candidates])
       meta = normalized_hash(result[:meta])
 
-      sanitize_hash(
+      snapshot = sanitize_hash(
         {
           schema_version: OCR_SUMMARY_SCHEMA_VERSION,
           success: result[:success] == true,
@@ -410,6 +419,8 @@ module Receipts::Processing::Runs
           provider_error_detail: provider_error_detail_snapshot(meta[:provider_error_detail]).presence
         }.compact
       )
+      preserve_provider_error_details(snapshot, meta)
+      snapshot
     end
 
     def ocr_result_snapshot(ocr_result)
@@ -455,6 +466,7 @@ module Receipts::Processing::Runs
       end
 
       snapshot = sanitize_hash(snapshot.compact)
+      preserve_provider_error_details(snapshot["meta"], result[:meta])
       if candidates.key?(:store_name_evidence)
         evidence = Analysis.store_name_evidence(
           candidates[:store_name_evidence],
@@ -551,7 +563,7 @@ module Receipts::Processing::Runs
       )
       selection = Analysis.store_name_selection(normalized_hash(result[:meta])[:store_name_selection])
       snapshot["meta"]["store_name_selection"] = selection.deep_stringify_keys if selection
-      preserve_ai_model_identifiers(snapshot["meta"], result[:meta])
+      preserve_ai_metadata(snapshot["meta"], result[:meta])
       snapshot
     end
 
@@ -582,7 +594,7 @@ module Receipts::Processing::Runs
           receipt_attributes_keys: normalized_hash(result[:receipt_attributes]).keys.map(&:to_s).sort
         }.compact
       )
-      preserve_ai_model_identifiers(snapshot, meta)
+      preserve_ai_metadata(snapshot, meta)
       snapshot
     end
 
@@ -2885,30 +2897,7 @@ module Receipts::Processing::Runs
     end
 
     def provider_error_detail_snapshot(value)
-      detail = normalized_hash(value)
-      return {} if detail.blank?
-
-      ExternalServices.error_detail(
-        service: detail[:service],
-        provider: detail[:provider],
-        phase: detail[:phase],
-        http_status: detail[:http_status],
-        provider_error_code: detail[:provider_error_code],
-        provider_error_type: detail[:provider_error_type],
-        provider_message_safe: detail[:provider_message_safe],
-        request_id: detail[:request_id],
-        region: detail[:region],
-        retry_after: detail[:retry_after],
-        latency_ms: detail[:latency_ms],
-        poll_count: detail[:poll_count],
-        model: detail[:model],
-        rate_limited: detail[:rate_limited],
-        quota_exceeded: detail[:quota_exceeded],
-        auth_error: detail[:auth_error],
-        disabled: detail[:disabled],
-        source: detail[:source],
-        reason: detail[:reason]
-      )
+      ExternalServices.sanitize_error_detail(value) || {}
     end
 
     def ocr_items_snapshot_limit
@@ -3124,28 +3113,25 @@ module Receipts::Processing::Runs
       ReceiptAiEnrichmentService.provider_metrics(value)
     end
 
-    def preserve_ai_model_identifiers(snapshot, value)
+    def preserve_provider_error_details(snapshot, value)
+      metadata = normalized_hash(value)
+      %w[provider_error_detail primary_error_detail fallback_error_detail final_error_detail].each do |key|
+        snapshot.delete(key)
+        detail = provider_error_detail_snapshot(metadata[key])
+        snapshot[key] = detail.deep_stringify_keys if detail.present?
+      end
+    end
+
+    def preserve_ai_metadata(snapshot, value)
       metadata = normalized_hash(value)
       model = sanitized_ai_metrics(model: metadata[:model])[:model]
       snapshot.delete("model")
       snapshot["model"] = model if model
 
-      %w[primary_error_detail fallback_error_detail final_error_detail].each do |key|
-        next unless snapshot[key].is_a?(Hash)
-
-        model = provider_error_detail_snapshot(metadata[key])[:model]
-        snapshot[key].delete("model")
-        snapshot[key]["model"] = model if model
-      end
-
-      return unless snapshot["metrics"].is_a?(Hash)
-
+      preserve_provider_error_details(snapshot, metadata)
       metrics = sanitized_ai_metrics(metadata[:metrics])
-      %w[model requested_model].each do |key|
-        snapshot["metrics"].delete(key)
-        snapshot["metrics"][key] = metrics[key.to_sym] if metrics.key?(key.to_sym)
-      end
-      snapshot.delete("metrics") if snapshot["metrics"].empty?
+      snapshot.delete("metrics")
+      snapshot["metrics"] = metrics.deep_stringify_keys if metrics.present?
     end
 
     def limited_hashes(value, max)

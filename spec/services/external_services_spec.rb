@@ -1,6 +1,35 @@
 require 'rails_helper'
 
 RSpec.describe ExternalServices do
+  describe '.sanitize_error_detail' do
+    it '保存済み詳細を再検証し、診断と許可されたmetadataだけを保持する' do
+      detail = described_class.error_detail(
+        service: :ocr,
+        http_status: 400,
+        policy_id: 'image_limit',
+        retry_after_at: '2026-10-20T12:00:00+09:00',
+        body: { error: { code: 'InvalidRequest', innererror: { code: 'InvalidContentLength', message: 'The input image is too large.' } } }
+      )
+      stored = JSON.parse(JSON.generate(detail)).merge('raw_response' => 'private response', 'api_key' => 'private key')
+
+      expect(described_class.sanitize_error_detail(stored)).to eq(detail)
+      expect(described_class.sanitize_error_detail(stored)).not_to have_key(:raw_response)
+    end
+
+    it '詳細ではない値や未知のfieldだけの入力は保存しない' do
+      [ nil, [], 'raw response', { raw_response: 'private response' } ].each do |value|
+        expect(described_class.sanitize_error_detail(value)).to be_nil
+      end
+    end
+
+    it '未知fieldの内容へ潜らず許可fieldだけを検証する' do
+      unknown = {}
+      unknown[:recursive] = unknown
+
+      expect(described_class.sanitize_error_detail(http_status: 400, raw_response: unknown)).to eq(http_status: 400)
+    end
+  end
+
   describe '.services' do
     it 'StatusStoreのservice一覧を返す' do
       expect(described_class.services).to eq(%i[ocr ai])
