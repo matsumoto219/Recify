@@ -38,6 +38,8 @@ module Ai
             cause: e,
             retryable: e.is_a?(Net::OpenTimeout),
             fallbackable: e.is_a?(Net::OpenTimeout),
+            phase: "ai_request",
+            diagnostic: ExternalServices.error_detail(local_issue: "timeout")[:diagnostic],
             metrics: error_metrics(provider_status: "timeout", request_body: body)
           )
         rescue Ai::Errors::ProviderError => e
@@ -54,6 +56,7 @@ module Ai
             fallbackable: true,
             cause: e,
             provider_status: "unexpected_error",
+            diagnostic: connection_failure_diagnostic(e),
             metrics: error_metrics(provider_status: "unexpected_error", request_body: body)
           )
         end
@@ -170,7 +173,16 @@ module Ai
             )
           end
 
-          parse_response_body(response.body, provider_status: response.code, request_body: body)
+          parsed_body = parse_response_body(response.body, provider_status: response.code, request_body: body)
+          return parsed_body unless parsed_body.is_a?(Hash)
+
+          http_metrics = Ai::ProviderMetrics.build(request_id: error_detail[:request_id])
+          return parsed_body.except(Ai::ProviderMetrics::METADATA_KEY) if http_metrics.empty?
+
+          parsed_body.merge(Ai::ProviderMetrics::METADATA_KEY => http_metrics)
+        rescue Ai::Errors::InvalidResponseError => e
+          e.metrics.replace(Ai::ProviderMetrics.merge(e.metrics, request_id: error_detail&.dig(:request_id)))
+          raise
         end
 
         def auth_error_response?(response)
@@ -275,6 +287,8 @@ module Ai
             fallbackable: false,
             cause: e,
             provider_status: "invalid_json",
+            phase: "ai_response",
+            diagnostic: ExternalServices.error_detail(local_issue: "invalid_json")[:diagnostic],
             metrics: error_metrics(provider_status: provider_status || "invalid_json", request_body: request_body)
           )
         end
@@ -284,6 +298,8 @@ module Ai
             raise Ai::Errors::InvalidResponseError.new(
               message: "OpenAI response must be a JSON object",
               provider: PROVIDER_NAME,
+              phase: "ai_response",
+              diagnostic: ExternalServices.error_detail(local_issue: "invalid_response")[:diagnostic],
               metrics: error_metrics(provider_status: "200", request_body: request_body)
             )
           end
@@ -294,7 +310,8 @@ module Ai
         end
 
         def response_metrics(response, request_body:)
-          Ai::ProviderMetrics.build(
+          Ai::ProviderMetrics.merge(
+            response[Ai::ProviderMetrics::METADATA_KEY],
             provider: PROVIDER_NAME,
             provider_status: "200",
             response_id: response["id"] || response[:id],
@@ -330,6 +347,7 @@ module Ai
             provider_error_code: error_detail[:provider_error_code],
             provider_error_type: error_detail[:provider_error_type],
             provider_message: error_detail[:provider_message_safe],
+            diagnostic: error_detail[:diagnostic],
             request_id: error_detail[:request_id],
             quota_exceeded: error_detail[:quota_exceeded],
             rate_limited: error_detail[:rate_limited],
@@ -371,6 +389,12 @@ module Ai
           return unless body.respond_to?(:[])
 
           body[:model] || body["model"]
+        end
+
+        def connection_failure_diagnostic(error)
+          return unless error.is_a?(SocketError) || error.is_a?(EOFError) || error.is_a?(SystemCallError) || error.is_a?(OpenSSL::SSL::SSLError)
+
+          ExternalServices.error_detail(local_issue: "connection_failed")[:diagnostic]
         end
       end
     end

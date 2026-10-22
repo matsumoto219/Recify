@@ -65,13 +65,17 @@ module Ai
 
       result = provider_executor(fallback_provider, input: input, before_provider_call: before_provider_call, deadline: deadline).call(input)
 
-      decorate_success_result(
+      payload = decorate_success_result(
         result,
         fallback_used: true,
         fallback_provider: fallback_provider,
         fallback_reason: fallback_decision.reason,
         final_provider: fallback_provider
       )
+      payload[:meta][:primary_error_code] = primary_error.error_code
+      payload[:meta][:primary_error_message] = safe_error_message(primary_error)
+      payload[:meta][:primary_error_detail] = provider_error_detail(primary_error, fallback_phase: false)
+      payload
     rescue Ai::Errors::TimeoutError => fallback_error
       failure_result(primary_error, build_fallback_error(fallback_error))
     rescue Ai::Errors::ProviderError => fallback_error
@@ -206,6 +210,7 @@ module Ai
         provider_error_code: error.respond_to?(:provider_error_code) ? error.provider_error_code : nil,
         provider_error_type: error.respond_to?(:provider_error_type) ? error.provider_error_type : nil,
         provider_message: error.respond_to?(:provider_message) ? error.provider_message : nil,
+        diagnostic: error.respond_to?(:diagnostic) ? error.diagnostic : nil,
         request_id: error.respond_to?(:request_id) ? error.request_id : nil,
         quota_exceeded: error.respond_to?(:quota_exceeded) ? error.quota_exceeded : nil,
         rate_limited: error.respond_to?(:rate_limited) ? error.rate_limited : nil,
@@ -227,6 +232,7 @@ module Ai
         provider_error_code: error.provider_error_code || metrics[:provider_error_code],
         provider_error_type: error.provider_error_type || metrics[:provider_error_type],
         provider_message: error.provider_message || metrics[:provider_message],
+        diagnostic: error.diagnostic || metrics[:diagnostic],
         request_id: error.request_id || metrics[:request_id],
         retry_after: error.retry_after || metrics[:retry_after],
         model: metrics[:model],

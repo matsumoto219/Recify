@@ -160,18 +160,19 @@ class ReceiptAiEnrichmentService
 
     ExternalServices.error_detail(
       service: :ai,
-      provider: error.respond_to?(:provider) ? error.provider : metrics[:provider],
-      phase: (error.respond_to?(:phase) ? error.phase : nil) || metrics[:phase],
-      http_status: error.respond_to?(:provider_status) ? error.provider_status : metrics[:provider_status],
-      provider_error_code: error.respond_to?(:provider_error_code) ? error.provider_error_code : metrics[:provider_error_code],
-      provider_error_type: error.respond_to?(:provider_error_type) ? error.provider_error_type : metrics[:provider_error_type],
-      provider_message: error.respond_to?(:provider_message) ? error.provider_message : metrics[:provider_message],
-      request_id: error.respond_to?(:request_id) ? error.request_id : metrics[:request_id],
-      retry_after: error.respond_to?(:retry_after) ? error.retry_after : metrics[:retry_after],
+      provider: metrics[:provider],
+      phase: metrics[:phase],
+      http_status: metrics[:provider_status],
+      provider_error_code: metrics[:provider_error_code],
+      provider_error_type: metrics[:provider_error_type],
+      provider_message: metrics[:provider_message],
+      diagnostic: metrics[:diagnostic],
+      request_id: metrics[:request_id],
+      retry_after: metrics[:retry_after],
       model: metrics[:model],
-      rate_limited: error.respond_to?(:rate_limited) ? error.rate_limited : metrics[:rate_limited],
-      quota_exceeded: error.respond_to?(:quota_exceeded) ? error.quota_exceeded : metrics[:quota_exceeded],
-      auth_error: error.respond_to?(:auth_error) ? error.auth_error : metrics[:auth_error]
+      rate_limited: metrics[:rate_limited],
+      quota_exceeded: metrics[:quota_exceeded],
+      auth_error: metrics[:auth_error]
     ).presence
   end
 

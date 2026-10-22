@@ -225,6 +225,11 @@ RSpec.describe Ai::ProviderExecutor do
     end
 
     it 'retry delayが残り時間以上ならsleepせずtimeoutへ倒す' do
+      diagnostic = {
+        schema_version: 'external_service_error_diagnostic_v1',
+        nodes: [ { path: 'error', code: 'server_error', param: 'input', message_safe: 'The service is temporarily unavailable.' } ],
+        omissions: []
+      }
       budget_executor = described_class.new(
         provider_client: provider_client,
         provider_name: :openai,
@@ -240,7 +245,7 @@ RSpec.describe Ai::ProviderExecutor do
           error_code: 'ai_api_error',
           provider: 'openai',
           retryable: true,
-          metrics: { provider_status: '503', request_id: 'req_retry', token_usage: { input_tokens: 12 } }
+          metrics: { provider_status: '503', request_id: 'req_retry', token_usage: { input_tokens: 12 }, diagnostic: diagnostic }
         )
       )
 
@@ -254,7 +259,8 @@ RSpec.describe Ai::ProviderExecutor do
             provider_status: '503',
             request_id: 'req_retry',
             token_usage: { input_tokens: 12 },
-            retry_count: 0
+            retry_count: 0,
+            diagnostic: diagnostic.merge(local_issue: 'timeout')
           )
           expect(provider_client).to have_received(:call).once
           expect(budget_executor).not_to have_received(:sleep)

@@ -284,6 +284,7 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
               expect(error.metrics[:token_usage]).to eq(safe_metrics[:token_usage])
               expect(error.metrics[:response_status]).to eq(status == 'unknown' ? nil : status)
               expect(error.metrics[:incomplete_reason]).to eq(status == 'incomplete' ? 'max_output_tokens' : nil)
+              expect(error.metrics.dig(:diagnostic, :local_issue)).to eq(status == 'incomplete' ? 'incomplete' : 'invalid_response')
             end
           }
           expect(Ai::ResponseParser).not_to have_received(:parse)
@@ -294,6 +295,76 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
         response.delete('status')
 
         expect { described_class.parse(response) }.to raise_error(Ai::Errors::InvalidResponseError)
+      end
+
+      it 'failedの構造化された原因だけを保持し応答本文は残さない' do
+        response['status'] = 'failed'
+        response['error'] = {
+          'code' => 'server_error',
+          'message' => 'The service could not process this response.',
+          'param' => 'input',
+          'debug' => 'private debug'
+        }
+
+        expect do
+          described_class.parse(response, provider_response: true)
+        end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+          aggregate_failures do
+            expect(error.metrics[:diagnostic]).to include(
+              nodes: [
+                {
+                  path: 'error',
+                  code: 'server_error',
+                  message_safe: 'The service could not process this response.',
+                  param: 'input'
+                }
+              ]
+            )
+            expect(error.provider_error_code).to eq('server_error')
+            expect(error.phase).to eq('ai_response')
+            expect(error.metrics.to_s).not_to include('private debug', 'private response', payload.to_json)
+            expect(error).not_to be_retryable
+            expect(error).not_to be_fallbackable
+          end
+        }
+      end
+
+      it '未登録の安全なincomplete reasonも診断に保持し分類やretryを変えない' do
+        response['status'] = 'incomplete'
+        response['error'] = nil
+        response['incomplete_details'] = { 'reason' => 'future_incomplete_reason', 'debug' => 'private details' }
+        expected_nodes = [ { path: 'incomplete_details', reason: 'future_incomplete_reason' } ]
+        expected_omissions = [ { path: 'incomplete_details', reason: 'unsupported_fields' } ]
+
+        expect do
+          described_class.parse(response, provider_response: true)
+        end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+          aggregate_failures do
+            expect(error.error_code).to eq('ai_invalid_response')
+            expect(error.metrics[:incomplete_reason]).to be_nil
+            expect(error.metrics.dig(:diagnostic, :local_issue)).to eq('incomplete')
+            expect(error.metrics.dig(:diagnostic, :nodes)).to eq(expected_nodes)
+            expect(error.metrics.dig(:diagnostic, :omissions)).to eq(expected_omissions)
+            expect(error.metrics.to_s).not_to include('private details', payload.to_json)
+            expect(error).not_to be_retryable
+            expect(error).not_to be_fallbackable
+          end
+        }
+      end
+
+      it 'incomplete reason内の機密情報を保存せず除外した箇所を記録する' do
+        response['status'] = 'incomplete'
+        response['incomplete_details'] = { 'reason' => 'Bearer private-credential' }
+
+        expect do
+          described_class.parse(response, provider_response: true)
+        end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+          aggregate_failures do
+            expect(error.metrics[:incomplete_reason]).to be_nil
+            expect(error.metrics.dig(:diagnostic, :omissions)).to include(path: 'incomplete_details.reason', reason: 'redacted')
+            expect(error.metrics.to_s).not_to include('private-credential')
+          end
+        }
       end
 
       it 'HTTP応答のoutput_text helper形でもstatus欠損を拒否する' do
@@ -324,6 +395,7 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
             expect(error.retryable?).to be(false)
             expect(error.fallbackable?).to be(false)
             expect(error.metrics).to include(safe_metrics)
+            expect(error.metrics.dig(:diagnostic, :local_issue)).to eq('invalid_response')
           end
         }
       end
@@ -340,6 +412,7 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
             expect(error.retryable?).to be(false)
             expect(error.fallbackable?).to be(false)
             expect(error.metrics).to include(safe_metrics)
+            expect(error.metrics.dig(:diagnostic, :local_issue)).to eq('refusal')
             expect(error.metrics.to_s).not_to include('private refusal', 'private response')
           end
         }
@@ -357,7 +430,10 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
         expect do
           described_class.parse(response, provider_response: true)
         end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
-          expect(error.metrics).to include(safe_metrics)
+          aggregate_failures do
+            expect(error.metrics).to include(safe_metrics)
+            expect(error.metrics.dig(:diagnostic, :local_issue)).to eq('invalid_json')
+          end
         }
       end
 

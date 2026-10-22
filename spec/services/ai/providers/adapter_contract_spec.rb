@@ -15,6 +15,7 @@ RSpec.describe 'AI provider adapter contract' do
       reasoning_effort
       response_status
       incomplete_reason
+      diagnostic
       provider
       provider_error_code
       provider_error_type

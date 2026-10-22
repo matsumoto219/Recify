@@ -86,6 +86,40 @@ RSpec.describe Ai::ProviderMetrics do
       expect(metrics).to eq(provider_message: '[FILTERED]')
     end
 
+    it '診断の再読込でも安全な原因を保持し任意のpayloadを持ち回らない' do
+      diagnostic = {
+        schema_version: 'external_service_error_diagnostic_v1',
+        nodes: [
+          {
+            path: 'error',
+            code: 'unsupported_value',
+            param: 'reasoning.effort',
+            message_safe: 'The requested option is not supported.',
+            debug: 'private debug'
+          }
+        ],
+        omissions: [],
+        raw_response: 'private response'
+      }
+
+      metrics = described_class.build(diagnostic: diagnostic)
+      restored = described_class.build(JSON.parse(JSON.generate(metrics)))
+      expected_nodes = [
+        {
+          path: 'error',
+          code: 'unsupported_value',
+          param: 'reasoning.effort',
+          message_safe: 'The requested option is not supported.'
+        }
+      ]
+
+      aggregate_failures do
+        expect(restored).to eq(metrics)
+        expect(restored.dig(:diagnostic, :nodes)).to eq(expected_nodes)
+        expect(restored.to_s).not_to include('private debug', 'private response')
+      end
+    end
+
     it '非有限なmetrics数値はJSONへ出さない' do
       metrics = described_class.build(elapsed_ms: Float::NAN, retry_after: Float::INFINITY, token_usage: { total_tokens: 10**100 })
 

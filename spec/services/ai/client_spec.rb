@@ -170,6 +170,39 @@ RSpec.describe Ai::Client do
           )
         end
       end
+
+      it 'fallback成功でもprimary失敗の原因を成功payloadと分けて保持する' do
+        error = Ai::Errors::ProviderError.new(
+          message: 'primary failed',
+          error_code: 'ai_primary_failed',
+          provider_error_code: 'server_error',
+          provider_message: 'The upstream service is temporarily unavailable.',
+          metrics: {
+            diagnostic: {
+              schema_version: 'external_service_error_diagnostic_v1',
+              nodes: [ { path: 'error', code: 'server_error', message_safe: 'The upstream service is temporarily unavailable.' } ],
+              omissions: []
+            }
+          }
+        )
+        allow(primary_client).to receive(:call).with(input).and_raise(error)
+        allow(fallback_client).to receive(:call).with(input).and_return(provider_result(fallback_result, provider: fallback_provider))
+
+        result = client.call(input)
+
+        aggregate_failures do
+          expect(result[:success]).to eq(true)
+          expect(result.dig(:meta, :primary_error_detail, :diagnostic, :nodes)).to include(
+            path: 'error',
+            code: 'server_error',
+            message_safe: 'The upstream service is temporarily unavailable.'
+          )
+          expect(result.dig(:meta, :metrics, :final_provider)).to eq('fallback_ai')
+          expect(result.dig(:meta, :final_error_detail)).to be_nil
+          expect(primary_client).to have_received(:call).once
+          expect(fallback_client).to have_received(:call).once
+        end
+      end
     end
 
     context 'primary が fallback対象外のエラーを返す場合' do
@@ -322,6 +355,11 @@ RSpec.describe Ai::Client do
           phase: 'ai_request',
           metrics: {
             model: 'gpt-test',
+            diagnostic: {
+              schema_version: 'external_service_error_diagnostic_v1',
+              nodes: [ { path: 'error', code: 'insufficient_quota', param: 'project' } ],
+              omissions: []
+            },
             prompt: 'PROMPT MUST NOT BE STORED',
             raw_body: '{"error":"RAW BODY"}'
           }
@@ -339,6 +377,11 @@ RSpec.describe Ai::Client do
           phase: 'fallback',
           metrics: {
             model: 'fallback-model',
+            diagnostic: {
+              schema_version: 'external_service_error_diagnostic_v1',
+              nodes: [ { path: 'error', code: 'server_error', param: 'input' } ],
+              omissions: []
+            },
             headers: { authorization: 'Bearer secret' }
           }
         )
@@ -347,6 +390,8 @@ RSpec.describe Ai::Client do
         allow(fallback_client).to receive(:call).with(input).and_raise(fallback_error)
 
         result = client.call(input)
+        primary_nodes = [ { path: 'error', code: 'insufficient_quota', param: 'project' } ]
+        fallback_nodes = [ { path: 'error', code: 'server_error', param: 'input' } ]
 
         aggregate_failures do
           expect(result[:success]).to eq(false)
@@ -376,6 +421,8 @@ RSpec.describe Ai::Client do
             model: 'fallback-model'
           )
           expect(result.dig(:meta, :final_error_detail)).to eq(result.dig(:meta, :fallback_error_detail))
+          expect(result.dig(:meta, :primary_error_detail, :diagnostic, :nodes)).to eq(primary_nodes)
+          expect(result.dig(:meta, :fallback_error_detail, :diagnostic, :nodes)).to eq(fallback_nodes)
           expect(result.to_s).not_to include('sk-secret-token')
           expect(result.to_s).not_to include('PROMPT MUST NOT BE STORED')
           expect(result.to_s).not_to include('RAW BODY')

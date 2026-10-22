@@ -1,7 +1,7 @@
 module Ai
   module Errors
     class TimeoutError < ProviderError
-      def initialize(message: nil, provider: nil, category: :timeout, retryable: true, fallbackable: true, cause: nil, retry_after: nil, provider_status: "timeout", provider_error_code: nil, provider_error_type: nil, provider_message: nil, request_id: nil, quota_exceeded: nil, rate_limited: nil, auth_error: nil, phase: nil, metrics: nil)
+      def initialize(message: nil, provider: nil, category: :timeout, retryable: true, fallbackable: true, cause: nil, retry_after: nil, provider_status: "timeout", provider_error_code: nil, provider_error_type: nil, provider_message: nil, request_id: nil, quota_exceeded: nil, rate_limited: nil, auth_error: nil, phase: nil, diagnostic: nil, metrics: nil)
         super(
           message: message || default_message(provider),
           error_code: "ai_timeout",
@@ -20,6 +20,7 @@ module Ai
           rate_limited: rate_limited,
           auth_error: auth_error,
           phase: phase,
+          diagnostic: diagnostic,
           metrics: metrics
         )
       end

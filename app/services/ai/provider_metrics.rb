@@ -44,6 +44,7 @@ module Ai
           provider_error_code: safe_string(metrics[:provider_error_code]),
           provider_error_type: safe_string(metrics[:provider_error_type]),
           provider_message: safe_message(metrics[:provider_message]),
+          diagnostic: safe_diagnostic(metrics[:diagnostic]),
           request_id: safe_string(metrics[:request_id]),
           retry_after: safe_numeric(metrics[:retry_after]),
           quota_exceeded: safe_boolean(metrics, :quota_exceeded),
@@ -80,6 +81,12 @@ module Ai
 
       def safe_message(value)
         ExternalServices.sanitize_error_text(value)
+      end
+
+      def safe_diagnostic(value)
+        return if value.nil?
+
+        ExternalServices.error_detail(diagnostic: value)[:diagnostic]
       end
 
       def safe_enum(value, allowed_values)
