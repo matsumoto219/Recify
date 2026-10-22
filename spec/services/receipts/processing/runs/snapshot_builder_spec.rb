@@ -20,7 +20,7 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
     end
 
     [ 150, 500 ].each do |length|
-      it "preserves #{length}-byte model identifiers without expanding other snapshot strings" do
+      it "preserves #{length}-byte model identifiers and validated provider messages" do
         model = 'model-' + ('x' * (length - 6))
         requested_model = 'requested-' + ('y' * (length - 10))
         result = {
@@ -46,7 +46,7 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
             expect(metadata.fetch('metrics')).to include(
               'model' => model, 'requested_model' => requested_model, 'reasoning_effort' => 'high'
             )
-            expect(metadata.dig('metrics', 'provider_message').bytesize).to eq(100)
+            expect(metadata.dig('metrics', 'provider_message')).to eq('m' * 150)
             %w[primary_error_detail fallback_error_detail final_error_detail].each do |key|
               expect(metadata.dig(key, 'model')).to eq(model)
             end
@@ -71,7 +71,7 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
       end
     end
 
-    it 'revalidates stored error models without retaining unsafe identifiers or expanding messages' do
+    it 'revalidates stored error models without retaining unsafe identifiers or truncating messages' do
       original = {
         'schema_version' => described_class::AI_RESULT_SCHEMA_VERSION,
         'final_error_detail' => {
@@ -83,7 +83,7 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
       copied = described_class.sanitized_stored_snapshot(original)
 
       expect(copied.fetch('final_error_detail')).not_to have_key('model')
-      expect(copied.dig('final_error_detail', 'provider_message_safe').bytesize).to eq(100)
+      expect(copied.dig('final_error_detail', 'provider_message_safe')).to eq('m' * 150)
     end
   end
 

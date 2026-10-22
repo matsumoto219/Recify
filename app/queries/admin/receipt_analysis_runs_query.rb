@@ -40,6 +40,12 @@ module Admin
       secret
       signed_id
     ].freeze
+    PROVIDER_ERROR_DETAIL_KEYS = %w[
+      provider_error_detail
+      primary_error_detail
+      fallback_error_detail
+      final_error_detail
+    ].freeze
 
     Result = Data.define(:records, :limit, :offset, :total_count)
 
@@ -318,6 +324,10 @@ module Admin
       if @include_amount_profile
         record[:amount_calculation_profile] = amount_calculation_profile
         record[:amount_calculation_run_snapshot] = final_summary["amount_calculation_run_snapshot"]
+      end
+      unless @summary_only
+        detail = run.metadata.to_h.dig("error_metadata", "provider_detail")
+        record[:provider_error_detail] = ExternalServices.sanitize_error_detail(detail)&.deep_stringify_keys
       end
       record[:retry_options] = Receipts::Processing.admin_retry_eligibility(receipt: receipt, parent_run: run).retry_options if include_retry_options?
       record
@@ -602,7 +612,13 @@ module Admin
           normalized_key = key.to_s
           next if forbidden_summary_key?(normalized_key)
 
-          memo[normalized_key] = sanitize_summary(child_value)
+          memo[normalized_key] = if PROVIDER_ERROR_DETAIL_KEYS.include?(normalized_key)
+            ExternalServices.sanitize_error_detail(child_value)&.deep_stringify_keys
+          elsif normalized_key == "diagnostic"
+            ExternalServices.error_detail(diagnostic: child_value)[:diagnostic]&.deep_stringify_keys
+          else
+            sanitize_summary(child_value)
+          end
         end
       when Array
         value.map { |child_value| sanitize_summary(child_value) }

@@ -20,6 +20,42 @@ RSpec.describe Admin::ReceiptAnalysisRunsQuery do
   end
 
   describe '.call' do
+    it '終端metadataだけにあるprovider原因も再検証して詳細表示へ渡す' do
+      detail = ExternalServices.error_detail(
+        service: :ocr,
+        body: { error: { code: 'InvalidRequest', innererror: { code: 'InvalidContentLength', message: 'The input image is too large.' } } }
+      ).deep_stringify_keys
+      run = create(:receipt_analysis_run, :failed, metadata: {
+        error_metadata: { provider_detail: detail.merge('raw_response' => 'not retained') }
+      })
+
+      record = described_class.call(run_key: run.run_key).records.first
+
+      aggregate_failures do
+        expect(record[:provider_error_detail]).to eq(detail)
+        expect(described_class.call(run_key: run.run_key, summary_only: true).records.first).not_to have_key(:provider_error_detail)
+      end
+    end
+
+    it '保存済みprovider detailの不正fieldや自由文を表示用summaryへ通さない' do
+      run = create(:receipt_analysis_run, :failed, ocr_summary: {
+        provider_error_detail: {
+          service: 'ocr', provider_message_safe: 'Invalid input for person@example.test',
+          diagnostic: { schema_version: 'unknown', nodes: [ { message_safe: 'private response' } ] },
+          arbitrary: 'private arbitrary value'
+        }
+      })
+
+      summary = described_class.call(run_key: run.run_key).records.first.dig(:summaries, :ocr)
+
+      aggregate_failures do
+        expect(summary.dig('provider_error_detail', 'diagnostic', 'omissions')).to include(
+          'path' => 'diagnostic', 'reason' => 'unknown_version'
+        )
+        expect(summary.to_json).not_to include('person@example.test', 'private response', 'private arbitrary value')
+      end
+    end
+
     it 'latest順で管理画面用recordを返す' do
       older = create(:receipt_analysis_run, :succeeded, created_at: 2.hours.ago)
       newer = create(:receipt_analysis_run, :failed, created_at: 1.hour.ago)

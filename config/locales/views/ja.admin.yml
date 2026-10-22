@@ -807,6 +807,7 @@ ja:
             ai_primary: AI primary
             ai_fallback: AI fallback
             ai_final: AI final
+            processing: Processing
           fields:
             service: service
             provider: provider
