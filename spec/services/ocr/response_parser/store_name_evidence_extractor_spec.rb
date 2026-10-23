@@ -40,6 +40,81 @@ RSpec.describe Ocr::ResponseParser::StoreNameEvidenceExtractor do
     end
   end
 
+  context 'when MerchantName spans multiple lines' do
+    let(:texts) { [ 'Sample', 'Store', '中央店', '合計 300' ] }
+    let(:fields) do
+      { 'MerchantName' => { 'valueString' => "Sample\nStore", 'confidence' => 0.87,
+                            'spans' => [ { 'offset' => 0, 'length' => 12 } ] } }
+    end
+
+    it 'normalizes LF for the name while retaining the original exact field span' do
+      merchant = extract[:candidates].find { |candidate| candidate[:source] == 'merchant_name' }
+
+      aggregate_failures do
+        expect(merchant).to include(
+          text: 'Sample Store', confidence: 0.87, span_state: 'exact',
+          span: { offset: 0, length: 12 }, string_index_type: 'textElements'
+        )
+        expect(merchant).not_to have_key(:line_index)
+        expect(fields['MerchantName']['valueString']).to eq("Sample\nStore")
+        expect(analyze_result['content']).to start_with("Sample\nStore\n")
+      end
+    end
+
+    it 'normalizes CRLF without changing text element span lengths' do
+      fields['MerchantName']['valueString'] = "Sample\r\nStore"
+      analyze_result['content'] = texts.join("\r\n")
+
+      expect(extract[:candidates]).to include(
+        include(source: 'merchant_name', text: 'Sample Store', span_state: 'exact', span: { offset: 0, length: 12 })
+      )
+    end
+
+    it 'retains both CRLF code units in an exact UTF-16 field span' do
+      fields['MerchantName']['valueString'] = "Sample\r\nStore"
+      fields['MerchantName']['spans'][0]['length'] = 13
+      analyze_result['content'] = texts.join("\r\n")
+      analyze_result['stringIndexType'] = 'utf16CodeUnit'
+      analyze_result['pages'][0]['lines'].each_with_index do |line, index|
+        line['spans'][0]['offset'] += index
+      end
+
+      expect(extract[:candidates]).to include(
+        include(source: 'merchant_name', text: 'Sample Store', span_state: 'exact', span: { offset: 0, length: 13 })
+      )
+    end
+
+    it 'does not mark a contradictory multiline field span exact' do
+      fields['MerchantName']['spans'][0]['length'] = 11
+
+      expect(extract[:candidates]).to include(include(source: 'merchant_name', text: 'Sample Store', span_state: 'invalid'))
+    end
+
+    it 'does not retain a multiline field spanning an excluded calculation line' do
+      expect(extract(excluded_line_indexes: [ 1 ])[:candidates]).not_to include(include(source: 'merchant_name'))
+    end
+
+    it 'does not allow embedded line breaks in a provider line' do
+      analyze_result['pages'][0]['lines'][0]['content'] = "Sample\nStore"
+
+      expect(extract).to include(invalid: true, candidates: [])
+    end
+
+    {
+      'NUL' => "\0",
+      'tab' => "\t",
+      'standalone CR' => "\r",
+      'escape' => "\e",
+      'DEL' => "\u007F"
+    }.each do |name, control|
+      it "rejects #{name} instead of accepting it as a field line break" do
+        fields['MerchantName']['valueString'] = "Sample\n#{control}Store"
+
+        expect(extract[:candidates]).not_to include(include(source: 'merchant_name'))
+      end
+    end
+  end
+
   it 'keeps provider identity separate from normalized line indexes when blank lines occur' do
     analyze_result['pages'][0]['lines'].unshift('content' => '  ')
     result = extract
