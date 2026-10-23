@@ -519,6 +519,8 @@ export default class extends Controller {
 
   syncPricingSourceSummaryForRow (row, mode = this.pricingSourceModeForRow(row)) {
     this.syncExplicitLineTotalSemantics(row)
+    const discountHelp = row.querySelector('[data-receipt-form-absolute-discount-help]')
+    if (discountHelp) discountHelp.hidden = this.itemDiscountCleared(row)
     const summary = Array.from(
       row.querySelectorAll('[data-receipt-form-target~="pricingSourceSummary"]')
     ).find((candidate) => this.pricingElementSupportsMode(candidate, mode))
@@ -646,6 +648,10 @@ export default class extends Controller {
 
     return row.dataset?.receiptFormHasPersistedAbsoluteDiscountSource === 'true' ||
       row.dataset?.receiptFormHasPersistedExplicitPositiveDiscountRateSource === 'true'
+  }
+
+  itemDiscountCleared (row) {
+    return row.querySelector('[data-receipt-form-target="clearItemDiscountBeforeExplicitInput"]')?.value === '1'
   }
 
   itemDiscountClearConfirmationRequired (row) {
@@ -1261,6 +1267,7 @@ export default class extends Controller {
           discountRateInput,
           lineTotalInput,
           pricingSourceMode,
+          discountCleared: this.itemDiscountCleared(row),
           sourceModeChanged: pricingSourceChangedRow === row
         })
         : 0
@@ -2165,13 +2172,14 @@ export default class extends Controller {
     discountRateInput,
     lineTotalInput,
     pricingSourceMode,
+    discountCleared = false,
     sourceModeChanged = false
   }) {
     if (this.formulaPricingSourceMode(pricingSourceMode) || pricingSourceMode === 'explicit_line_total') {
       // Stored totals may already include tax. Typed modes use only their
       // source amount and discount before projecting tax again.
       const absoluteDiscountAmount = this.absoluteDiscountAmountFor({
-        pricingSourceMode, discountRateInput, lineTotalInput
+        pricingSourceMode, discountRateInput, lineTotalInput, discountCleared
       })
       if (absoluteDiscountAmount !== null) return Math.max(originalLineTotal - absoluteDiscountAmount, 0)
 
@@ -2189,7 +2197,8 @@ export default class extends Controller {
     return this.discountedLineTotalFor(originalLineTotal, discountRatePercent)
   }
 
-  absoluteDiscountAmountFor ({ pricingSourceMode, discountRateInput, lineTotalInput }) {
+  absoluteDiscountAmountFor ({ pricingSourceMode, discountRateInput, lineTotalInput, discountCleared = false }) {
+    if (discountCleared) return null
     if (!this.formulaPricingSourceMode(pricingSourceMode) && pricingSourceMode !== 'explicit_line_total') return null
     const originalAmount = lineTotalInput?.dataset.originalDiscountAmount
     if (originalAmount === undefined) return null
@@ -2428,7 +2437,7 @@ export default class extends Controller {
       const taxRateInput = row.querySelector('[data-receipt-form-target="taxRateInput"]')
       const pricingSourceMode = this.pricingSourceModeForRow(row)
       const absoluteDiscountAmount = this.absoluteDiscountAmountFor({
-        pricingSourceMode, discountRateInput, lineTotalInput
+        pricingSourceMode, discountRateInput, lineTotalInput, discountCleared: this.itemDiscountCleared(row)
       })
       const discountValid = absoluteDiscountAmount === null
         ? this.previewInputInRange(discountRateInput, 'discountPercentage', { minimum: 0, maximum: 100 })

@@ -1431,7 +1431,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     end
   end
 
-  it '通常form相当の全項目保存でもabsolute discountの表示用rateをsourceへ昇格させない' do
+  it '通常form相当の全項目保存でも空欄のrateはabsolute discountを維持する' do
     receipt, item = create_reference_receipt(
       line_total: 150,
       subtotal_amount: 150,
@@ -1444,7 +1444,8 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
       item,
       {
         confirmed_name: '全項目保存した値引商品',
-        discount_rate: item.discount_rate_percentage_input
+        discount_rate: '',
+        discount_rate_input_contract: 'explicit_rate_v1'
       }
     )
 
@@ -1475,7 +1476,8 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
       item,
       {
         reference_price_amount: '240',
-        discount_rate: item.discount_rate_percentage_input
+        discount_rate: '',
+        discount_rate_input_contract: 'explicit_rate_v1'
       }
     )
 
@@ -1496,7 +1498,8 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
       item,
       {
         reference_price_amount: '120',
-        discount_rate: item.discount_rate_percentage_input
+        discount_rate: '',
+        discount_rate_input_contract: 'explicit_rate_v1'
       }
     )
 
@@ -1513,6 +1516,64 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
       )
       expect(final_source[:item]).to eq(original_source[:item])
       expect(final_source[:receipt].except('lock_version')).to eq(original_source[:receipt].except('lock_version'))
+    end
+  end
+
+  [ [ '0', 0, 180 ], [ '100', 180, 0 ], [ '10', 18, 162 ] ].each do |rate, discount, total|
+    it "新フォームの明示#{rate}%はabsolute discountを率sourceへ置き換えて保存する" do
+      receipt, item = create_reference_receipt(line_total: 162, subtotal_amount: 162, total_amount: 162)
+      item.update!(original_line_total: 180, discount_amount: 18, discount_rate: nil, line_total: 162)
+
+      patch_item(receipt, item, { discount_rate: rate, discount_rate_input_contract: 'explicit_rate_v1' })
+
+      aggregate_failures do
+        expect(response).to redirect_to(receipt_path(receipt))
+        expect(item.reload).to have_attributes(
+          discount_rate: BigDecimal(rate) / 100,
+          discount_amount: discount,
+          original_line_total: 180,
+          line_total: total
+        )
+        expect(receipt.reload).to have_attributes(subtotal_amount: total, tax_amount: 0, total_amount: total)
+      end
+    end
+  end
+
+  it '不正な割引入力契約では金額sourceを変更しない' do
+    receipt, item = create_reference_receipt
+    before = persisted_snapshot(receipt, item)
+
+    patch_item(receipt, item, { discount_rate: '0', discount_rate_input_contract: 'unknown' })
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(persisted_snapshot(receipt, item)).to eq(before)
+  end
+
+  it '有効な率入力後のモデルvalidation 422でも保存済みabsolute discountと入力値を分離して再表示する' do
+    receipt, item = create_reference_receipt(line_total: 150, subtotal_amount: 150, total_amount: 150)
+    item.update!(original_line_total: 180, discount_amount: 30, discount_rate: nil, line_total: 150)
+    before = persisted_snapshot(receipt, item)
+
+    patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
+      receipt: {
+        lock_version: receipt.lock_version,
+        memo: 'a' * 1_001,
+        receipt_items_attributes: {
+          '0' => item_attributes(item, discount_rate: '10', discount_rate_input_contract: 'explicit_rate_v1')
+        }
+      }
+    }
+
+    document = Nokogiri::HTML(response.body)
+    line_total_input = document.at_css("[data-receipt-form-target='lineTotalInput']")
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(document.at_css("[data-receipt-form-target='discountRateInput']")['value']).to eq('10')
+      expect(line_total_input['data-original-discount-amount']).to eq('30')
+      expect(line_total_input['data-original-discount-rate']).to eq('')
+      expect(document.at_css('[data-receipt-form-absolute-discount-help]')&.text).to include('30円', '約16.7%')
+      expect(persisted_snapshot(receipt, item)).to eq(before)
     end
   end
 

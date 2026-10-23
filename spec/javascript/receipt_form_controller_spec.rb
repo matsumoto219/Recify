@@ -2144,6 +2144,38 @@ RSpec.describe "Receipt form Stimulus controller" do
     expect(result['data']).to include('originalSavedLineTotal' => '540', 'originalDiscountAmount' => '60')
   end
 
+  it "keeps an absolute discount for blank input, distinguishes explicit rates and honors a confirmed clear" do
+    result = run_controller_script(<<~JAVASCRIPT)
+      const controller = Object.create(ReceiptFormController.prototype)
+      Object.defineProperties(controller, {
+        discountRoundingModeValue: { value: 'round' },
+        receiptItemLineTotalMaxValue: { value: 999999999 }
+      })
+      const discount = { value: '', dataset: { originalDiscountRate: '' } }
+      const lineTotal = {
+        value: '550',
+        dataset: { originalDiscountAmount: '50', originalDiscountRate: '' }
+      }
+      const calculate = (mode, value, discountCleared = false) => {
+        discount.value = value
+        return controller.lineTotalFor({
+          originalLineTotal: 600,
+          discountRatePercent: controller.parseDiscountRateInput(value),
+          discountRateInput: discount,
+          lineTotalInput: lineTotal,
+          pricingSourceMode: mode,
+          discountCleared
+        })
+      }
+      const values = ['count_unit_price', 'reference_quantity_price', 'explicit_line_total'].map((mode) => (
+        ['', '0', '100', '10', ''].map((value) => calculate(mode, value))
+      ))
+      process.stdout.write(JSON.stringify({ values, cleared: calculate('explicit_line_total', '', true) }))
+    JAVASCRIPT
+
+    expect(result).to eq('values' => Array.new(3) { [ 550, 600, 0, 540, 550 ] }, 'cleared' => 600)
+  end
+
   it "validates an unchanged recurring discount display as an absolute reference source before recalculation" do
     result = run_amount_round_trip(
       basis: "internal",

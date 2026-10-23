@@ -236,6 +236,16 @@ RSpec.describe ReceiptItem, type: :model do
     end
   end
 
+  describe '#discount_rate_percentage_input' do
+    it '確定割引額を率入力へ逆算せず、保存済み率はexactに表示する' do
+      item = described_class.new(original_line_total: 600, discount_amount: 50, discount_rate: nil)
+
+      expect(item.discount_rate_percentage_input).to be_nil
+      item.discount_rate = BigDecimal('0.105')
+      expect(item.discount_rate_percentage_input).to eq('10.5')
+    end
+  end
+
   describe '#review_reason_labels' do
     it 'ユーザー向けに許可されたreview_reasonだけを表示する' do
       item = build(:receipt).receipt_items.build(

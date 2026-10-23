@@ -1076,6 +1076,7 @@ class ReceiptsController < ApplicationController
         :product_code,
         :tax_rate,
         :discount_rate,
+        :discount_rate_input_contract,
         :original_line_total,
         :line_total,
         :position_index,

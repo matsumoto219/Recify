@@ -56,7 +56,7 @@ class Receipts::Editing::InputNormalizer
     validate_pricing_source_transition!
     normalize_selected_pricing_source_fields!
     normalize_purchased_at!
-    discard_inferred_discount_rate_echoes!
+    normalize_discount_rate_inputs!
     normalize_numeric_inputs!
     validate_unrecorded_explicit_discount_changes!
     normalize_nullable_item_sources!
@@ -318,19 +318,29 @@ class Receipts::Editing::InputNormalizer
     end
   end
 
-  def discard_inferred_discount_rate_echoes!
+  def normalize_discount_rate_inputs!
     attributes["receipt_items_attributes"]&.each_value do |item|
+      explicit_rate_input = item.key?("discount_rate_input_contract")
+      if explicit_rate_input && item.delete("discount_rate_input_contract") != "explicit_rate_v1"
+        raise Receipts::Editing::InvalidItemSourceError, "Invalid discount rate input contract"
+      end
       next unless item.key?("discount_rate")
       next if explicit_discount_replacement_item_ids.include?(item.object_id)
+      next if discount_clear_intent_item_ids.include?(item.object_id)
 
       existing_item = existing_item_for(item)
       next unless existing_item
       next unless existing_item.discount_rate.nil?
-      next unless existing_item.discount_amount.to_i.positive?
+      next if existing_item.discount_amount.nil?
 
       submitted_rate = Receipts::NumericInput.percentage(item["discount_rate"])
-      inferred_rate = Receipts::NumericInput.percentage(existing_item.discount_rate_percentage_input)
-      item.delete("discount_rate") if submitted_rate == inferred_rate
+      if explicit_rate_input
+        item.delete("discount_rate") if submitted_rate.nil?
+      elsif existing_item.discount_amount.positive?
+        inferred_percentage = existing_item.inferred_discount_rate_percentage
+        inferred_rate = inferred_percentage && inferred_percentage / 100
+        item.delete("discount_rate") if submitted_rate == inferred_rate
+      end
     end
   end
 

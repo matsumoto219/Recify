@@ -5568,7 +5568,7 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(response.body).to include('単価: ¥310')
-        expect(response.body).to include('割引: -¥155（50%）')
+        expect(response.body).to include('割引: -¥155（約50%）')
         amount = Nokogiri::HTML(response.body).at_css('[data-receipt-item-gross-amount]')
         expect(amount.text.squish).to eq('税込 ¥155')
       end
@@ -7134,7 +7134,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '既存割引額からdiscount_rate入力値を表示する' do
+    it '既存割引額の参考換算率を空欄のdiscount_rate入力から分離する' do
       receipt.receipt_items.create!(
         confirmed_name: '割引商品',
         price: 310,
@@ -7153,7 +7153,11 @@ RSpec.describe 'Receipts', type: :request do
 
       aggregate_failures do
         expect(response).to have_http_status(:success)
-        expect(discount_rate_input['value']).to eq('50')
+        expect(discount_rate_input['value']).to be_blank
+        expect(document.at_css('input[name$="[discount_rate_input_contract]"]')['value']).to eq('explicit_rate_v1')
+        help = document.at_css('[data-receipt-form-absolute-discount-help]')
+        expect(help.text).to include('155円', '約50%', '空欄', '0%')
+        expect(discount_rate_input['aria-describedby']).to eq(help['id'])
       end
     end
 

@@ -1607,11 +1607,46 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     expect(reference_line_total_display(row)).to have_text("¥550")
     expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥550")
 
+    discount_rate = row.find("[data-receipt-form-target='discountRateInput']", visible: true)
+    expect(discount_rate.value).to eq("")
+    expect(row).to have_css("[data-receipt-form-absolute-discount-help]", text: "約8.3%")
+    discount_rate.set("0")
+    expect(reference_line_total_display(row)).to have_text("¥600")
+    discount_rate.set("100")
+    expect(reference_line_total_display(row)).to have_text("¥0", exact: true)
+    discount_rate.set("")
+    expect(reference_line_total_display(row)).to have_text("¥550")
+
+    expand_pricing_source_details(row)
+    mode_select = row.find("[data-receipt-form-target='pricingSourceModeInput']", visible: :all)
+    mode_select.find("option[value='explicit_line_total']", visible: :all).select_option
+    find("dialog[data-confirm-dialog][open] [data-confirm-dialog-confirm]").click
+    row.find("[data-receipt-form-target='explicitLineTotalInput']", visible: true).set("600")
+    expect(row).to have_no_css("[data-receipt-form-absolute-discount-help]", visible: true)
+    expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥600")
+    mode_select.find("option[value='reference_quantity_price']", visible: :all).select_option
+    expect(row).to have_css("[data-receipt-form-absolute-discount-help]", visible: true)
+    expect(reference_line_total_display(row)).to have_text("¥550")
+
     quantity = row.find("[data-receipt-form-target='quantityInput']", visible: true)
     quantity.set("200")
     expect(reference_line_total_display(row)).to have_text("¥1,150")
     quantity.set("100")
     expect(reference_line_total_display(row)).to have_text("¥550")
+
+    discount_rate.set("10")
+    page.execute_script("document.querySelector('#receipt_memo').value = 'a'.repeat(1001)")
+    save_receipt
+    expect(page).to have_css("#flash [data-controller~='notice-surface']", text: Receipt.human_attribute_name(:memo))
+    expect_only_validation_failure_in_browser_console(receipt)
+    wait_for_stimulus_controller("receipt-form")
+    row = expand_item_row(item_row_named("既存商品"))
+    discount_rate = row.find("[data-receipt-form-target='discountRateInput']", visible: true)
+    expect(discount_rate.value).to eq("10")
+    expect(row).to have_css("[data-receipt-form-absolute-discount-help]", text: "約8.3%")
+    discount_rate.set("")
+    expect(reference_line_total_display(row)).to have_text("¥550")
+    fill_in "receipt_memo", with: ""
     save_receipt
 
     expect(page).to have_current_path(receipt_path(receipt), ignore_query: true)

@@ -756,7 +756,7 @@ RSpec.describe ReceiptFormPresenter do
       end
     end
 
-    it '絶対額割引sourceと保存時の表示率をderived totalから分離して方式変更後も参照できるようにする' do
+    it '絶対額割引sourceと空欄の率入力をderived totalから分離して方式変更後も参照できるようにする' do
       receipt = create(:receipt)
       item = receipt.receipt_items.create!(
         confirmed_name: '計量商品',
@@ -786,16 +786,21 @@ RSpec.describe ReceiptFormPresenter do
           original_line_total: 600,
           original_saved_line_total: 583,
           original_discount_amount: 60,
-          original_discount_rate: '10'
+          original_discount_rate: ''
         )
-        expect(submitted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '10')
+        expect(persisted_row.discount_rate_percentage_input).to be_nil
+        expect(persisted_row.persisted_formula_discount_input_value).to eq('')
+        expect(submitted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '')
         expect(submitted_row.discount_rate_percentage_input).to eq('20')
         item.pricing_source_kind = 'count_unit_price'
-        expect(persisted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '10')
+        expect(persisted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '')
         item.pricing_source_kind = 'explicit_line_total'
-        expect(persisted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '10')
+        expect(persisted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '')
         item.discount_rate = BigDecimal('0.1')
-        expect(persisted_row.line_total_data).not_to have_key(:original_discount_amount)
+        item.discount_amount = 120
+        expect(submitted_row.line_total_data).to include(original_discount_amount: 60, original_discount_rate: '')
+        expect(submitted_row.persisted_formula_discount_input_value).to eq('')
+        expect(submitted_row.discount_rate_percentage_input).to eq('20')
       end
     end
 
