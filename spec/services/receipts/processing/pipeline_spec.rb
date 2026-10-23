@@ -7190,7 +7190,7 @@ RSpec.describe Receipts::Processing::Pipeline do
         expect(receipt.status).to eq('completed')
         expect(receipt.review_reasons).to be_empty
         expect(receipt.total_amount).to eq(571)
-        expect(receipt.receipt_items.pluck(:raw_text, :original_line_total, :discount_amount, :line_total)).to eq([
+        expect(receipt.receipt_items.order(:position_index).pluck(:raw_text, :original_line_total, :discount_amount, :line_total)).to eq([
           [ '国産豚こま切れ肉 200g', 398, 50, 348 ],
           [ 'きゅうり 1本', 258, nil, 258 ],
           [ "トマト (大玉)\n1個", 198, nil, 198 ],
