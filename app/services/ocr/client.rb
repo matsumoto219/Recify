@@ -3,6 +3,7 @@ require "json"
 require "time"
 require "timeout"
 require "uri"
+require "zlib"
 
 module Ocr
   class Client
@@ -210,7 +211,7 @@ module Ocr
         attempts += 1
         yield
       rescue Faraday::TimeoutError, Faraday::ConnectionFailed, OcrError, OcrTimeoutError => e
-        raise unless retryable_error?(e, retry_timeouts:)
+        raise unless retryable_error?(e, operation:, retry_timeouts:)
         raise if attempts > max_retries
 
         track_retry_metrics!(e)
@@ -223,11 +224,14 @@ module Ocr
       end
     end
 
-    def retryable_error?(error, retry_timeouts:)
+    def retryable_error?(error, operation:, retry_timeouts:)
       case error
       when Faraday::TimeoutError
         retry_timeouts
       when Faraday::ConnectionFailed
+        # 応答の解凍失敗時も、submit POST は Azure 側で受理済みの可能性がある。
+        return false if operation == :submit_request && error.wrapped_exception.is_a?(Zlib::Error)
+
         true
       when OcrTimeoutError
         error.message == "ocr_timeout" && !elapsed_budget_exhausted?
