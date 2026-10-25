@@ -225,12 +225,13 @@ module ReceiptsHelper
     percentage = item.inferred_discount_rate_percentage(persisted: persisted)
     return nil if percentage.nil?
     return t("receipts.item_fields.discount_reference_rate.below_minimum") if percentage < BigDecimal("0.1")
+    return t("receipts.item_fields.discount_reference_rate.below_one") if percentage < 1 && percentage.round(1) == 1
     return t("receipts.item_fields.discount_reference_rate.full") if percentage == 100
-    return t("receipts.item_fields.discount_reference_rate.above_maximum") if percentage > BigDecimal("99.9")
+    return t("receipts.item_fields.discount_reference_rate.above_maximum") if percentage > 99
 
     t(
       "receipts.item_fields.discount_reference_rate.approximate",
-      rate: number_with_precision(percentage, precision: 1, strip_insignificant_zeros: true)
+      rate: number_with_precision(percentage, precision: percentage < 1 ? 1 : 0, strip_insignificant_zeros: true)
     )
   end
 
@@ -238,9 +239,7 @@ module ReceiptsHelper
     discount_amount = item.attribute_in_database(:discount_amount)
     return nil unless item.attribute_in_database(:discount_rate).nil? && discount_amount.to_i.positive?
 
-    rate = receipt_item_discount_reference_rate(item, persisted: true)
-    key = rate ? "discount_amount_reference" : "discount_amount_reference_without_rate"
-    t("receipts.item_fields.#{key}", amount: number_with_delimiter(discount_amount), rate: rate)
+    t("receipts.item_fields.discount_amount_reference", amount: number_with_delimiter(discount_amount))
   end
 
   def receipt_item_warning_reason_codes(item)

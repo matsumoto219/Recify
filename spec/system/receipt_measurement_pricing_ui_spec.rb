@@ -1609,7 +1609,8 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
 
     discount_rate = row.find("[data-receipt-form-target='discountRateInput']", visible: true)
     expect(discount_rate.value).to eq("")
-    expect(row).to have_css("[data-receipt-form-absolute-discount-help]", text: "約8.3%")
+    expect(discount_rate[:placeholder]).to be_blank
+    expect(row).to have_css("[data-receipt-form-absolute-discount-help]", text: "保存済み：50円引", exact_text: true)
     discount_rate.set("0")
     expect(reference_line_total_display(row)).to have_text("¥600")
     discount_rate.set("100")
@@ -1623,9 +1624,11 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     find("dialog[data-confirm-dialog][open] [data-confirm-dialog-confirm]").click
     row.find("[data-receipt-form-target='explicitLineTotalInput']", visible: true).set("600")
     expect(row).to have_no_css("[data-receipt-form-absolute-discount-help]", visible: true)
+    expect(discount_rate[:placeholder]).to be_blank
     expect(page).to have_css("[data-receipt-form-target='totalAmount']", text: "¥600")
     mode_select.find("option[value='reference_quantity_price']", visible: :all).select_option
     expect(row).to have_css("[data-receipt-form-absolute-discount-help]", visible: true)
+    expect(discount_rate[:placeholder]).to be_blank
     expect(reference_line_total_display(row)).to have_text("¥550")
 
     quantity = row.find("[data-receipt-form-target='quantityInput']", visible: true)
@@ -1643,7 +1646,7 @@ RSpec.describe "明細の金額計算方式", type: :system, mobile: true do
     row = expand_item_row(item_row_named("既存商品"))
     discount_rate = row.find("[data-receipt-form-target='discountRateInput']", visible: true)
     expect(discount_rate.value).to eq("10")
-    expect(row).to have_css("[data-receipt-form-absolute-discount-help]", text: "約8.3%")
+    expect(row).to have_css("[data-receipt-form-absolute-discount-help]", text: "保存済み：50円引", exact_text: true)
     discount_rate.set("")
     expect(reference_line_total_display(row)).to have_text("¥550")
     fill_in "receipt_memo", with: ""

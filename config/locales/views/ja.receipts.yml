@@ -229,12 +229,12 @@ ja:
       clear_discount_before_explicit_title: 金額の計算方式を切り替え
       clear_discount_before_explicit_label: 割引を解除して切り替える
       discount_rate: 割引率
-      discount_amount_reference: "保存済み割引額：%{amount}円（参考換算率：%{rate}）。空欄で維持し、0%で解除します。"
-      discount_amount_reference_without_rate: "保存済み割引額：%{amount}円。空欄で維持し、0%で解除します。"
+      discount_amount_reference: "保存済み：%{amount}円引"
       discount_reference_rate:
         approximate: "約%{rate}%"
         below_minimum: "0.1%未満"
-        above_maximum: "99.9%超"
+        below_one: "1%未満"
+        above_maximum: "99%超"
         full: "100%"
       tax_rate: 税率
       category: カテゴリ

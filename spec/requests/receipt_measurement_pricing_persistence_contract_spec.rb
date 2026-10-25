@@ -1350,6 +1350,40 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
     end
   end
 
+  it '金額指定割引の解除確認後の422では保存済み額の補足を隠してDBを保持する' do
+    receipt, item = create_reference_receipt(line_total: 150, subtotal_amount: 150, total_amount: 150)
+    item.update!(original_line_total: 180, discount_amount: 30, discount_rate: nil, line_total: 150)
+    before = persisted_snapshot(receipt, item)
+
+    patch receipt_path(receipt), params: {
+      receipt_calculation_context: calculation_context(receipt),
+      receipt: {
+        lock_version: receipt.lock_version,
+        memo: 'x' * 1_001,
+        receipt_items_attributes: {
+          '0' => {
+            id: item.id,
+            pricing_source_kind: 'explicit_line_total',
+            original_line_total: '200',
+            discount_rate: '',
+            discount_rate_input_contract: 'explicit_rate_v1',
+            clear_item_discount_before_explicit: '1'
+          }
+        }
+      }
+    }
+
+    document = Nokogiri::HTML(response.body)
+    discount_rate = document.at_css("input[name$='[discount_rate]']")
+
+    aggregate_failures do
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(discount_rate['placeholder']).to be_blank
+      expect(document.at_css('[data-receipt-form-absolute-discount-help]')['hidden']).not_to be_nil
+      expect(persisted_snapshot(receipt, item)).to eq(before)
+    end
+  end
+
   it 'discount解除intentが未確認ならformula sourceとdiscountを一切変更しない' do
     receipt, item = create_reference_receipt(
       line_total: 162,
@@ -1572,7 +1606,7 @@ RSpec.describe 'Receipt measurement pricing persistence contract', type: :reques
       expect(document.at_css("[data-receipt-form-target='discountRateInput']")['value']).to eq('10')
       expect(line_total_input['data-original-discount-amount']).to eq('30')
       expect(line_total_input['data-original-discount-rate']).to eq('')
-      expect(document.at_css('[data-receipt-form-absolute-discount-help]')&.text).to include('30円', '約16.7%')
+      expect(document.at_css('[data-receipt-form-absolute-discount-help]')&.text).to eq('保存済み：30円引')
       expect(persisted_snapshot(receipt, item)).to eq(before)
     end
   end

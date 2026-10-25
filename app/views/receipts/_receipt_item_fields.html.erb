@@ -26,6 +26,7 @@
   item_row_dom_key = item.persisted? ? item.id : item_form.object_name.to_s.gsub(/[^a-zA-Z0-9_-]/, "-")
   item_details_id = "receipt-item-#{item_row_dom_key}-details"
   discount_help = receipt_item_absolute_discount_help(item) unless new_record
+  discount_cleared = row_state.clear_item_discount_before_explicit_value.to_s == "1"
   pricing_source_ui_mode = row_state.pricing_source_ui_mode
   saved_tax_inclusion = item.attribute_in_database(row_state.active_tax_inclusion_field) if item.persisted?
   tax_inclusion_unconfirmed = local_assigns.fetch(:tax_detail_diagnostic_unavailable, false) && item.persisted? &&
@@ -440,6 +441,7 @@
           <div class="space-y-2">
             <p class="text-xs font-bold token-text-muted uppercase tracking-wider"><%= t("receipts.item_fields.discount_rate") %></p>
             <div>
+              <%# 金額指定の割引は空欄で維持、明示0%で解除、100%で全額割引。未保存の率を消すと保存済み額へ戻る。 %>
               <%= item_form.hidden_field :discount_rate_input_contract, value: "explicit_rate_v1" %>
               <%= render "shared/ui/form/number_field",
                          f: item_form,
@@ -471,7 +473,7 @@
                 <p id="<%= item_details_id %>-discount-help"
                    class="mt-2 text-xs leading-relaxed token-text-muted"
                    data-receipt-form-absolute-discount-help
-                   <% if row_state.clear_item_discount_before_explicit_value.to_s == "1" %> hidden<% end %>><%= discount_help %></p>
+                   <% if discount_cleared %> hidden<% end %>><%= discount_help %></p>
               <% end %>
             </div>
           </div>

@@ -7134,7 +7134,7 @@ RSpec.describe 'Receipts', type: :request do
       end
     end
 
-    it '既存割引額の参考換算率を空欄のdiscount_rate入力から分離する' do
+    it '既存割引額を空欄のdiscount_rate入力と短い補足に分離する' do
       receipt.receipt_items.create!(
         confirmed_name: '割引商品',
         price: 310,
@@ -7154,9 +7154,10 @@ RSpec.describe 'Receipts', type: :request do
       aggregate_failures do
         expect(response).to have_http_status(:success)
         expect(discount_rate_input['value']).to be_blank
+        expect(discount_rate_input['placeholder']).to be_blank
         expect(document.at_css('input[name$="[discount_rate_input_contract]"]')['value']).to eq('explicit_rate_v1')
         help = document.at_css('[data-receipt-form-absolute-discount-help]')
-        expect(help.text).to include('155円', '約50%', '空欄', '0%')
+        expect(help.text).to eq('保存済み：155円引')
         expect(discount_rate_input['aria-describedby']).to eq(help['id'])
       end
     end

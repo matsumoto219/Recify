@@ -520,7 +520,9 @@ export default class extends Controller {
   syncPricingSourceSummaryForRow (row, mode = this.pricingSourceModeForRow(row)) {
     this.syncExplicitLineTotalSemantics(row)
     const discountHelp = row.querySelector('[data-receipt-form-absolute-discount-help]')
-    if (discountHelp) discountHelp.hidden = this.itemDiscountCleared(row)
+    if (discountHelp) {
+      discountHelp.hidden = this.itemDiscountCleared(row)
+    }
     const summary = Array.from(
       row.querySelectorAll('[data-receipt-form-target~="pricingSourceSummary"]')
     ).find((candidate) => this.pricingElementSupportsMode(candidate, mode))
