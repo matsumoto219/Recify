@@ -53,6 +53,31 @@ RSpec.describe '店舗名選択のsnapshot往復' do
     expect(Analysis.store_name_selection(selection, options: changed_options)).to include(decision: 'invalid')
   end
 
+  it '連続page行の合成optionもsnapshot往復後に同じ出典と選択名で解決する' do
+    lines = [ 'サンプル公園', '駐車場' ]
+    ocr_result[:lines] = lines
+    ocr_result[:case_preserved_lines] = lines
+    ocr_result[:candidates][:store_name] = 'サンプル公園'
+    ocr_result[:candidates][:store_name_evidence][:candidates] = lines.each_with_index.map do |text, index|
+      {
+        candidate_id: "page_0_line_#{index}", source: 'line', source_path: "pages[0].lines[#{index}]",
+        line_index: index, page_index: 0, provider_line_index: index, text: text,
+        span_state: 'exact', span: { offset: index * 20, length: text.length }, string_index_type: 'textElements'
+      }
+    end
+    options = Analysis.store_name_options(ocr_result: ocr_result)
+    option = options[:options].find { |candidate| candidate[:value] == 'サンプル公園駐車場' }
+    selection = Analysis.store_name_selection({ decision: 'select', option_id: option[:option_id] }, options: options)
+    restored_ocr = rehydrator.ocr(JSON.parse(builder.ocr_result_snapshot(ocr_result).to_json))
+    restored_ai = rehydrator.ai(JSON.parse(builder.ai_normalized_result_snapshot(success: true, meta: { store_name_selection: selection }).to_json))
+
+    result = Analysis.build_receipt_params(ocr_result: restored_ocr, ai_result: restored_ai)
+
+    expect(Analysis.store_name_options(ocr_result: restored_ocr)).to eq(options)
+    expect(result[:store_name_resolution]).to include(state: 'confirmed', option_id: option[:option_id])
+    expect(result.dig(:receipt_attributes, :store_name)).to eq('サンプル公園駐車場')
+  end
+
   it '汎用文字列上限でOCR行が短縮されても検証済み店舗名と選択を維持する' do
     name = ('サンプル' * 12) + '商店'
     ocr_result[:lines] = [ name ]

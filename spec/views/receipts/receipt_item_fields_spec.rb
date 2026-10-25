@@ -342,8 +342,9 @@ RSpec.describe 'receipts/_receipt_item_fields', type: :view do
   end
 
   it '明示金額modeで割引前sourceと割引解除確認intentをderived totalから分離する' do
-    receipt = build(:receipt)
-    item = receipt.receipt_items.build(
+    receipt = create(:receipt)
+    item = receipt.receipt_items.create!(
+      confirmed_name: '割引商品',
       pricing_source_kind: 'explicit_line_total',
       quantity: 1,
       quantity_unit_code: 'each',

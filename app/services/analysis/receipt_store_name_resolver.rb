@@ -69,10 +69,18 @@ module Analysis
       end
       return unavailable_options if duplicate_line_position?(available)
 
-      composition_lines = evidence ? evidence_lines(available) : lines
-      option_list = available.filter_map do |entry|
-        option_for(entry, entries: available, lines: composition_lines, preserved: preserved, item_names: item_names)
-      end.uniq { |option| compact_store_name(option[:value]) }
+      option_list = if evidence && entries.any? { |entry| entry.key?(:page_index) && entry[:span_state] != "missing" }
+        page_options(available, preserved: preserved, item_names: item_names)
+      else
+        composition_lines = evidence ? evidence_lines(available) : lines
+        available.flat_map do |entry|
+          [
+            option_for(entry, entries: available, lines: composition_lines, preserved: preserved, item_names: item_names),
+            atomic_option(entry, lines: composition_lines, preserved: preserved, item_names: item_names)
+          ].compact
+        end
+      end
+      option_list = option_list.uniq { |option| compact_store_name(option[:value]) }
       truncated = evidence&.dig(:truncated) == true || option_list.length > OPTIONS_MAX
       option_list = option_list.first(OPTIONS_MAX)
       result = {
@@ -165,6 +173,151 @@ module Analysis
       entries
     end
 
+    def atomic_option(entry, lines:, preserved:, item_names:)
+      item_names = [] if merchant_header_evidence?(entry, lines)
+      value = restore_store_name_casing(entry[:text], preserved)
+      return nil unless allowed_store_name?(value, item_names: item_names)
+
+      build_option(value, entry: entry, supports: [ entry ], kind: "atomic")
+    end
+
+    def page_options(entries, preserved:, item_names:)
+      page_lines = entries.group_by { |entry| entry[:page_index] }.transform_values { |group| evidence_lines(group) }
+      options = entries.filter_map do |entry|
+        atomic_option(entry, lines: page_lines.fetch(entry[:page_index]), preserved: preserved, item_names: item_names)
+      end
+      lines = entries.select { |entry| entry[:source] == "line" && entry.key?(:page_index) }
+        .sort_by { |entry| [ entry[:page_index], entry[:provider_line_index] ] }
+      merchants = entries.select { |entry| entry[:source] == "merchant_name" && entry[:span_state] == "exact" }
+      [ 2, 3 ].each do |size|
+        lines.each_cons(size) do |block|
+          next unless exact_line_block?(block)
+
+          merchant = merchants.find { |entry| merchant_covers_lines?(entry, block.first(size - 1)) }
+          if size == 3 && merchant.nil?
+            merchant = merchants.find { |entry| merchant_covers_lines?(entry, block.first(1)) }
+          end
+          duplicate_logo = size == 3 && duplicate_symbol_line?(block.first[:text], block.second[:text])
+          next if size == 3 && !merchant && !duplicate_logo
+          next unless block.last[:provider_line_index] < 8 || merchant
+
+          value = page_block_name(block, merchant: merchant, item_names: item_names)
+          next unless value
+
+          supports = merchant ? [ merchant, *block ] : block
+          options << build_option(value, entry: block.first, supports: supports, kind: "composed")
+        end
+      end
+      options.concat(page_logo_options(lines, item_names: item_names))
+      options
+    end
+
+    def duplicate_symbol_line?(brand, text)
+      text.match?(/\A\p{S}\z/u) && brand.include?(text)
+    end
+
+    def page_logo_options(lines, item_names:)
+      lines.group_by { |entry| entry[:page_index] }.filter_map do |_page, entries|
+        header = entries.select { |entry| entry[:provider_line_index] < 8 }
+        header_lines = Array.new(8, "")
+        header.each { |entry| header_lines[entry[:provider_line_index]] = entry[:text] }
+        components = latin_logo_components(header_lines, domain_lines: entries.map { |entry| entry[:text] })
+        next unless components && allowed_store_name?(components[:value], item_names: item_names)
+
+        supports = header.select { |entry| components[:line_indexes].include?(entry[:provider_line_index]) }
+        next unless supports.size == components[:line_indexes].size
+
+        supports << entries[components[:domain_index]] if components[:domain_index]
+        supports = supports.uniq.sort_by { |entry| entry[:provider_line_index] }
+        next unless ordered_line_evidence?(supports)
+        next unless unambiguous_logo_components?(header, header_lines, components, entries)
+
+        logo = header.find { |entry| entry[:provider_line_index] == components[:logo_index] }
+        build_option(components[:value], entry: logo, supports: supports, kind: "composed")
+      end
+    end
+
+    def unambiguous_logo_components?(header, lines, components, entries)
+      logos = header.count do |entry|
+        allowed_store_name?(entry[:text], item_names: []) &&
+          latin_logo_store_brand_line?(entry[:text], header_lines: lines, line_index: entry[:provider_line_index])
+      end
+      return false unless logos == 1
+      return false if entries.count { |entry| matching_logo_domain?(lines[components[:logo_index]], entry[:text]) } > 1
+
+      header.none? do |entry|
+        next false if components[:line_indexes].include?(entry[:provider_line_index])
+
+        classifier.complete_local_store_name?(entry[:text]) || customer_facing_branch_candidate(entry[:text])
+      end
+    end
+
+    def exact_line_block?(block)
+      return false unless ordered_line_evidence?(block)
+
+      block.each_cons(2).all? do |left, right|
+        left[:provider_line_index] + 1 == right[:provider_line_index] && left[:line_index] + 1 == right[:line_index]
+      end
+    end
+
+    def ordered_line_evidence?(block)
+      return false unless block.all? { |entry| entry[:span_state] == "exact" }
+
+      block.each_cons(2).all? do |left, right|
+        left[:page_index] == right[:page_index] &&
+          left[:provider_line_index] < right[:provider_line_index] &&
+          left[:line_index] < right[:line_index] &&
+          left[:string_index_type] == right[:string_index_type] &&
+          left[:span][:offset] + left[:span][:length] <= right[:span][:offset]
+      end
+    end
+
+    def merchant_covers_lines?(merchant, lines)
+      return false if merchant.key?(:page_index) && merchant[:page_index] != lines.first[:page_index]
+      return false unless merchant[:string_index_type] == lines.first[:string_index_type]
+      return false unless merchant[:span][:offset] == lines.first[:span][:offset]
+      return false unless merchant[:span][:offset] + merchant[:span][:length] == lines.last[:span][:offset] + lines.last[:span][:length]
+
+      compact_store_name(merchant[:text]) == compact_store_name(lines.map { |line| line[:text] }.join(" "))
+    end
+
+    def page_block_name(block, merchant:, item_names:)
+      lines = block.map { |entry| classifier.normalize_name(entry[:text]).to_s }
+      if block.size == 3 && duplicate_symbol_line?(lines.first, lines.second)
+        return nil unless allowed_store_name?(lines.first, item_names: item_names) && customer_facing_branch_candidate(lines.last)
+
+        value = "#{lines.first} #{lines.last}"
+        return allowed_store_name?(value, item_names: item_names) ? value : nil
+      end
+      return nil unless lines.all? { |line| allowed_store_name?(line, item_names: item_names) }
+      return nil if lines.any? { |line| line.length < 2 }
+      return nil if store_name_has_location_marker?(lines.first) && store_name_has_location_marker?(lines.last)
+      return nil if lines.size == 2 && lines.all? { |line| store_brand_type_line?(line) }
+
+      if block.size == 3
+        return nil unless customer_facing_branch_candidate(lines.last)
+        if merchant_covers_lines?(merchant, block.first(1))
+          return nil unless classifier.latin_logo_prefix_duplicate?("#{lines.second} #{lines.first}", lines.first)
+          return nil if store_brand_type_line?(lines.second)
+        end
+
+        value = "#{merchant[:text]} #{lines.last}"
+        return allowed_store_name?(value, item_names: item_names) ? value : nil
+      end
+
+      value = legal_brand_with_branch(lines.first, lines)
+      return value if value && allowed_store_name?(value, item_names: item_names)
+
+      combined = compact_store_name(lines.join(" "))
+      heading = classifier.customer_facing_heading_candidates(lines, max_lines: block.size)
+        .find { |candidate| compact_store_name(candidate) == combined }
+      return nil unless heading
+
+      existing = resolve_store_name(lines.last, lines, item_names: item_names)
+      value = compact_store_name(existing) == combined ? existing : heading
+      value if allowed_store_name?(value, item_names: item_names)
+    end
+
     def option_for(entry, entries:, lines:, preserved:, item_names:)
       original = entry[:text]
       item_names = [] if merchant_header_evidence?(entry, lines)
@@ -177,8 +330,12 @@ module Analysis
       supports = entries.select do |candidate|
         candidate.equal?(entry) || component_in_name?(candidate[:text], value)
       end
-      candidate_ids = supports.map { |candidate| candidate[:candidate_id] }.uniq.sort
       kind = compact_store_name(value) == compact_store_name(original) ? "atomic" : "composed"
+      build_option(value, entry: entry, supports: supports, kind: kind)
+    end
+
+    def build_option(value, entry:, supports:, kind:)
+      candidate_ids = supports.map { |candidate| candidate[:candidate_id] }.uniq.sort
       {
         option_id: "store_option_#{Digest::SHA256.hexdigest([ kind, entry[:candidate_id], *candidate_ids ].join(':'))[0, 32]}",
         value: value,
@@ -393,6 +550,13 @@ module Analysis
       current_store_name = compact_store_name(store_name)
       return nil if current_store_name.blank?
 
+      components = latin_logo_components(lines)
+      return nil unless components && current_store_name.include?(compact_store_name(components[:branch]))
+
+      components[:value]
+    end
+
+    def latin_logo_components(lines, domain_lines: lines)
       header_lines = Array(lines).first(8).map do |line|
         classifier.normalize_name(line).to_s
       end
@@ -411,18 +575,28 @@ module Analysis
 
       descriptor_line, descriptor_relative_index = descriptor_entry
       descriptor_index = logo_index + 1 + descriptor_relative_index
-      branch_line = following_customer_facing_branch_line(header_lines, descriptor_index)
-      return nil if branch_line.blank?
+      branch_entry = following_customer_facing_branch_entry(header_lines, descriptor_index)
+      return nil unless branch_entry
 
-      printed_branch = classifier.normalize_name(branch_line)
-      return nil unless current_store_name.include?(compact_store_name(printed_branch))
+      branch, branch_index = branch_entry
 
-      brand = canonical_latin_logo_brand(logo_line, lines)
+      brand = canonical_latin_logo_brand(logo_line, domain_lines)
       descriptor = normalize_local_business_descriptor(descriptor_line)
-      branch = printed_branch
       return nil if brand.blank? || descriptor.blank? || branch.blank?
 
-      "#{brand} #{descriptor} #{branch}"
+      domain_index = Array(domain_lines).find_index { |line| matching_logo_domain?(logo_line, line) }
+      {
+        value: "#{brand} #{descriptor} #{branch}",
+        branch: branch,
+        logo_index: logo_index,
+        line_indexes: [ logo_index, descriptor_index, branch_index ],
+        domain_index: domain_index
+      }
+    end
+
+    def matching_logo_domain?(logo, line)
+      brand = logo.gsub(/[^A-Za-z0-9&.'-]/, "").downcase
+      domain_brand_tokens([ line ]).any? { |token| latin_brand_token_match?(brand, token) }
     end
 
     def printed_store_name_extension(store_name, lines)
@@ -514,9 +688,13 @@ module Analysis
     end
 
     def following_customer_facing_branch_line(header_lines, base_index)
-      Array(header_lines)[(base_index + 1)..(base_index + 3)].to_a.each do |line|
+      following_customer_facing_branch_entry(header_lines, base_index)&.first
+    end
+
+    def following_customer_facing_branch_entry(header_lines, base_index)
+      Array(header_lines)[(base_index + 1)..(base_index + 3)].to_a.each_with_index do |line, index|
         candidate = customer_facing_branch_candidate(line)
-        return candidate if candidate
+        return [ candidate, base_index + index + 1 ] if candidate
         break if line.blank? || line.match?(profile.store_heading_stop_pattern) || line.match?(profile.store_date_time_pattern)
       end
       nil

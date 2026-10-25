@@ -76,6 +76,8 @@ RSpec.describe ReceiptAnalysisProfiles do
 
     it '店舗名classifierの地域語彙とscriptを所有する' do
       expect('500円').to match(profile.store_money_or_numeric_pattern)
+      expect('3点').to match(profile.store_money_or_numeric_pattern)
+      expect('三点商店').not_to match(profile.store_money_or_numeric_pattern)
       expect('プ').to match(profile.store_isolated_logo_fragment_pattern)
       expect('サンプル').to match(profile.store_name_letter_pattern)
       expect('サンプル').to match(profile.store_local_name_prefix_pattern)

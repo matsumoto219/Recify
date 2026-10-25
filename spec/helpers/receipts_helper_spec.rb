@@ -31,8 +31,7 @@ RSpec.describe ReceiptsHelper, type: :helper do
 
   describe '#receipt_item_discount_label' do
     def discount_item(discount_amount:, original_line_total:, discount_rate: nil)
-      instance_double(
-        ReceiptItem,
+      ReceiptItem.new(
         discount_amount: discount_amount,
         original_line_total: original_line_total,
         discount_rate: discount_rate
@@ -51,10 +50,16 @@ RSpec.describe ReceiptsHelper, type: :helper do
       expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥245（50.1%）')
     end
 
+    it '保存済みの1%未満の率指定は丸めず表示する' do
+      item = discount_item(discount_amount: 5, original_line_total: 1_000, discount_rate: BigDecimal('0.005'))
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥5（0.5%）')
+    end
+
     it 'discount_rate がない場合はdiscount_amountとoriginal_line_totalから推定表示する' do
       item = discount_item(discount_amount: 245, original_line_total: 489)
 
-      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥245（50.1%）')
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥245（約50%）')
     end
 
     it 'discount_amount がnilの場合は割引表示を出さない' do
@@ -73,6 +78,80 @@ RSpec.describe ReceiptsHelper, type: :helper do
       item = discount_item(discount_amount: 245, original_line_total: 0, discount_rate: BigDecimal('0.5'))
 
       expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥245')
+    end
+
+    it '正の小さな割引を0%と表示しない' do
+      item = discount_item(discount_amount: 1, original_line_total: 10_000)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥1（0.1%未満）')
+    end
+
+    it '1%以上の参考表示だけを整数に丸める' do
+      item = discount_item(discount_amount: 1, original_line_total: 16)
+      item.line_total = 15
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥1（約6%）')
+      expect(item).to have_attributes(discount_amount: 1, original_line_total: 16, discount_rate: nil, line_total: 15)
+    end
+
+    it '参考率の小数部が0.5なら整数へ切り上げる' do
+      item = discount_item(discount_amount: 1, original_line_total: 8)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥1（約13%）')
+    end
+
+    it '参考率が0.1%ちょうどなら小数を表示する' do
+      item = discount_item(discount_amount: 1, original_line_total: 1_000)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥1（約0.1%）')
+    end
+
+    it '1%未満の参考率は小数1桁で表示する' do
+      item = discount_item(discount_amount: 42, original_line_total: 10_000)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥42（約0.4%）')
+    end
+
+    it '1%へ丸まらない上端の参考率は小数を表示する' do
+      item = discount_item(discount_amount: 94, original_line_total: 10_000)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥94（約0.9%）')
+    end
+
+    it '小数1桁への丸めで1%になる参考率は1%未満と表示する' do
+      item = discount_item(discount_amount: 95, original_line_total: 10_000)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥95（1%未満）')
+    end
+
+    it '参考率が1%ちょうどなら整数で表示する' do
+      item = discount_item(discount_amount: 1, original_line_total: 100)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥1（約1%）')
+    end
+
+    it '参考率が99%ちょうどなら整数で表示する' do
+      item = discount_item(discount_amount: 99, original_line_total: 100)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥99（約99%）')
+    end
+
+    it '参考率が99%を超えたら全額割引と区別する' do
+      item = discount_item(discount_amount: 991, original_line_total: 1_000)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥991（99%超）')
+    end
+
+    it '全額未満の割引を100%と表示しない' do
+      item = discount_item(discount_amount: 9_999, original_line_total: 10_000)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥9,999（99%超）')
+    end
+
+    it '全額割引の参考率は100%と表示する' do
+      item = discount_item(discount_amount: 600, original_line_total: 600)
+
+      expect(helper.receipt_item_discount_label(item)).to eq('割引: -¥600（100%）')
     end
   end
 

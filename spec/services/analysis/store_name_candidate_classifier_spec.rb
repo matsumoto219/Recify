@@ -266,6 +266,15 @@ RSpec.describe Analysis::StoreNameCandidateClassifier do
   end
 
   describe '.valid_candidate?' do
+    it '商品点数の除外も注入されたprofileに従う' do
+      replacement = ReceiptAnalysisProfiles.default.dup
+      replacement.define_singleton_method(:store_money_or_numeric_pattern) { /\Azero\z/ }
+      classifier = described_class.new(profile: replacement)
+
+      expect(classifier.valid_candidate?('zero')).to be(false)
+      expect(classifier.valid_candidate?('3点')).to be(true)
+    end
+
     it '帳票見出し・金額行・structured item由来候補を拒否する' do
       item_names = [ '商品A', '商品B' ]
 

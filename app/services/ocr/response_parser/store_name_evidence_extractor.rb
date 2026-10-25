@@ -111,7 +111,7 @@ class Ocr::ResponseParser::StoreNameEvidenceExtractor
     field = fields["MerchantName"]
     return unless field.is_a?(Hash)
 
-    source_text = normalized_text(field["valueString"] || field["content"])
+    source_text = normalized_text(field["valueString"] || field["content"], multiline: true)
     return unless source_text.present?
 
     text = name_before_phone_suffix(source_text)
@@ -121,11 +121,15 @@ class Ocr::ResponseParser::StoreNameEvidenceExtractor
     candidate = {
       candidate_id: "merchant_name", text:, source: "merchant_name",
       source_path: merchant_source_path
-    }.merge(name_span_evidence(field, source_text, text))
+    }.merge(name_span_evidence(field, source_text, text, multiline: true))
     confidence = field["confidence"]
     if (confidence.is_a?(Integer) || confidence.is_a?(Float)) && confidence.finite? && confidence.between?(0, 1)
       candidate[:confidence] = confidence
     end
+    return if entries.any? do |entry|
+      excluded_line_indexes.include?(entry[:line_index]) && source_overlaps?(entry, candidate)
+    end
+
     matching = entries.select { |entry| source_contains?(entry, candidate) }
     if matching.one?
       entry = matching.first
@@ -146,7 +150,15 @@ class Ocr::ResponseParser::StoreNameEvidenceExtractor
     parent[:offset] <= child[:offset] && parent[:offset] + parent[:length] >= child[:offset] + child[:length]
   end
 
-  def span_evidence(value, text)
+  def source_overlaps?(entry, candidate)
+    return false unless entry[:span_state] == "exact" && candidate[:span_state] == "exact"
+
+    line = entry[:span]
+    field = candidate[:span]
+    line[:offset] < field[:offset] + field[:length] && field[:offset] < line[:offset] + line[:length]
+  end
+
+  def span_evidence(value, text, multiline: false)
     return { span_state: "missing" } unless value.key?("spans")
 
     spans = value["spans"]
@@ -165,19 +177,19 @@ class Ocr::ResponseParser::StoreNameEvidenceExtractor
     return { span_state: "invalid" } unless mapper
 
     source = mapper.slice(provider_content, offset:, length:)
-    return { span_state: "invalid" } unless normalized_text(source) == text
+    return { span_state: "invalid" } unless normalized_text(source, multiline:) == text
 
     { span_state: "exact", span: { offset:, length: }, string_index_type: mapper.index_type }
   end
 
-  def name_span_evidence(value, source_text, text)
-    evidence = span_evidence(value, source_text)
+  def name_span_evidence(value, source_text, text, multiline: false)
+    evidence = span_evidence(value, source_text, multiline:)
     return evidence if source_text == text || evidence[:span_state] != "exact"
 
     span = evidence[:span]
     source = index_mapper.slice(provider_content, **span)
     prefix = source.sub(profile.store_branch_phone_suffix_pattern, "").strip
-    return { span_state: "missing" } unless normalized_text(prefix) == text
+    return { span_state: "missing" } unless normalized_text(prefix, multiline:) == text
 
     source_bytes = index_mapper.byte_range_for_span(provider_content, **span)
     prefix_bytes = source.bytesize - source.lstrip.bytesize
@@ -239,10 +251,11 @@ class Ocr::ResponseParser::StoreNameEvidenceExtractor
     text.bytesize <= MAX_TEXT_BYTES && text.length <= MAX_TEXT_LENGTH
   end
 
-  def normalized_text(value)
+  def normalized_text(value, multiline: false)
     return unless value.is_a?(String) && value.valid_encoding?
     return unless value.encoding == Encoding::UTF_8 || value.ascii_only?
     return if value.bytesize > Ocr::ResponseParser::AzureStringIndexMapper::MAX_CONTENT_BYTES
+    value = value.gsub(/\r?\n/, " ") if multiline
     return if value.match?(CONTROL_PATTERN)
 
     value.encode(Encoding::UTF_8).unicode_normalize(:nfkc).gsub(/[[:space:]]+/, " ").strip

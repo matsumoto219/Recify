@@ -182,6 +182,294 @@ RSpec.describe Analysis::ReceiptStoreNameResolver do
       }
     end
 
+    def page_candidate(text, index, page: 0, offset: index * 30)
+      {
+        candidate_id: "page_#{page}_line_#{index}", text: text, source: 'line',
+        source_path: "pages[#{page}].lines[#{index}]", line_index: index,
+        page_index: page, provider_line_index: index, span_state: 'exact',
+        span: { offset: offset, length: text.length }, string_index_type: 'textElements'
+      }
+    end
+
+    it '施設と用途のexact連続行を参考候補と同じ完全名で選択可能にする' do
+      input = evidence_result(page_candidate('サンプル公園', 0), page_candidate('駐車場', 1))
+      options = described_class.options(ocr_result: input)
+
+      expect(options[:options]).to include(
+        include(value: 'サンプル公園駐車場', candidate_ids: [ 'page_0_line_0', 'page_0_line_1' ])
+      )
+    end
+
+    it '店で終わらない施設名もexact見出しblock内だけでブランドと結合する' do
+      input = evidence_result(page_candidate('サンプルレストラン', 0), page_candidate('みどりプラザ', 1))
+
+      expect(described_class.options(ocr_result: input)[:options]).to include(
+        include(value: 'サンプルレストラン みどりプラザ')
+      )
+    end
+
+    it '複数行MerchantNameに覆われたブランドと後続支店を同じsupportで合成する' do
+      merchant = {
+        candidate_id: 'merchant_name', text: 'サンプルの 食堂', source: 'merchant_name',
+        source_path: 'documents[0].fields.MerchantName', confidence: 0.99,
+        span_state: 'exact', span: { offset: 0, length: 32 }, string_index_type: 'textElements'
+      }
+      input = evidence_result(
+        merchant, page_candidate('サンプルの', 0), page_candidate('食堂', 1), page_candidate('中央店', 2)
+      )
+      options = described_class.options(ocr_result: input)[:options]
+
+      aggregate_failures do
+        expect(options).to include(include(value: 'サンプルの 食堂', confidence: 0.99))
+        expect(options).to include(
+          include(
+            value: 'サンプルの 食堂 中央店',
+            candidate_ids: [ 'merchant_name', 'page_0_line_0', 'page_0_line_1', 'page_0_line_2' ]
+          )
+        )
+        expect(options.find { |option| option[:value] == 'サンプルの 食堂 中央店' }).not_to have_key(:confidence)
+      end
+    end
+
+    it '一文字候補を残しても後続の完全なMerchantNameへ付け足さない' do
+      name = 'サンプル食堂 中央店'
+      merchant = {
+        candidate_id: 'merchant_name', text: name, source: 'merchant_name',
+        source_path: 'documents[0].fields.MerchantName', confidence: 0.99,
+        span_state: 'exact', span: { offset: 30, length: name.length }, string_index_type: 'textElements', line_index: 1
+      }
+      input = evidence_result(merchant, page_candidate('一', 0), page_candidate(name, 1))
+      options = described_class.options(ocr_result: input)[:options]
+
+      aggregate_failures do
+        expect(options).to include(include(value: name, confidence: 0.99), include(value: '一'))
+        expect(options).not_to include(include(value: "一 #{name}"))
+      end
+    end
+
+    it '同名でも別blockの行を合成候補の出典へ取り込まない' do
+      input = evidence_result(
+        page_candidate('SampleMart', 0), page_candidate('中央店', 1), page_candidate('SampleMart', 6)
+      )
+      option = described_class.options(ocr_result: input)[:options].find { |candidate| candidate[:value] == 'SampleMart 中央店' }
+
+      expect(option).to include(candidate_ids: [ 'page_0_line_0', 'page_0_line_1' ], line_indexes: [ 0, 1 ])
+    end
+
+    {
+      '別page' => { page_index: 1, provider_line_index: 0, candidate_id: 'page_1_line_0', source_path: 'pages[1].lines[0]' },
+      '非連続provider行' => { provider_line_index: 3, candidate_id: 'page_0_line_3', source_path: 'pages[0].lines[3]' },
+      '非連続normalized行' => { line_index: 3 },
+      'span overlap' => { span: { offset: 2, length: 3 } },
+      '異なるindex type' => { string_index_type: 'utf16CodeUnit' },
+      '逆順span' => { span: { offset: 0, length: 3 } }
+    }.each do |label, changes|
+      it "#{label}の行を単なる近接で店舗名へ結合しない" do
+        input = evidence_result(page_candidate('SampleMart', 0, offset: 10), page_candidate('中央店', 1).merge(changes))
+
+        expect(described_class.options(ocr_result: input)[:options]).not_to include(include(value: 'SampleMart 中央店'))
+      end
+    end
+
+    it '別の完成店舗名を連続していても一つの店舗へ結合しない' do
+      [ [ '青葉商店', '朝日商店' ], [ 'サンプルストア', '青葉ストア' ] ].each do |names|
+        input = evidence_result(*names.each_with_index.map { |name, index| page_candidate(name, index) })
+
+        expect(described_class.options(ocr_result: input)[:options].map { |option| option[:value] }).to match_array(names)
+      end
+    end
+
+    it 'MerchantName根拠なしに三行の見出しを一つへ連結しない' do
+      input = evidence_result(page_candidate('青葉', 0), page_candidate('みどり', 1), page_candidate('中央店', 2))
+
+      expect(described_class.options(ocr_result: input)[:options]).not_to include(
+        include(value: '青葉みどり中央店'), include(value: '青葉 みどり 中央店')
+      )
+    end
+
+    it '複数行MerchantNameの直後でも支店でない行を追加しない' do
+      merchant = {
+        candidate_id: 'merchant_name', text: 'サンプルの 食堂', source: 'merchant_name',
+        source_path: 'documents[0].fields.MerchantName', confidence: 0.99,
+        span_state: 'exact', span: { offset: 0, length: 32 }, string_index_type: 'textElements'
+      }
+      input = evidence_result(
+        merchant, page_candidate('サンプルの', 0), page_candidate('食堂', 1), page_candidate('サンプルサービス', 2)
+      )
+
+      expect(described_class.options(ocr_result: input)[:options]).not_to include(
+        include(value: 'サンプルの 食堂 サンプルサービス')
+      )
+    end
+
+    it 'exact spanがないpage行から新しい見出し結合を行わない' do
+      first = page_candidate('サンプル公園', 0).except(:span, :string_index_type).merge(span_state: 'missing')
+      input = evidence_result(first, page_candidate('駐車場', 1))
+
+      expect(described_class.options(ocr_result: input)[:options].map { |option| option[:value] }).to contain_exactly('サンプル公園', '駐車場')
+    end
+
+    it '宣伝行を挟む見出しを同じblockとして結合しない' do
+      input = evidence_result(
+        page_candidate('サンプル公園', 0), page_candidate('毎日安い!この価格!', 1), page_candidate('駐車場', 2)
+      )
+
+      expect(described_class.options(ocr_result: input)[:options].map { |option| option[:value] }).to contain_exactly('サンプル公園', '駐車場')
+    end
+
+    it '商品点数を店舗候補へ残さず点を含む店舗名は維持する' do
+      input = evidence_result(page_candidate('3点', 0), page_candidate('三点商店', 1))
+
+      expect(described_class.options(ocr_result: input)[:options].map { |option| option[:value] }).to eq([ '三点商店' ])
+    end
+
+    it 'spanのない旧page evidenceは従来の印字行支持と確認済み状態を維持する' do
+      name = 'サンプル検証ストア'
+      merchant = {
+        candidate_id: 'merchant_name', text: name, source: 'merchant_name',
+        source_path: 'documents[0].fields.MerchantName', span_state: 'missing'
+      }
+      line = page_candidate(name, 0).except(:span, :string_index_type).merge(span_state: 'missing')
+      input = evidence_result(merchant, line)
+
+      result = described_class.resolve(ocr_result: input, ai_result: { receipt_attributes: { store_name: name } })
+
+      expect(result).to include(value: name, state: 'confirmed', reason_codes: [])
+    end
+
+    it 'invalid spanを除外した残りのmissing行を旧合成経路へ逃がさない' do
+      entries = [ page_candidate('SampleMart', 0), page_candidate('中央店', 1) ].map do |entry|
+        entry.except(:span, :string_index_type).merge(span_state: 'missing')
+      end
+      invalid = page_candidate('別名', 2).except(:span, :string_index_type).merge(span_state: 'invalid')
+
+      expect(described_class.options(ocr_result: evidence_result(*entries, invalid))[:options]).not_to include(
+        include(value: 'SampleMart 中央店'), include(value: '別名')
+      )
+    end
+
+    it 'exact MerchantNameと支店の間に印字されたロゴ断片がある既存候補を維持する' do
+      name = 'サンプルストア'
+      merchant = {
+        candidate_id: 'merchant_name', text: name, source: 'merchant_name',
+        source_path: 'documents[0].fields.MerchantName', span_state: 'exact',
+        span: { offset: 0, length: name.length }, string_index_type: 'textElements'
+      }
+      input = evidence_result(merchant, page_candidate(name, 0), page_candidate('ABC XY', 1), page_candidate('中央店', 2))
+
+      expect(described_class.options(ocr_result: input)[:options]).to include(
+        include(value: 'サンプルストア 中央店', candidate_ids: [ 'merchant_name', 'page_0_line_0', 'page_0_line_1', 'page_0_line_2' ])
+      )
+    end
+
+    it 'MerchantNameがあっても別の完成店舗や一文字候補を飛ばして支店へ結合しない' do
+      name = 'サンプルストア'
+      merchant = {
+        candidate_id: 'merchant_name', text: name, source: 'merchant_name',
+        source_path: 'documents[0].fields.MerchantName', span_state: 'exact',
+        span: { offset: 0, length: name.length }, string_index_type: 'textElements'
+      }
+      [ '青葉商店', '北口店', 'Q', '領収書' ].each do |middle|
+        input = evidence_result(merchant, page_candidate(name, 0), page_candidate(middle, 1), page_candidate('中央店', 2))
+
+        expect(described_class.options(ocr_result: input)[:options]).not_to include(include(value: 'サンプルストア 中央店'))
+      end
+    end
+
+    it 'ブランドに既に含まれる単独symbolの重複行を支店名へ挟まない' do
+      input = evidence_result(page_candidate('SampleMart®', 0), page_candidate('®', 1), page_candidate('中央店', 2))
+
+      expect(described_class.options(ocr_result: input)[:options]).to include(
+        include(value: 'SampleMart® 中央店', candidate_ids: [ 'page_0_line_0', 'page_0_line_1', 'page_0_line_2' ])
+      )
+    end
+
+    it '独立した一文字ブランドや異なるsymbolを重複ロゴとして飛ばさない' do
+      [ 'Q', '©' ].each do |middle|
+        input = evidence_result(page_candidate('SampleMart®', 0), page_candidate(middle, 1), page_candidate('中央店', 2))
+
+        expect(described_class.options(ocr_result: input)[:options]).not_to include(include(value: 'SampleMart® 中央店'))
+      end
+    end
+
+    context 'Latin logoと業態と支店の既存復元' do
+      let(:logo_entries) do
+        [ 'samplecacaok', 'maitre sample suisse', 'since 1900', 'サムプル ショコラ ブティック&カフェ', '中央店', '', '', 'www.samplecacao.jp' ]
+          .each_with_index.filter_map { |text, index| page_candidate(text, index) if text.present? }
+      end
+
+      it '同page headerの使用した行だけを出典に従来のlogo表記を復元する' do
+        options = described_class.options(ocr_result: evidence_result(*logo_entries))[:options]
+
+        expect(options).to include(
+          include(
+            value: 'Samplecacao ショコラブティック&カフェ 中央店',
+            candidate_ids: [ 'page_0_line_0', 'page_0_line_3', 'page_0_line_4', 'page_0_line_7' ]
+          )
+        )
+      end
+
+      it 'header外でも同pageのexact domainだけを既存logo補正の出典に使う' do
+        logo_entries[-1] = page_candidate('www.samplecacao.jp', 47)
+
+        expect(described_class.options(ocr_result: evidence_result(*logo_entries))[:options]).to include(
+          include(
+            value: 'Samplecacao ショコラブティック&カフェ 中央店',
+            candidate_ids: [ 'page_0_line_0', 'page_0_line_3', 'page_0_line_4', 'page_0_line_47' ]
+          )
+        )
+      end
+
+      it '別pageのdomainをlogo補正へ使用しない' do
+        logo_entries.last.merge!(page_index: 1, provider_line_index: 0, source_path: 'pages[1].lines[0]', candidate_id: 'page_1_line_0')
+
+        expect(described_class.options(ocr_result: evidence_result(*logo_entries))[:options]).not_to include(
+          include(value: 'Samplecacao ショコラブティック&カフェ 中央店')
+        )
+      end
+
+      it '別の完成店舗名をまたいでlogoと業態を関連付けない' do
+        logo_entries[1] = page_candidate('サンプルストア 北口店', 1)
+
+        expect(described_class.options(ocr_result: evidence_result(*logo_entries))[:options]).not_to include(
+          include(value: 'Samplecacao ショコラブティック&カフェ 中央店')
+        )
+      end
+
+      it '同じheaderに複数の独立したlogoがある場合は補正を選ばない' do
+        logo_entries[1] = page_candidate('OtherBrand', 1)
+
+        expect(described_class.options(ocr_result: evidence_result(*logo_entries))[:options]).not_to include(
+          include(value: 'Samplecacao ショコラブティック&カフェ 中央店')
+        )
+      end
+
+      it '複数のdomain根拠を任意に選んでlogoを補正しない' do
+        logo_entries << page_candidate('www.samplecacao.com', 47)
+
+        expect(described_class.options(ocr_result: evidence_result(*logo_entries))[:options]).not_to include(
+          include(value: 'Samplecacao ショコラブティック&カフェ 中央店')
+        )
+      end
+
+      it 'exactでないfooter domainをlogoの補正根拠にしない' do
+        logo_entries[-1] = page_candidate('www.samplecacao.jp', 47)
+          .except(:span, :string_index_type).merge(span_state: 'missing')
+
+        expect(described_class.options(ocr_result: evidence_result(*logo_entries))[:options]).not_to include(
+          include(value: 'Samplecacao ショコラブティック&カフェ 中央店')
+        )
+      end
+
+      it 'header外の同じ行構造をlogo復元へ流用しない' do
+        entries = logo_entries.map { |entry| page_candidate(entry[:text], entry[:provider_line_index] + 10) }
+
+        expect(described_class.options(ocr_result: evidence_result(*entries))[:options]).not_to include(
+          include(value: 'Samplecacao ショコラブティック&カフェ 中央店')
+        )
+      end
+    end
+
     it '不正なAI店舗名で有効なOCR店舗名を失わない' do
       result = described_class.resolve(
         ocr_result: ocr_result,

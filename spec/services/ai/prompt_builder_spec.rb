@@ -137,6 +137,31 @@ RSpec.describe Ai::PromptBuilder do
       expect(result.dig(:store, :name_options).to_json).not_to include('confidence')
     end
 
+    it 'exactな施設用途見出しを参考名だけでなく選択可能なoptionとして渡す' do
+      lines = [ 'サンプル公園', '駐車場' ]
+      evidence = lines.each_with_index.map do |text, index|
+        {
+          candidate_id: "page_0_line_#{index}", source: 'line', source_path: "pages[0].lines[#{index}]",
+          line_index: index, page_index: 0, provider_line_index: index, text: text,
+          span_state: 'exact', span: { offset: index * 20, length: text.length }, string_index_type: 'textElements'
+        }
+      end
+      input = ocr_result.deep_merge(
+        lines: lines,
+        candidates: {
+          store_name: 'サンプル公園駐車場',
+          store_name_evidence: { schema_version: 'store_name_evidence_v1', candidates: evidence, truncated: false, invalid: false }
+        }
+      )
+
+      store = described_class.build(input).fetch(:store)
+
+      expect(store[:customer_facing_store_candidates]).to include('サンプル公園駐車場')
+      expect(store.dig(:name_options, :options)).to include(
+        include(value: 'サンプル公園駐車場', candidate_ids: [ 'page_0_line_0', 'page_0_line_1' ])
+      )
+    end
+
     it '既存のPromptBuilder出力仕様を維持する' do
       result = described_class.build(ocr_result)
 

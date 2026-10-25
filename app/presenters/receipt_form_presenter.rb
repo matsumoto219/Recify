@@ -521,8 +521,8 @@ class ReceiptFormPresenter
       }
       data[:original_saved_line_total] = line_total_value unless new_record? || line_total_value.nil?
       if persisted_absolute_discount_source?
-        data[:original_discount_amount] = item.discount_amount
-        data[:original_discount_rate] = item.discount_rate_percentage_input
+        data[:original_discount_amount] = item.attribute_in_database(:discount_amount)
+        data[:original_discount_rate] = ""
       end
       data
     end
@@ -710,15 +710,16 @@ class ReceiptFormPresenter
 
     def persisted_formula_discount_input_value
       return nil if new_record?
-      return nil unless %w[count_unit_price reference_quantity_price].include?(item.pricing_source_kind)
+      return nil unless %w[count_unit_price reference_quantity_price].include?(item.attribute_in_database(:pricing_source_kind))
+      return nil if item.attribute_in_database(:discount_rate).nil? && item.attribute_in_database(:discount_amount).nil?
 
-      item.discount_rate_percentage_input
+      item.discount_rate_percentage_input(persisted: true).to_s
     end
 
     def persisted_absolute_discount_source?
       return false if new_record?
 
-      item.discount_rate.nil? && !item.discount_amount.nil?
+      item.attribute_in_database(:discount_rate).nil? && !item.attribute_in_database(:discount_amount).nil?
     end
 
     def persisted_explicit_positive_discount_rate_source?

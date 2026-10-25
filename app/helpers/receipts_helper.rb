@@ -211,14 +211,35 @@ module ReceiptsHelper
     return label unless original_line_total.positive?
     return label if discount_amount > original_line_total
 
-    percentage =
+    percentage_label =
       if item.discount_rate.present?
-        BigDecimal(item.discount_rate.to_s) * 100
+        percentage = BigDecimal(item.discount_rate.to_s) * 100
+        "#{number_with_precision(percentage, precision: 1, strip_insignificant_zeros: true)}%"
       else
-        BigDecimal(discount_amount.to_s) * 100 / BigDecimal(original_line_total.to_s)
+        receipt_item_discount_reference_rate(item)
       end
-    formatted_percentage = number_with_precision(percentage, precision: 1, strip_insignificant_zeros: true)
-    "#{label}（#{formatted_percentage}%）"
+    "#{label}（#{percentage_label}）"
+  end
+
+  def receipt_item_discount_reference_rate(item, persisted: false)
+    percentage = item.inferred_discount_rate_percentage(persisted: persisted)
+    return nil if percentage.nil?
+    return t("receipts.item_fields.discount_reference_rate.below_minimum") if percentage < BigDecimal("0.1")
+    return t("receipts.item_fields.discount_reference_rate.below_one") if percentage < 1 && percentage.round(1) == 1
+    return t("receipts.item_fields.discount_reference_rate.full") if percentage == 100
+    return t("receipts.item_fields.discount_reference_rate.above_maximum") if percentage > 99
+
+    t(
+      "receipts.item_fields.discount_reference_rate.approximate",
+      rate: number_with_precision(percentage, precision: percentage < 1 ? 1 : 0, strip_insignificant_zeros: true)
+    )
+  end
+
+  def receipt_item_absolute_discount_help(item)
+    discount_amount = item.attribute_in_database(:discount_amount)
+    return nil unless item.attribute_in_database(:discount_rate).nil? && discount_amount.to_i.positive?
+
+    t("receipts.item_fields.discount_amount_reference", amount: number_with_delimiter(discount_amount))
   end
 
   def receipt_item_warning_reason_codes(item)

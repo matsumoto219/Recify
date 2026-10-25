@@ -191,14 +191,18 @@ class ReceiptItem < ApplicationRecord
     decimal.to_s("F").sub(/\.?0+\z/, "")
   end
 
-  def discount_rate_percentage_input
-    rate = discount_rate.presence || inferred_discount_rate
-    return nil if rate.blank?
+  def discount_rate_percentage_input(persisted: false)
+    rate = persisted ? attribute_in_database(:discount_rate) : discount_rate
+    return nil if rate.nil?
 
     percentage = BigDecimal(rate.to_s) * 100
     return percentage.to_i.to_s if percentage.frac.zero?
 
     percentage.to_s("F").sub(/\.?0+\z/, "")
+  end
+
+  def inferred_discount_rate_percentage(persisted: false)
+    inferred_discount_rate(persisted: persisted)&.*(100)
   end
 
   def formatted_quantity_with_unit
@@ -435,9 +439,9 @@ class ReceiptItem < ApplicationRecord
     nil
   end
 
-  def inferred_discount_rate
-    discount = discount_amount.to_i
-    original_total = original_line_total.to_i
+  def inferred_discount_rate(persisted: false)
+    discount = (persisted ? attribute_in_database(:discount_amount) : discount_amount).to_i
+    original_total = (persisted ? attribute_in_database(:original_line_total) : original_line_total).to_i
     return nil unless discount.positive?
     return nil unless original_total.positive?
     return nil if discount > original_total

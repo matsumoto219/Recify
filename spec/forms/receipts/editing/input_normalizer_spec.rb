@@ -787,7 +787,7 @@ RSpec.describe Receipts::Editing::InputNormalizer do
         "receipt_items_attributes" => {
           "0" => {
             "id" => item.id.to_s,
-            "discount_rate" => item.discount_rate_percentage_input
+            "discount_rate" => "10"
           }
         }
       }
@@ -818,6 +818,101 @@ RSpec.describe Receipts::Editing::InputNormalizer do
     )
 
     expect(normalized.dig("receipt_items_attributes", "0", "discount_rate")).to eq(BigDecimal("0.1"))
+  end
+
+  context "with an explicit discount rate input contract" do
+    let(:item) do
+      receipt.receipt_items.build(
+        id: 42,
+        pricing_source_kind: "count_unit_price",
+        price: 600,
+        quantity: 1,
+        quantity_unit_code: "each",
+        original_line_total: 600,
+        discount_amount: 60,
+        discount_rate: nil,
+        line_total: 540
+      )
+    end
+    let(:rate) { "" }
+    let(:contract) { "explicit_rate_v1" }
+    let(:attributes) do
+      {
+        "receipt_items_attributes" => {
+          "0" => {
+            "id" => item.id.to_s,
+            "discount_rate" => rate,
+            "discount_rate_input_contract" => contract
+          }
+        }
+      }
+    end
+
+    it "空欄は保存済み割引額を維持し、入力契約を保存属性へ渡さない" do
+      normalized = normalize.dig("receipt_items_attributes", "0")
+
+      expect(normalized).not_to have_key("discount_rate")
+      expect(normalized).not_to have_key("discount_rate_input_contract")
+      expect(item.discount_amount).to eq(60)
+    end
+
+    context "when the entered rate equals the old inferred display" do
+      let(:rate) { "10" }
+
+      it "推定率のechoではなく明示された率sourceとして扱う" do
+        expect(normalize.dig("receipt_items_attributes", "0", "discount_rate")).to eq(BigDecimal("0.1"))
+      end
+    end
+
+    context "when zero is entered" do
+      let(:rate) { "0" }
+
+      it "空欄と区別して割引解除の明示0を保持する" do
+        expect(normalize.dig("receipt_items_attributes", "0", "discount_rate")).to eq(BigDecimal("0"))
+      end
+    end
+
+    context "when full discount is entered" do
+      let(:rate) { "100" }
+
+      it "全額割引の率sourceを保持する" do
+        expect(normalize.dig("receipt_items_attributes", "0", "discount_rate")).to eq(BigDecimal("1"))
+      end
+    end
+
+    context "when the entered rate has excessive precision" do
+      let(:rate) { "10.55" }
+
+      it "参考表示の丸めを入力に適用せず拒否する" do
+        expect { normalize }.to raise_error(Receipts::NumericInput::InvalidValue)
+      end
+    end
+
+    context "when the stored amount produces a recurring percentage" do
+      let(:rate) { item.inferred_discount_rate_percentage.to_s("F") }
+
+      before { item.discount_amount = 50 }
+
+      it "旧表示と同値でも新フォームの明示率は精度上限で拒否する" do
+        expect { normalize }.to raise_error(Receipts::NumericInput::InvalidValue)
+      end
+
+      it "契約markerのない旧フォームのexact echoは金額sourceとして維持する" do
+        attributes.dig("receipt_items_attributes", "0").delete("discount_rate_input_contract")
+
+        expect(normalize.dig("receipt_items_attributes", "0")).not_to have_key("discount_rate")
+      end
+    end
+
+    [ nil, "", "unknown", true, [], {} ].each do |invalid_contract|
+      context "with malformed contract #{invalid_contract.inspect}" do
+        let(:contract) { invalid_contract }
+
+        it "未知の契約を旧フォームとして扱わず拒否する" do
+          expect { normalize }.to raise_error(Receipts::Editing::InvalidItemSourceError)
+        end
+      end
+    end
   end
 
   it "manual HTTPからunknown raw unit evidenceを新規作成・変更させない" do

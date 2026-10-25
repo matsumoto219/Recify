@@ -531,7 +531,7 @@ module ReceiptAnalysisProfiles
       /ai/i,
       /ファイル/
     ].freeze
-    STORE_MONEY_OR_NUMERIC_PATTERN = /\A[\d\s\-\/:().,*＊¥￥$€£%円]+\z/.freeze
+    STORE_MONEY_OR_NUMERIC_PATTERN = /\A(?:[\d\s\-\/:().,*＊¥￥$€£%円]+|\d+\s*点)\z/.freeze
     STORE_ISOLATED_LOGO_FRAGMENT_PATTERN = /\A(?:\p{Katakana}|[[:punct:]])\z/u.freeze
     STORE_NAME_LETTER_PATTERN = /[一-龠ぁ-んァ-ヶA-Za-z]/.freeze
     STORE_LOCAL_NAME_PREFIX_PATTERN = /\A[ァ-ヶー]{2,}/.freeze
