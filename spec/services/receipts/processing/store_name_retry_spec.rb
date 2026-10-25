@@ -34,6 +34,7 @@ RSpec.describe '店舗名選択のsnapshot往復' do
     restored_ocr = rehydrator.ocr(JSON.parse(ocr_snapshot.to_json))
     restored_ai = rehydrator.ai(JSON.parse(ai_snapshot.to_json))
 
+    expect(restored_ai.dig(:meta, 'store_name_selection', 'options_schema_version')).to eq('store_name_options_v1')
     expect(Analysis.store_name_options(ocr_result: restored_ocr)).to eq(options)
     expect(Analysis.build_receipt_params(ocr_result: restored_ocr, ai_result: restored_ai)).to include(
       store_name_resolution: include(state: 'confirmed', option_id: options[:options].first[:option_id])
@@ -76,6 +77,17 @@ RSpec.describe '店舗名選択のsnapshot往復' do
     expect(Analysis.store_name_options(ocr_result: restored_ocr)).to eq(options)
     expect(result[:store_name_resolution]).to include(state: 'confirmed', option_id: option[:option_id])
     expect(result.dig(:receipt_attributes, :store_name)).to eq('サンプル公園駐車場')
+
+    historical_selection = {
+      decision: 'select', option_id: 'store_option_2e0f56e091d035f87249ce0869b78013',
+      options_checksum: '9e1d5d8f9272a4c7b55a59aaa050ebe7b75fcf08ca9bc1c6ea0036626f06c8e4'
+    }
+    historical_result = Analysis.build_receipt_params(
+      ocr_result: restored_ocr, ai_result: { success: true, meta: { store_name_selection: historical_selection } }
+    )
+
+    expect(historical_result[:store_name_resolution]).to include(state: 'confirmed', option_id: historical_selection[:option_id])
+    expect(historical_result.dig(:receipt_attributes, :store_name)).to eq('サンプル公園駐車場')
   end
 
   it '汎用文字列上限でOCR行が短縮されても検証済み店舗名と選択を維持する' do

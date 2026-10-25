@@ -1,7 +1,8 @@
 module Analysis
   class StoreNameSelection
     DECISIONS = %w[select ambiguous reject invalid].freeze
-    KEYS = %w[decision option_id options_checksum].freeze
+    KEYS = %w[decision option_id options_checksum options_schema_version].freeze
+    OPTIONS_SCHEMA_VERSIONS = %w[store_name_options_v1].freeze
     OPTION_ID_PATTERN = /\Astore_option_[0-9a-f]{32}\z/
     CHECKSUM_PATTERN = /\A[0-9a-f]{64}\z/
 
@@ -25,12 +26,14 @@ module Analysis
         return invalid unless data.size == value.size
         return invalid unless DECISIONS.include?(data[:decision])
         return invalid if data[:options_checksum] && !valid_checksum?(data[:options_checksum])
+        return invalid if data.key?(:options_schema_version) && !valid_options_schema_version?(data[:options_schema_version])
         return invalid unless valid_option?(data)
 
         {
           decision: data[:decision],
           option_id: data[:option_id],
-          options_checksum: data[:options_checksum]
+          options_checksum: data[:options_checksum],
+          options_schema_version: data[:options_schema_version]
         }.compact
       end
 
@@ -45,19 +48,34 @@ module Analysis
         value.is_a?(String) && value.valid_encoding? && value.bytesize == 64 && CHECKSUM_PATTERN.match?(value)
       end
 
+      def valid_options_schema_version?(value)
+        value.is_a?(String) && value.valid_encoding? && value.bytesize <= 64 && OPTIONS_SCHEMA_VERSIONS.include?(value)
+      end
+
       def bind(selection, options)
         checksum = options[:checksum] || options["checksum"]
         return invalid unless valid_checksum?(checksum)
+
+        attributes = { options_checksum: checksum }
+        version = options[:schema_version] || options["schema_version"]
+        if options.key?(:schema_version) || options.key?("schema_version")
+          return invalid.merge(attributes) unless valid_options_schema_version?(version)
+
+          attributes[:options_schema_version] = version
+        end
+        if selection[:options_schema_version] && selection[:options_schema_version] != version
+          return invalid.merge(attributes)
+        end
         if selection[:options_checksum] && selection[:options_checksum] != checksum
-          return invalid.merge(options_checksum: checksum)
+          return invalid.merge(attributes)
         end
 
         entries = options[:options] || options["options"]
         if selection[:decision] == "select" && !unique_option?(entries, selection[:option_id])
-          return invalid.merge(options_checksum: checksum)
+          return invalid.merge(attributes)
         end
 
-        selection.merge(options_checksum: checksum)
+        selection.merge(attributes)
       end
 
       def unique_option?(entries, option_id)

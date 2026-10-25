@@ -13,8 +13,8 @@ module Analysis
         new.call(**attributes)
       end
 
-      def options(ocr_result:, profile: nil)
-        new(profile: profile || profile_for(ocr_result)).options(ocr_result: ocr_result)
+      def options(ocr_result:, profile: nil, version: OPTIONS_SCHEMA_VERSION)
+        new(profile: profile || profile_for(ocr_result)).options(ocr_result: ocr_result, version: version)
       end
 
       def resolve(ocr_result:, ai_result: nil, profile: nil)
@@ -47,8 +47,8 @@ module Analysis
       )[:value]
     end
 
-    def options(ocr_result:)
-      return unavailable_options unless profile
+    def options(ocr_result:, version: OPTIONS_SCHEMA_VERSION)
+      return unavailable_options unless profile && version == OPTIONS_SCHEMA_VERSION
 
       source = ocr_result.is_a?(Hash) ? ocr_result.deep_symbolize_keys : {}
       candidates = source[:candidates].is_a?(Hash) ? source[:candidates] : {}
@@ -101,8 +101,10 @@ module Analysis
       source[:candidates] = candidates
       ai = ai_result.is_a?(Hash) ? ai_result.deep_symbolize_keys : {}
       ai[:receipt_attributes] = {} unless ai[:receipt_attributes].is_a?(Hash)
-      option_set = options(ocr_result: source)
       meta = ai[:meta].is_a?(Hash) ? ai[:meta] : {}
+      saved_selection = meta[:store_name_selection]
+      version = saved_selection.is_a?(Hash) ? saved_selection.fetch(:options_schema_version, OPTIONS_SCHEMA_VERSION) : OPTIONS_SCHEMA_VERSION
+      option_set = options(ocr_result: source, version: version)
       selection = StoreNameSelection.call(meta[:store_name_selection], options: option_set) if meta.key?(:store_name_selection)
       preferred = preferred_ocr_option(option_set, candidates)
       selected = if selection.nil? && compact_store_name(ai.dig(:receipt_attributes, :store_name)) == compact_store_name(store_name_value(candidates))

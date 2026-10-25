@@ -18,6 +18,24 @@ RSpec.describe Analysis::ReceiptStoreNameResolver do
     expect(described_class.singleton_class.public_instance_methods(false)).to contain_exactly(:call, :resolve, :options)
   end
 
+  it '選択時に記録した版を指定すると同じ候補集合を再構築する' do
+    input = { candidates: { store_name: 'SampleMart' }, lines: [ 'SampleMart' ] }
+
+    expect(described_class.options(ocr_result: input, version: 'store_name_options_v1'))
+      .to eq(described_class.options(ocr_result: input))
+  end
+
+  it '未対応の候補版を現在の版へ推測変換しない' do
+    input = { candidates: { store_name: 'SampleMart' }, lines: [ 'SampleMart' ] }
+
+    expect(described_class.options(ocr_result: input, version: 'store_name_options_unknown'))
+      .to include(options: [], invalid: true)
+    expect(described_class.resolve(
+      ocr_result: input,
+      ai_result: { meta: { store_name_selection: { decision: 'reject', options_schema_version: 'store_name_options_unknown' } } }
+    )).to include(value: nil, state: 'missing')
+  end
+
   it '空の店舗名ではcasing設定を読まず元の値を返す' do
     expect(SystemSettings).not_to receive(:limit_for)
 
