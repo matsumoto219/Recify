@@ -420,6 +420,27 @@ RSpec.describe Ocr::Client do
       end
     end
 
+    [ Zlib::DataError, Zlib::NeedDict, Zlib::BufError, Zlib::GzipFile::Error ].each do |error_class|
+      it "submit POST の#{error_class}を伴う接続失敗は再送せず終了する" do
+        error = Faraday::ConnectionFailed.new(error_class.new('invalid compressed response'))
+        connection = stub_connection_post(client, error, error, error)
+        allow(Faraday).to receive(:get)
+        allow(client).to receive(:sleep)
+
+        expect do
+          client.call
+        end.to raise_error(Ocr::OcrError, 'external_service_unavailable') { |ocr_error|
+          expect(ocr_error.polling_metrics).to include('retry_count' => 0)
+        }
+
+        aggregate_failures do
+          expect(connection).to have_received(:post).once
+          expect(Faraday).not_to have_received(:get)
+          expect(client).not_to have_received(:sleep)
+        end
+      end
+    end
+
     it '401/403はretryしない' do
       [ 401, 403 ].each do |status|
         request_client = described_class.new(image: image, provider: provider)
@@ -863,6 +884,37 @@ RSpec.describe Ocr::Client do
         expect(connection).to have_received(:post).once
         expect(Faraday).to have_received(:get).twice
         expect(client).to have_received(:sleep).with(0.5).once
+      end
+    end
+
+    [ Zlib::DataError, Zlib::NeedDict, Zlib::BufError, Zlib::GzipFile::Error ].each do |error_class|
+      it "polling GET の#{error_class}を伴う接続失敗ではPOSTを再送せずGETだけretryする" do
+        connection = stub_connection_post(client, accepted_response)
+        outcomes = [
+          Faraday::ConnectionFailed.new(error_class.new('invalid compressed response')),
+          succeeded_poll_response
+        ]
+        allow(Faraday).to receive(:get) do
+          outcome = outcomes.shift
+          raise outcome if outcome.is_a?(Exception)
+
+          outcome
+        end
+        allow(client).to receive(:sleep)
+
+        result = client.call
+
+        aggregate_failures do
+          expect(result.except(described_class::POLLING_METRICS_KEY)).to eq(succeeded_response)
+          expect(result[described_class::POLLING_METRICS_KEY]).to include(
+            'poll_count' => 2,
+            'final_status' => 'succeeded',
+            'retry_count' => 1
+          )
+          expect(connection).to have_received(:post).once
+          expect(Faraday).to have_received(:get).twice
+          expect(client).to have_received(:sleep).with(0.5).once
+        end
       end
     end
 
