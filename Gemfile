@@ -26,7 +26,7 @@ gem "pagy"
 # リクエスト制限ミドルウェア [https://github.com/rack/rack-attack]
 gem "rack-attack", "~> 6.8"
 # Passkey/WebAuthn検証 [https://github.com/cedarcode/webauthn-ruby]
-gem "webauthn", "~> 3.4"
+gem "webauthn", "~> 3.5"
 # TOTP生成・検証 [https://github.com/mdp/rotp]
 gem "rotp", "~> 6.3"
 # QRコード生成 [https://github.com/whomwah/rqrcode]
