@@ -473,6 +473,8 @@ module Receipts::Processing::Runs
           max_candidates: snapshot_store_candidates_limit
         )
         snapshot["candidates"]["store_name_evidence"] = evidence.deep_stringify_keys if evidence
+        layout = Analysis.store_name_layout(normalized_hash(result[:meta])[:store_name_layout], evidence:)
+        snapshot["meta"]["store_name_layout"] = layout.deep_stringify_keys if layout
       end
       if candidates.key?(:purchased_at_evidence)
         evidence = Analysis.purchased_at_evidence(

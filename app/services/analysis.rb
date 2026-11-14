@@ -120,6 +120,10 @@ module Analysis
       StoreNameEvidence.call(...)
     end
 
+    def store_name_layout(...)
+      StoreNameLayout.call(...)
+    end
+
     def store_name_options(...)
       ReceiptStoreNameResolver.options(...)
     end

@@ -69,6 +69,7 @@ module Ai
       {
         store_name: candidate_value(:store_name),
         name_options: options,
+        name_layout: store_name_layout(options),
         store_address: candidate_value(:store_address),
         store_phone_number: candidate_value(:store_phone_number),
         operator_candidates: operator_candidates,
@@ -105,6 +106,25 @@ module Ai
           )
         end
       )
+    end
+
+    def store_name_layout(options)
+      return if options[:invalid] || options[:truncated]
+
+      evidence = Analysis.store_name_evidence(candidate_value(:store_name_evidence))
+      layout = Analysis.store_name_layout(fetch(meta_hash, :store_name_layout), evidence:)
+      return unless layout
+
+      referenced_ids = (options[:options] + options[:relations]).flat_map { |entry| entry[:candidate_ids] }.to_h { |id| [ id, true ] }
+      candidates_by_id = evidence[:candidates].index_by { |candidate| candidate[:candidate_id] }
+      entries = layout[:entries].filter_map do |entry|
+        next unless referenced_ids[entry[:candidate_id]]
+
+        candidate = candidates_by_id.fetch(entry[:candidate_id])
+        coverage = entry[:line_span] == candidate[:span] ? "full_line" : "partial_line"
+        entry.merge(coverage:)
+      end
+      layout.merge(entries:) if entries.any?
     end
 
     def build_payment_payload

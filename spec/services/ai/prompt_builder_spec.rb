@@ -141,6 +141,69 @@ RSpec.describe Ai::PromptBuilder do
       expect(result.dig(:store, :name_options).to_json).not_to include('confidence')
     end
 
+    context '店舗候補に参照行の位置情報がある場合' do
+      let(:layout_entries) do
+        evidence[:candidates].map do |candidate|
+          {
+            candidate_id: candidate[:candidate_id], page_index: 0, provider_line_index: candidate[:provider_line_index],
+            line_span: candidate[:span].merge(length: candidate[:provider_line_index] == 1 ? 12 : candidate[:span][:length]),
+            bounds: { left: 1000, top: 1000 + candidate[:provider_line_index] * 1000, width: 7000, height: 400 }
+          }
+        end
+      end
+      let(:evidence) do
+        {
+          schema_version: 'store_name_evidence_v1', invalid: false, truncated: false,
+          candidates: [ 'テスト食堂', '青葉支店', '合計 400' ].each_with_index.map do |text, index|
+            {
+              candidate_id: "page_0_line_#{index}", text: text, source: 'line',
+              source_path: "pages[0].lines[#{index}]", line_index: index, page_index: 0, provider_line_index: index,
+              span_state: 'exact', span: { offset: index * 20, length: text.length }, string_index_type: 'textElements'
+            }
+          end
+        }
+      end
+      let(:layout) { { scope: 'provider_line', coordinate_scale: 10_000, entries: layout_entries } }
+
+      before do
+        ocr_result[:lines] = evidence[:candidates].map { |entry| entry[:text] }
+        ocr_result[:candidates][:store_name] = nil
+        ocr_result[:candidates][:store_name_evidence] = evidence
+      end
+
+      it '選択候補が参照する行だけを補足し候補IDと金額入力を変えない' do
+        before = described_class.build(ocr_result)
+        ocr_result[:meta][:store_name_layout] = layout
+        original = ocr_result.deep_dup
+
+        result = described_class.build(ocr_result)
+
+        expect(result.except(:store)).to eq(before.except(:store))
+        expect(result[:store].except(:name_layout)).to eq(before[:store])
+        expect(result.dig(:store, :name_layout)).to include(scope: 'provider_line', coordinate_scale: 10_000)
+        entries = result.dig(:store, :name_layout, :entries)
+        expect(entries.map { |entry| entry[:candidate_id] }).to eq(%w[page_0_line_0 page_0_line_1])
+        expect(entries.map { |entry| entry[:coverage] }).to eq(%w[full_line partial_line])
+        expect(entries.map { |entry| entry[:bounds] }).to eq(layout_entries.first(2).map { |entry| entry[:bounds] })
+        expect(result.dig(:store, :name_layout).to_json).not_to include('テスト食堂', '青葉支店', 'polygon')
+        expect(ocr_result).to eq(original)
+      end
+
+      it '不正な位置情報だけを省略し店舗名候補を維持する' do
+        before = described_class.build(ocr_result)
+        ocr_result[:meta][:store_name_layout] = layout.merge(raw_text: '保存してはいけない文字列')
+
+        expect(described_class.build(ocr_result)).to eq(before)
+      end
+
+      it '選択候補に含まれない行だけなら位置情報を渡さない' do
+        before = described_class.build(ocr_result)
+        ocr_result[:meta][:store_name_layout] = layout.merge(entries: layout_entries.last(1))
+
+        expect(described_class.build(ocr_result)).to eq(before)
+      end
+    end
+
     it 'exactな施設用途見出しを参考名だけでなく選択可能なoptionとして渡す' do
       lines = [ 'サンプル公園', '駐車場' ]
       evidence = lines.each_with_index.map do |text, index|

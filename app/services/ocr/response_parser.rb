@@ -234,6 +234,16 @@ class Ocr::ResponseParser
       profile:,
       analyze_result:
     )
+    store_name_evidence = Ocr::ResponseParser::StoreNameEvidenceExtractor.call(
+      analyze_result:,
+      fields: extract_fields(authority_response),
+      lines: case_preserved_lines,
+      excluded_line_indexes: reference_pricing_block_line_indexes(reference_pricing_blocks),
+      profile:,
+      merchant_source_path: extract_document(authority_response)["fields"] ?
+        "documents[0].fields.MerchantName" : "fields.MerchantName"
+    )
+    store_name_layout = Ocr::ResponseParser::StoreNameLayoutExtractor.call(analyze_result:, evidence: store_name_evidence)
 
     {
       success: normalized_raw_text.present? || normalized_lines.any?,
@@ -242,15 +252,7 @@ class Ocr::ResponseParser
       case_preserved_lines: case_preserved_lines,
       candidates: {
         store_name: extract_store_name(authority_response, authority_lines),
-        store_name_evidence: Ocr::ResponseParser::StoreNameEvidenceExtractor.call(
-          analyze_result:,
-          fields: extract_fields(authority_response),
-          lines: case_preserved_lines,
-          excluded_line_indexes: reference_pricing_block_line_indexes(reference_pricing_blocks),
-          profile:,
-          merchant_source_path: extract_document(authority_response)["fields"] ?
-            "documents[0].fields.MerchantName" : "fields.MerchantName"
-        ),
+        store_name_evidence: store_name_evidence,
         store_address: extract_store_address(authority_response),                                                   # MerchantAddress は取得率にばらつきあり。取得値は住所として保存/表示する
         store_address_components: extract_store_address_components(authority_response),
         store_phone_number: extract_store_phone_number(authority_response),
@@ -297,7 +299,7 @@ class Ocr::ResponseParser
         doc_type: extract_doc_type(parsed_response),
         polling_metrics: extract_polling_metrics(parsed_response),
         raw_response_included: false
-      }
+      }.tap { |meta| meta[:store_name_layout] = store_name_layout if store_name_layout }
     }
   rescue JSON::ParserError => e
     Rails.logger.error("[OCR::ResponseParser] json_parse_failed class=#{e.class}")

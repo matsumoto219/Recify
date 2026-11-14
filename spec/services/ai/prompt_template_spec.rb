@@ -235,6 +235,17 @@ RSpec.describe Ai::PromptTemplate do
       end
     end
 
+    it '店舗名の位置情報は行全体の補助根拠としてだけ使う' do
+      store_information_prompt = user_prompt.split("For store information:", 2).last.split("For purchase:", 2).first
+
+      aggregate_failures do
+        expect(store_information_prompt).to include('store.name_layout is optional structural context for existing candidate_ids only.')
+        expect(store_information_prompt).to include('Bounds describe the entire provider line, not the selected name or an exact font size.')
+        expect(store_information_prompt).to include('Do not infer a shared store, a name relation, or a preferred option from size, proximity, or alignment alone.')
+        expect(store_information_prompt).to include('When layout is absent or insufficient, use the existing printed text and relation rules without inventing geometry.')
+      end
+    end
+
     it 'not receipt の rejection_reason 許可リストを指示する' do
       aggregate_failures do
         expect(system_prompt).to include('Allowed rejection_reason values:')
