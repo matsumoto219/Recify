@@ -74,6 +74,38 @@ RSpec.describe 'Optional store contact review' do
     end
   end
 
+  it '決済metadataの見出しを住所と誤認せず、別の未解決理由を維持する' do
+    receipt = create(:receipt, :processing, :with_image)
+    run = Receipts::Processing.start(receipt: receipt, source: 'upload').run
+    source = parsed_product_locality
+    source[:lines] << '商品区分'
+    Receipts::Processing.record_ocr_snapshot(run, source)
+    Receipts::Processing.record_ai_normalized_result(
+      run,
+      {
+        success: true, needs_review: true,
+        review_reasons: [ 'store_address_missing' ],
+        receipt_attributes: {},
+        receipt_items_attributes: [ { index: 0, category: 'daily_goods', needs_review: false } ]
+      }
+    )
+    Receipts::Processing.record_finalize_decision(
+      run,
+      Receipts::Processing::Contracts::FinalizeDecision.new(
+        finalize_strategy: 'ai_success', receipt_attributes: {}, metadata: {}
+      )
+    )
+
+    result = Receipts::Processing.run_finalize(run.reload)
+
+    aggregate_failures do
+      expect(result.next_step).to eq(:done)
+      expect(receipt.reload).to have_attributes(status: 'review_needed', total_amount: 300, store_address: nil)
+      expect(receipt.review_reasons).to include('purchased_at_missing', 'payment_method_missing')
+      expect(receipt.review_reasons).not_to include('store_address_missing')
+    end
+  end
+
   describe 'missing reasonの根拠' do
     let(:step) do
       Receipts::Processing::Pipeline::FinalizeStep.new(receipt: build(:receipt), decision: nil)
@@ -144,7 +176,8 @@ RSpec.describe 'Optional store contact review' do
       end
 
       it '差替えprofileの印字判定を使い、元の語彙を共有処理へ固定しない' do
-        replacement = Struct.new(:signal_address_pattern, :signal_phone_pattern).new(/CONTACT-ADDRESS/, /CONTACT-PHONE/)
+        replacement = Struct.new(:signal_address_pattern, :signal_phone_pattern, :analysis_fallback_payment_metadata_label_pattern)
+          .new(/CONTACT-ADDRESS/, /CONTACT-PHONE/, /PAYMENT-METADATA/)
         allow(ReceiptAnalysisProfiles).to receive(:default).and_return(replacement)
         ocr_result[:lines] = [ printed_value ]
 
@@ -166,6 +199,65 @@ RSpec.describe 'Optional store contact review' do
         ocr_result[:candidates][:store_address_components] = { city: '検証市' }
 
         expect(resolve_missing_reason).to eq([ reason ])
+      end
+
+      context '決済metadataの見出し' do
+        it '行全体が既存の見出しだけなら住所欠損を解除する' do
+          [ '商品区分', '取扱区分', '  商品区分  ', '　取扱区分　' ].each do |label|
+            ocr_result[:lines] = [ label ]
+
+            expect(resolve_missing_reason).to be_empty
+          end
+        end
+
+        it '見出しの前後に住所や値がある行、未知の見出しを除外しない' do
+          [ "商品区分 #{printed_value}", "#{printed_value} 取扱区分", '商品区分 001', '検証商品区分', '未定義区分' ].each do |line|
+            ocr_result[:lines] = [ line ]
+
+            expect(resolve_missing_reason).to eq([ reason ])
+          end
+        end
+
+        it '別行にある住所の根拠を維持する' do
+          ocr_result[:lines] = [ '商品区分', printed_value ]
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '構造化住所がある場合は見出しだけでも欠損を維持する' do
+          ocr_result[:lines] = [ '商品区分' ]
+          ocr_result[:candidates][:store_address_components] = { city: '検証市' }
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '省略されたOCRで住所なしと判断しない' do
+          ocr_result[:lines] = [ '商品区分' ]
+          ocr_result[:truncated] = { lines: true }
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '除外する見出しも注入されたprofileから取得する' do
+          replacement = ReceiptAnalysisProfiles.default.dup
+          replacement.define_singleton_method(:analysis_fallback_payment_metadata_label_pattern) { /検証区分/ }
+          allow(ReceiptAnalysisProfiles).to receive(:default).and_return(replacement)
+          ocr_result[:lines] = [ '検証区分' ]
+
+          expect(resolve_missing_reason).to be_empty
+          ocr_result[:lines] = [ '商品区分' ]
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '住所用の除外を電話番号に流用しない' do
+          replacement = ReceiptAnalysisProfiles.default.dup
+          replacement.define_singleton_method(:analysis_fallback_payment_metadata_label_pattern) { /03-0000-0000/ }
+          allow(ReceiptAnalysisProfiles).to receive(:default).and_return(replacement)
+          ocr_result[:lines] = [ '03-0000-0000' ]
+
+          expect(step.send(:remove_resolved_store_phone_number_missing_review_reason, [ 'store_phone_number_missing' ], params, ocr_result))
+            .to eq([ 'store_phone_number_missing' ])
+        end
       end
 
       context '商品説明に地名がある場合' do
@@ -260,7 +352,8 @@ RSpec.describe 'Optional store contact review' do
         end
 
         it '商品説明の除外にも差替えprofileの住所判定を使う' do
-          replacement = Struct.new(:signal_address_pattern, :signal_phone_pattern).new(/contact-address/, /contact-phone/)
+          replacement = Struct.new(:signal_address_pattern, :signal_phone_pattern, :analysis_fallback_payment_metadata_label_pattern)
+            .new(/contact-address/, /contact-phone/, /payment-metadata/)
           allow(ReceiptAnalysisProfiles).to receive(:default).and_return(replacement)
           description = 'CONTACT-ADDRESS用商品'
           ocr_result[:lines][1] = "#{description.downcase} 300"

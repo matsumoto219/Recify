@@ -1357,12 +1357,21 @@ class Receipts::Processing::Pipeline
       description_ranges = field == :store_address ? item_description_source_ranges(candidates, lines) : {}
       lines.each_with_index.none? do |line, index|
         text = line.to_s.dup
+        next false if field == :store_address && standalone_payment_metadata_label?(text)
+
         # 商品説明だけを同じ文字数の空白へ置換し、同じ行の実住所や文字境界を維持する。
         description_ranges.fetch(index, []).each do |start, finish|
           text[start...finish] = " " * (finish - start)
         end
         text.match?(pattern)
       end
+    end
+
+    def standalone_payment_metadata_label?(text)
+      label = text.unicode_normalize(:nfkc).strip
+      match = label.match(profile.analysis_fallback_payment_metadata_label_pattern)
+      # 部分一致では同じ行の実住所も消えるため、決済見出しだけの行に限定する。
+      match && match.begin(0).zero? && match.end(0) == label.length
     end
 
     def item_description_source_ranges(candidates, lines)
