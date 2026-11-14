@@ -71,6 +71,7 @@ module Ai
         - amount MUST be an unsigned absolute integer.
         - Use sign to express whether the adjustment is a discount or surcharge.
         - source_text and source_line_index MUST refer to full_context_lines.
+        - Copy source_text from the text of the same entry whose index you return as source_line_index. For previous_text or next_text, use that text's own entry and index, not the index of the entry containing the neighboring text. Do not guess an index when that entry is unavailable.
         - Do NOT output an adjustment if its amount cannot be tied to OCR text.
         - Quantity tokens such as item counts or units MUST NOT be used as adjustment amounts.
         - Do NOT convert item rows, payment rows, or tax-detail rows into receipt_adjustments.
@@ -181,7 +182,7 @@ module Ai
         - If both sides are complete and there is no clear printed basis to prefer one, return ambiguous. Do not prefer a language or a longer name to resolve that ambiguity.
         - unrelated: the components identify different entities or non-store text. Do not combine them; select a listed separate_option_ids option if one of those components identifies the store.
         - ambiguous: the relationship cannot be determined. If the chosen name involves that relation, return the overall decision ambiguous with option_id null. An ambiguous relation outside the chosen store does not make that store ambiguous.
-        - For each relation involving the selected option, the option_id must belong to the list matching its relation decision. Do not select a brand-only option after recognizing its store_location relation. Do not omit printed location components merely because the brand alone is recognizable.
+        - For each relation involving the selected option, the option_id must belong to the list matching its relation decision. Do not select a brand-only or location-only option after recognizing its store_location relation. Do not omit either the printed brand or its printed location from a supported combined name.
         - A complete-side decision does not waive another relation's branch or location requirement. The selected option must satisfy every relation involving it.
         - Use printed customer-facing identity and source context to choose, not option order, the longest string, or provider confidence alone. If more than one plausible store identity remains, return ambiguous. If no option identifies the store, return reject.
         - A truncated or invalid option set is incomplete evidence; do not assume its remaining option is unique. The server makes the final store-name and review decision.
@@ -195,7 +196,7 @@ module Ai
         - Legal entity designators, company suffixes, or jurisdiction-specific corporate forms (e.g. Inc., Ltd., LLC, GmbH, S.A., Pty Ltd and similar) may be valid store_name only when that legal name is the only clearly supported customer-facing name.
         - If a legal entity appears near text that indicates management, operation, ownership, contracting, licensing, facility administration, merchant-of-record, tax-registration, or similar operator/legal-entity context, treat it as operator/legal-entity evidence rather than the primary store_name.
         - Preserve the printed components needed to identify the customer-facing store or facility. When those components form a name according to their relation, preserve that printed combined name as store_name.
-        - Do not shorten a printed brand-plus-branch/location/facility name to brand-only unless the extra text is clearly unrelated, address-only, operator/legal context, or non-store text.
+        - Do not shorten a printed brand-plus-branch/location/facility name to brand-only or location-only unless the omitted component is clearly unrelated, address-only, operator/legal context, or non-store text.
         - A combined brand, branch, facility, or venue name must already exist as one server-provided name option when store.name_options is present. Do not combine options yourself.
         - If a store candidate contains an isolated leading character, symbol, or logo fragment that is not supported by nearby text, prefer the clean customer-facing name that is otherwise supported by OCR. Do not invent or remove real brand words.
         - Determine whether a printed component identifies the store from its role in the original context, not from its wording alone. A supported printed store or branch name may resemble a description or slogan; that resemblance alone is not grounds to discard it or mark its name relation unrelated.
