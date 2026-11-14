@@ -64,8 +64,17 @@ module Ai
             type: "json_schema",
             name: "recify_receipt_analysis_v1",
             strict: true,
-            schema: Ai::ReceiptAnalysisSchema.to_json_schema
+            schema: Ai::ReceiptAnalysisSchema.to_json_schema(name_options: store_name_options)
           }
+        end
+
+        def store_name_options
+          return unless input.is_a?(Hash)
+
+          store = input[:store] || input["store"]
+          return unless store.is_a?(Hash)
+
+          store[:name_options] || store["name_options"]
         end
       end
     end

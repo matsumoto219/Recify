@@ -1107,7 +1107,7 @@ module SystemSettings
         key: "limits.snapshot_store_candidates_max",
         category: "snapshot_limit",
         value_type: "integer",
-        default: 10,
+        default: 20,
         editable: true,
         risk_level: "medium",
         min: 1,

@@ -4,7 +4,8 @@ class Ocr::ResponseParser::StoreNameEvidenceExtractor
   MAX_TEXT_BYTES = 500
   MAX_TEXT_LENGTH = 255
   EDGE_LINES = 8
-  DEFAULT_MAX_CANDIDATES = 10
+  # 先頭・末尾の各8行と、MerchantName 1件・その前後を含む3行を保持する。
+  DEFAULT_MAX_CANDIDATES = (EDGE_LINES * 2) + 4
   NUMERIC_LINE_PATTERN = /\A[\d\s\-\/:().,*＊¥￥$€£%]+\z/.freeze
   CONTROL_PATTERN = /[\u0000-\u001F\u007F]/.freeze
 

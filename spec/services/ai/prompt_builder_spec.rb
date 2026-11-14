@@ -53,6 +53,10 @@ RSpec.describe Ai::PromptBuilder do
     }
   end
 
+  def store_option_values(store)
+    store.fetch(:name_options).fetch(:options).map { |option| option.fetch(:value) }
+  end
+
   describe '.build' do
     it '日時の役割と独立した候補省略状態を既存AI購入入力へ渡す' do
       allow(described_class).to receive(:purchase_candidates_max).and_return(1)
@@ -125,11 +129,11 @@ RSpec.describe Ai::PromptBuilder do
     end
 
     it '店舗名はserverが構成した候補集合だけをIDとともに渡す' do
-      options = Analysis.store_name_options(ocr_result: ocr_result)
+      options = Analysis.store_name_options(ocr_result: ocr_result, version: 'store_name_options_v2')
       result = described_class.build(ocr_result)
 
       expect(result.dig(:store, :name_options)).to include(
-        schema_version: 'store_name_options_v1', checksum: options[:checksum]
+        schema_version: 'store_name_options_v2', checksum: options[:checksum], relations: []
       )
       expect(result.dig(:store, :name_options, :options)).to eq(
         options[:options].map { |option| option.slice(:option_id, :value, :candidate_ids, :line_indexes) }
@@ -154,12 +158,48 @@ RSpec.describe Ai::PromptBuilder do
         }
       )
 
-      store = described_class.build(input).fetch(:store)
+      result = described_class.build(input)
+      store = result.fetch(:store)
 
-      expect(store[:customer_facing_store_candidates]).to include('サンプル公園駐車場')
+      expect(store.keys & %i[branch_name_candidates customer_facing_store_candidates store_candidates]).to be_empty
       expect(store.dig(:name_options, :options)).to include(
         include(value: 'サンプル公園駐車場', candidate_ids: [ 'page_0_line_0', 'page_0_line_1' ])
       )
+      choices = store.dig(:name_options, :options)
+      joined = choices.find { |option| option[:value] == 'サンプル公園駐車場' }
+      separated = choices.find { |option| option[:value] == 'サンプル公園 駐車場' }
+      relation = store.dig(:name_options, :relations).sole
+      expect(relation).to include(
+        candidate_ids: %w[page_0_line_0 page_0_line_1],
+        same_name_option_ids: include(joined[:option_id]),
+        store_location_option_ids: include(separated[:option_id])
+      )
+      expect(relation.keys).to match_array(%i[
+        relation_id candidate_ids same_name_option_ids store_location_option_ids separate_option_ids
+        left_complete_option_ids right_complete_option_ids
+      ])
+      expect(relation[:left_complete_option_ids]).to include(choices.find { |option| option[:value] == lines.first }[:option_id])
+      expect(relation[:right_complete_option_ids]).to include(choices.find { |option| option[:value] == lines.last }[:option_id])
+      expect(result.dig(:tax, :total_amount)).to eq(400)
+      expect(result[:items].map { |item| item.slice(:price, :quantity, :line_total) }).to eq(
+        [ { price: 180, quantity: 1, line_total: 180 }, { price: 220, quantity: 1, line_total: 220 } ]
+      )
+    end
+
+    it '店舗情報がない場合も店舗名や旧hintを補わず空の候補集合を返す' do
+      result = described_class.build({
+        success: true, lines: [], candidates: { country_region: 'JPN', items: [] }
+      })
+      store = result.fetch(:store)
+
+      aggregate_failures do
+        expect(store).not_to have_key(:store_name)
+        expect(store.keys & %i[branch_name_candidates customer_facing_store_candidates store_candidates]).to be_empty
+        expect(store[:name_options]).to include(schema_version: 'store_name_options_v2', options: [], relations: [], invalid: false)
+        expect(store[:operator_candidates]).to eq([])
+        expect(result[:full_context_lines]).to eq([])
+        expect(result[:items]).to eq([])
+      end
     end
 
     it '既存のPromptBuilder出力仕様を維持する' do
@@ -338,8 +378,8 @@ RSpec.describe Ai::PromptBuilder do
       )
 
       aggregate_failures do
-        expect(result.dig(:store, :store_candidates)).to include('サンプルストア')
-        expect(result.dig(:store, :store_candidates)).not_to include('領 収 書', '商品A 100円', '*100', '商品B 200円')
+        expect(store_option_values(result.fetch(:store))).to include('サンプルストア')
+        expect(store_option_values(result.fetch(:store))).not_to include('領 収 書', '商品A 100円', '*100', '商品B 200円')
       end
     end
 
@@ -415,14 +455,13 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:customer_facing_store_candidates]).to include('サンプル公園駐車場')
-        expect(store_payload[:store_candidates].first).to eq('サンプル公園駐車場')
+        expect(store_option_values(store_payload)).to include('サンプル公園駐車場')
         expect(store_payload[:operator_candidates]).to include('株式会社サンプル管理')
-        expect(store_payload[:store_candidates]).not_to include("株式会社\nサンプル管理")
+        expect(store_option_values(store_payload)).not_to include("株式会社\nサンプル管理")
       end
     end
 
-    it '印字されたブランド名と場所名を結合した候補を短いOCR店舗名より優先する' do
+    it '印字されたブランド名と場所名を結合した候補を保持する' do
       branch_ocr_result = ocr_result.deep_merge(
         lines: [
           'サンプル食堂',
@@ -445,9 +484,8 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:store_candidates].first).to eq('サンプル食堂 サンプル通り')
-        expect(store_payload[:customer_facing_store_candidates]).to include('サンプル食堂 サンプル通り')
-        expect(store_payload[:branch_name_candidates]).to include('サンプル通り')
+        expect(store_option_values(store_payload)).to include('サンプル食堂 サンプル通り')
+        expect(store_option_values(store_payload)).to include('サンプル通り')
         expect(store_payload[:operator_candidates]).to include('株式会社サンプル食堂')
         expect(store_payload[:operator_candidates]).not_to include('株式会社サンプル食堂サンプル通り')
       end
@@ -477,15 +515,16 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:store_candidates].first).to eq('SampleMart 中央南三丁目店')
-        expect(store_payload[:customer_facing_store_candidates]).to include('SampleMart 中央南三丁目店')
-        expect(store_payload[:customer_facing_store_candidates]).not_to include('SampleMart中央南三丁目店')
-        expect(store_payload[:branch_name_candidates]).to include('中央南三丁目店')
-        expect(store_payload[:branch_name_candidates] & [ '領', '収', '証', '合 計' ]).to be_empty
+        expect(store_option_values(store_payload)).to include('SampleMart 中央南三丁目店')
+        expect(store_option_values(store_payload)).not_to include('SampleMart中央南三丁目店')
+        expect(store_option_values(store_payload)).to include('中央南三丁目店')
+        composed = store_payload.dig(:name_options, :options).select { |option| option[:candidate_ids].size > 1 }
+        expect(composed).to all(include(value: 'SampleMart 中央南三丁目店'))
+        expect(store_option_values(store_payload)).not_to include('合 計')
       end
     end
 
-    it '店舗名表記ポリシーとして顧客向けブランドと支店・場所名だけを候補化する' do
+    it '顧客向けブランドと支店の候補へ運営主体を結合しない' do
       policy_ocr_result = ocr_result.deep_merge(
         lines: [
           'SampleMart',
@@ -508,15 +547,15 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:store_candidates].first).to eq('SampleMart 中央南三丁目店')
-        expect(store_payload[:customer_facing_store_candidates]).to include('SampleMart 中央南三丁目店')
-        expect(store_payload[:branch_name_candidates]).to include('中央南三丁目店')
+        expect(store_option_values(store_payload)).to include('SampleMart 中央南三丁目店')
+        expect(store_option_values(store_payload)).to include('中央南三丁目店')
         expect(store_payload[:operator_candidates]).to include('Sample Retail LLC')
-        expect(store_payload[:store_candidates]).not_to include('Sample Retail LLC')
+        composed = store_payload.dig(:name_options, :options).select { |option| option[:candidate_ids].size > 1 }
+        expect(composed).to all(include(value: 'SampleMart 中央南三丁目店'))
       end
     end
 
-    it '英字ロゴ行とローカル完結店舗名が重複する場合はローカル店舗名を先に候補化する' do
+    it '英字ロゴ行とローカル完結店舗名の両方を候補に保持する' do
       local_complete_ocr_result = ocr_result.deep_merge(
         lines: [
           'SampleBrand',
@@ -536,13 +575,12 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:store_candidates].first).to eq('サンプルブランド東京中央店')
-        expect(store_payload[:customer_facing_store_candidates].first).to eq('サンプルブランド東京中央店')
-        expect(store_payload[:customer_facing_store_candidates]).to include('SampleBrand')
+        expect(store_option_values(store_payload)).to include('サンプルブランド東京中央店')
+        expect(store_option_values(store_payload)).to include('SampleBrand')
       end
     end
 
-    it 'ブランドのみ・施設名・ブランド+locationをOCR表記どおり候補化し未印字suffixを足さない' do
+    it '未対応国ではブランドや施設のOCR原値を保持して選択候補の生成を拒否する' do
       examples = [
         {
           lines: [ 'SampleMart', 'Receipt' ],
@@ -581,10 +619,10 @@ RSpec.describe Ai::PromptBuilder do
         store_payload = result[:store]
 
         aggregate_failures(example[:expected]) do
-          expect(store_payload[:store_candidates].first).to eq(example[:expected])
-          expect(store_payload[:customer_facing_store_candidates]).to include(example[:expected])
-          expect(store_payload[:store_candidates]).not_to include("#{example[:expected]} Store")
-          expect(store_payload[:store_candidates]).not_to include("#{example[:expected]} Branch")
+          expect(store_payload[:store_name]).to eq(example[:expected])
+          expect(store_payload[:name_options]).to include(invalid: true, options: [], relations: [])
+          expect(result[:full_context_lines].map { |line| line[:text] }).to eq(example[:lines])
+          expect(result.dig(:meta, :country_region)).to eq('USA')
         end
       end
     end
@@ -612,14 +650,11 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:customer_facing_store_candidates]).to include(
+        expect(store_option_values(store_payload)).to include(
           'Sample Life Market',
           'サンプルライフマーケット 恵比寿店'
         )
-        expect(store_payload[:store_candidates]).to include('Sample Life Market')
-        expect(store_payload[:store_candidates] & [ 'プ', 'プ Sample Life Market', 'サンプルプラザビルB1F', '領 収 証', '毎度ありがとうございます。' ]).to be_empty
-        expect(store_payload[:branch_name_candidates]).not_to include('プ')
-        expect(store_payload[:branch_name_candidates]).not_to include('サンプルプラザビルB1F')
+        expect(store_option_values(store_payload) & [ 'プ', 'プ Sample Life Market', 'サンプルプラザビルB1F', '領 収 証', '毎度ありがとうございます。' ]).to be_empty
       end
     end
 
@@ -642,14 +677,12 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:customer_facing_store_candidates]).to include('サンプル中央店')
-        expect(store_payload[:customer_facing_store_candidates]).not_to include('/smp')
-        expect(store_payload[:store_candidates]).not_to include('/smp')
-        expect(store_payload[:branch_name_candidates]).not_to include('/smp')
+        expect(store_option_values(store_payload)).to include('サンプル中央店')
+        expect(store_option_values(store_payload)).not_to include('/smp')
       end
     end
 
-    it '販促文や営業時間案内をstore候補やbranch候補に含めない' do
+    it '販促文や営業時間案内を店舗名候補に含めない' do
       message_line_ocr_result = ocr_result.deep_merge(
         lines: [
           'プロの品質とプロの価格',
@@ -670,12 +703,10 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:customer_facing_store_candidates]).to include('サンプルスーパー 東京中央店')
-        expect(store_payload[:store_candidates]).to include('サンプルスーパー 東京中央店')
-        expect(store_payload[:store_candidates]).not_to include('プロの品質とプロの価格')
-        expect(store_payload[:store_candidates]).not_to include('毎日安い!この価格!')
-        expect(store_payload[:branch_name_candidates]).not_to include('毎日安い!この価格!')
-        expect(store_payload[:branch_name_candidates]).not_to include('営業時間AM9:00~PM9:00')
+        expect(store_option_values(store_payload)).to include('サンプルスーパー 東京中央店')
+        expect(store_option_values(store_payload)).not_to include('プロの品質とプロの価格')
+        expect(store_option_values(store_payload)).not_to include('毎日安い!この価格!')
+        expect(store_option_values(store_payload)).not_to include('営業時間AM9:00~PM9:00')
       end
     end
 
@@ -702,17 +733,14 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:store_candidates].first).to eq('サンプル食堂 サンプル通り')
-        expect(store_payload[:customer_facing_store_candidates]).to include(
-          'サンプル食堂 サンプル通り',
-          'サンプル食堂'
-        )
+        expect(store_option_values(store_payload)).to include('サンプル食堂 サンプル通り')
+        expect(store_option_values(store_payload)).not_to include('サンプル食堂')
         expect(store_payload[:operator_candidates]).to include('株式会社サンプル食堂')
-        expect(store_payload[:store_candidates]).not_to include('サンプル食堂 サンプル通り店')
+        expect(store_option_values(store_payload)).not_to include('サンプル食堂 サンプル通り店')
       end
     end
 
-    it 'operator法人名だけではブランド候補をstore候補の先頭にしない' do
+    it 'operator法人名だけの印字では法人名を保持しブランドだけへ書き換えない' do
       operator_only_ocr_result = ocr_result.deep_merge(
         lines: [
           '株式会社サンプル食堂',
@@ -730,12 +758,12 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:store_candidates].first).to eq('株式会社サンプル食堂')
-        expect(store_payload[:customer_facing_store_candidates]).not_to include('サンプル食堂')
+        expect(store_option_values(store_payload)).to include('株式会社サンプル食堂')
+        expect(store_option_values(store_payload)).not_to include('サンプル食堂')
       end
     end
 
-    it '海外風のoperator法人名からブランドと場所名の候補を生成する' do
+    it '未対応国ではoperator法人名からブランドや場所名を合成しない' do
       overseas_broken_brand_ocr_result = ocr_result.deep_merge(
         lines: [
           'Starbueks',
@@ -756,13 +784,14 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:store_candidates].first).to eq('Sample Coffee Company Downtown')
-        expect(store_payload[:customer_facing_store_candidates]).to include('Sample Coffee Company')
-        expect(store_payload[:store_candidates]).not_to include('Sample Coffee Company Downtown Store')
+        expect(store_payload[:store_name]).to eq('Starbueks Downtown')
+        expect(store_payload[:name_options]).to include(invalid: true, options: [], relations: [])
+        expect(result[:full_context_lines].map { |line| line[:text] }).to eq(overseas_broken_brand_ocr_result[:lines])
+        expect(result.dig(:meta, :country_region)).to eq('USA')
       end
     end
 
-    it '業態説明行を除外し、ブランド名と施設内の場所名を結合した候補を優先する' do
+    it '業態説明行を除外しブランド名と施設内の場所名を結合した候補を保持する' do
       facility_ocr_result = ocr_result.deep_merge(
         lines: [
           'イタリアンワイン&カフェレストラン',
@@ -782,14 +811,13 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:store_candidates].first).to eq('サンプルレストラン サンプルモール渋谷')
-        expect(store_payload[:customer_facing_store_candidates]).to include('サンプルレストラン サンプルモール渋谷')
-        expect(store_payload[:store_candidates]).not_to include('イタリアンワイン&カフェレストランサンプルレストランサンプルモール渋谷')
-        expect(store_payload[:branch_name_candidates]).to include('サンプルモール渋谷')
+        expect(store_option_values(store_payload)).to include('サンプルレストラン サンプルモール渋谷')
+        expect(store_option_values(store_payload)).not_to include('イタリアンワイン&カフェレストランサンプルレストランサンプルモール渋谷')
+        expect(store_option_values(store_payload)).to include('サンプルモール渋谷')
       end
     end
 
-    it '海外風のブランド名と場所名は印字どおり結合し、未印字のsuffixを候補へ足さない' do
+    it '未対応国の別行にある場所名や未印字suffixをOCR原値へ足さない' do
       overseas_ocr_result = ocr_result.deep_merge(
         lines: [
           'Sample Coffee',
@@ -809,9 +837,10 @@ RSpec.describe Ai::PromptBuilder do
       store_payload = result[:store]
 
       aggregate_failures do
-        expect(store_payload[:store_candidates].first).to eq('Sample Coffee Downtown')
-        expect(store_payload[:store_candidates]).not_to include('Sample Coffee Downtown Store')
-        expect(store_payload[:store_candidates]).not_to include('Sample Coffee Downtown Branch')
+        expect(store_payload[:store_name]).to eq('Sample Coffee')
+        expect(store_payload[:name_options]).to include(invalid: true, options: [], relations: [])
+        expect(result[:full_context_lines].map { |line| line[:text] }).to eq(overseas_ocr_result[:lines])
+        expect(result.dig(:meta, :country_region)).to eq('USA')
       end
     end
 

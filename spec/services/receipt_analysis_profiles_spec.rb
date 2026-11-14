@@ -99,6 +99,15 @@ RSpec.describe ReceiptAnalysisProfiles do
       expect('サンプル北町店').not_to match(profile.store_context_noise_pattern)
       expect('サンプル北町店').not_to match(profile.store_message_line_pattern)
     end
+
+    it '店舗の構成行の間で許可する帳票見出しは既知ラベル全体に一致する' do
+      %w[納品書 領収書 領収証 レシート お客様控え 納品書(領収書) 領収書(お客様控え)].each do |text|
+        expect(text).to match(profile.store_document_title_pattern)
+      end
+      [ 'サンプル領収書', '領収書サンプル', 'サンプル(領収書)', '領収書(サンプル)', '納品書(領収書)控え', '納品書((領収書))' ].each do |text|
+        expect(text).not_to match(profile.store_document_title_pattern)
+      end
+    end
   end
 
   describe 'JPN profile analysis fallback amount candidates' do

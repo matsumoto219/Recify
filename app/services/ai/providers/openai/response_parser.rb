@@ -20,22 +20,21 @@ module Ai
           parsed_body = normalized_response_body
           metrics = response_metrics(parsed_body)
           validate_response!(parsed_body)
-          payload = extract_json_payload(parsed_body)
+          payload = normalize_store_name_relations(extract_json_payload(parsed_body))
 
           Ai::ResponseParser.parse(
             payload,
             provider: "openai",
             meta: build_meta(parsed_body, metrics: metrics)
           )
-        rescue JSON::ParserError => e
+        rescue JSON::ParserError
           raise Ai::Errors::InvalidResponseError.new(
             message: "Failed to parse OpenAI JSON payload",
             error_code: "ai_invalid_response",
             provider: "openai",
             **diagnostic_attributes(local_issue: "invalid_json"),
-            metrics: metrics,
-            cause: e
-          )
+            metrics: metrics
+          ), cause: nil
         rescue Ai::Errors::ProviderError => e
           e.metrics.replace(Ai::ProviderMetrics.merge(metrics, e.metrics))
           raise
@@ -56,7 +55,7 @@ module Ai
 
         def normalized_response_body
           return response if response.is_a?(Hash)
-          return JSON.parse(response) if response.is_a?(String)
+          return JSON.parse(response, allow_duplicate_key: false) if response.is_a?(String)
 
           raise Ai::Errors::InvalidResponseError.new(
             message: "OpenAI response must be a Hash or JSON string",
@@ -68,10 +67,10 @@ module Ai
 
         def extract_json_payload(body)
           output_text = direct_output_text(body)
-          return JSON.parse(output_text) if output_text.present?
+          return JSON.parse(output_text, allow_duplicate_key: false) if output_text.present?
 
           output_text = nested_output_text(body)
-          return JSON.parse(output_text) if output_text.present?
+          return JSON.parse(output_text, allow_duplicate_key: false) if output_text.present?
 
           if !provider_response && !response_envelope?(body) && (body["store"].is_a?(Hash) || body[:store].is_a?(Hash))
             return stringify_keys(body.except(Ai::ProviderMetrics::METADATA_KEY))
@@ -83,6 +82,19 @@ module Ai
             provider: "openai",
             **diagnostic_attributes(local_issue: "invalid_response")
           )
+        end
+
+        def normalize_store_name_relations(payload)
+          return payload unless payload.is_a?(Hash) && payload["store"].is_a?(Hash)
+
+          selection = payload["store"]["store_name_selection"]
+          return payload unless selection.is_a?(Hash) && selection["relations"].is_a?(Hash)
+
+          relations = selection["relations"]
+          selection["relations"] = if relations.size <= Ai::ReceiptAnalysisSchema::MAX_STORE_NAME_IDS
+            relations.map { |id, decision| { "relation_id" => id, "decision" => decision } }
+          end
+          payload
         end
 
         def validate_response!(body)

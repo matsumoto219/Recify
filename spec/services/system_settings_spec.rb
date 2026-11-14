@@ -536,7 +536,7 @@ RSpec.describe SystemSettings do
         expect(described_class.limit_for('limits.snapshot_ai_input_filtered_content_max_bytes')).to eq(8.kilobytes)
         expect(described_class.limit_for('limits.snapshot_string_max_bytes')).to eq(500)
         expect(described_class.limit_for('limits.snapshot_ai_input_items_max')).to eq(50)
-        expect(described_class.limit_for('limits.snapshot_store_candidates_max')).to eq(10)
+        expect(described_class.limit_for('limits.snapshot_store_candidates_max')).to eq(20)
         expect(described_class.limit_for('limits.snapshot_purchase_candidates_max')).to eq(5)
         expect(described_class.limit_for('limits.snapshot_payment_candidates_max')).to eq(10)
         expect(described_class.limit_for('limits.snapshot_tax_details_max')).to eq(10)
@@ -1905,7 +1905,7 @@ RSpec.describe SystemSettings do
           risk_level: 'medium',
           min: 1,
           max: 100,
-          default: 10
+          default: 20
         )
         expect(described_class.definition_for('limits.snapshot_review_reasons_max')).to have_attributes(
           category: 'snapshot_limit',

@@ -452,6 +452,196 @@ RSpec.describe Ai::Providers::Openai::ResponseParser do
           end
         }
       end
+
+      context '店舗名の関係回答をIDごとの必須項目として受け取る場合' do
+        let(:option_id) { 'store_option_' + 'a' * 32 }
+        let(:relation_id) { 'store_relation_' + '1' * 32 }
+        let(:selection) do
+          {
+            'relations' => { relation_id => 'store_location' },
+            'decision' => 'select', 'option_id' => option_id
+          }
+        end
+
+        before do
+          payload['store']['store_name_selection'] = selection
+          payload['payment']['payment_method'] = 'cash'
+        end
+
+        it '5関係を既存の内部配列へ戻し、別のAI補助結果を変更しない' do
+          decisions = %w[same_name store_location left_complete right_complete unrelated]
+          relations = decisions.each_with_index.to_h do |decision, index|
+            [ "store_relation_#{index.to_s(16).rjust(32, '0')}", decision ]
+          end
+          selection['relations'] = relations
+          original_response = response.deep_dup
+
+          result = described_class.parse(response, provider_response: true)
+
+          aggregate_failures do
+            expect(result[:success]).to be(true)
+            expect(result.dig(:receipt_attributes, 'payment_method')).to eq('cash')
+            expect(result.dig(:meta, :store_name_selection)).to eq(
+              decision: 'select', option_id: option_id,
+              relations: relations.map { |id, decision| { relation_id: id, decision: decision } }
+            )
+            expect(response).to eq(original_response)
+          end
+        end
+
+        %w[ambiguous reject].each do |decision|
+          it "#{decision}は選択IDを作らず関係のambiguousを保持する" do
+            selection.merge!('decision' => decision, 'option_id' => nil, 'relations' => { relation_id => 'ambiguous' })
+
+            result = described_class.parse(response, provider_response: true)
+
+            expect(result.dig(:meta, :store_name_selection)).to eq(
+              decision: decision, relations: [ { relation_id: relation_id, decision: 'ambiguous' } ]
+            )
+          end
+        end
+
+        it 'nullの任意選択を関係回答へ補完しない' do
+          payload['store']['store_name_selection'] = nil
+
+          result = described_class.parse(response, provider_response: true)
+
+          expect(result[:meta]).not_to have_key(:store_name_selection)
+        end
+
+        it '関係0件を空配列へ変換する' do
+          selection['relations'] = {}
+
+          result = described_class.parse(response, provider_response: true)
+
+          expect(result.dig(:meta, :store_name_selection)).to eq(decision: 'select', option_id: option_id, relations: [])
+        end
+
+        it '上限100件を欠落なく変換する' do
+          selection['relations'] = 100.times.to_h do |index|
+            [ "store_relation_#{index.to_s(16).rjust(32, '0')}", 'unrelated' ]
+          end
+
+          result = described_class.parse(response, provider_response: true)
+
+          expect(result.dig(:meta, :store_name_selection, :relations)).to eq(
+            selection['relations'].map { |id, decision| { relation_id: id, decision: decision } }
+          )
+        end
+
+        it '上限超過は部分的に切り詰めず選択だけを拒否する' do
+          selection['relations'] = 101.times.to_h do |index|
+            [ "store_relation_#{index.to_s(16).rjust(32, '0')}", 'unrelated' ]
+          end
+
+          result = described_class.parse(response, provider_response: true)
+
+          aggregate_failures do
+            expect(result[:success]).to be(true)
+            expect(result.dig(:meta, :store_name_selection)).to eq(decision: 'invalid')
+            expect(result.dig(:receipt_attributes, 'payment_method')).to eq('cash')
+          end
+        end
+
+        [ 'unknown_id', "store_relation_#{'1' * 32}\n", 'store_relation_' + 'A' * 32 ].each do |id|
+          it "不正な関係ID #{id.inspect} は他の補助結果へ波及させず拒否する" do
+            selection['relations'] = { id => 'store_location' }
+
+            result = described_class.parse(response, provider_response: true)
+
+            aggregate_failures do
+              expect(result[:success]).to be(true)
+              expect(result.dig(:meta, :store_name_selection)).to eq(decision: 'invalid')
+              expect(result.dig(:receipt_attributes, 'payment_method')).to eq('cash')
+            end
+          end
+        end
+
+        [ 'unknown', nil, false, 1, [], { 'decision' => 'store_location' } ].each do |decision|
+          it "未知・不正な関係判定 #{decision.inspect} は選択だけを拒否する" do
+            selection['relations'] = { relation_id => decision }
+
+            result = described_class.parse(response, provider_response: true)
+
+            aggregate_failures do
+              expect(result[:success]).to be(true)
+              expect(result.dig(:meta, :store_name_selection)).to eq(decision: 'invalid')
+              expect(result.dig(:receipt_attributes, 'payment_method')).to eq('cash')
+            end
+          end
+        end
+
+        %w[store_name_options_v1 store_name_options_v2].each do |version|
+          it "正規化済み#{version}の内部配列を再解釈しない" do
+            selection['options_schema_version'] = version
+            selection['relations'] = version.end_with?('v1') ? [] : [ { 'relation_id' => relation_id, 'decision' => 'store_location' } ]
+            original_payload = payload.deep_dup
+
+            result = described_class.parse(payload)
+
+            aggregate_failures do
+              expect(result.dig(:meta, :store_name_selection)).to eq(selection.deep_symbolize_keys)
+              expect(payload).to eq(original_payload)
+            end
+          end
+        end
+
+        [ 'store_location', 'unrelated' ].each do |decision|
+          it "同一IDの#{decision}重複を上書きで受理せず不正JSONとして拒否する" do
+            text = payload.to_json.sub(
+              %Q("#{relation_id}":"store_location"),
+              %Q("#{relation_id}":"store_location","#{relation_id}":"#{decision}")
+            )
+            response['output'].first['content'].first['text'] = text
+
+            expect do
+              described_class.parse(response, provider_response: true)
+            end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+              aggregate_failures do
+                expect(error.error_code).to eq('ai_invalid_response')
+                expect(error.metrics).to include(safe_metrics)
+                expect(error.metrics.dig(:diagnostic, :local_issue)).to eq('invalid_json')
+                expect(error.cause).to be_nil
+                expect(error.full_message).not_to include(relation_id, text)
+                expect(error).not_to be_retryable
+                expect(error).not_to be_fallbackable
+              end
+            }
+          end
+        end
+
+        it '入れ子の未知キーも重複を検知し、キーや値を例外へ残さない' do
+          response['output_text'] = payload.to_json.sub(
+            '"payment_method":"cash"',
+            '"payment_method":"cash","private_nested_key":"private value","private_nested_key":"private value"'
+          )
+
+          expect do
+            described_class.parse(response, provider_response: true)
+          end.to raise_error(Ai::Errors::InvalidResponseError) { |error|
+            aggregate_failures do
+              expect(error.cause).to be_nil
+              expect(error.full_message).not_to include('private_nested_key', 'private value')
+              expect(error.metrics.to_s).not_to include('private_nested_key', 'private value')
+            end
+          }
+        end
+
+        it 'JSON escapeで同じIDになる重複も拒否する' do
+          response['output_text'] = payload.to_json.sub(
+            %Q("#{relation_id}":"store_location"),
+            %Q("#{relation_id}":"store_location","\\u0073#{relation_id.delete_prefix('s')}":"store_location")
+          )
+
+          expect { described_class.parse(response, provider_response: true) }.to raise_error(Ai::Errors::InvalidResponseError)
+        end
+
+        it '外側JSON文字列の重複もJSON parserで拒否する' do
+          text = response.to_json.sub('"status":"completed"', '"status":"completed","status":"completed"')
+
+          expect { described_class.parse(text, provider_response: true) }.to raise_error(Ai::Errors::InvalidResponseError)
+        end
+      end
     end
 
     context 'response 自体が store を持つHashの場合' do

@@ -39,6 +39,8 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
   OFFLINE_CASES = [
     {
       fixture: 'single_tax_receipt',
+      expected_store_name: 'ステーショナリーマート 新宿南口店',
+      store_name_relations: { %w[page_0_line_0 page_0_line_1] => 'store_location' },
       payment_method: 'cash',
       status: 'completed',
       subtotal: 700,
@@ -64,6 +66,7 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
     {
       fixture: 'multiple_tax_receipt',
       expected_store_name: 'デイリーフレッシュマート みどり店',
+      store_name_relations: { %w[page_0_line_0 page_0_line_1] => 'right_complete' },
       payment_method: 'cash',
       status: 'completed',
       subtotal: 1_598,
@@ -95,6 +98,7 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
     {
       fixture: 'discount_heavy_receipt',
       expected_store_name: 'マルマルスーパー 渋 谷 店',
+      store_name_relations: { %w[page_0_line_0 page_0_line_1] => 'store_location' },
       payment_method: 'credit_card',
       status: 'completed',
       subtotal: 529,
@@ -149,6 +153,8 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
     },
     {
       fixture: 'item_owned_bag_quantity_receipt',
+      expected_store_name: 'サンプル検証ストア',
+      store_name_candidate_ids: [ 'page_0_line_0' ],
       generated_case: 'g112_item_owned_bag_quantity',
       payment_method: 'e_money',
       status: 'completed',
@@ -254,7 +260,7 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
     )
     raw_response['authorization'] = SECRET_SENTINEL
     stub_ocr_client(raw_response)
-    stub_ai_client(ai_result_for(case_config), expected_store_name: case_config[:expected_store_name])
+    stub_ai_client(ai_result_for(case_config), case_config: case_config)
 
     receipt = create(:receipt, :processing, :with_image)
     run = Receipts::Processing.start(receipt: receipt, source: 'upload').run
@@ -290,19 +296,27 @@ RSpec.describe 'Receipt processing offline pipeline replay' do
     end
   end
 
-  def stub_ai_client(ai_result, expected_store_name: nil)
+  def stub_ai_client(ai_result, case_config:)
     allow(Ai::Client).to receive(:new) do |**_options|
       client = instance_double(Ai::Client)
       allow(client).to receive(:call) do |input, before_provider_call: nil|
         before_provider_call&.call
         result = ai_result.deep_dup
-        if expected_store_name
-          expected = Analysis.normalize_compact_store_name_candidate(expected_store_name).to_s.downcase
-          matching_options = input.fetch(:store).fetch(:name_options).fetch(:options).select do |option|
-            Analysis.normalize_compact_store_name_candidate(option[:value]).to_s.downcase == expected
+        if case_config[:expected_store_name]
+          name_options = input.fetch(:store).fetch(:name_options)
+          matching_options = name_options.fetch(:options).select do |option|
+            option[:value] == case_config[:expected_store_name] &&
+              (!case_config[:store_name_candidate_ids] || option[:candidate_ids] == case_config[:store_name_candidate_ids])
           end
           expect(matching_options.size).to eq(1)
-          result[:meta][:store_name_selection] = { decision: 'select', option_id: matching_options.sole.fetch(:option_id) }
+          expected_relations = case_config.fetch(:store_name_relations, {})
+          expect(name_options.fetch(:relations).pluck(:candidate_ids)).to match_array(expected_relations.keys)
+          result[:meta][:store_name_selection] = {
+            decision: 'select', option_id: matching_options.sole.fetch(:option_id),
+            relations: name_options.fetch(:relations).map do |relation|
+              { relation_id: relation.fetch(:relation_id), decision: expected_relations.fetch(relation.fetch(:candidate_ids)) }
+            end
+          }
         end
         result
       end

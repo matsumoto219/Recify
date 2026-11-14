@@ -28,6 +28,29 @@ RSpec.describe Ai::Providers::Openai::RequestBuilder do
       end
     end
 
+    it 'promptへ提示する同じ候補IDと関係IDで応答schemaを制限する' do
+      option_id = "store_option_#{'a' * 32}"
+      relation_id = "store_relation_#{'b' * 32}"
+      input[:store] = {
+        name_options: {
+          schema_version: 'store_name_options_v2',
+          options: [ { option_id: option_id, value: '候補の店舗名' } ],
+          relations: [ { relation_id: relation_id } ]
+        }
+      }
+      request = described_class.build(input.deep_stringify_keys)
+      selection = request.dig(:text, :format, :schema, 'properties', 'store', 'properties', 'store_name_selection')
+
+      aggregate_failures do
+        expect(selection.dig('properties', 'option_id', 'enum')).to eq([ option_id, nil ])
+        expect(selection.dig('properties', 'relations', 'required')).to eq([ relation_id ])
+        expect(selection.dig('properties', 'relations', 'properties').keys).to eq([ relation_id ])
+        expect(selection.dig('properties', 'relations', 'additionalProperties')).to be(false)
+        expect(request.dig(:input, 1, :content, 0, :text)).to include(option_id, relation_id, '候補の店舗名')
+        expect(request.dig(:text, :format, :schema).to_json).not_to include('候補の店舗名')
+      end
+    end
+
     it '商品名AI補完OFFでは固定した通常の推論強度を送る' do
       config = ExternalServices.runtime_config_snapshot.ai.with(model: 'custom-model', reasoning_effort: 'max')
       request = described_class.build(input, runtime_config: config)

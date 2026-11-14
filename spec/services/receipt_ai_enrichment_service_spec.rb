@@ -1,4 +1,5 @@
 require 'rails_helper'
+require 'webmock/rspec'
 
 RSpec.describe ReceiptAiEnrichmentService do
   let(:client) { instance_double(Ai::Client) }
@@ -85,6 +86,61 @@ RSpec.describe ReceiptAiEnrichmentService do
         expect(result.dig(:meta, :store_name_selection)).to eq(decision: 'invalid', options_checksum: 'a' * 64)
         expect(result[:receipt_items_attributes]).to eq(successful_ai_result[:receipt_items_attributes])
         expect(ExternalServices).not_to have_received(:mark_failure!)
+      end
+
+      it 'OpenAIの5関係objectを内部配列へ正規化し同じ候補集合へbindする' do
+        option_id = name_options[:options].sole[:option_id]
+        relation_ids = Array.new(5) { |index| "store_relation_#{format('%032x', index)}" }
+        name_options.merge!(
+          schema_version: 'store_name_options_v2',
+          relations: relation_ids.each_with_index.map do |id, index|
+            {
+              relation_id: id, candidate_ids: [ 'line_0', "line_#{index + 1}" ],
+              same_name_option_ids: [], store_location_option_ids: [], separate_option_ids: [ option_id ],
+              left_complete_option_ids: [], right_complete_option_ids: []
+            }
+          end
+        )
+        relations = relation_ids.index_with { 'unrelated' }
+        payload = {
+          is_receipt: true, document_type: 'receipt', rejection_reason: nil,
+          store: {
+            store_name: 'サンプルコンビニ',
+            store_name_selection: { relations: relations, decision: 'select', option_id: option_id }
+          },
+          purchase: {}, payment: { payment_method: 'cash' }, items: [], receipt_adjustments: [],
+          needs_review: false, review_reasons: []
+        }
+        response = { status: 'completed', model: 'gpt-test', output_text: payload.to_json }
+        runtime_config = ExternalServices.runtime_config_snapshot.ai.with(max_retries: 0)
+        request_body = nil
+        allow(Ai::Client).to receive(:new).and_call_original
+        allow(Ai::ProviderSelector).to receive(:primary).and_return('openai')
+        allow(Ai::ProviderSelector).to receive(:fallback).and_return(nil)
+        allow(ENV).to receive(:fetch).and_call_original
+        allow(ENV).to receive(:fetch).with('OPENAI_API_KEY').and_return('test-openai-key')
+        stub_request(:any, /./).to_raise(StandardError.new('unexpected HTTP request'))
+        request = stub_request(:post, 'https://api.openai.com/v1/responses')
+          .with(headers: { 'Authorization' => 'Bearer test-openai-key' }) do |http_request|
+            request_body = JSON.parse(http_request.body)
+            true
+          end.to_return(status: 200, body: response.to_json, headers: { 'Content-Type' => 'application/json' })
+
+        result = described_class.call(valid_ocr_result, runtime_config: runtime_config)
+
+        aggregate_failures do
+          expect(request).to have_been_requested.once
+          expect(request_body.dig('text', 'format', 'schema', 'properties', 'store', 'properties',
+            'store_name_selection', 'properties', 'relations', 'required')).to eq(relation_ids)
+          expect(result[:success]).to be(true)
+          expect(result.dig(:meta, :store_name_selection)).to eq(
+            decision: 'select', option_id: option_id, options_checksum: 'a' * 64,
+            options_schema_version: 'store_name_options_v2',
+            relations: relation_ids.map { |id| { relation_id: id, decision: 'unrelated' } }
+          )
+          expect(result.dig(:receipt_attributes, 'payment_method')).to eq('cash')
+          expect(ExternalServices).not_to have_received(:mark_failure!)
+        end
       end
     end
 

@@ -48,7 +48,7 @@ module Analysis
     end
 
     def options(ocr_result:, version: OPTIONS_SCHEMA_VERSION)
-      return unavailable_options unless profile && version == OPTIONS_SCHEMA_VERSION
+      return unavailable_options unless profile && [ OPTIONS_SCHEMA_VERSION, StoreNameRelations::SCHEMA_VERSION ].include?(version)
 
       source = ocr_result.is_a?(Hash) ? ocr_result.deep_symbolize_keys : {}
       candidates = source[:candidates].is_a?(Hash) ? source[:candidates] : {}
@@ -62,23 +62,38 @@ module Analysis
         name = item[:raw_text].presence || item[:description].presence
         name if safe_store_text?(name)
       end
-      entries = evidence ? evidence[:candidates] : legacy_entries(candidates, lines)
+      relation_options = version == StoreNameRelations::SCHEMA_VERSION
+      entries = evidence ? evidence[:candidates] : legacy_entries(candidates, lines, include_source_paths: relation_options)
       entries = [] if evidence && evidence[:invalid] || unsupported_country
       available = entries.reject do |entry|
         entry[:span_state] == "invalid" || entry[:line_index].to_i >= SOURCE_LINES_MAX
       end
       return unavailable_options if duplicate_line_position?(available)
 
-      option_list = if evidence && entries.any? { |entry| entry.key?(:page_index) && entry[:span_state] != "missing" }
-        page_options(available, preserved: preserved, item_names: item_names)
+      option_list = if evidence && entries.any? { |entry| entry.key?(:page_index) && (relation_options || entry[:span_state] != "missing") }
+        page_options(
+          available, preserved: preserved, item_names: item_names,
+          include_display_components: relation_options, context_lines: lines
+        )
       else
         composition_lines = evidence ? evidence_lines(available) : lines
-        available.flat_map do |entry|
-          [
-            option_for(entry, entries: available, lines: composition_lines, preserved: preserved, item_names: item_names),
-            atomic_option(entry, lines: composition_lines, preserved: preserved, item_names: item_names)
-          ].compact
+        if relation_options
+          legacy_relation_options(available, lines: composition_lines, preserved: preserved, item_names: item_names)
+        else
+          available.flat_map do |entry|
+            [
+              option_for(entry, entries: available, lines: composition_lines, preserved: preserved, item_names: item_names),
+              atomic_option(entry, lines: composition_lines, preserved: preserved, item_names: item_names)
+            ].compact
+          end
         end
+      end
+      if version == StoreNameRelations::SCHEMA_VERSION
+        return StoreNameRelations.call(
+          options: option_list, evidence: available, profile: profile,
+          truncated: evidence&.dig(:truncated) == true,
+          invalid: evidence&.dig(:invalid) == true || unsupported_country
+        )
       end
       option_list = option_list.uniq { |option| compact_store_name(option[:value]) }
       truncated = evidence&.dig(:truncated) == true || option_list.length > OPTIONS_MAX
@@ -106,7 +121,12 @@ module Analysis
       version = saved_selection.is_a?(Hash) ? saved_selection.fetch(:options_schema_version, OPTIONS_SCHEMA_VERSION) : OPTIONS_SCHEMA_VERSION
       option_set = options(ocr_result: source, version: version)
       selection = StoreNameSelection.call(meta[:store_name_selection], options: option_set) if meta.key?(:store_name_selection)
-      preferred = preferred_ocr_option(option_set, candidates)
+      fallback_options = if version == StoreNameRelations::SCHEMA_VERSION && selection&.dig(:decision) != "select"
+        options(ocr_result: source)
+      else
+        option_set
+      end
+      preferred = preferred_ocr_option(fallback_options, candidates, lines: source[:lines])
       selected = if selection.nil? && compact_store_name(ai.dig(:receipt_attributes, :store_name)) == compact_store_name(store_name_value(candidates))
         preferred
       else
@@ -163,16 +183,58 @@ module Analysis
       lines
     end
 
-    def legacy_entries(candidates, lines)
+    def legacy_entries(candidates, lines, include_source_paths: false)
       entries = []
       name = store_name_value(candidates)
       if safe_store_text?(name)
         entries << { candidate_id: "legacy_store", text: name, source: "legacy", span_state: "missing" }
       end
       lines.first(8).each_with_index do |line, index|
-        entries << { candidate_id: "line_#{index}", text: line, source: "line", line_index: index, span_state: "missing" }
+        entry = { candidate_id: "line_#{index}", text: line, source: "line", line_index: index, span_state: "missing" }
+        entry[:source_path] = "lines[#{index}]" if include_source_paths
+        entries << entry
       end
       entries
+    end
+
+    def legacy_relation_options(entries, lines:, preserved:, item_names:)
+      fragments = legacy_document_fragments(entries)
+      available = entries - fragments
+      fragment_indexes = fragments.pluck(:line_index)
+      context = lines.each_with_index.map { |line, index| fragment_indexes.include?(index) ? "" : line }
+      options = available.flat_map do |entry|
+        [
+          option_for(entry, entries: available, lines: context, preserved: preserved, item_names: item_names),
+          atomic_option(entry, lines: context, preserved: preserved, item_names: item_names)
+        ].compact
+      end
+      header = available.select { |entry| legacy_line?(entry) && entry[:line_index] < 8 }
+        .sort_by { |entry| entry[:line_index] }
+      header.each_cons(2) do |block|
+        next unless block.first[:line_index] + 1 == block.last[:line_index]
+
+        value = page_block_name(block, merchant: nil, item_names: item_names)
+        options << build_option(value, entry: block.first, supports: block, kind: "composed") if value
+      end
+      options
+    end
+
+    def legacy_document_fragments(entries)
+      letters = entries.select { |entry| legacy_line?(entry) && entry[:text].length == 1 }
+        .sort_by { |entry| entry[:line_index] }
+      letters.slice_when { |left, right| left[:line_index] + 1 != right[:line_index] }.flat_map do |block|
+        next [] unless block.size.between?(2, 8)
+        next [] unless block.pluck(:text).join.match?(profile.store_document_title_pattern)
+
+        block
+      end
+    end
+
+    def legacy_line?(entry)
+      index = entry[:line_index]
+      entry[:source] == "line" && entry[:span_state] == "missing" && index.is_a?(Integer) && index.between?(0, SOURCE_LINES_MAX - 1) &&
+        !entry.key?(:page_index) && !entry.key?(:provider_line_index) && !entry.key?(:span) && !entry.key?(:string_index_type) &&
+        entry[:candidate_id] == "line_#{index}" && entry[:source_path] == "lines[#{index}]"
     end
 
     def atomic_option(entry, lines:, preserved:, item_names:)
@@ -183,7 +245,7 @@ module Analysis
       build_option(value, entry: entry, supports: [ entry ], kind: "atomic")
     end
 
-    def page_options(entries, preserved:, item_names:)
+    def page_options(entries, preserved:, item_names:, include_display_components: false, context_lines: [])
       page_lines = entries.group_by { |entry| entry[:page_index] }.transform_values { |group| evidence_lines(group) }
       options = entries.filter_map do |entry|
         atomic_option(entry, lines: page_lines.fetch(entry[:page_index]), preserved: preserved, item_names: item_names)
@@ -207,18 +269,76 @@ module Analysis
           next unless value
 
           supports = merchant ? [ merchant, *block ] : block
-          options << build_option(value, entry: block.first, supports: supports, kind: "composed")
+          display_components = page_block_display_components(block, merchant:) if include_display_components
+          options << build_option(value, entry: block.first, supports: supports, kind: "composed", display_components:)
         end
       end
-      options.concat(page_logo_options(lines, item_names: item_names))
+      options.concat(page_logo_options(lines, item_names: item_names, include_display_components:))
+      if include_display_components
+        operator_options = page_operator_brand_options(lines, merchants, item_names:, context_lines:)
+        support_ids = operator_options.flat_map do |option|
+          option[:candidate_ids] - option[:display_components].pluck(:candidate_id)
+        end
+        options.reject! do |option|
+          Array(option[:display_components]).any? { |component| support_ids.include?(component[:candidate_id]) }
+        end
+        options.concat(operator_options)
+      end
       options
+    end
+
+    def page_operator_brand_options(lines, merchants, item_names:, context_lines:)
+      lines.group_by { |entry| entry[:page_index] }.filter_map do |_page, entries|
+        header = entries.select { |entry| entry[:provider_line_index] < 8 }
+        pairs = header.each_cons(2).filter_map do |operator, name|
+          next unless classifier.legal_entity_name?(operator[:text]) && exact_line_block?([ operator, name ])
+          next unless customer_facing_store_line?(name[:text]) && allowed_store_name?(name[:text], item_names:)
+
+          merchant = merchants.find { |entry| merchant_covers_lines?(entry, [ operator, name ]) }
+          [ operator, name, merchant ] if merchant
+        end
+        next unless pairs.one?
+
+        operator, name, merchant = pairs.first
+        brands = (header - [ operator, name ]).select do |entry|
+          customer_facing_store_line?(entry[:text]) && allowed_store_name?(entry[:text], item_names:)
+        end
+        next unless brands.one?
+
+        brand = brands.first
+        next unless ordered_line_evidence?([ brand, operator, name ])
+        next unless operator_brand_context?(brand, operator, name, context_lines)
+
+        displayed = [ brand, name ].map do |entry|
+          { candidate_id: entry[:candidate_id], text: classifier.normalize_name(entry[:text]) }
+        end
+        value = displayed.map { |component| component[:text] }.join(" ")
+        next unless allowed_store_name?(value, item_names:)
+
+        build_option(
+          value, entry: brand, supports: [ merchant, brand, operator, name ], kind: "composed",
+          display_components: displayed
+        )
+      end
+    end
+
+    def operator_brand_context?(brand, operator, name, lines)
+      return false unless [ brand, operator, name ].all? do |entry|
+        compact_store_name(lines[entry[:line_index]]) == compact_store_name(entry[:text])
+      end
+      gap = operator[:line_index] - brand[:line_index]
+      return false unless gap.positive? && gap == operator[:provider_line_index] - brand[:provider_line_index]
+
+      lines[(brand[:line_index] + 1)...operator[:line_index]].all? do |text|
+        text.gsub(/[[:space:]]+/, "").match?(profile.store_document_title_pattern)
+      end
     end
 
     def duplicate_symbol_line?(brand, text)
       text.match?(/\A\p{S}\z/u) && brand.include?(text)
     end
 
-    def page_logo_options(lines, item_names:)
+    def page_logo_options(lines, item_names:, include_display_components: false)
       lines.group_by { |entry| entry[:page_index] }.filter_map do |_page, entries|
         header = entries.select { |entry| entry[:provider_line_index] < 8 }
         header_lines = Array.new(8, "")
@@ -235,7 +355,13 @@ module Analysis
         next unless unambiguous_logo_components?(header, header_lines, components, entries)
 
         logo = header.find { |entry| entry[:provider_line_index] == components[:logo_index] }
-        build_option(components[:value], entry: logo, supports: supports, kind: "composed")
+        display_components = if include_display_components
+          components[:line_indexes].zip(components[:display_parts]).map do |index, text|
+            entry = header.find { |candidate| candidate[:provider_line_index] == index }
+            { candidate_id: entry[:candidate_id], text: text }
+          end
+        end
+        build_option(components[:value], entry: logo, supports: supports, kind: "composed", display_components:)
       end
     end
 
@@ -320,6 +446,22 @@ module Analysis
       value if allowed_store_name?(value, item_names: item_names)
     end
 
+    def page_block_display_components(block, merchant:)
+      displayed = if block.size == 3 &&
+          (duplicate_symbol_line?(block.first[:text], block.second[:text]) || merchant_covers_lines?(merchant, block.first(1)))
+        [ block.first, block.last ]
+      else
+        block
+      end
+      components = displayed.map do |entry|
+        { candidate_id: entry[:candidate_id], text: classifier.normalize_name(entry[:text]) }
+      end
+      if block.size == 2 && legal_brand_with_branch(block.first[:text], block.map { |entry| entry[:text] })
+        components.first[:text] = classifier.brand_candidate_from_legal_entity(block.first[:text])
+      end
+      components
+    end
+
     def option_for(entry, entries:, lines:, preserved:, item_names:)
       original = entry[:text]
       item_names = [] if merchant_header_evidence?(entry, lines)
@@ -336,7 +478,7 @@ module Analysis
       build_option(value, entry: entry, supports: supports, kind: kind)
     end
 
-    def build_option(value, entry:, supports:, kind:)
+    def build_option(value, entry:, supports:, kind:, display_components: nil)
       candidate_ids = supports.map { |candidate| candidate[:candidate_id] }.uniq.sort
       {
         option_id: "store_option_#{Digest::SHA256.hexdigest([ kind, entry[:candidate_id], *candidate_ids ].join(':'))[0, 32]}",
@@ -344,7 +486,8 @@ module Analysis
         candidate_ids: candidate_ids,
         line_indexes: supports.filter_map { |candidate| candidate[:line_index] }.uniq.sort,
         source: entry[:source],
-        confidence: kind == "atomic" ? entry[:confidence] : nil
+        confidence: kind == "atomic" ? entry[:confidence] : nil,
+        display_components: display_components
       }.compact
     end
 
@@ -410,8 +553,15 @@ module Analysis
         compact_store_name(ai_name) == compact_store_name(store_name_value(candidates))
     end
 
-    def preferred_ocr_option(option_set, candidates)
-      printed = complete_printed_options(option_set, store_name_value(candidates))
+    def preferred_ocr_option(option_set, candidates, lines:)
+      name = store_name_value(candidates)
+      return unless name.nil? || name.is_a?(String) && name.valid_encoding? &&
+        name.bytesize <= StoreNameEvidence::MAX_TEXT_BYTES && (name.encoding == Encoding::UTF_8 || name.ascii_only?)
+      if classifier.normalize_name(name).blank?
+        return preferred_merchant_header_option(option_set, candidates, lines: lines)
+      end
+
+      printed = complete_printed_options(option_set, name)
       return printed.first if printed.one?
 
       preferred = option_set[:options].find do |option|
@@ -419,6 +569,23 @@ module Analysis
           option[:candidate_ids].include?("legacy_store")
       end
       preferred || option_set[:options].first
+    end
+
+    def preferred_merchant_header_option(option_set, candidates, lines:)
+      evidence = StoreNameEvidence.call(candidates[:store_name_evidence])
+      return unless evidence && !evidence[:invalid]
+
+      header_lines = bounded_lines(lines)
+      merchants = evidence[:candidates].select { |entry| merchant_header_evidence?(entry, header_lines) }
+      return unless merchants.one?
+
+      merchant = merchants.first
+      options = option_set[:options].select do |option|
+        option[:source] == "merchant_name" && option[:confidence] == merchant[:confidence] &&
+          option[:candidate_ids].include?(merchant[:candidate_id]) &&
+          compact_store_name(option[:value]) == compact_store_name(merchant[:text])
+      end
+      options.first if options.one?
     end
 
     def complete_printed_options(option_set, store_name)
@@ -439,6 +606,9 @@ module Analysis
 
     def resolved_state(selected, option_set, selection)
       return "uncertain" if option_set[:invalid]
+      if option_set[:schema_version] == StoreNameRelations::SCHEMA_VERSION
+        return "uncertain" if option_set[:truncated] || selection&.dig(:decision) != "select"
+      end
       return "uncertain" if selection && %w[ambiguous reject].include?(selection[:decision])
       return "uncertain" if classifier.legal_entity_name?(selected[:value])
       return "uncertain" if selection&.dig(:decision) != "select" && conflicting_options?(selected, option_set)
@@ -589,6 +759,7 @@ module Analysis
       domain_index = Array(domain_lines).find_index { |line| matching_logo_domain?(logo_line, line) }
       {
         value: "#{brand} #{descriptor} #{branch}",
+        display_parts: [ brand, descriptor, branch ],
         branch: branch,
         logo_index: logo_index,
         line_indexes: [ logo_index, descriptor_index, branch_index ],

@@ -557,6 +557,8 @@ module ReceiptAnalysisProfiles
       tel|電話|fax|住所|所在地|合計|小計|消費税|税率|税額|税込|税抜|現計|支払|お支払|決済|点数|
       total|subtotal|tax|payment|cash|change
     /ix.freeze
+    STORE_DOCUMENT_LABEL_PATTERN = /納品書|領収書|領収証|レシート|お客様控え|クレジットカード売上票/.freeze
+    STORE_DOCUMENT_TITLE_PATTERN = /\A(?:#{STORE_DOCUMENT_LABEL_PATTERN})(?:\((?:#{STORE_DOCUMENT_LABEL_PATTERN})\))?\z/.freeze
     STORE_ADDRESS_LIKE_PATTERN = /
       [都道府県].*\d|[市区町村郡].*\d|〒|\d+[-丁目番地号]|
       \b(?:street|st\.|road|rd\.|avenue|ave\.|blvd\.|drive|dr\.|suite|floor)\b.*\d
@@ -1494,6 +1496,10 @@ module ReceiptAnalysisProfiles
 
       def store_heading_stop_pattern
         STORE_HEADING_STOP_PATTERN
+      end
+
+      def store_document_title_pattern
+        STORE_DOCUMENT_TITLE_PATTERN
       end
 
       def store_address_like_pattern

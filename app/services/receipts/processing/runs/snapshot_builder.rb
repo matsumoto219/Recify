@@ -28,7 +28,7 @@ module Receipts::Processing::Runs
     FILTERED_CONTENT_MAX_BYTES = 8 * 1024
     STRING_MAX_BYTES = 500
     MAX_ITEMS = 50
-    MAX_STORE_CANDIDATES = 10
+    MAX_STORE_CANDIDATES = 20
     MAX_PURCHASED_AT_CANDIDATES = 5
     PURCHASED_AT_RESOLUTION_STATES = %w[confirmed date_only conflicted uncertain missing].freeze
     PURCHASED_AT_PRECISIONS = %w[datetime date_only time_only].freeze

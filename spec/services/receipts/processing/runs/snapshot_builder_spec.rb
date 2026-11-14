@@ -378,6 +378,17 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
       end
     end
 
+    it 'roundtrips the complete twenty-entry source window under the default setting' do
+      store_evidence[:candidates] = Array.new(20) do |index|
+        { candidate_id: "line_#{index}", text: "Sample Place #{index}", source: 'line',
+          source_path: "lines[#{index}]", line_index: index, span_state: 'missing' }
+      end
+      snapshot = described_class.ocr_result_snapshot(candidates: { store_name_evidence: store_evidence })
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+      expect(restored.dig(:candidates, 'store_name_evidence')).to eq(store_evidence.deep_stringify_keys)
+    end
+
     it 'marks snapshot candidate clipping instead of treating its subset as complete' do
       allow(described_class).to receive(:snapshot_store_candidates_max).and_return(1)
       snapshot = described_class.ocr_result_snapshot(candidates: { store_name_evidence: store_evidence })
