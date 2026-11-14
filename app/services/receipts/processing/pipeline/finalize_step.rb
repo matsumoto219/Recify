@@ -35,6 +35,9 @@ class Receipts::Processing::Pipeline
       item_quantity_uncertain
       item_tax_rate_uncertain
     ].freeze
+    ITEM_DESCRIPTION_SOURCE_REFS_MAX = 16
+    ITEM_DESCRIPTION_SOURCE_ITEMS_MAX = 100
+    ITEM_DESCRIPTION_SOURCE_LINES_MAX = 150
     ITEM_TAX_RATE_RESOLUTION_BLOCKING_REASONS = %w[
       item_total_mismatch
       tax_amount_mismatch
@@ -1350,7 +1353,59 @@ class Receipts::Processing::Pipeline
         return false unless line_truncated == false
       end
 
-      Array(ocr_result[:lines]).none? { |line| line.to_s.match?(pattern) }
+      lines = Array(ocr_result[:lines])
+      description_ranges = field == :store_address ? item_description_source_ranges(candidates, lines) : {}
+      lines.each_with_index.none? do |line, index|
+        text = line.to_s.dup
+        # 商品説明だけを同じ文字数の空白へ置換し、同じ行の実住所や文字境界を維持する。
+        description_ranges.fetch(index, []).each do |start, finish|
+          text[start...finish] = " " * (finish - start)
+        end
+        text.match?(pattern)
+      end
+    end
+
+    def item_description_source_ranges(candidates, lines)
+      items = candidates[:items]
+      return {} unless items.is_a?(Array) && items.size <= ITEM_DESCRIPTION_SOURCE_ITEMS_MAX
+      return {} if lines.size > ITEM_DESCRIPTION_SOURCE_LINES_MAX
+
+      ranges = Hash.new { |hash, key| hash[key] = [] }
+      items.each do |item|
+        return {} unless item.is_a?(Hash)
+
+        normalized = normalized_hash(item)
+        next unless normalized.key?(:description_source_refs)
+
+        refs = normalized[:description_source_refs]
+        return {} unless refs.is_a?(Array) && refs.size <= ITEM_DESCRIPTION_SOURCE_REFS_MAX
+        raw_text = normalized[:raw_text]
+        return {} unless raw_text.is_a?(String) && raw_text.valid_encoding?
+
+        fragments = []
+        refs.each do |ref|
+          return {} unless ref.is_a?(Hash) && ref.keys.map(&:to_s).sort == %w[character_length character_offset line_index]
+
+          source = normalized_hash(ref)
+          index, offset, length = source.values_at(:line_index, :character_offset, :character_length)
+          return {} unless [ index, offset, length ].all? { |value| value.is_a?(Integer) }
+          return {} unless index.between?(0, lines.size - 1) && lines[index].is_a?(String)
+          return {} unless lines[index].valid_encoding?
+          return {} unless offset.between?(0, lines[index].length) && length.between?(1, lines[index].length - offset)
+
+          fragments << lines[index][offset, length]
+          ranges[index] << [ offset, offset + length ]
+        end
+        normalized_name = raw_text.unicode_normalize(:nfkc).downcase.gsub(/[[:space:]]+/, " ").strip
+        return {} unless fragments.join(" ") == normalized_name
+      end
+      ranges.each_value do |entries|
+        entries.sort!
+        return {} if entries.each_cons(2).any? { |left, right| left[1] > right[0] }
+      end
+      ranges
+    rescue ArgumentError, EncodingError
+      {}
     end
 
     def remove_resolved_store_address_uncertain_review_reason(review_reasons, params, amount_result, ocr_result)

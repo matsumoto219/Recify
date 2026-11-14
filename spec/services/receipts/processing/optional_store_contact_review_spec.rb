@@ -1,21 +1,51 @@
 require 'rails_helper'
 
 RSpec.describe 'Optional store contact review' do
-  it '任意の連絡先だけが根拠なく欠損していても、日時や支払の要確認と混同しない' do
-    receipt = create(:receipt, :processing, :with_image)
-    run = Receipts::Processing.start(receipt: receipt, source: 'upload').run
-    Receipts::Processing.record_ocr_snapshot(
-      run,
-      {
-        success: true,
-        raw_text: "検証店\n検証品A 300\n合計 300",
-        lines: [ '検証店', '検証品A 300', '合計 300' ],
-        candidates: {
-          store_name: '検証店', total_amount: 300, country_region: 'JPN',
-          items: [ { raw_text: '検証品A', price: 300, quantity: 1, line_total: 300, confidence: 0.95 } ]
-        }
+  def parsed_product_locality
+    lines = [ '検証店', '001 検証市指定券 300', '合計 300' ]
+    offset = 0
+    provider_lines = lines.map do |line|
+      entry = { 'content' => line, 'spans' => [ { 'offset' => offset, 'length' => line.length } ] }
+      offset += line.length + 1
+      entry
+    end
+    region = [ { 'pageNumber' => 1 } ]
+    item = provider_lines[1].deep_dup.merge(
+      'boundingRegions' => region,
+      'valueObject' => {
+        'Description' => {
+          'valueString' => '検証市指定券', 'content' => '検証市指定券',
+          'spans' => [ { 'offset' => 8, 'length' => 6 } ], 'boundingRegions' => region
+        },
+        'TotalPrice' => { 'valueCurrency' => { 'amount' => 300 } }
       }
     )
+    response = {
+      'analyzeResult' => {
+        'modelId' => 'prebuilt-receipt',
+        'apiVersion' => '2024-11-30',
+        'stringIndexType' => 'textElements',
+        'content' => lines.join("\n"),
+        'pages' => [ { 'pageNumber' => 1, 'lines' => provider_lines } ],
+        'documents' => [
+          {
+            'fields' => {
+              'MerchantName' => { 'valueString' => '検証店' },
+              'Total' => { 'valueCurrency' => { 'amount' => 300 } },
+              'CountryRegion' => { 'valueString' => 'JPN' },
+              'Items' => { 'valueArray' => [ item ] }
+            }
+          }
+        ]
+      }
+    }
+    Ocr::ResponseParser.new(response: response, provider: 'azure').call
+  end
+
+  it '商品内の地名で任意の住所欠損を残さず、日時や支払の要確認は維持する' do
+    receipt = create(:receipt, :processing, :with_image)
+    run = Receipts::Processing.start(receipt: receipt, source: 'upload').run
+    Receipts::Processing.record_ocr_snapshot(run, parsed_product_locality)
     Receipts::Processing.record_ai_normalized_result(
       run,
       {
@@ -136,6 +166,125 @@ RSpec.describe 'Optional store contact review' do
         ocr_result[:candidates][:store_address_components] = { city: '検証市' }
 
         expect(resolve_missing_reason).to eq([ reason ])
+      end
+
+      context '商品説明に地名がある場合' do
+        let(:description_ref) { { line_index: 1, character_offset: 0, character_length: 6 } }
+
+        before do
+          ocr_result[:lines][1] = '検証市指定券 300'
+          ocr_result[:candidates][:items] = [ { raw_text: '検証市指定券', description_source_refs: [ description_ref ] } ]
+        end
+
+        it '正確な商品説明の範囲に属する地名だけなら住所欠損を解除する' do
+          expect(resolve_missing_reason).to be_empty
+        end
+
+        it '商品コードを含む住所patternの一致でもDescriptionの地名だけを除外する' do
+          ocr_result[:lines][1] = '001 検証市指定券 300'
+          description_ref[:character_offset] = 4
+
+          expect(resolve_missing_reason).to be_empty
+        end
+
+        it '同じ行でも商品説明の範囲外に実住所があれば欠損を維持する' do
+          ocr_result[:lines][1] += " #{printed_value}"
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '別行の住所の根拠を商品説明と一緒に除外しない' do
+          ocr_result[:lines] << printed_value
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '構造化住所の根拠を商品説明の地名で無効にしない' do
+          ocr_result[:candidates][:store_address_components] = { city: '検証市' }
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '所有範囲が保存されていない旧OCRでは地名を推測で除外しない' do
+          ocr_result[:candidates][:items].first.delete(:description_source_refs)
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '範囲内でも商品説明と一致しない参照では欠損を維持する' do
+          description_ref[:character_offset] = 1
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        [
+          { line_index: -1 },
+          { line_index: 99 },
+          { character_offset: -1 },
+          { character_length: 0 },
+          { character_length: 1000 },
+          { character_length: '6' },
+          { extra: true }
+        ].each do |invalid_attributes|
+          it "不正な所有範囲#{invalid_attributes.inspect}で欠損を解除しない" do
+            description_ref.merge!(invalid_attributes)
+
+            expect(resolve_missing_reason).to eq([ reason ])
+          end
+        end
+
+        it '別商品と重なる所有範囲を根拠にしない' do
+          ocr_result[:candidates][:items] << { raw_text: '別の検証品', description_source_refs: [ description_ref.dup ] }
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '所有範囲が上限を超えた場合は一部だけを採用しない' do
+          ocr_result[:lines][1] += 'x' * 20
+          refs = ocr_result[:candidates][:items].first[:description_source_refs]
+          refs.concat(16.times.map { |index| { line_index: 1, character_offset: index + 6, character_length: 1 } })
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '商品数が所有根拠の上限を超える場合は除外しない' do
+          ocr_result[:candidates][:items].concat(Array.new(100) { { raw_text: '検証品' } })
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '行数が所有根拠の上限を超える場合は除外しない' do
+          ocr_result[:lines].concat(Array.new(148, '検証行'))
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '商品説明の除外にも差替えprofileの住所判定を使う' do
+          replacement = Struct.new(:signal_address_pattern, :signal_phone_pattern).new(/contact-address/, /contact-phone/)
+          allow(ReceiptAnalysisProfiles).to receive(:default).and_return(replacement)
+          description = 'CONTACT-ADDRESS用商品'
+          ocr_result[:lines][1] = "#{description.downcase} 300"
+          ocr_result[:candidates][:items].first[:raw_text] = description
+          description_ref[:character_length] = description.length
+
+          expect(resolve_missing_reason).to be_empty
+          ocr_result[:lines] << 'contact-address'
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '省略されたOCRでは商品説明以外の住所がないと判断しない' do
+          ocr_result[:truncated] = { lines: true }
+
+          expect(resolve_missing_reason).to eq([ reason ])
+        end
+
+        it '商品説明の所有範囲を電話番号の判定へ流用しない' do
+          ocr_result[:lines][1] = '03-0000-0000'
+          description_ref[:character_length] = 11
+
+          expect(step.send(:remove_resolved_store_phone_number_missing_review_reason, [ 'store_phone_number_missing' ], params, ocr_result))
+            .to eq([ 'store_phone_number_missing' ])
+        end
       end
     end
 

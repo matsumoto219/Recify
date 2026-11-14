@@ -41,6 +41,8 @@ module Receipts::Processing::Runs
     MAX_REVIEW_REASONS = 20
     MAX_OCR_ITEM_DISCOUNT_SOURCE_REFS = 16
     OCR_ITEM_DISCOUNT_SOURCE_REF_KEYS = %w[source_line_index source_span_start source_span_end amount].freeze
+    MAX_OCR_ITEM_DESCRIPTION_SOURCE_REFS = 16
+    OCR_ITEM_DESCRIPTION_SOURCE_REF_KEYS = %w[line_index character_offset character_length].freeze
     MAX_REFERENCE_PRICING_CANDIDATES = 100
     MAX_ITEM_CALCULATION_MODE_CANDIDATES = Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_SETS
     ITEM_CALCULATION_MODE_ITEM_IDENTITY_MAX_BYTES = Receipts::Processing::Contracts::ItemCalculationModeProposalSet::MAX_ID_BYTES
@@ -2664,13 +2666,15 @@ module Receipts::Processing::Runs
     end
 
     def limited_ocr_items(items, lines:, source_lines:, profile:)
-      Array(items).first(ocr_items_snapshot_limit).filter_map do |item|
+      description_refs_allowed = Array(items).size <= MAX_REFERENCE_PRICING_CANDIDATES && lines.size <= MAX_OCR_LINES
+      snapshots = Array(items).first(ocr_items_snapshot_limit).filter_map do |item|
         item = normalized_hash(item)
         next if item.blank?
         quantity_unit_status = safe_quantity_unit_status(item[:quantity_unit_status])
 
         {
           raw_text: safe_string(item[:raw_text]),
+          description_source_refs: description_refs_allowed ? description_source_refs_snapshot(item, lines:, source_lines:) : nil,
           price: safe_value(item[:price]),
           quantity: safe_value(item[:quantity]),
           quantity_unit_code: safe_string(item[:quantity_unit_code]),
@@ -2696,6 +2700,66 @@ module Receipts::Processing::Runs
           confidence: safe_value(item[:confidence])
         }.compact
       end
+      remove_overlapping_description_refs(snapshots)
+    end
+
+    def description_source_refs_snapshot(item, lines:, source_lines:)
+      value = item[:description_source_refs]
+      return unless value.is_a?(Array) && value.size.between?(1, MAX_OCR_ITEM_DESCRIPTION_SOURCE_REFS)
+      raw_text = item[:raw_text]
+      return unless raw_text.is_a?(String) && safe_utf8_string?(raw_text.delete("\n")) && safe_string(raw_text) == raw_text
+      return unless source_lines.first(lines.size) == lines
+
+      fragments = []
+      references = value.map do |entry|
+        return unless entry.is_a?(Hash) && entry.keys.map(&:to_s).sort == OCR_ITEM_DESCRIPTION_SOURCE_REF_KEYS.sort
+
+        reference = normalized_hash(entry)
+        return unless reference.values.all? { |component| component.is_a?(Integer) }
+
+        index = reference[:line_index]
+        offset = reference[:character_offset]
+        length = reference[:character_length]
+        return unless index.between?(0, lines.size - 1)
+
+        line = lines[index]
+        return unless safe_utf8_string?(line) && line == source_lines[index]
+        return unless offset.between?(0, line.length - 1) && length.between?(1, line.length - offset)
+
+        fragments << line[offset, length]
+        { line_index: index, character_offset: offset, character_length: length }
+      end
+      ordered = references.sort_by { |reference| [ reference[:line_index], reference[:character_offset] ] }
+      return unless ordered == references
+      return if references.each_cons(2).any? do |left, right|
+        left[:line_index] == right[:line_index] && left[:character_offset] + left[:character_length] > right[:character_offset]
+      end
+      normalized_name = raw_text.unicode_normalize(:nfkc).downcase.gsub(/[[:space:]]+/, " ").strip
+      return unless fragments.join(" ") == normalized_name
+
+      references
+    rescue ArgumentError, EncodingError
+      nil
+    end
+
+    def remove_overlapping_description_refs(items)
+      ranges = items.each_with_index.flat_map do |item, index|
+        Array(item[:description_source_refs]).map do |reference|
+          [ reference[:line_index], reference[:character_offset], reference[:character_offset] + reference[:character_length], index ]
+        end
+      end.sort
+      conflicts = Set.new
+      previous = nil
+      ranges.each do |range|
+        if previous && previous[0] == range[0] && previous[2] > range[1]
+          conflicts.merge([ previous[3], range[3] ])
+          previous = range if range[2] > previous[2]
+        else
+          previous = range
+        end
+      end
+      conflicts.each { |index| items[index].delete(:description_source_refs) }
+      items
     end
 
     def discount_source_refs_snapshot(value, lines:, source_lines:, profile:)

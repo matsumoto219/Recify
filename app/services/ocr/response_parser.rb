@@ -2859,6 +2859,7 @@ class Ocr::ResponseParser
     end
 
     discount_details_by_index = extract_discount_details_by_item_index(items, lines)
+    description_refs_by_index = structured_item_description_refs(items, lines)
     fragment_replacements = item_calculation_mode_fragments.to_h do |entry|
       [ entry.fetch(:structured_item_indexes).min, entry.fetch(:item) ]
     end
@@ -2973,9 +2974,11 @@ class Ocr::ResponseParser
           field_path: "documents[0].fields.Items[#{index}].#{amount_field_name}"
         )
       end
+      description_refs = description_refs_by_index[index] if raw_text == value_object.dig("Description", "content")
 
       {
         raw_text: raw_text,
+        **(description_refs.present? ? { description_source_refs: description_refs } : {}),
         price: count_source ? count_source[:price_amount].to_i : value_object.dig("Price", "valueCurrency", "amount") || value_object.dig("Price", "valueNumber"),
         quantity: purchased_quantity&.dig(:amount) || count_source&.dig(:quantity)&.to_i || value_object.dig("Quantity", "valueNumber"),
         quantity_unit_code: quantity_unit_code,
@@ -3288,6 +3291,82 @@ class Ocr::ResponseParser
     end
 
     ranges
+  end
+
+  def structured_item_description_refs(items, lines)
+    return {} if lines.size > MAX_REFERENCE_PRICING_TOTAL_LINES
+
+    groups = structured_discount_line_groups(items, lines)
+    return {} if groups.empty?
+
+    analyze_result = extract_analyze_result(@parsed_response)
+    pages = analyze_result["pages"]
+    page_numbers = pages.map { |page| page["pageNumber"] }
+    return {} unless page_numbers.all? { |number| number.is_a?(Integer) && number.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES) }
+    return {} unless page_numbers.uniq.size == page_numbers.size
+
+    line_pages = pages.each_with_object({}) do |page, mapping|
+      page["lines"].each { |line| mapping[line.object_id] = page["pageNumber"] }
+    end
+    content = analyze_result["content"]
+    mapper = Ocr::ResponseParser::AzureStringIndexMapper.build(index_type: analyze_result["stringIndexType"])
+    groups.each_with_object({}) do |(item_index, entries), result|
+      item = items[item_index]
+      description = item.dig("valueObject", "Description")
+      page_number = description_source_page(item)
+      next unless page_number && page_number == description_source_page(description)
+
+      parents = discount_parent_spans(item, content:, mapper:)
+      spans = structured_discount_description_spans(item, parent_spans: parents, content:, mapper:)
+      next if spans.empty?
+
+      references = spans.map do |start, finish|
+        matches = entries.select do |entry|
+          line_span = entry[:provider_line]["spans"].sole
+          line_start = line_span["offset"]
+          start >= line_start && finish <= line_start + line_span["length"]
+        end
+        next unless matches.one?
+
+        entry = matches.sole
+        next unless line_pages[entry[:provider_line].object_id] == page_number
+
+        normalized_description_source_ref(entry, start:, finish:, content:, mapper:)
+      end
+      result[item_index] = references if references.all? && references.size <= MAX_REFERENCE_PRICING_AUTHORITY_SPANS
+    end
+  rescue NoMethodError, TypeError, ArgumentError, EncodingError
+    {}
+  end
+
+  def description_source_page(field)
+    regions = field.is_a?(Hash) ? field["boundingRegions"] : nil
+    return unless regions.is_a?(Array) && regions.one? && regions.sole.is_a?(Hash)
+
+    number = regions.sole["pageNumber"]
+    number if number.is_a?(Integer) && number.between?(1, MAX_REFERENCE_PRICING_TOTAL_PAGES)
+  end
+
+  def normalized_description_source_ref(entry, start:, finish:, content:, mapper:)
+    line = entry[:provider_line]
+    line_span = line["spans"].sole
+    line_start = line_span["offset"]
+    line_end = line_start + line_span["length"]
+    fragments = [ [ line_start, start ], [ start, finish ], [ finish, line_end ] ].map do |left, right|
+      mapper.slice(content, offset: left, length: right - left)&.unicode_normalize(:nfkc)&.downcase&.gsub(/[[:space:]]+/, " ")
+    end
+    return unless fragments.all?
+
+    # 正規化がcomponent境界を跨いで変化する場合は、位置を推測せずproofだけを破棄する。
+    normalized_line = line["content"].unicode_normalize(:nfkc).downcase.gsub(/[[:space:]]+/, " ")
+    return unless fragments.join == normalized_line && normalized_line.strip == entry[:text]
+    return if fragments[1].blank? || fragments[1] != fragments[1].strip
+
+    offset = fragments[0].length - (normalized_line.length - normalized_line.lstrip.length)
+    length = fragments[1].length
+    return if offset.negative? || entry[:text][offset, length] != fragments[1]
+
+    { line_index: entry[:line_index], character_offset: offset, character_length: length }
   end
 
   def discount_source_refs(line, line_index)
