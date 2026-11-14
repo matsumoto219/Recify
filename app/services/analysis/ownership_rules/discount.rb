@@ -9,7 +9,7 @@ module Analysis
           return item_decision(:item_owned) if context.item_owned?
           return cashless_decision if context.cashless_reward_text?
           return purchase_decision("coupon") if context.coupon_text?
-          return purchase_decision("receipt_discount") if context.receipt_discount_text?
+          return purchase_decision("receipt_discount") if context.receipt_discount_text? || context.printed_discount_block?
 
           review_decision(context)
         end
@@ -20,6 +20,7 @@ module Analysis
           %w[coupon receipt_discount].include?(context.kind) ||
             context.coupon_text? ||
             context.receipt_discount_text? ||
+            context.printed_discount_block? ||
             context.cashless_reward_text? ||
             context.post_settlement_promo? ||
             context.item_discount_owned?

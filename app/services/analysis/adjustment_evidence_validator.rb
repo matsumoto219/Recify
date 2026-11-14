@@ -80,6 +80,8 @@ module Analysis
     end
 
     def amount_evidence_supported?
+      return true if PrintedDiscountBlock.call(proposal: proposal, lines: lines, items: items, profile: profile)
+
       evidence_entries.any? do |entry|
         Array(entry[:tokens]).any? do |token|
           next false unless token[:amount].to_i == amount

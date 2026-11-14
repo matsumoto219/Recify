@@ -712,7 +712,7 @@ module Analysis
             needs_review: needs_review,
             review_reasons: review_reasons.uniq,
             position_index: normalized[:position_index] || index + 1
-          }.compact
+          }.compact.merge(normalized.slice(:source_span_start, :source_span_end))
         end
       end
 

@@ -630,6 +630,9 @@ module ReceiptAnalysisProfiles
     ANALYSIS_ITEM_DISCOUNT_LABEL_PATTERN = /割引|discount|off/i.freeze
     ANALYSIS_RECEIPT_LEVEL_ADJUSTMENT_LINE_PATTERN = /クーポン|ポイント|coupon|point/i.freeze
     ANALYSIS_PREVIOUS_SUBTOTAL_CONTEXT_PATTERN = /小計|合計|総合計|total|subtotal/i.freeze
+    ANALYSIS_PRINTED_DISCOUNT_LABEL_PATTERN = /\A[\p{L} \t]{0,24}(?:半額|値引き?|割引)(?:計|合計)?\z/u.freeze
+    ANALYSIS_PRINTED_DISCOUNT_QUANTITY_PATTERN = /\A(?:数量[ \t]*[:：]?[ \t]*)?[1-9][0-9]{0,3}(?:[ \t]*(?:枚|個|点|本|袋|箱))?\z/.freeze
+    ANALYSIS_PRINTED_DISCOUNT_SUBTOTAL_LABEL_PATTERN = /\A(?:商品小計|小計|subtotal)[ \t]*[:：]?[ \t]*\z/i.freeze
     ANALYSIS_GENERIC_RETURN_REFUND_LABEL_PATTERN = /\A(?:返品|返金|返却|refund|return)\z/i.freeze
     ANALYSIS_RETURN_REFUND_KIND_PATTERN = /返品|返金|返却|refund|return/i.freeze
     ANALYSIS_COUPON_KIND_PATTERN = /クーポン|coupon/i.freeze
@@ -1657,6 +1660,18 @@ module ReceiptAnalysisProfiles
 
       def analysis_previous_subtotal_context_pattern
         ANALYSIS_PREVIOUS_SUBTOTAL_CONTEXT_PATTERN
+      end
+
+      def analysis_printed_discount_label_pattern
+        ANALYSIS_PRINTED_DISCOUNT_LABEL_PATTERN
+      end
+
+      def analysis_printed_discount_quantity_pattern
+        ANALYSIS_PRINTED_DISCOUNT_QUANTITY_PATTERN
+      end
+
+      def analysis_printed_discount_subtotal_label_pattern
+        ANALYSIS_PRINTED_DISCOUNT_SUBTOTAL_LABEL_PATTERN
       end
 
       def analysis_generic_return_refund_label_pattern

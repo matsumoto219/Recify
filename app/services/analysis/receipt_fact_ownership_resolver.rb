@@ -135,6 +135,11 @@ module Analysis
       source_indexes = source_line_indexes(attributes)
       return [] if source_indexes.empty?
 
+      if origin == :adjustment
+        block_entry = PrintedDiscountBlock.call(proposal: attributes, lines: evidence_lines, items: items, profile: profile)
+        return [ build_source_ref(attributes, block_entry[:line], block_entry[:token]) ] if block_entry
+      end
+
       token_entries = token_entries_near(source_indexes, amount_value)
       token_entry = if attributes[:source_span_start].present? || attributes[:source_span_end].present?
         explicit_span_token_entry(attributes, token_entries)

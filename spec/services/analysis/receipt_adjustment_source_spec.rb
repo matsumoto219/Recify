@@ -8,6 +8,114 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
     }
   end
 
+  it '小計間の割引・数量・負額は種別や参照行が変わっても同じ印字済み割引を保持する' do
+    lines = [ '検証品A 600円', '小計', '600円', '半額', '2', '-120円', '小計', '480円', '合計', '480円' ]
+    ocr = adjustment_ocr_result(lines: lines, items: [ { raw_text: '検証品A', line_total: 600 } ])
+
+    %w[receipt_discount other].each do |kind|
+      [ 3, 4, 5 ].each do |source_index|
+        result = described_class.call(
+          ocr_result: ocr,
+          ai_result: {
+            receipt_adjustments_attributes: [
+              {
+                kind: kind,
+                label: '半額',
+                amount: 120,
+                sign: 'discount',
+                source_text: lines[source_index],
+                source_line_index: source_index,
+                needs_review: true,
+                review_reasons: [ 'adjustment_uncertain' ]
+              }
+            ]
+          }
+        )
+
+        expect(result[:receipt_adjustments_attributes]).to contain_exactly(
+          include(kind: 'receipt_discount', amount: 120, sign: 'discount', needs_review: false, review_reasons: [])
+        )
+        expect(result[:receipt_items_attributes]).to contain_exactly(include(line_total: 600))
+      end
+    end
+  end
+
+  it '割引の所有権確定後も別の確認理由と印字額を保持する' do
+    lines = [ '小計 600円', '半額', '2点', '-120円', '合計 480円' ]
+    result = described_class.call(
+      ocr_result: adjustment_ocr_result(lines: lines),
+      ai_result: {
+        receipt_adjustments_attributes: [
+          {
+            kind: 'other',
+            amount: 120,
+            sign: 'discount',
+            source_line_index: 1,
+            needs_review: true,
+            review_reasons: [ 'adjustment_uncertain', 'adjustment_tax_rate_missing' ]
+          }
+        ]
+      }
+    )
+
+    expect(result[:receipt_adjustments_attributes]).to contain_exactly(
+      include(kind: 'receipt_discount', amount: 120, needs_review: true, review_reasons: [ 'adjustment_tax_rate_missing' ])
+    )
+  end
+
+  it 'blockを持たない既存other調整のreview経路は変更しない' do
+    result = described_class.call(
+      ocr_result: adjustment_ocr_result(lines: [ '調整額 -120円' ]),
+      ai_result: {
+        receipt_adjustments_attributes: [
+          { kind: 'other', amount: 120, sign: 'discount', source_line_index: 0 }
+        ]
+      }
+    )
+
+    expect(result[:receipt_adjustments_attributes]).to contain_exactly(
+      include(kind: 'other', amount: 120, needs_review: true, review_reasons: [ 'adjustment_uncertain' ])
+    )
+  end
+
+  it '明示spanの不正やnilを最終所有権解決まで維持し保存用attributesへ出さない' do
+    lines = [ '小計 600円', '半額', '2', '-120円', '合計 480円' ]
+    ownership = nil
+    allow(Analysis::ReceiptFactOwnershipResolver).to receive(:call).and_wrap_original do |method, **arguments|
+      ownership = method.call(**arguments)
+    end
+
+    [ { source_span_start: nil }, { source_span_start: '0', source_span_end: 5 }, { source_span_start: 0, source_span_end: 4 } ].each do |span|
+      result = Analysis.build_receipt_params(
+        ocr_result: adjustment_ocr_result(lines: lines),
+        ai_result: {
+          receipt_adjustments_attributes: [
+            { kind: 'other', label: '半額', amount: 120, sign: 'discount', source_line_index: 3 }.merge(span)
+          ]
+        }
+      )
+
+      expect(ownership.facts.sole.fact_type).to eq(:unknown_adjustment)
+      expect(result[:receipt_adjustments_attributes]).to contain_exactly(include(kind: 'other', amount: 120, needs_review: true))
+      expect(result[:receipt_adjustments_attributes].sole.keys).not_to include(:source_span_start, :source_span_end)
+    end
+  end
+
+  it 'source textに加えた別ownerの主張から2行先の金額を新たに借用しない' do
+    [ 'クーポン 半額', 'キャッシュレス還元 半額' ].each do |source|
+      result = Analysis.build_receipt_params(
+        ocr_result: adjustment_ocr_result(lines: [ '小計 600円', '半額', '2', '-120円', '合計 480円' ]),
+        ai_result: {
+          receipt_adjustments_attributes: [
+            { kind: 'other', amount: 120, sign: 'discount', source_line_index: 1, source_text: source }
+          ]
+        }
+      )
+
+      expect(result[:receipt_adjustments_attributes]).to be_empty
+    end
+  end
+
   it '同じ物理行のAIとOCR割引は英字大小文字や空白の差で二重保存しない' do
     ocr = adjustment_ocr_result(
       lines: [ '検証品A 360円', 'Sample Stock Discount -180', '合計 180円' ],

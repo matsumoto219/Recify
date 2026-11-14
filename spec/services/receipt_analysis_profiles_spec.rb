@@ -128,6 +128,26 @@ RSpec.describe ReceiptAnalysisProfiles do
     end
   end
 
+  describe 'JPN profile printed discount blocks' do
+    let(:profile) { described_class.fetch('JPN') }
+
+    it '割引・数量・小計ラベルを完全行で限定する' do
+      [ '半額', '会員 AB半額', '商品割引', '半額値引合計' ].each do |text|
+        expect(text).to match(profile.analysis_printed_discount_label_pattern)
+      end
+      [ '半額120円', '50%割引', '半額の商品', "#{'例' * 25}半額" ].each do |text|
+        expect(text).not_to match(profile.analysis_printed_discount_label_pattern)
+      end
+      expect('数量 2点').to match(profile.analysis_printed_discount_quantity_pattern)
+      expect('2').to match(profile.analysis_printed_discount_quantity_pattern)
+      [ '2円', '0', '10000', '2.5点', '2点 3点' ].each do |text|
+        expect(text).not_to match(profile.analysis_printed_discount_quantity_pattern)
+      end
+      expect('商品小計').to match(profile.analysis_printed_discount_subtotal_label_pattern)
+      expect('商品小計 600円').not_to match(profile.analysis_printed_discount_subtotal_label_pattern)
+    end
+  end
+
   describe 'JPN profile payment metadata labels' do
     it '取引識別子の見出しとiD支払を区別する地域語彙を所有する' do
       profile = described_class.fetch('JPN')
