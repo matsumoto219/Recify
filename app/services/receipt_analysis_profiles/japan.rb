@@ -261,6 +261,15 @@ module ReceiptAnalysisProfiles
     /ix.freeze
 
     OCR_PAYMENT_METHOD_PATTERN = /現金|cash|e[\s-]*gift|イーギフト|電子ギフト|ストアクレジット|store\s*credit|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|mastercard|master|jcb|amex|american\s*express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|楽天edy|edy|\bid\b|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|\bnfc\b|mobilepayment|applepay|googlepay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|rakuten\s*pay|d払い|dpayment|au\s*pay|aupay|メルペイ|line\s*pay|linepay|alipay|wechatpay|デビット|debit/i.freeze
+    OCR_PAYMENT_METHOD_LABEL_PATTERN = /\A(?:売上|支払方法|お支払方法|お支払い方法|決済方法|payment\s+method)\z/i.freeze
+    OCR_PAYMENT_SCHEDULE_VALUE_PATTERN = /\A一括\z/.freeze
+    OCR_PAYMENT_METHOD_VALUE_PATTERNS = {
+      "cash" => /\A(?:現金|現計|cash)\z/i,
+      "credit_card" => /\A(?:クレジット(?:カード)?|credit(?:\s*card)?)\z/i,
+      "debit_card" => /\A(?:デビット(?:カード)?|debit(?:\s*card)?|j[-\s]?debit|visa\s*debit)\z/i,
+      "e_money" => /\A(?:電子マネー|交通系\s*(?:ic|電子マネー)|suica|pasmo|icoca|waon|nanaco|(?:楽天)?edy|i\s*d|qui(?:c|ck)\s*pay)\z/i,
+      "qr_payment" => /\A(?:qr(?:コード)?(?:決済)?|paypay|楽天(?:ペイ|pay)|rakuten\s*pay|d払い|d\s*payment|au\s*pay|メルペイ|line\s*pay|alipay|wechat\s*pay)\z/i
+    }.freeze
     OCR_POINT_KEYWORDS_PATTERN = /ポイント|point|会員|member|楽天ポイント|楽天ポイン|waonpoint|tポイント|dポイント|ponta/i.freeze
     OCR_PAYMENT_KEYWORDS_PATTERN = /現金|cash|クレジット|credit|visa|mastercard|master|jcb|amex|americanexpress|diners|discover|unionpay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|edy|id|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|nfc|mobilepayment|applepay|googlepay|qr(?:コード)?|paypay|楽天ペイ|rakutenpay|d払い|dpayment|aupay|メルペイ|linepay|alipay|wechatpay|デビット|debit|カード|支払|決済/i.freeze
     OCR_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|weaccept/i.freeze
@@ -779,6 +788,18 @@ module ReceiptAnalysisProfiles
 
       def ocr_payment_method_pattern
         OCR_PAYMENT_METHOD_PATTERN
+      end
+
+      def ocr_payment_method_label_pattern
+        OCR_PAYMENT_METHOD_LABEL_PATTERN
+      end
+
+      def ocr_payment_method_value_patterns
+        OCR_PAYMENT_METHOD_VALUE_PATTERNS
+      end
+
+      def ocr_payment_schedule_value_pattern
+        OCR_PAYMENT_SCHEDULE_VALUE_PATTERN
       end
 
       def ocr_point_keywords_pattern

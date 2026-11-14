@@ -158,6 +158,30 @@ RSpec.describe ReceiptAnalysisProfiles do
   end
 
   describe 'JPN profile payment method token boundaries' do
+    it '同一行の支払ラベルと決済名の完全一致語彙を所有する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect('売上').to match(profile.ocr_payment_method_label_pattern)
+        expect('支払方法').to match(profile.ocr_payment_method_label_pattern)
+        expect('売上予定').not_to match(profile.ocr_payment_method_label_pattern)
+        expect('取引ID').not_to match(profile.ocr_payment_method_label_pattern)
+        expect('iD').to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('ID').to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('クレジットカード').to match(profile.ocr_payment_method_value_patterns.fetch('credit_card'))
+        expect('VISA').not_to match(profile.ocr_payment_method_value_patterns.fetch('credit_card'))
+        expect('Mastercard').not_to match(profile.ocr_payment_method_value_patterns.fetch('credit_card'))
+        expect('JCB').not_to match(profile.ocr_payment_method_value_patterns.fetch('credit_card'))
+        expect('VISA Debit').to match(profile.ocr_payment_method_value_patterns.fetch('debit_card'))
+        expect('iD使えます').not_to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('Transaction ID').not_to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('Apple Pay').not_to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('一括').to match(profile.ocr_payment_schedule_value_pattern)
+        expect('一括 Cash').not_to match(profile.ocr_payment_schedule_value_pattern)
+        expect('UnknownPay').not_to match(profile.ocr_payment_schedule_value_pattern)
+      end
+    end
+
     it 'd paymentは独立したtokenとして検出し他方式や英単語の内部へ部分一致しない' do
       patterns = described_class.fetch('JPN').fallback_payment_method_patterns.fetch('qr_payment')
 

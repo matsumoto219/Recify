@@ -145,6 +145,8 @@ module Analysis
           receipt_attributes[:payment_method] = nil
           payment_review_reasons << "payment_method_uncertain"
         end
+        proven_payment_method = protected_payment_method(ocr_result: normalized_ocr_result, candidates:, payment_evidence:)
+        receipt_attributes[:payment_method] = proven_payment_method if proven_payment_method
         amount_hints = build_amount_hints(
           ai_receipt_attributes,
           candidates,
@@ -2845,6 +2847,59 @@ module Analysis
         return detected_from_text if detected_from_text.present?
 
         detect_payment_method_from_payments(candidates[:payments])
+      end
+
+      def protected_payment_method(ocr_result:, candidates:, payment_evidence:)
+        return unless candidates[:payment_method_evidence] && payment_method_source_complete?(ocr_result)
+
+        evidence = PaymentMethodEvidence.call(candidates[:payment_method_evidence], lines: ocr_result[:lines], profile:)
+        return unless evidence && payment_evidence[:payments].empty?
+        return unless payment_evidence.dig(:settlement, :method_conflict) == false
+        return if Array(payment_evidence.dig(:settlement, :zero_method_identities)).include?(evidence[:method])
+
+        indexes = evidence.values_at(:label_line_index, :method_line_index)
+        return if (Array(candidates[:reference_pricing_block_line_indexes]) & indexes).any?
+        return unless payment_method_lines_unowned?(candidates[:items], indexes, ocr_result[:lines])
+
+        # 金額のない同一行の決済種別だけを保護し、金額照合の曖昧さや既存の支払行・金額は変更しない。
+        evidence[:method]
+      end
+
+      def payment_method_source_complete?(ocr_result)
+        truncated = ocr_result.fetch(:truncated, {})
+        return false unless truncated.is_a?(Hash)
+
+        keys = %i[lines items payments]
+        return false unless keys.all? { |key| !truncated.key?(key) || truncated[key] == false }
+        return true unless ocr_result.key?(:schema_version)
+
+        ocr_result[:schema_version] == "receipt_analysis_run_ocr_result_v1" && keys.all? { |key| truncated[key] == false }
+      end
+
+      def payment_method_lines_unowned?(items, indexes, lines)
+        items = [] if items.nil?
+        return false unless items.is_a?(Array) && items.size <= 1000
+
+        items.all? do |item|
+          next false unless item.is_a?(Hash)
+          if item.key?(:source_line_index)
+            index = item[:source_line_index]
+            next false unless index.is_a?(Integer) && index.between?(0, lines.size - 1) && !indexes.include?(index)
+          end
+          next true unless item.key?(:description_source_refs)
+
+          refs = item[:description_source_refs]
+          refs.is_a?(Array) && refs.size <= 16 && refs.all? do |ref|
+            next false unless ref.is_a?(Hash) && ref.keys.sort == %i[character_length character_offset line_index]
+
+            index = ref[:line_index]
+            offset = ref[:character_offset]
+            length = ref[:character_length]
+            index.is_a?(Integer) && index.between?(0, lines.size - 1) && !indexes.include?(index) &&
+              offset.is_a?(Integer) && offset >= 0 && length.is_a?(Integer) && length.positive? &&
+              offset + length <= lines[index].length
+          end
+        end
       end
 
       def reconcile_payment_method_with_payments(current_method, payments, adjustments: [], lines: [], receipt_total: nil, review_reasons: [])

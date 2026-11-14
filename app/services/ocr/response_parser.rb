@@ -263,6 +263,12 @@ class Ocr::ResponseParser
         tax_amount: tax_amount,
         tax_rate: extract_tax_rate(authority_response),
         payment_method_text: extract_payment_method_text(authority_response, authority_raw_text, authority_lines),
+        payment_method_evidence: Ocr::ResponseParser::PaymentMethodEvidenceExtractor.call(
+          analyze_result: extract_analyze_result(authority_response),
+          fields: extract_fields(authority_response),
+          lines: authority_lines,
+          profile:
+        ),
         payment_candidates: extract_payment_candidates(authority_response),
         tip_amount: extract_tip_amount(authority_response),                                                         # NOTE: Tip は日本レシートではほぼ存在せず、保存はされるが未使用に近い
         currency_code: extract_currency_code(authority_response),

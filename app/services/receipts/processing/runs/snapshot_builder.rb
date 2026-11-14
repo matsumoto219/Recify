@@ -485,6 +485,14 @@ module Receipts::Processing::Runs
         )
         snapshot["candidates"]["purchased_at_evidence"] = evidence.deep_stringify_keys
       end
+      if payment_method_source_complete?(result, snapshot)
+        evidence = Analysis.payment_method_evidence(
+          candidates[:payment_method_evidence],
+          lines: snapshot["lines"],
+          profile: ReceiptAnalysisProfiles.fetch(candidates[:country_region])
+        )
+        snapshot["candidates"]["payment_method_evidence"] = evidence.deep_stringify_keys if evidence
+      end
       snapshot
     end
 
@@ -807,6 +815,21 @@ module Receipts::Processing::Runs
       return false unless result.key?(:schema_version)
 
       false if result[:schema_version] == OCR_RESULT_SCHEMA_VERSION && stored == false
+    end
+
+    def payment_method_source_complete?(result, snapshot)
+      return false unless normalized_hash(result[:candidates])[:payment_method_evidence].present?
+      return false unless result[:lines] == snapshot["lines"]
+
+      keys = %i[lines items payments]
+      return false unless keys.all? { |key| snapshot.dig("truncated", key.to_s) == false }
+
+      truncated = result.fetch(:truncated, {})
+      return false unless truncated.is_a?(Hash)
+      return false if keys.any? { |key| truncated.key?(key) && truncated[key] != false }
+      return true unless result.key?(:schema_version)
+
+      result[:schema_version] == OCR_RESULT_SCHEMA_VERSION && keys.all? { |key| truncated[key] == false }
     end
 
     def item_calculation_mode_discount_proofs(result, candidates)

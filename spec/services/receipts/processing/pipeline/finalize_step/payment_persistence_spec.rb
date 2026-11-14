@@ -145,6 +145,44 @@ RSpec.describe Receipts::Processing::Pipeline::FinalizeStep do
     expect(receipt.receipt_payments.reload.pluck(:amount)).to eq([ 864 ])
   end
 
+  it '同じ印字行の決済方式を非同期Finalizeでも維持し金額や支払行を作り直さない' do
+    ocr_result[:lines] = [
+      '架空検証店', '2026/06/18 12:30', '売上', 'id',
+      '架空品A 540', '架空品B 260', '小計 800', '消費税 64', '合計 864'
+    ]
+    label_offset = ocr_result[:lines].first(2).sum { |line| line.length + 1 }
+    ocr_result[:candidates][:payment_method_text] = 'id'
+    ocr_result[:candidates][:payment_method_evidence] = {
+      source_kind: 'azure_same_row', method: 'e_money', page_index: 0,
+      label_line_index: 2, method_line_index: 3,
+      label_path: 'pages[0].lines[2]', method_path: 'pages[0].lines[3]',
+      label_span: { offset: label_offset, length: 2 }, method_span: { offset: label_offset + 3, length: 2 },
+      string_index_type: 'textElements'
+    }
+    ai_result[:receipt_attributes][:payment_method] = 'credit_card'
+    ai_result[:needs_review] = false
+    ai_result[:review_reasons] = []
+    run = create(:receipt_analysis_run, receipt: receipt)
+    Receipts::Processing.record_ocr_snapshot(run, ocr_result)
+    Receipts::Processing.record_ai_normalized_result(run, ai_result)
+    Receipts::Processing.record_finalize_decision(run, decision)
+
+    ReceiptFinalizeJob.perform_now(run_id: run.id)
+    first_items = receipt.receipt_items.reload.map(&:attributes)
+    first_summary = run.reload.final_result_summary.deep_dup
+    ReceiptFinalizeJob.perform_now(run_id: run.id)
+
+    aggregate_failures do
+      expect(receipt.reload).to have_attributes(
+        subtotal_amount: 800, tax_amount: 64, total_amount: 864, payment_method: 'e_money', status: 'completed'
+      )
+      expect(receipt.receipt_payments.reload).to be_empty
+      expect(receipt.receipt_items.reload.map(&:attributes)).to eq(first_items)
+      expect(run.reload.final_result_summary).to eq(first_summary)
+      expect(run.ocr_result_snapshot.dig('candidates', 'payment_method_evidence', 'method')).to eq('e_money')
+    end
+  end
+
   it '欠損measurementのOCR購入額を保持する経路でも実際の保存額で支払照合する' do
     ocr_result.replace(
       success: true,
