@@ -180,7 +180,7 @@ module Ai
         {
           source_text: fetch(candidate, :source_text),
           source_line_index: normalize_number(fetch(candidate, :source_line_index)),
-          neighboring_texts: normalize_neighboring_texts(fetch(candidate, :neighboring_texts)),
+          neighboring_lines: normalize_neighboring_lines(candidate),
           amount: normalize_number(fetch(candidate, :amount)),
           sign_hint: fetch(candidate, :sign_hint),
           tax_rate_hint: normalize_tax_rate(fetch(candidate, :tax_rate_hint)),
@@ -196,10 +196,16 @@ module Ai
         {
           index: index,
           text: line,
-          previous_text: index.positive? ? lines[index - 1] : nil,
-          next_text: lines[index + 1]
+          previous_line: context_line(index - 1),
+          next_line: context_line(index + 1)
         }.compact
       end
+    end
+
+    def context_line(index)
+      return unless index.is_a?(Integer) && index >= 0 && index < lines.size
+
+      { index: index, text: lines[index] }
     end
 
     def normalize_item_payload(item, index)
@@ -514,13 +520,25 @@ module Ai
       end
     end
 
-    def normalize_neighboring_texts(value)
-      return unless value.is_a?(Hash)
+    def normalize_neighboring_lines(candidate)
+      value = fetch(candidate, :neighboring_texts)
+      return unless value.is_a?(Hash) && value.size.between?(1, 2)
 
-      {
-        previous_text: fetch(value, :previous_text),
-        next_text: fetch(value, :next_text)
-      }.compact.presence
+      neighbors = value.symbolize_keys
+      return unless neighbors.size == value.size && (neighbors.keys - %i[previous_text next_text]).empty?
+
+      index = fetch(candidate, :source_line_index)
+      source = context_line(index)
+      return unless source && fetch(candidate, :source_text) == source[:text]
+
+      # 既存の隣接本文と元OCR行が一致する場合だけindexを付け、欠けた本文は補わない。
+      neighbors.each_with_object({}) do |(key, text), result|
+        previous = key == :previous_text
+        line = context_line(index + (previous ? -1 : 1))
+        return unless line && text.is_a?(String) && text == line[:text]
+
+        result[previous ? :previous_line : :next_line] = line
+      end
     end
 
     def items_average_confidence

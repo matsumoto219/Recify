@@ -3151,17 +3151,30 @@ module Receipts::Processing::Runs
     end
 
     def limited_context_lines(lines, max)
-      Array(lines).first(max).filter_map do |line|
+      Array(lines).first(max).each_with_index.filter_map do |line, position|
         line = normalized_hash(line)
         next if line.blank?
 
+        source_index = line[:index] if line[:index].is_a?(Integer) && line[:index] == position
         {
           index: safe_value(line[:index]),
           text: safe_string(line[:text]),
           previous_text: safe_string(line[:previous_text]),
-          next_text: safe_string(line[:next_text])
+          next_text: safe_string(line[:next_text]),
+          previous_line: indexed_context_neighbor(line[:previous_line], parent_index: source_index, offset: -1),
+          next_line: indexed_context_neighbor(line[:next_line], parent_index: source_index, offset: 1)
         }.compact
       end
+    end
+
+    def indexed_context_neighbor(value, parent_index:, offset:)
+      return unless parent_index.is_a?(Integer) && parent_index >= 0 && value.is_a?(Hash) && value.size == 2
+
+      neighbor = normalized_hash(value)
+      return unless neighbor.key?(:index) && neighbor.key?(:text) && neighbor[:index].is_a?(Integer) &&
+        neighbor[:index] >= 0 && neighbor[:index] == parent_index + offset && neighbor[:text].is_a?(String)
+
+      { index: neighbor[:index], text: safe_string(neighbor[:text]) }
     end
 
     def amount_snapshot(receipt, receipt_attrs)

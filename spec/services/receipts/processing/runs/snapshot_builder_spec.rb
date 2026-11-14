@@ -1,6 +1,76 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
+  describe 'AI inputの隣接行' do
+    it '主行上限と境界の隣接本文を保ち、旧versionのままindexと本文を保存する' do
+      allow(described_class).to receive(:snapshot_ai_input_full_context_lines_max).and_return(2)
+      allow(described_class).to receive(:snapshot_ai_input_adjustment_context_lines_max).and_return(1)
+      context = [
+        { index: 0, text: '同じ印字', next_line: { index: 1, text: '同じ印字' } },
+        { index: 1, text: '同じ印字', previous_line: { index: 0, text: '同じ印字' }, next_line: { index: 2, text: '末尾の文脈' } },
+        { index: 2, text: '末尾の文脈', previous_line: { index: 1, text: '同じ印字' } }
+      ]
+
+      snapshot = described_class.ai_input_snapshot(full_context_lines: context, adjustment_context_lines: context)
+
+      aggregate_failures do
+        expect(snapshot.values_at('schema_version', 'prompt_schema_version')).to eq(%w[receipt_analysis_run_ai_input_v1 recify_receipt_analysis_v1])
+        expect(snapshot['full_context_lines']).to eq(context.first(2).map(&:deep_stringify_keys))
+        expect(snapshot['adjustment_context_lines']).to eq(context.first(1).map(&:deep_stringify_keys))
+        expect(snapshot['truncated']).to include('full_context_lines' => true, 'adjustment_context_lines' => true)
+        expect(JSON.parse(snapshot.to_json)).to eq(snapshot)
+      end
+    end
+
+    it '旧入力の隣接文字列はそのまま扱い、新しいindexを補わない' do
+      old = { index: 1, text: '対象行', previous_text: '前の行', next_text: '次の行' }
+
+      snapshot = described_class.ai_input_snapshot(full_context_lines: [ old ])
+
+      expect(snapshot['full_context_lines']).to eq([ old.deep_stringify_keys ])
+    end
+
+    it '新しい隣接本文にも既存のbyte上限を適用する' do
+      allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
+      context = { index: 0, text: '対象', next_line: { index: 1, text: 'あいうえお' } }
+
+      snapshot = described_class.ai_input_snapshot(full_context_lines: [ context ])
+
+      expect(snapshot.dig('full_context_lines', 0, 'next_line')).to eq('index' => 1, 'text' => 'あ')
+    end
+
+    [
+      nil,
+      [],
+      { index: 2, text: '次行' },
+      { index: '1', text: '次行' },
+      { index: 1.0, text: '次行' },
+      { index: -1, text: '次行' },
+      { index: 1, text: { raw_response: '保存しない' } },
+      { index: 1 },
+      { index: 1, text: '次行', unknown: '保存しない' },
+      { index: 1, 1 => '保存しない' }
+    ].each do |neighbor|
+      it "型・隣接index・fieldが不正な行objectを保存しない: #{neighbor.inspect}" do
+        snapshot = described_class.ai_input_snapshot(full_context_lines: [ { index: 0, text: '対象行', next_line: neighbor } ])
+
+        aggregate_failures do
+          expect(snapshot['full_context_lines']).to eq([ { 'index' => 0, 'text' => '対象行' } ])
+          expect(snapshot.to_json).not_to include('保存しない')
+        end
+      end
+    end
+
+    it '保持配列の位置に一致しない親indexから隣接indexを保存しない' do
+      index = 10**100
+      snapshot = described_class.ai_input_snapshot(full_context_lines: [
+        { index: index, text: '対象行', next_line: { index: index + 1, text: '次行' } }
+      ])
+
+      expect(snapshot['full_context_lines']).to eq([ { 'index' => index, 'text' => '対象行' } ])
+    end
+  end
+
   it 'AI実行条件は安全な値だけを文字列短縮せず保存する' do
     allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
     execution = { schema_version: 1, model: 'future-model', reasoning_effort: 'max', prompt: 'not retained' }

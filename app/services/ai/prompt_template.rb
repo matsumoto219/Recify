@@ -71,7 +71,7 @@ module Ai
         - amount MUST be an unsigned absolute integer.
         - Use sign to express whether the adjustment is a discount or surcharge.
         - source_text and source_line_index MUST refer to full_context_lines.
-        - Copy source_text from the text of the same entry whose index you return as source_line_index. For previous_text or next_text, use that text's own entry and index, not the index of the entry containing the neighboring text. Do not guess an index when that entry is unavailable.
+        - Copy source_text and source_line_index from the text and index of the same OCR line object. previous_line and next_line have their own index; do not use the containing row or adjustment candidate index for their text. Do not guess an index when that line object is unavailable.
         - Do NOT output an adjustment if its amount cannot be tied to OCR text.
         - Quantity tokens such as item counts or units MUST NOT be used as adjustment amounts.
         - Do NOT convert item rows, payment rows, or tax-detail rows into receipt_adjustments.
@@ -294,8 +294,8 @@ module Ai
         - Do NOT rely only on known keywords. Use context, amounts, signs, neighboring lines, labels, and payment context to interpret Japanese, English, overseas, abbreviated, or unknown adjustment wording.
         - Treat point_usage as a payment adjustment. Do NOT treat point_usage as an item discount or tax adjustment.
         - adjustment_context_lines may exist for compatibility, but full_context_lines takes priority.
-        - Labels and amounts may be split across neighboring OCR lines. Use previous_text and next_text to connect them.
-        - Tie each adjustment amount to source_text, previous_text, or next_text.
+        - Labels and amounts may be split across neighboring OCR lines. Use previous_line and next_line, including adjustment_candidates.neighboring_lines, to connect them.
+        - Tie each adjustment amount to the text and index of one OCR line object.
         - Do NOT invent amount, label, percentage, or source_line_index.
         - Use sign according to whether the adjustment increases or decreases the total.
         - kind MUST be selected only from allowed adjustment_kinds.

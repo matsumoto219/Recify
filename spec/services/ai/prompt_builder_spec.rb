@@ -278,13 +278,13 @@ RSpec.describe Ai::PromptBuilder do
         TEXT
         expect(result[:full_context_lines]).to eq(
           [
-            { index: 0, text: 'Recify Mart 新宿店', next_text: '東京都新宿区1-2-3' },
-            { index: 1, text: '東京都新宿区1-2-3', previous_text: 'Recify Mart 新宿店', next_text: '2026/05/20 12:34' },
-            { index: 2, text: '2026/05/20 12:34', previous_text: '東京都新宿区1-2-3', next_text: 'コーヒー 180' },
-            { index: 3, text: 'コーヒー 180', previous_text: '2026/05/20 12:34', next_text: 'パン 220' },
-            { index: 4, text: 'パン 220', previous_text: 'コーヒー 180', next_text: '合計 400' },
-            { index: 5, text: '合計 400', previous_text: 'パン 220', next_text: 'クレジット' },
-            { index: 6, text: 'クレジット', previous_text: '合計 400' }
+            { index: 0, text: 'Recify Mart 新宿店', next_line: { index: 1, text: '東京都新宿区1-2-3' } },
+            { index: 1, text: '東京都新宿区1-2-3', previous_line: { index: 0, text: 'Recify Mart 新宿店' }, next_line: { index: 2, text: '2026/05/20 12:34' } },
+            { index: 2, text: '2026/05/20 12:34', previous_line: { index: 1, text: '東京都新宿区1-2-3' }, next_line: { index: 3, text: 'コーヒー 180' } },
+            { index: 3, text: 'コーヒー 180', previous_line: { index: 2, text: '2026/05/20 12:34' }, next_line: { index: 4, text: 'パン 220' } },
+            { index: 4, text: 'パン 220', previous_line: { index: 3, text: 'コーヒー 180' }, next_line: { index: 5, text: '合計 400' } },
+            { index: 5, text: '合計 400', previous_line: { index: 4, text: 'パン 220' }, next_line: { index: 6, text: 'クレジット' } },
+            { index: 6, text: 'クレジット', previous_line: { index: 5, text: '合計 400' } }
           ]
         )
         expect(result[:items]).to eq(
@@ -487,6 +487,80 @@ RSpec.describe Ai::PromptBuilder do
         expect(result[:full_context_lines].size).to eq(10)
         expect(result.dig(:purchase, :purchased_at_candidates).size).to eq(2)
         expect(result.dig(:meta, :raw_text_length)).to be <= 500
+      end
+    end
+
+    it '主行上限の次の既存文脈も自身のindexで保ち、同文の別行を統合しない' do
+      allow(described_class).to receive(:full_context_lines_max).and_return(10)
+      lines = Array.new(12) { |index| "印字行#{index}" }
+      lines[10] = lines[9]
+
+      result = described_class.build(ocr_result.merge(lines: lines))
+      context = result.fetch(:full_context_lines)
+      visible = context.flat_map { |line| [ line.slice(:index, :text), line[:previous_line], line[:next_line] ].compact }
+
+      aggregate_failures do
+        expect(context.size).to eq(10)
+        expect(context.last).to include(index: 9, text: lines[9], next_line: { index: 10, text: lines[10] })
+        expect(visible.uniq).to eq(lines.first(11).each_with_index.map { |text, index| { index: index, text: text } })
+        expect(result[:adjustment_context_lines]).to eq(context)
+        expect(context).to all(satisfy { |line| (line.keys & %i[previous_text next_text]).empty? })
+      end
+    end
+
+    context 'adjustment候補の隣接行' do
+      let(:lines) { [ '同じ印字', '割引', '同じ印字' ] }
+      let(:candidate) do
+        {
+          source_text: '割引', source_line_index: 1, amount: 50,
+          neighboring_texts: { previous_text: '同じ印字', next_text: '同じ印字' }
+        }
+      end
+
+      subject(:result) do
+        described_class.build(ocr_result.merge(lines: lines, candidates: { adjustment_candidates: [ candidate ] }))
+          .fetch(:adjustment_candidates).first
+      end
+
+      it '元の本文と金額を保ち、前後の同文を別のindexへ結び付ける' do
+        original = candidate.deep_dup
+
+        aggregate_failures do
+          expect(result).to include(
+            source_text: '割引', source_line_index: 1, amount: 50,
+            neighboring_lines: { previous_line: { index: 0, text: '同じ印字' }, next_line: { index: 2, text: '同じ印字' } }
+          )
+          expect(result).not_to have_key(:neighboring_texts)
+          expect(candidate).to eq(original)
+        end
+      end
+
+      it '元候補に存在しない隣接本文をOCR行から補わない' do
+        candidate[:neighboring_texts].delete(:next_text)
+
+        expect(result[:neighboring_lines]).to eq(previous_line: { index: 0, text: '同じ印字' })
+      end
+
+      [ -1, 3, 1.0, '1', nil ].each do |index|
+        it "不正な元index #{index.inspect} から隣接indexを推測しない" do
+          candidate[:source_line_index] = index
+
+          expect(result).not_to have_key(:neighboring_lines)
+        end
+      end
+
+      [ { next_text: '別の印字' }, { next_text: { text: '同じ印字' } }, { next_text: nil }, { unknown: '同じ印字' }, { 1 => '同じ印字' } ].each do |change|
+        it "OCRとの対応を証明できない隣接候補を渡さない: #{change.inspect}" do
+          candidate[:neighboring_texts].merge!(change)
+
+          expect(result).not_to have_key(:neighboring_lines)
+        end
+      end
+
+      it '元行の本文が一致しない候補へ隣接indexを与えない' do
+        candidate[:source_text] = '別の印字'
+
+        expect(result).not_to have_key(:neighboring_lines)
       end
     end
 
@@ -963,7 +1037,7 @@ RSpec.describe Ai::PromptBuilder do
             amount: 486,
             sign_hint: 'surcharge',
             tax_rate_hint: BigDecimal('0.1'),
-            neighboring_texts: hash_including(next_text: '¥486')
+            neighboring_lines: hash_including(next_line: { index: parsed_ocr_result[:lines].index('¥486'), text: '¥486' })
           ),
           hash_including(
             source_text: '深夜料金10%',
