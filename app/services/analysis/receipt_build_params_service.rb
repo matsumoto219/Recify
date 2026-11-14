@@ -183,6 +183,13 @@ module Analysis
           recovered_source_values: recovered_tax_detail_values
         )
           amount_hints[:tax_detail_amount_basis] = "net"
+          resolve_printed_tax_rate_review_reasons(
+            normalized_ocr_result,
+            receipt_items_attributes,
+            receipt_adjustments_attributes,
+            receipt_tax_details_attributes,
+            receipt_attributes
+          )
         end
         invalid_adjustment_review_reasons = tax_allocation_result.review_reasons
         ownership_contract = OwnershipConsistencyGuard.contract_for(tax_allocation_result)
@@ -422,6 +429,47 @@ module Analysis
           [ rate, net, tax ]
         end
         values.sort
+      end
+
+      def resolve_printed_tax_rate_review_reasons(ocr_result, items, adjustments, tax_details, receipt_attributes)
+        return unless tax_rate_review_source_complete?(ocr_result)
+
+        source_items = Array(ocr_result.dig(:candidates, :items))
+        return unless items.present? && items.size == source_items.size
+        return unless source_items.all? { |item| item.is_a?(Hash) && !normalize_rate(item[:tax_rate])&.zero? }
+
+        rate = single_tax_detail_rate(tax_details)
+        return unless rate && tax_details.one?
+
+        detail = tax_details.first
+        tax = normalize_amount(detail[:amount])
+        printed_total = normalize_amount(detail[:net_amount]) + tax
+        return unless printed_total == normalize_amount(receipt_attributes[:total_amount])
+        return unless included_tax_amount_matches?(printed_total, rate, tax)
+        return unless items.all? { |item| normalize_amount(item[:line_total])&.positive? && normalize_rate(item[:tax_rate]) == rate }
+        return unless single_tax_detail_matches_taxable_total?(items, adjustments, tax_details, receipt_attributes)
+
+        # 印字税内訳が全明細を説明できる場合だけ、AIの確信度による税率確認を解消する。
+        # 数値補正の有無と切り離し、他の確認理由や明細flagは既存Finalizeの判定に残す。
+        items.each { |item| item[:review_reasons] = Array(item[:review_reasons]) - [ "item_tax_rate_uncertain" ] }
+      end
+
+      def tax_rate_review_source_complete?(ocr_result)
+        truncated = ocr_result.fetch(:truncated, {})
+        return false unless truncated.is_a?(Hash)
+        return false if %i[lines items tax_details].any? { |key| ![ nil, false ].include?(truncated[key]) }
+        return true unless ocr_result.key?(:schema_version)
+        return false unless ocr_result[:schema_version] == "receipt_analysis_run_ocr_result_v1"
+        return false unless %i[lines items tax_details].all? { |key| truncated[key] == false }
+
+        counts = ocr_result[:candidate_counts]
+        return false unless counts.is_a?(Hash)
+
+        %i[items tax_details].all? do |key|
+          count = Array(ocr_result.dig(:candidates, key)).size
+          entry = counts[key]
+          entry.is_a?(Hash) && entry[:actual_count] == count && entry[:snapshot_count] == count
+        end
       end
 
       def settlement_receipt_total_restored?(ai_receipt_attributes, candidates, lines, receipt_attributes)

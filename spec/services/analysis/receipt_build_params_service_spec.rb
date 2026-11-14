@@ -2705,7 +2705,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
         }
         ai_result = {
           receipt_items_attributes: [
-            { index: 0, category: 'food', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.98 },
+            { index: 0, category: 'food', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.4 },
             { index: 1, category: 'food', tax_rate: 0.08, tax_rate_reason: 'reduced_rate', tax_rate_confidence: 0.98 }
           ],
           receipt_adjustments_attributes: [
@@ -2726,6 +2726,7 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
 
         aggregate_failures do
           expect(params[:receipt_items_attributes].map { |item| item[:tax_rate] }).to eq([ BigDecimal('0.1'), BigDecimal('0.1') ])
+          expect(params[:receipt_items_attributes].flat_map { |item| item[:review_reasons] }).not_to include('item_tax_rate_uncertain')
           expect(params[:receipt_adjustments_attributes].pluck(:kind, :amount, :tax_rate)).to eq([
             [ 'late_night_charge', 91, BigDecimal('0.1') ]
           ])
@@ -4461,6 +4462,174 @@ RSpec.describe Analysis::ReceiptBuildParamsService do
           expect(item).not_to have_key(:tax_rate_confidence)
           expect(item).not_to have_key(:tax_rate_reason)
         end
+      end
+    end
+
+    context '完全な単一税率の印字根拠で税率確認を解消する場合' do
+      let(:printed_tax_ocr_result) do
+        {
+          candidates: {
+            total_amount: 1_100,
+            tax_amount: 100,
+            country_region: 'JPN',
+            tax_detail_amount_basis: 'net',
+            items: [
+              { raw_text: '検証品A', price: 660, quantity: 1, line_total: 660, confidence: 0.95 },
+              { raw_text: '検証品B', price: 440, quantity: 1, line_total: 440, confidence: 0.95 }
+            ],
+            tax_details: [ { description: '10%対象', rate: 0.1, net_amount: 1_000, amount: 100 } ]
+          },
+          lines: []
+        }
+      end
+
+      let(:uncertain_tax_ai_result) do
+        {
+          receipt_items_attributes: [
+            { index: 0, category: 'food', tax_rate: 0.1, tax_rate_confidence: 0.4, needs_review: true },
+            { index: 1, category: 'food', tax_rate: 0.1, tax_rate_confidence: 0.9, needs_review: false }
+          ]
+        }
+      end
+
+      it 'AI税率が正しいときは数値や補正履歴を変えずconfidenceによる確認差だけを解消する' do
+        certain_ai_result = uncertain_tax_ai_result.deep_dup
+        certain_ai_result[:receipt_items_attributes].first.merge!(tax_rate_confidence: 0.9, needs_review: false)
+
+        uncertain = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+        certain = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: certain_ai_result)
+
+        aggregate_failures do
+          expect(uncertain[:receipt_items_attributes]).to eq(certain[:receipt_items_attributes])
+          expect(uncertain[:receipt_items_attributes].pluck(:line_total)).to eq([ 660, 440 ])
+          expect(uncertain[:receipt_items_attributes].pluck(:tax_rate)).to eq([ BigDecimal('0.1'), BigDecimal('0.1') ])
+          expect(uncertain[:receipt_items_attributes].flat_map { |item| item[:review_reasons] }).to be_empty
+          expect(uncertain[:tax_rate_correction]).to be_nil
+          expect(uncertain_tax_ai_result[:receipt_items_attributes].first[:tax_rate_confidence]).to eq(0.4)
+        end
+      end
+
+      it '税率を補正したときも印字根拠でtax reasonだけを解消する' do
+        uncertain_tax_ai_result[:receipt_items_attributes].first[:tax_rate] = 0.08
+
+        params = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].first).to include(tax_rate: BigDecimal('0.1'), review_reasons: [])
+          expect(params[:tax_rate_correction]).to include(item_count: 1, adjustment_count: 0)
+        end
+      end
+
+      it '別の確認理由と明細の確認flagは解消しない' do
+        uncertain_tax_ai_result[:receipt_items_attributes].first[:review_reasons] = [ 'item_quantity_uncertain' ]
+
+        params = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+
+        expect(params[:receipt_items_attributes].first).to include(
+          needs_review: true,
+          review_reasons: [ 'item_quantity_uncertain' ]
+        )
+      end
+
+      it 'OCR由来basisがない算術一致だけではtax reasonを解消しない' do
+        printed_tax_ocr_result[:candidates].delete(:tax_detail_amount_basis)
+        uncertain_tax_ai_result[:receipt_tax_details_attributes] = printed_tax_ocr_result[:candidates][:tax_details]
+
+        params = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+
+        expect(params[:receipt_items_attributes].first[:review_reasons]).to include('item_tax_rate_uncertain')
+      end
+
+      {
+        '対象額不一致' => { rate: 0.1, net_amount: 900, amount: 90 },
+        '税額だけは税込合計と一致する対象額不一致' => { rate: 0.1, net_amount: 900, amount: 100 },
+        '合計は一致する税率と税額の矛盾' => { rate: 0.08, net_amount: 1_000, amount: 100 },
+        '対象額欠損' => { rate: 0.1, amount: 100 },
+        '税率欠損' => { net_amount: 1_000, amount: 100 },
+        '非課税' => { rate: 0, net_amount: 1_100, amount: 0 }
+      }.each do |label, detail|
+        it "#{label}の内訳からtax reasonを解消しない" do
+          printed_tax_ocr_result[:candidates][:tax_details] = [ detail ]
+
+          params = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+
+          expect(params[:receipt_items_attributes].first[:review_reasons]).to include('item_tax_rate_uncertain')
+        end
+      end
+
+      it '別税率の不完全な内訳がある場合はtax reasonを解消しない' do
+        printed_tax_ocr_result[:candidates][:tax_details] << { rate: 0.08, amount: 0 }
+
+        params = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+
+        expect(params[:receipt_items_attributes].first[:review_reasons]).to include('item_tax_rate_uncertain')
+      end
+
+      it 'OCR明細に明示された0%と単一positive税率の競合を解消しない' do
+        printed_tax_ocr_result[:candidates][:items].last[:tax_rate] = 0
+
+        params = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+
+        expect(params[:receipt_items_attributes].first[:review_reasons]).to include('item_tax_rate_uncertain')
+      end
+
+      it '金額欠損の明細を除外して全額一致と扱わない' do
+        printed_tax_ocr_result[:candidates][:items] << { raw_text: '検証品C', confidence: 0.95 }
+
+        params = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+
+        expect(params[:receipt_items_attributes].first[:review_reasons]).to include('item_tax_rate_uncertain')
+      end
+
+      it '保存snapshotの再構築でも同じ印字根拠で確認を解消する' do
+        snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(printed_tax_ocr_result)
+        rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+        params = described_class.call(ocr_result: rehydrated, ai_result: uncertain_tax_ai_result)
+
+        aggregate_failures do
+          expect(params[:receipt_items_attributes].first[:review_reasons]).not_to include('item_tax_rate_uncertain')
+          expect(params[:tax_rate_correction]).to be_nil
+        end
+      end
+
+      %i[lines items tax_details].each do |key|
+        it "#{key}が省略されたsnapshotからtax reasonを解消しない" do
+          snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(printed_tax_ocr_result)
+          snapshot['truncated'][key.to_s] = true
+          rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+          params = described_class.call(ocr_result: rehydrated, ai_result: uncertain_tax_ai_result)
+
+          expect(params[:receipt_items_attributes].first[:review_reasons]).to include('item_tax_rate_uncertain')
+        end
+      end
+
+      it '完全性が未記録の旧snapshotからtax reasonを解消しない' do
+        printed_tax_ocr_result[:schema_version] = 'receipt_analysis_run_ocr_result_v1'
+
+        params = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+
+        expect(params[:receipt_items_attributes].first[:review_reasons]).to include('item_tax_rate_uncertain')
+      end
+
+      it 'snapshotの明細件数が一致しなければtax reasonを解消しない' do
+        snapshot = Receipts::Processing::Runs::SnapshotBuilder.ocr_result_snapshot(printed_tax_ocr_result)
+        snapshot['candidate_counts']['items']['actual_count'] += 1
+        rehydrated = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+        params = described_class.call(ocr_result: rehydrated, ai_result: uncertain_tax_ai_result)
+
+        expect(params[:receipt_items_attributes].first[:review_reasons]).to include('item_tax_rate_uncertain')
+      end
+
+      it '未知versionのsnapshotからtax reasonを解消しない' do
+        printed_tax_ocr_result[:schema_version] = 'unknown'
+        printed_tax_ocr_result[:truncated] = { lines: false, items: false, tax_details: false }
+
+        params = described_class.call(ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+
+        expect(params[:receipt_items_attributes].first[:review_reasons]).to include('item_tax_rate_uncertain')
       end
     end
 
