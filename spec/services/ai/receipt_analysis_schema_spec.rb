@@ -1,5 +1,5 @@
 require 'rails_helper'
-require 'open3'
+require 'json_schemer'
 
 RSpec.describe Ai::ReceiptAnalysisSchema do
   describe '.to_json_schema' do
@@ -35,20 +35,13 @@ RSpec.describe Ai::ReceiptAnalysisSchema do
         purchase: { purchased_at_text: nil }, payment: { payment_method: nil },
         items: [], receipt_adjustments: [], needs_review: false, review_reasons: []
       }
-      script = <<~JS
-        const fs = require('node:fs')
-        const Ajv = require('ajv')
-        const input = JSON.parse(fs.readFileSync(0, 'utf8'))
-        const validate = new Ajv().compile(input.schema)
-        const results = input.selections.map(selection => {
-          input.response.store.store_name_selection = selection
-          return validate(input.response)
-        })
-        process.stdout.write(JSON.stringify(results))
-      JS
-      stdout, stderr, status = Open3.capture3('node', '-e', script, stdin_data: JSON.generate(schema:, selections:, response:))
-      expect(status.success?).to be(true), stderr
-      JSON.parse(stdout)
+      validator = JSONSchemer.schema(schema)
+      expect(validator.valid_schema?).to be(true)
+
+      selections.map do |selection|
+        response[:store][:store_name_selection] = selection
+        validator.valid?(response)
+      end
     end
 
     it 'root objectとtop-level required keysを定義する' do
