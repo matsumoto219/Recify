@@ -40,6 +40,23 @@ RSpec.describe Ocr::ResponseParser::StoreNameEvidenceExtractor do
     end
   end
 
+  it 'retains the bounded header, footer and MerchantName neighborhood without an earlier ten-entry cutoff' do
+    texts.replace(Array.new(20) { |index| "Sample Place #{index}" })
+    merchant_line = analyze_result.fetch('pages').first.fetch('lines')[9]
+    fields['MerchantName'] = {
+      'valueString' => texts[9], 'confidence' => 0.9, 'spans' => merchant_line.fetch('spans')
+    }
+
+    result = extract
+
+    expect(result).to include(invalid: false, truncated: false)
+    expect(result[:candidates].size).to eq(20)
+    expect(result[:candidates].map { |candidate| candidate[:candidate_id] }).to contain_exactly(
+      'merchant_name', *(0..10).map { |index| "page_0_line_#{index}" }, *(12..19).map { |index| "page_0_line_#{index}" }
+    )
+    expect(extract(max_candidates: 10)).to include(truncated: true)
+  end
+
   context 'when MerchantName spans multiple lines' do
     let(:texts) { [ 'Sample', 'Store', '中央店', '合計 300' ] }
     let(:fields) do

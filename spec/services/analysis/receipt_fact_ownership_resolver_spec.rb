@@ -1,6 +1,62 @@
 require 'rails_helper'
 
 RSpec.describe Analysis::ReceiptFactOwnershipResolver do
+  describe 'printed discount quantity block' do
+    let(:profile) { ReceiptAnalysisProfiles.default }
+    let(:lines) { [ '検証品A 600円', '小計 600円', '半額', '2点', '-120円', '合計 480円' ] }
+    let(:evidence_index) do
+      Analysis::SourceEvidenceIndex.call(
+        lines: lines,
+        money_pattern: profile.analysis_adjustment_amount_candidate_pattern,
+        profile: profile
+      )
+    end
+
+    def resolve_printed_discount(index, items: [], **attributes)
+      described_class.call(
+        items: items,
+        adjustments: [ { kind: 'other', sign: 'discount', amount: 120, source_line_index: index }.merge(attributes) ],
+        payments: [],
+        tax_details: [],
+        review_reasons: [],
+        evidence_index: evidence_index,
+        profile: profile
+      )
+    end
+
+    it 'label・数量・金額の参照を同じ物理tokenへ結び、AI種別に依存しない' do
+      identities = [ 2, 3, 4 ].map do |index|
+        result = resolve_printed_discount(index)
+        fact = result.facts.sole
+        expect(fact).to have_attributes(owner: :receipt_adjustment, fact_type: :purchase_adjustment, kind: 'receipt_discount', action: :persist)
+        expect(fact.source_refs.sole).to have_attributes(line_index: 4, span_start: 0, span_end: 5, amount_token: 120)
+        fact.source_refs.sole.strong_identity
+      end
+
+      expect(identities.uniq.size).to eq(1)
+    end
+
+    it '同じtokenをitem discountが所有するときはitemを維持し二重割引しない' do
+      item = {
+        raw_text: '検証品A',
+        line_total: 480,
+        discount_source_refs: [ { source_line_index: 4, source_span_start: 0, source_span_end: 5, amount: 120 } ]
+      }
+      result = resolve_printed_discount(4, items: [ item ])
+
+      expect(result.items).to contain_exactly(include(line_total: 480))
+      expect(result.adjustments).to be_empty
+      expect(result.diagnostics).to include(include(code: :item_owner_wins))
+    end
+
+    it '不正な明示spanは新しいblockにより補完しない' do
+      result = resolve_printed_discount(4, source_span_start: -1, source_span_end: 5)
+
+      expect(result.facts.sole.source_refs).to be_empty
+      expect(result.facts.sole.fact_type).to eq(:unknown_adjustment)
+    end
+  end
+
   it '既存の保存attributesを変えずにowner factへ写像する' do
     items = [ { raw_text: '商品A', line_total: 1_000, tax_rate: 0.1 } ]
     adjustments = [

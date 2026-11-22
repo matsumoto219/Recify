@@ -6154,6 +6154,71 @@ RSpec.describe Receipts::Processing::Pipeline do
       end
     end
 
+    context '完全な印字税内訳でAI税率の確認を解消する場合' do
+      let(:printed_tax_ocr_result) do
+        successful_ocr_result.deep_merge(
+          raw_text: "テストストア\n2026/05/23 10:00\nコーヒー 1,100\n合計 1,100\n現金\n10%対象 1,100\n内消費税 100",
+          candidates: {
+            total_amount: 1_100,
+            tax_amount: 100,
+            tax_detail_amount_basis: 'net',
+            items: [ { raw_text: 'コーヒー', price: 1_100, quantity: 1, line_total: 1_100, confidence: 0.95 } ],
+            payments: [ { method: 'Cash', amount: 1_100 } ],
+            tax_details: [ { description: '10%対象', rate: 0.1, net_amount: 1_000, amount: 100 } ]
+          },
+          lines: [ 'テストストア', '2026/05/23 10:00', 'コーヒー 1,100', '合計 1,100', '現金', '10%対象 1,100', '内消費税 100' ]
+        )
+      end
+      let(:uncertain_tax_ai_result) do
+        successful_ai_result.merge(
+          needs_review: true,
+          review_reasons: [ 'item_tax_rate_uncertain' ],
+          receipt_items_attributes: [
+            {
+              index: 0, suggested_name: 'コーヒー', category: 'drink', tax_rate: 0.1,
+              tax_rate_confidence: 0.4, needs_review: true
+            }
+          ]
+        )
+      end
+
+      it '低confidenceでも税率と金額を維持して保存後にcompletedとする' do
+        receipt = create(:receipt, :processing, :with_image)
+
+        described_class.finalize(
+          receipt: receipt,
+          decision: finalize_decision(:ai_success, ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+        )
+
+        aggregate_failures do
+          expect(receipt.reload).to have_attributes(status: 'completed', total_amount: 1_100, tax_amount: 100, review_reasons: [])
+          expect(receipt.receipt_items.sole).to have_attributes(
+            tax_rate: BigDecimal('0.1'),
+            line_total: 1_100,
+            needs_review: false,
+            review_reasons: []
+          )
+        end
+      end
+
+      it '低いOCR confidenceの確認理由まで解消しない' do
+        receipt = create(:receipt, :processing, :with_image)
+        printed_tax_ocr_result[:candidates][:items].first[:confidence] = 0.4
+
+        described_class.finalize(
+          receipt: receipt,
+          decision: finalize_decision(:ai_success, ocr_result: printed_tax_ocr_result, ai_result: uncertain_tax_ai_result)
+        )
+
+        aggregate_failures do
+          expect(receipt.reload.status).to eq('review_needed')
+          expect(receipt.review_reasons).to include('ocr_low_confidence')
+          expect(receipt.receipt_items.sole.confidence).to eq(BigDecimal('0.4'))
+          expect(receipt.total_amount).to eq(1_100)
+        end
+      end
+    end
+
     it 'Finalizeで解消したitem_name_uncertainを元needs_reviewの明細へ保存しない' do
       receipt = create(:receipt, :processing, :with_image)
       ai_result = successful_ai_result.merge(

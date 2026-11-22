@@ -64,6 +64,10 @@ module Analysis
       PurchasedAtEvidence.from_lines(...)
     end
 
+    def payment_method_evidence(...)
+      PaymentMethodEvidence.call(...)
+    end
+
     def store_name_customer_facing_heading_candidates(...)
       StoreNameCandidateClassifier.customer_facing_heading_candidates(...)
     end
@@ -118,6 +122,10 @@ module Analysis
 
     def store_name_evidence(...)
       StoreNameEvidence.call(...)
+    end
+
+    def store_name_layout(...)
+      StoreNameLayout.call(...)
     end
 
     def store_name_options(...)

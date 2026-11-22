@@ -261,6 +261,15 @@ module ReceiptAnalysisProfiles
     /ix.freeze
 
     OCR_PAYMENT_METHOD_PATTERN = /現金|cash|e[\s-]*gift|イーギフト|電子ギフト|ストアクレジット|store\s*credit|商品券|金券|ギフト券|お買物券|買物券|voucher|gift\s*certificate|gift\s*card|coupon|クレジット|credit|visa|mastercard|mastercard|master|jcb|amex|american\s*express|diners|discover|unionpay|union\s*pay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|楽天edy|edy|\bid\b|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|\bnfc\b|mobilepayment|applepay|googlepay|qr\s*(?:コード)?\s*(?:決済|支払|支払い|payment)?|paypay|楽天ペイ|rakuten\s*pay|d払い|dpayment|au\s*pay|aupay|メルペイ|line\s*pay|linepay|alipay|wechatpay|デビット|debit/i.freeze
+    OCR_PAYMENT_METHOD_LABEL_PATTERN = /\A(?:売上|支払方法|お支払方法|お支払い方法|決済方法|payment\s+method)\z/i.freeze
+    OCR_PAYMENT_SCHEDULE_VALUE_PATTERN = /\A一括\z/.freeze
+    OCR_PAYMENT_METHOD_VALUE_PATTERNS = {
+      "cash" => /\A(?:現金|現計|cash)\z/i,
+      "credit_card" => /\A(?:クレジット(?:カード)?|credit(?:\s*card)?)\z/i,
+      "debit_card" => /\A(?:デビット(?:カード)?|debit(?:\s*card)?|j[-\s]?debit|visa\s*debit)\z/i,
+      "e_money" => /\A(?:電子マネー|交通系\s*(?:ic|電子マネー)|suica|pasmo|icoca|waon|nanaco|(?:楽天)?edy|i\s*d|qui(?:c|ck)\s*pay)\z/i,
+      "qr_payment" => /\A(?:qr(?:コード)?(?:決済)?|paypay|楽天(?:ペイ|pay)|rakuten\s*pay|d払い|d\s*payment|au\s*pay|メルペイ|line\s*pay|alipay|wechat\s*pay)\z/i
+    }.freeze
     OCR_POINT_KEYWORDS_PATTERN = /ポイント|point|会員|member|楽天ポイント|楽天ポイン|waonpoint|tポイント|dポイント|ponta/i.freeze
     OCR_PAYMENT_KEYWORDS_PATTERN = /現金|cash|クレジット|credit|visa|mastercard|master|jcb|amex|americanexpress|diners|discover|unionpay|銀聯|suica|pasmo|icoca|交通系ic|交通系電子マネー|電子マネー|waon|nanaco|edy|id|quickpay|quicpay|contactless|タッチ決済|コンタクトレス|nfc|mobilepayment|applepay|googlepay|qr(?:コード)?|paypay|楽天ペイ|rakutenpay|d払い|dpayment|aupay|メルペイ|linepay|alipay|wechatpay|デビット|debit|カード|支払|決済/i.freeze
     OCR_PAYMENT_SUPPORT_ONLY_PATTERN = /対応|使えます|使える|利用可|ご利用(?:いただけます|できます|可能)|取扱|取り扱|accepted|available|supported|weaccept/i.freeze
@@ -557,6 +566,8 @@ module ReceiptAnalysisProfiles
       tel|電話|fax|住所|所在地|合計|小計|消費税|税率|税額|税込|税抜|現計|支払|お支払|決済|点数|
       total|subtotal|tax|payment|cash|change
     /ix.freeze
+    STORE_DOCUMENT_LABEL_PATTERN = /納品書|領収書|領収証|レシート|お客様控え|クレジットカード売上票/.freeze
+    STORE_DOCUMENT_TITLE_PATTERN = /\A(?:#{STORE_DOCUMENT_LABEL_PATTERN})(?:\((?:#{STORE_DOCUMENT_LABEL_PATTERN})\))?\z/.freeze
     STORE_ADDRESS_LIKE_PATTERN = /
       [都道府県].*\d|[市区町村郡].*\d|〒|\d+[-丁目番地号]|
       \b(?:street|st\.|road|rd\.|avenue|ave\.|blvd\.|drive|dr\.|suite|floor)\b.*\d
@@ -619,6 +630,9 @@ module ReceiptAnalysisProfiles
     ANALYSIS_ITEM_DISCOUNT_LABEL_PATTERN = /割引|discount|off/i.freeze
     ANALYSIS_RECEIPT_LEVEL_ADJUSTMENT_LINE_PATTERN = /クーポン|ポイント|coupon|point/i.freeze
     ANALYSIS_PREVIOUS_SUBTOTAL_CONTEXT_PATTERN = /小計|合計|総合計|total|subtotal/i.freeze
+    ANALYSIS_PRINTED_DISCOUNT_LABEL_PATTERN = /\A[\p{L} \t]{0,24}(?:半額|値引き?|割引)(?:計|合計)?\z/u.freeze
+    ANALYSIS_PRINTED_DISCOUNT_QUANTITY_PATTERN = /\A(?:数量[ \t]*[:：]?[ \t]*)?[1-9][0-9]{0,3}(?:[ \t]*(?:枚|個|点|本|袋|箱))?\z/.freeze
+    ANALYSIS_PRINTED_DISCOUNT_SUBTOTAL_LABEL_PATTERN = /\A(?:商品小計|小計|subtotal)[ \t]*[:：]?[ \t]*\z/i.freeze
     ANALYSIS_GENERIC_RETURN_REFUND_LABEL_PATTERN = /\A(?:返品|返金|返却|refund|return)\z/i.freeze
     ANALYSIS_RETURN_REFUND_KIND_PATTERN = /返品|返金|返却|refund|return/i.freeze
     ANALYSIS_COUPON_KIND_PATTERN = /クーポン|coupon/i.freeze
@@ -777,6 +791,18 @@ module ReceiptAnalysisProfiles
 
       def ocr_payment_method_pattern
         OCR_PAYMENT_METHOD_PATTERN
+      end
+
+      def ocr_payment_method_label_pattern
+        OCR_PAYMENT_METHOD_LABEL_PATTERN
+      end
+
+      def ocr_payment_method_value_patterns
+        OCR_PAYMENT_METHOD_VALUE_PATTERNS
+      end
+
+      def ocr_payment_schedule_value_pattern
+        OCR_PAYMENT_SCHEDULE_VALUE_PATTERN
       end
 
       def ocr_point_keywords_pattern
@@ -1496,6 +1522,10 @@ module ReceiptAnalysisProfiles
         STORE_HEADING_STOP_PATTERN
       end
 
+      def store_document_title_pattern
+        STORE_DOCUMENT_TITLE_PATTERN
+      end
+
       def store_address_like_pattern
         STORE_ADDRESS_LIKE_PATTERN
       end
@@ -1630,6 +1660,18 @@ module ReceiptAnalysisProfiles
 
       def analysis_previous_subtotal_context_pattern
         ANALYSIS_PREVIOUS_SUBTOTAL_CONTEXT_PATTERN
+      end
+
+      def analysis_printed_discount_label_pattern
+        ANALYSIS_PRINTED_DISCOUNT_LABEL_PATTERN
+      end
+
+      def analysis_printed_discount_quantity_pattern
+        ANALYSIS_PRINTED_DISCOUNT_QUANTITY_PATTERN
+      end
+
+      def analysis_printed_discount_subtotal_label_pattern
+        ANALYSIS_PRINTED_DISCOUNT_SUBTOTAL_LABEL_PATTERN
       end
 
       def analysis_generic_return_refund_label_pattern

@@ -18,6 +18,24 @@ RSpec.describe Analysis::ReceiptStoreNameResolver do
     expect(described_class.singleton_class.public_instance_methods(false)).to contain_exactly(:call, :resolve, :options)
   end
 
+  it '選択時に記録した版を指定すると同じ候補集合を再構築する' do
+    input = { candidates: { store_name: 'SampleMart' }, lines: [ 'SampleMart' ] }
+
+    expect(described_class.options(ocr_result: input, version: 'store_name_options_v1'))
+      .to eq(described_class.options(ocr_result: input))
+  end
+
+  it '未対応の候補版を現在の版へ推測変換しない' do
+    input = { candidates: { store_name: 'SampleMart' }, lines: [ 'SampleMart' ] }
+
+    expect(described_class.options(ocr_result: input, version: 'store_name_options_unknown'))
+      .to include(options: [], invalid: true)
+    expect(described_class.resolve(
+      ocr_result: input,
+      ai_result: { meta: { store_name_selection: { decision: 'reject', options_schema_version: 'store_name_options_unknown' } } }
+    )).to include(value: nil, state: 'missing')
+  end
+
   it '空の店舗名ではcasing設定を読まず元の値を返す' do
     expect(SystemSettings).not_to receive(:limit_for)
 
@@ -189,6 +207,242 @@ RSpec.describe Analysis::ReceiptStoreNameResolver do
         page_index: page, provider_line_index: index, span_state: 'exact',
         span: { offset: offset, length: text.length }, string_index_type: 'textElements'
       }
+    end
+
+    it '同一の印字範囲と表示に統合した候補はMerchantNameの低confidenceだけで要確認に戻さない' do
+      lines = [ 'みどり食堂', 'ひだまりテラス南' ]
+      name = lines.join(' ')
+      input = evidence_result(
+        page_candidate(lines.first, 0), page_candidate(lines.last, 1),
+        { candidate_id: 'merchant_name', text: name, source: 'merchant_name', confidence: 0.2,
+          source_path: 'documents[0].fields.MerchantName', span_state: 'exact',
+          span: { offset: 0, length: 38 }, string_index_type: 'textElements' }
+      ).deep_merge(candidates: { store_name: name }, lines: lines, case_preserved_lines: lines)
+      legacy = described_class.options(ocr_result: input)
+      options = described_class.options(ocr_result: input, version: 'store_name_options_v2')
+      selected = options[:options].find { |option| option[:value] == name }
+      relation = options[:relations].sole
+      selection = Analysis.store_name_selection(
+        { decision: 'select', option_id: selected[:option_id],
+          relations: [ { relation_id: relation[:relation_id], decision: 'store_location' } ] }, options: options
+      )
+
+      result = described_class.resolve(ocr_result: input, ai_result: { meta: { store_name_selection: selection } })
+
+      expect(result).to include(value: name, state: 'confirmed', reason_codes: [])
+      expect(described_class.options(ocr_result: input)).to eq(legacy)
+    end
+
+    context 'OCRで店舗名を選べなかった場合' do
+      let(:missing_store_ocr) do
+        evidence_result(line_candidate('詳しくは係員まで', 2)).deep_merge(
+          candidates: { store_name: nil }, lines: [ '領収書', '合計100円', '詳しくは係員まで' ]
+        )
+      end
+
+      %w[store_name_options_v1 store_name_options_v2].each do |version|
+        context "#{version}の選択" do
+          let(:options) { described_class.options(ocr_result: missing_store_ocr, version: version) }
+
+          %w[reject ambiguous invalid].each do |decision|
+            it "#{decision}で候補先頭の案内文を店舗名へ昇格しない" do
+              selection = {
+                decision: decision, options_schema_version: version,
+                options_checksum: options[:checksum], relations: []
+              }
+              result = described_class.resolve(
+                ocr_result: missing_store_ocr,
+                ai_result: { receipt_attributes: {}, review_reasons: [ 'store_name_missing' ], meta: { store_name_selection: selection } }
+              )
+
+              aggregate_failures do
+                expect(options[:options]).to contain_exactly(include(value: '詳しくは係員まで'))
+                expect(result).to eq(value: nil, state: 'missing', option_id: nil, reason_codes: [ 'store_name_missing' ])
+              end
+            end
+          end
+
+          it 'OCR店舗名が空でも検証済みIDによるAI選択は採用する' do
+            input = evidence_result(line_candidate('サンプル商店')).deep_merge(
+              candidates: { store_name: nil }, lines: [ 'サンプル商店' ]
+            )
+            choices = described_class.options(ocr_result: input, version: version)
+            selected = choices[:options].sole
+            selection = {
+              decision: 'select', option_id: selected[:option_id], options_schema_version: version,
+              options_checksum: choices[:checksum], relations: []
+            }
+
+            result = described_class.resolve(ocr_result: input, ai_result: { meta: { store_name_selection: selection } })
+
+            expect(result).to eq(value: 'サンプル商店', state: 'confirmed', option_id: selected[:option_id], reason_codes: [])
+          end
+
+          it '有効なOCR店舗名がある場合はAIのrejectでも既存名を保持する' do
+            choices = described_class.options(ocr_result: ocr_result, version: version)
+            result = described_class.resolve(
+              ocr_result: ocr_result,
+              ai_result: {
+                meta: { store_name_selection: {
+                  decision: 'reject', options_schema_version: version, options_checksum: choices[:checksum], relations: []
+                } }
+              }
+            )
+
+            expect(result).to include(value: 'サンプルストア', state: 'uncertain', reason_codes: [ 'store_name_uncertain' ])
+          end
+        end
+      end
+
+      [ {}, { store_name_selection: nil } ].each do |meta|
+        it "AI選択が#{meta.empty? ? '未保存' : 'null'}でも候補先頭を確定しない" do
+          result = described_class.resolve(ocr_result: missing_store_ocr, ai_result: { meta: meta })
+
+          expect(result).to eq(value: nil, state: 'missing', option_id: nil, reason_codes: [ 'store_name_missing' ])
+        end
+      end
+
+      it '選択肢もない場合は店舗名欠損を維持する' do
+        input = missing_store_ocr.deep_merge(candidates: { store_name_evidence: { candidates: [] } })
+
+        expect(described_class.resolve(ocr_result: input)).to eq(
+          value: nil, state: 'missing', option_id: nil, reason_codes: [ 'store_name_missing' ]
+        )
+      end
+
+      it '旧AIの店舗名が既存候補に一致する場合は採用経路を維持する' do
+        input = evidence_result(line_candidate('サンプル商店')).deep_merge(
+          candidates: { store_name: nil }, lines: [ 'サンプル商店' ]
+        )
+
+        result = described_class.resolve(ocr_result: input, ai_result: { receipt_attributes: { store_name: 'サンプル商店' } })
+
+        expect(result).to include(value: 'サンプル商店', state: 'confirmed', reason_codes: [])
+      end
+    end
+
+    context 'OCR店舗名の改行とprovider自身の店舗名証拠を扱う場合' do
+      let(:merchant_name) { 'SampleMart 東京中央店' }
+      let(:merchant) do
+        {
+          candidate_id: 'merchant_name', text: merchant_name, source: 'merchant_name',
+          source_path: 'documents[0].fields.MerchantName', confidence: 0.99,
+          span_state: 'exact', span: { offset: 0, length: merchant_name.length },
+          string_index_type: 'textElements', line_index: 0
+        }
+      end
+      let(:merchant_ocr) do
+        evidence_result(merchant).deep_merge(candidates: { store_name: nil }, lines: [ merchant_name ])
+      end
+
+      { 'LF' => "\n", 'CRLF' => "\r\n" }.each do |label, newline|
+        it "#{label}入りのOCR名を欠損と見なさず旧AI結果のfallbackを維持する" do
+          name = "SampleMart#{newline}東京中央店"
+          input = merchant_ocr.deep_merge(candidates: { store_name: name })
+          options = described_class.options(ocr_result: input)
+
+          result = described_class.resolve(ocr_result: input, ai_result: { receipt_attributes: { store_name: name } })
+
+          expect(result).to include(value: merchant_name, state: 'confirmed', reason_codes: [])
+          expect(described_class.options(ocr_result: input)).to eq(options)
+        end
+
+        it "#{label}入りのOCR名をv2のambiguousでも欠損へ変えない" do
+          input = merchant_ocr.deep_merge(candidates: { store_name: "SampleMart#{newline}東京中央店" })
+          options = described_class.options(ocr_result: input, version: 'store_name_options_v2')
+          selection = {
+            decision: 'ambiguous', options_schema_version: 'store_name_options_v2',
+            options_checksum: options[:checksum], relations: []
+          }
+
+          result = described_class.resolve(ocr_result: input, ai_result: { meta: { store_name_selection: selection } })
+
+          expect(result).to include(value: merchant_name, state: 'uncertain', reason_codes: [ 'store_name_uncertain' ])
+          expect(described_class.options(ocr_result: input, version: 'store_name_options_v2')).to eq(options)
+        end
+      end
+
+      it 'OCR名が商品名と重なって欠損してもexactな高信頼header MerchantNameを維持する' do
+        input = merchant_ocr.deep_merge(candidates: { items: [ { raw_text: merchant_name } ] })
+
+        result = described_class.resolve(ocr_result: input)
+
+        expect(result).to include(value: merchant_name, state: 'confirmed', reason_codes: [])
+      end
+
+      it '同じ原文行のsupportも保持するatomic MerchantNameを救済する' do
+        input = merchant_ocr.deep_merge(candidates: {
+          store_name_evidence: { candidates: [ merchant, line_candidate(merchant_name) ] }
+        })
+        options = described_class.options(ocr_result: input)
+
+        result = described_class.resolve(ocr_result: input)
+
+        expect(options[:options].sole[:candidate_ids]).to contain_exactly('merchant_name', 'line_0')
+        expect(result).to include(value: merchant_name, state: 'confirmed', reason_codes: [])
+      end
+
+      it 'OCR名が空白だけでも一意なprovider店舗名を先頭lineとは区別して採用する' do
+        input = merchant_ocr.deep_merge(candidates: {
+          store_name: " \r\n ", store_name_evidence: { candidates: [ line_candidate('詳しくは係員まで', 2), merchant ] }
+        }, lines: [ merchant_name, '領収書', '詳しくは係員まで' ])
+        options = described_class.options(ocr_result: input)
+
+        result = described_class.resolve(ocr_result: input)
+
+        expect(options[:options].first[:value]).to eq('詳しくは係員まで')
+        expect(result).to include(value: merchant_name, state: 'uncertain', reason_codes: [ 'store_name_uncertain' ])
+      end
+
+      it 'provider店舗名を救済してもv2のrejectを確認済みへ変えない' do
+        options = described_class.options(ocr_result: merchant_ocr, version: 'store_name_options_v2')
+        selection = {
+          decision: 'reject', options_schema_version: 'store_name_options_v2',
+          options_checksum: options[:checksum], relations: []
+        }
+
+        result = described_class.resolve(ocr_result: merchant_ocr, ai_result: { meta: { store_name_selection: selection } })
+
+        expect(result).to include(value: merchant_name, state: 'uncertain', reason_codes: [ 'store_name_uncertain' ])
+      end
+
+      it '低信頼のMerchantNameはOCR名欠損の代わりに採用しない' do
+        merchant[:confidence] = 0.89
+
+        expect(described_class.resolve(ocr_result: merchant_ocr)).to include(value: nil, state: 'missing')
+      end
+
+      it '本文内のMerchantNameはOCR名欠損の代わりに採用しない' do
+        merchant[:line_index] = 8
+        input = merchant_ocr.merge(lines: Array.new(8, '領収書') + [ merchant_name ])
+
+        expect(described_class.resolve(ocr_result: input)).to include(value: nil, state: 'missing')
+      end
+
+      it 'exact spanがないMerchantNameはOCR名欠損の代わりに採用しない' do
+        merchant.except!(:span, :string_index_type)
+        merchant[:span_state] = 'missing'
+
+        expect(described_class.resolve(ocr_result: merchant_ocr)).to include(value: nil, state: 'missing')
+      end
+
+      it '不正spanのMerchantNameを欠損証拠へ読み替えて救済しない' do
+        merchant[:span][:offset] = -1
+
+        expect(described_class.resolve(ocr_result: merchant_ocr)).to include(value: nil, state: 'missing')
+      end
+
+      it '元OCR行との一致がないMerchantNameをheaderとして採用しない' do
+        input = merchant_ocr.merge(lines: [ '別の見出し' ])
+
+        expect(described_class.resolve(ocr_result: input)).to include(value: nil, state: 'missing')
+      end
+
+      it 'OCR名の上限超過は真の欠損としてprovider店舗名で補完しない' do
+        input = merchant_ocr.deep_merge(candidates: { store_name: 'a' * 501 })
+
+        expect(described_class.resolve(ocr_result: input)).to include(value: nil, state: 'missing')
+      end
     end
 
     it '施設と用途のexact連続行を参考候補と同じ完全名で選択可能にする' do

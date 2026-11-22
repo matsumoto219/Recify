@@ -79,6 +79,15 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
       if candidates.key?(:purchased_at_evidence)
         candidates[:purchased_at_evidence] = Analysis.purchased_at_evidence(candidates[:purchased_at_evidence] || {})
       end
+      evidence = candidates.delete(:payment_method_evidence)
+      if evidence && payment_method_source_complete?(snapshot)
+        evidence = Analysis.payment_method_evidence(
+          evidence,
+          lines: snapshot[:lines],
+          profile: ReceiptAnalysisProfiles.fetch(candidates[:country_region])
+        )
+        candidates[:payment_method_evidence] = evidence if evidence
+      end
       basis = candidates.delete(:tax_detail_amount_basis)
       counts = normalized_hash(normalized_hash(snapshot[:candidate_counts])[:tax_details])
       count = Array(candidates[:tax_details]).size
@@ -88,6 +97,13 @@ class Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator
         candidates[:tax_detail_amount_basis] = "net"
       end
       candidates.to_h
+    end
+
+    def payment_method_source_complete?(snapshot)
+      return false unless snapshot[:schema_version] == Receipts::Processing::Runs::SnapshotBuilder::OCR_RESULT_SCHEMA_VERSION
+
+      truncated = snapshot[:truncated]
+      truncated.is_a?(Hash) && %i[lines items payments].all? { |key| truncated[key] == false }
     end
 
     def rehydrate_ocr_truncation(value)

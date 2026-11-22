@@ -71,6 +71,7 @@ module Ai
         - amount MUST be an unsigned absolute integer.
         - Use sign to express whether the adjustment is a discount or surcharge.
         - source_text and source_line_index MUST refer to full_context_lines.
+        - Copy source_text and source_line_index from the text and index of the same OCR line object. previous_line and next_line have their own index; do not use the containing row or adjustment candidate index for their text. Do not guess an index when that line object is unavailable.
         - Do NOT output an adjustment if its amount cannot be tied to OCR text.
         - Quantity tokens such as item counts or units MUST NOT be used as adjustment amounts.
         - Do NOT convert item rows, payment rows, or tax-detail rows into receipt_adjustments.
@@ -102,7 +103,7 @@ module Ai
 
         Allowed store keys:
         - store_name
-        - store_name_selection (null, or decision and option_id only)
+        - store_name_selection (null, or decision, option_id, and relations only)
         - store_address
         - store_phone_number
 
@@ -171,18 +172,36 @@ module Ai
         For store information:
         - When store.name_options is present, select only an existing option_id from its options. Return store_name_selection with decision select, ambiguous, or reject; option_id is null unless selecting one option.
         - These options are server-constructed OCR names. Do NOT compose, expand, repair, or invent a store name outside this option set. For select, store_name may only repeat the selected option value; otherwise return null.
+        - store.name_options.relations asks about printed components identified by candidate_ids. A relation is a question, not proof that adjacent components belong to the same store.
+        - For every non-null store_name_selection, return relations as an object keyed by every supplied relation_id, with one of the six relation decisions below as each value. Do not omit or add relation keys. This applies to select, ambiguous, and reject decisions; use ambiguous for a relation you cannot determine. If no relations are supplied, return relations: {}.
+        - The whole store_name_selection may be null; do not force a selection to fill the relation keys.
+        - same_name: the components continue one printed name. A facility name followed by its function or use continues that facility's name, rather than naming a separate branch or venue. This relationship does not determine whether the displayed name needs a space. Choose the existing option whose spacing preserves the natural printed name; join a word continued across lines, but retain a boundary between distinct name components. Use a listed same_name_option_ids option when selecting that name.
+        - store_location: a store brand and its printed branch, venue, or in-facility location identify the same sales location. The location must have its own printed name, not merely describe a facility function or use. Use a listed store_location_option_ids option, with one space between the brand and location. A location does not need an explicit branch suffix.
+        - left_complete: the two components are duplicate representations of the same store, and the first candidate_id alone provides its complete printed name, including any printed branch, venue, or location. Select only an existing left_complete_option_ids option. Do not combine the components or translate, transliterate, repair, or expand the chosen name.
+        - right_complete: the same rule applies to the second candidate_id and its existing right_complete_option_ids options. These decisions require evidence that one side is the complete customer-facing printed name, not merely a recognizable brand.
+        - If both sides are complete and there is no clear printed basis to prefer one, return ambiguous. Do not prefer a language or a longer name to resolve that ambiguity.
+        - unrelated: the components identify different entities or non-store text. Do not combine them; select a listed separate_option_ids option if one of those components identifies the store.
+        - ambiguous: the relationship cannot be determined. If the chosen name involves that relation, return the overall decision ambiguous with option_id null. An ambiguous relation outside the chosen store does not make that store ambiguous.
+        - For each relation involving the selected option, the option_id must belong to the list matching its relation decision. Do not select a brand-only or location-only option after recognizing its store_location relation. Do not omit either the printed brand or its printed location from a supported combined name.
+        - A complete-side decision does not waive another relation's branch or location requirement. The selected option must satisfy every relation involving it.
         - Use printed customer-facing identity and source context to choose, not option order, the longest string, or provider confidence alone. If more than one plausible store identity remains, return ambiguous. If no option identifies the store, return reject.
         - A truncated or invalid option set is incomplete evidence; do not assume its remaining option is unique. The server makes the final store-name and review decision.
         - store_name: choose the customer-facing store, venue, facility, department, or sales-location name that a customer would use to identify where the purchase happened.
-        - Prefer prominent receipt header names and customer-facing candidates over legal entities when both are present.
+        - Use name_options and the original line context to determine name relationships. Prefer prominent printed customer-facing names over legal entities when both are present.
+        - store.name_layout is optional structural context for existing candidate_ids only. Its scope is provider_line; coordinate_scale is 10000, with the page's top-left at (0, 0) and bottom-right at (10000, 10000).
+        - Bounds describe the entire provider line, not the selected name or an exact font size. left/top locate that line; width/height describe its page-relative extent. coverage full_line means the candidate span covers the line; partial_line means the line includes text outside that candidate.
+        - Consider relative prominence, placement, and spacing together with the printed text when distinguishing customer-facing names from surrounding text. Layout is supporting evidence, not a name-selection instruction.
+        - Do not infer a shared store, a name relation, or a preferred option from size, proximity, or alignment alone. When layout is absent or insufficient, use the existing printed text and relation rules without inventing geometry.
         - OCR store_name is an important reference, but do NOT treat it as absolute when it appears to be an operator, management company, contractor, franchisee, licensee, tax-registered entity, legal entity, designated manager, or merchant-of-record.
         - Legal entity designators, company suffixes, or jurisdiction-specific corporate forms (e.g. Inc., Ltd., LLC, GmbH, S.A., Pty Ltd and similar) may be valid store_name only when that legal name is the only clearly supported customer-facing name.
         - If a legal entity appears near text that indicates management, operation, ownership, contracting, licensing, facility administration, merchant-of-record, tax-registration, or similar operator/legal-entity context, treat it as operator/legal-entity evidence rather than the primary store_name.
-        - Use the store brand name as the core store_name. When the receipt explicitly prints a brand followed by a branch, location, venue, department, sales area, or in-facility name, preserve that printed combined name as store_name.
-        - Do not shorten a printed brand-plus-branch/location/facility name to brand-only unless the extra text is clearly unrelated, address-only, operator/legal context, or non-store text.
+        - Preserve the printed components needed to identify the customer-facing store or facility. When those components form a name according to their relation, preserve that printed combined name as store_name.
+        - Do not shorten a printed brand-plus-branch/location/facility name to brand-only or location-only unless the omitted component is clearly unrelated, address-only, operator/legal context, or non-store text.
         - A combined brand, branch, facility, or venue name must already exist as one server-provided name option when store.name_options is present. Do not combine options yourself.
         - If a store candidate contains an isolated leading character, symbol, or logo fragment that is not supported by nearby text, prefer the clean customer-facing name that is otherwise supported by OCR. Do not invent or remove real brand words.
-        - Do NOT use descriptive phrases, slogans, business descriptions, addresses, phone numbers, fax numbers, register numbers, tax IDs, timestamps, receipt labels, operator/legal labels, or payment text as store_name.
+        - Determine whether a printed component identifies the store from its role in the original context, not from its wording alone. A supported printed store or branch name may resemble a description or slogan; that resemblance alone is not grounds to discard it or mark its name relation unrelated.
+        - Exclude phrases whose role is only advertising or business description, rather than store identity. If that role is unclear, return ambiguous instead of silently dropping a plausible name component.
+        - Do NOT use addresses, phone numbers, fax numbers, register numbers, tax IDs, timestamps, receipt labels, operator/legal labels, or payment text as store_name.
         - Use meta.country_region only to interpret local formatting already present in OCR. Do NOT add unprinted branch suffixes, store-type suffixes, location suffixes, words, or legal designators based on external knowledge, common naming conventions, or assumptions.
         - Do NOT normalize to a different brand name unless OCR candidates and context explicitly support it.
         - store_address: prefer OCR store_address. If it is blank or appears to be a headquarters or customer support address, look for a store-level address in address_candidates, filtered_content, and full_context_lines.
@@ -191,7 +210,7 @@ module Ai
         - store_phone_number: prefer OCR store_phone_number. Do NOT invent phone numbers.
         - If a plausible phone number exists, keep it unless there is strong evidence that it is not a store phone number. If uncertain, use store_phone_number_uncertain instead of treating it as missing.
         - Prefer phone numbers clearly tied to the store or branch context over headquarters or customer support numbers.
-        - customer_facing_store_candidates, store_candidates, operator_candidates, branch_name_candidates, and address_candidates are supporting references only. Do NOT output those arrays.
+        - operator_candidates and address_candidates are supporting references only, not name-selection or composition instructions. Do NOT output those arrays.
 
         For purchase:
         - purchased_at_text: identify when this purchase or fee settlement occurred. Do NOT invent timestamps.
@@ -275,8 +294,8 @@ module Ai
         - Do NOT rely only on known keywords. Use context, amounts, signs, neighboring lines, labels, and payment context to interpret Japanese, English, overseas, abbreviated, or unknown adjustment wording.
         - Treat point_usage as a payment adjustment. Do NOT treat point_usage as an item discount or tax adjustment.
         - adjustment_context_lines may exist for compatibility, but full_context_lines takes priority.
-        - Labels and amounts may be split across neighboring OCR lines. Use previous_text and next_text to connect them.
-        - Tie each adjustment amount to source_text, previous_text, or next_text.
+        - Labels and amounts may be split across neighboring OCR lines. Use previous_line and next_line, including adjustment_candidates.neighboring_lines, to connect them.
+        - Tie each adjustment amount to the text and index of one OCR line object.
         - Do NOT invent amount, label, percentage, or source_line_index.
         - Use sign according to whether the adjustment increases or decreases the total.
         - kind MUST be selected only from allowed adjustment_kinds.

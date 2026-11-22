@@ -180,15 +180,70 @@ RSpec.describe Ai::PromptTemplate do
       store_information_prompt = user_prompt.split("For store information:", 2).last.split("For purchase:", 2).first
 
       aggregate_failures do
-        expect(store_information_prompt).to include('Use the store brand name as the core store_name.')
+        expect(store_information_prompt).not_to include('Use the store brand name as the core store_name.')
+        expect(store_information_prompt).to include('Use name_options and the original line context to determine name relationships.')
         expect(store_information_prompt).to include('preserve that printed combined name as store_name')
         expect(store_information_prompt).to include('Do NOT add unprinted branch suffixes, store-type suffixes, location suffixes')
         expect(store_information_prompt).to include('Do NOT normalize to a different brand name unless OCR candidates and context explicitly support it.')
-        expect(store_information_prompt).to include('store_candidates, operator_candidates')
+        expect(store_information_prompt).to include('operator_candidates and address_candidates are supporting references only')
+        expect(store_information_prompt).not_to include('branch_name_candidates', 'customer_facing_store_candidates', 'store_candidates')
         expect(store_information_prompt).not_to include('store_casing_candidates')
         expect(store_information_prompt).not_to match(/[一-龠ぁ-んァ-ヶ]/)
         expect(store_information_prompt).not_to include('店')
         expect(store_information_prompt).not_to include('支店')
+      end
+    end
+
+    it '店舗候補の関係を全件判定し、その判定と表示候補の整合を要求する' do
+      store_information_prompt = user_prompt.split("For store information:", 2).last.split("For purchase:", 2).first
+
+      aggregate_failures do
+        expect(system_prompt).to include('store_name_selection (null, or decision, option_id, and relations only)')
+        expect(store_information_prompt).to include('For every non-null store_name_selection, return relations as an object keyed by every supplied relation_id')
+        expect(store_information_prompt).to include('This applies to select, ambiguous, and reject decisions; use ambiguous for a relation you cannot determine.')
+        expect(store_information_prompt).to include('same_name: the components continue one printed name')
+        expect(store_information_prompt).to include('This relationship does not determine whether the displayed name needs a space.')
+        expect(store_information_prompt).to include('Choose the existing option whose spacing preserves the natural printed name; join a word continued across lines, but retain a boundary between distinct name components.')
+        expect(store_information_prompt).to include("A facility name followed by its function or use continues that facility's name")
+        expect(store_information_prompt).to include('store_location: a store brand and its printed branch, venue, or in-facility location')
+        expect(store_information_prompt).to include('The location must have its own printed name, not merely describe a facility function or use.')
+        expect(store_information_prompt).to include('left_complete: the two components are duplicate representations of the same store')
+        expect(store_information_prompt).to include('right_complete: the same rule applies to the second candidate_id')
+        expect(store_information_prompt).to include('If both sides are complete and there is no clear printed basis to prefer one, return ambiguous.')
+        expect(store_information_prompt).to include('Do not prefer a language or a longer name to resolve that ambiguity.')
+        expect(store_information_prompt).to include('A complete-side decision does not waive another relation')
+        expect(store_information_prompt).to include('unrelated: the components identify different entities or non-store text')
+        expect(store_information_prompt).to include('ambiguous: the relationship cannot be determined')
+        expect(store_information_prompt).to include('one space between the brand and location')
+        expect(store_information_prompt).to include('Do not select a brand-only or location-only option after recognizing its store_location relation.')
+        expect(store_information_prompt).to include('Do not omit either the printed brand or its printed location from a supported combined name.')
+        expect(store_information_prompt).to include('If no relations are supplied, return relations: {}.')
+        expect(store_information_prompt).to include('The whole store_name_selection may be null; do not force a selection to fill the relation keys.')
+        expect(store_information_prompt).not_to include('using only relation_id and decision', 'return relations: []')
+        expect(store_information_prompt).to include('not option order, the longest string, or provider confidence alone')
+        expect(store_information_prompt).not_to match(/[一-龠ぁ-んァ-ヶ]/)
+      end
+    end
+
+    it '宣伝に似た語句でも印字上の役割から店舗名と宣伝文を区別する' do
+      store_information_prompt = user_prompt.split("For store information:", 2).last.split("For purchase:", 2).first
+
+      aggregate_failures do
+        expect(store_information_prompt).to include('Determine whether a printed component identifies the store from its role in the original context, not from its wording alone.')
+        expect(store_information_prompt).to include('A supported printed store or branch name may resemble a description or slogan; that resemblance alone is not grounds to discard it or mark its name relation unrelated.')
+        expect(store_information_prompt).to include('Exclude phrases whose role is only advertising or business description, rather than store identity. If that role is unclear, return ambiguous instead of silently dropping a plausible name component.')
+        expect(store_information_prompt).not_to include('Do NOT use descriptive phrases, slogans, business descriptions')
+      end
+    end
+
+    it '店舗名の位置情報は行全体の補助根拠としてだけ使う' do
+      store_information_prompt = user_prompt.split("For store information:", 2).last.split("For purchase:", 2).first
+
+      aggregate_failures do
+        expect(store_information_prompt).to include('store.name_layout is optional structural context for existing candidate_ids only.')
+        expect(store_information_prompt).to include('Bounds describe the entire provider line, not the selected name or an exact font size.')
+        expect(store_information_prompt).to include('Do not infer a shared store, a name relation, or a preferred option from size, proximity, or alignment alone.')
+        expect(store_information_prompt).to include('When layout is absent or insufficient, use the existing printed text and relation rules without inventing geometry.')
       end
     end
 
@@ -215,7 +270,7 @@ RSpec.describe Ai::PromptTemplate do
         expect(user_prompt).to include('full_context_lines takes priority.')
         expect(user_prompt).to include('overseas, abbreviated, or unknown adjustment wording.')
         expect(user_prompt).to include('Labels and amounts may be split across neighboring OCR lines.')
-        expect(user_prompt).to include('Tie each adjustment amount to source_text, previous_text, or next_text.')
+        expect(user_prompt).to include('Tie each adjustment amount to the text and index of one OCR line object.')
         expect(user_prompt).to include('Treat point_usage as a payment adjustment. Do NOT treat point_usage as an item discount or tax adjustment.')
         expect(user_prompt).to include('A change line alone, including zero change, does not establish cash payment.')
         expect(user_prompt).to include('Gift certificates and electronic gifts used in the settlement section are other.')
@@ -262,6 +317,8 @@ RSpec.describe Ai::PromptTemplate do
         expect(system_prompt).to include('price, quantity, quantity_unit_code, line_total, product_code, and confidence are reference-only inputs. Do NOT output or change them.')
         expect(system_prompt).to include('amount MUST be an unsigned absolute integer.')
         expect(system_prompt).to include('source_text and source_line_index MUST refer to full_context_lines.')
+        expect(system_prompt).to include('Copy source_text and source_line_index from the text and index of the same OCR line object.')
+        expect(system_prompt).to include('previous_line and next_line have their own index; do not use the containing row or adjustment candidate index for their text.')
         expect(system_prompt).to include('Do NOT output an adjustment if its amount cannot be tied to OCR text.')
         expect(system_prompt).to include('Use only allowed review reason codes.')
         expect(system_prompt).to include('Do NOT combine codes.')

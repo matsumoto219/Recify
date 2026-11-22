@@ -1,6 +1,76 @@
 require 'rails_helper'
 
 RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
+  describe 'AI inputの隣接行' do
+    it '主行上限と境界の隣接本文を保ち、旧versionのままindexと本文を保存する' do
+      allow(described_class).to receive(:snapshot_ai_input_full_context_lines_max).and_return(2)
+      allow(described_class).to receive(:snapshot_ai_input_adjustment_context_lines_max).and_return(1)
+      context = [
+        { index: 0, text: '同じ印字', next_line: { index: 1, text: '同じ印字' } },
+        { index: 1, text: '同じ印字', previous_line: { index: 0, text: '同じ印字' }, next_line: { index: 2, text: '末尾の文脈' } },
+        { index: 2, text: '末尾の文脈', previous_line: { index: 1, text: '同じ印字' } }
+      ]
+
+      snapshot = described_class.ai_input_snapshot(full_context_lines: context, adjustment_context_lines: context)
+
+      aggregate_failures do
+        expect(snapshot.values_at('schema_version', 'prompt_schema_version')).to eq(%w[receipt_analysis_run_ai_input_v1 recify_receipt_analysis_v1])
+        expect(snapshot['full_context_lines']).to eq(context.first(2).map(&:deep_stringify_keys))
+        expect(snapshot['adjustment_context_lines']).to eq(context.first(1).map(&:deep_stringify_keys))
+        expect(snapshot['truncated']).to include('full_context_lines' => true, 'adjustment_context_lines' => true)
+        expect(JSON.parse(snapshot.to_json)).to eq(snapshot)
+      end
+    end
+
+    it '旧入力の隣接文字列はそのまま扱い、新しいindexを補わない' do
+      old = { index: 1, text: '対象行', previous_text: '前の行', next_text: '次の行' }
+
+      snapshot = described_class.ai_input_snapshot(full_context_lines: [ old ])
+
+      expect(snapshot['full_context_lines']).to eq([ old.deep_stringify_keys ])
+    end
+
+    it '新しい隣接本文にも既存のbyte上限を適用する' do
+      allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
+      context = { index: 0, text: '対象', next_line: { index: 1, text: 'あいうえお' } }
+
+      snapshot = described_class.ai_input_snapshot(full_context_lines: [ context ])
+
+      expect(snapshot.dig('full_context_lines', 0, 'next_line')).to eq('index' => 1, 'text' => 'あ')
+    end
+
+    [
+      nil,
+      [],
+      { index: 2, text: '次行' },
+      { index: '1', text: '次行' },
+      { index: 1.0, text: '次行' },
+      { index: -1, text: '次行' },
+      { index: 1, text: { raw_response: '保存しない' } },
+      { index: 1 },
+      { index: 1, text: '次行', unknown: '保存しない' },
+      { index: 1, 1 => '保存しない' }
+    ].each do |neighbor|
+      it "型・隣接index・fieldが不正な行objectを保存しない: #{neighbor.inspect}" do
+        snapshot = described_class.ai_input_snapshot(full_context_lines: [ { index: 0, text: '対象行', next_line: neighbor } ])
+
+        aggregate_failures do
+          expect(snapshot['full_context_lines']).to eq([ { 'index' => 0, 'text' => '対象行' } ])
+          expect(snapshot.to_json).not_to include('保存しない')
+        end
+      end
+    end
+
+    it '保持配列の位置に一致しない親indexから隣接indexを保存しない' do
+      index = 10**100
+      snapshot = described_class.ai_input_snapshot(full_context_lines: [
+        { index: index, text: '対象行', next_line: { index: index + 1, text: '次行' } }
+      ])
+
+      expect(snapshot['full_context_lines']).to eq([ { 'index' => index, 'text' => '対象行' } ])
+    end
+  end
+
   it 'AI実行条件は安全な値だけを文字列短縮せず保存する' do
     allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
     execution = { schema_version: 1, model: 'future-model', reasoning_effort: 'max', prompt: 'not retained' }
@@ -378,6 +448,17 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
       end
     end
 
+    it 'roundtrips the complete twenty-entry source window under the default setting' do
+      store_evidence[:candidates] = Array.new(20) do |index|
+        { candidate_id: "line_#{index}", text: "Sample Place #{index}", source: 'line',
+          source_path: "lines[#{index}]", line_index: index, span_state: 'missing' }
+      end
+      snapshot = described_class.ocr_result_snapshot(candidates: { store_name_evidence: store_evidence })
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+      expect(restored.dig(:candidates, 'store_name_evidence')).to eq(store_evidence.deep_stringify_keys)
+    end
+
     it 'marks snapshot candidate clipping instead of treating its subset as complete' do
       allow(described_class).to receive(:snapshot_store_candidates_max).and_return(1)
       snapshot = described_class.ocr_result_snapshot(candidates: { store_name_evidence: store_evidence })
@@ -397,6 +478,136 @@ RSpec.describe Receipts::Processing::Runs::SnapshotBuilder do
         expect(restored.dig(:candidates, 'store_name_evidence')).to include('invalid' => true, 'candidates' => [])
         expect(described_class.ocr_result_snapshot(candidates: {}).fetch('candidates')).not_to have_key('store_name_evidence')
       end
+    end
+  end
+
+  describe 'store name line layout' do
+    let(:store_evidence) do
+      {
+        schema_version: 'store_name_evidence_v1', truncated: false, invalid: false,
+        candidates: [
+          { candidate_id: 'page_0_line_0', text: 'Sample Store', source: 'line', source_path: 'pages[0].lines[0]',
+            line_index: 0, page_index: 0, provider_line_index: 0, span_state: 'exact',
+            span: { offset: 0, length: 12 }, string_index_type: 'textElements' },
+          { candidate_id: 'page_0_line_1', text: '中央店', source: 'line', source_path: 'pages[0].lines[1]',
+            line_index: 1, page_index: 0, provider_line_index: 1, span_state: 'exact',
+            span: { offset: 13, length: 3 }, string_index_type: 'textElements' }
+        ]
+      }
+    end
+
+    let(:layout) do
+      {
+        scope: 'provider_line', coordinate_scale: 10_000,
+        entries: [
+          { candidate_id: 'page_0_line_0', page_index: 0, provider_line_index: 0,
+            line_span: { offset: 0, length: 12 }, bounds: { left: 1000, top: 500, width: 8000, height: 1000 } },
+          { candidate_id: 'page_0_line_1', page_index: 0, provider_line_index: 1,
+            line_span: { offset: 13, length: 3 }, bounds: { left: 3000, top: 1800, width: 4000, height: 500 } }
+        ]
+      }
+    end
+
+    let(:original) do
+      {
+        success: true, lines: [ 'Sample Store', '中央店' ],
+        candidates: { country_region: 'JPN', store_name: 'Sample Store', total_amount: 120, store_name_evidence: store_evidence },
+        meta: { provider: 'fixture', store_name_layout: layout }
+      }
+    end
+
+    it 'keeps optional line geometry through OCR retry without changing candidate identities or amounts' do
+      options = Analysis.store_name_options(ocr_result: original, version: 'store_name_options_v2')
+      snapshot = described_class.ocr_result_snapshot(original)
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(JSON.parse(snapshot.to_json))
+      repeated = described_class.ocr_result_snapshot(restored)
+      without_layout = restored.deep_dup
+      without_layout.fetch(:meta).delete('store_name_layout')
+
+      aggregate_failures do
+        expect(options).to include(invalid: false, truncated: false)
+        expect(options[:options]).not_to be_empty
+        expect(snapshot['schema_version']).to eq('receipt_analysis_run_ocr_result_v1')
+        expect(snapshot.dig('meta', 'store_name_layout')).to eq(layout.deep_stringify_keys)
+        expect(repeated.dig('meta', 'store_name_layout')).to eq(layout.deep_stringify_keys)
+        expect(restored.dig(:candidates, 'store_name_evidence')).to eq(store_evidence.deep_stringify_keys)
+        expect(Analysis.store_name_options(ocr_result: restored, version: 'store_name_options_v2')).to eq(options)
+        expect(Analysis.build_receipt_params(ocr_result: restored)).to eq(Analysis.build_receipt_params(ocr_result: without_layout))
+      end
+    end
+
+    it 'rebuilds AI layout from the OCR snapshot without expanding the AI input snapshot' do
+      snapshot = described_class.ocr_result_snapshot(original)
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(JSON.parse(snapshot.to_json))
+      captured = nil
+      capture = lambda do |input|
+        captured = input
+        raise 'input captured before provider dispatch'
+      end
+
+      expect do
+        ReceiptAiEnrichmentService.call(restored, capture_input: capture)
+      end.to raise_error(ReceiptAiEnrichmentService::InputCaptureError)
+
+      expect(captured.dig(:store, :name_layout)).to eq(
+        layout.merge(entries: layout[:entries].map { |entry| entry.merge(coverage: 'full_line') })
+      )
+      input_snapshot = described_class.ai_input_snapshot(captured)
+      expect(input_snapshot['schema_version']).to eq('receipt_analysis_run_ai_input_v1')
+      expect(input_snapshot.fetch('store')).not_to have_key('name_layout')
+      expect(input_snapshot.fetch('store')).not_to have_key('name_options')
+    end
+
+    it 'preserves structural identities independently from generic string truncation' do
+      allow(described_class).to receive(:snapshot_string_max_bytes).and_return(5)
+
+      snapshot = described_class.ocr_result_snapshot(original)
+
+      expect(snapshot.dig('meta', 'store_name_layout')).to eq(layout.deep_stringify_keys)
+      expect(snapshot.dig('candidates', 'store_name_evidence')).to eq(store_evidence.deep_stringify_keys)
+    end
+
+    it 'keeps only geometry linked to retained candidates when snapshot limits shrink' do
+      allow(described_class).to receive(:snapshot_store_candidates_max).and_return(1)
+      snapshot = described_class.ocr_result_snapshot(original)
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+      allow(described_class).to receive(:snapshot_store_candidates_max).and_return(20)
+      repeated = described_class.ocr_result_snapshot(restored)
+
+      expect(snapshot.dig('meta', 'store_name_layout', 'entries')).to eq([ layout[:entries].first.deep_stringify_keys ])
+      expect(repeated.dig('meta', 'store_name_layout')).to eq(snapshot.dig('meta', 'store_name_layout'))
+      expect(repeated.dig('candidates', 'store_name_evidence')).to include('truncated' => true, 'invalid' => false)
+    end
+
+    it 'drops malformed layout without invalidating or exposing the existing candidates' do
+      layout[:raw_response] = 'not retained'
+      snapshot = described_class.ocr_result_snapshot(original)
+
+      expect(snapshot.fetch('meta')).not_to have_key('store_name_layout')
+      expect(snapshot.dig('candidates', 'store_name_evidence')).to eq(store_evidence.deep_stringify_keys)
+      expect(snapshot.to_json).not_to include('not retained')
+    end
+
+    it 'leaves old OCR snapshots without layout on the existing candidate contract' do
+      original[:meta].delete(:store_name_layout)
+      snapshot = described_class.ocr_result_snapshot(original)
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+      expect(snapshot.fetch('meta')).to eq('provider' => 'fixture')
+      expect(restored.dig(:candidates, 'store_name_evidence')).to eq(store_evidence.deep_stringify_keys)
+      expect(Analysis.store_name_options(ocr_result: restored, version: 'store_name_options_v2')).to eq(
+        Analysis.store_name_options(ocr_result: original, version: 'store_name_options_v2')
+      )
+    end
+
+    it 'does not attach layout to legacy names without typed candidate evidence' do
+      original[:candidates].delete(:store_name_evidence)
+      snapshot = described_class.ocr_result_snapshot(original)
+      restored = Receipts::Processing::Pipeline::FinalizeStep::SnapshotRehydrator.ocr(snapshot)
+
+      expect(snapshot.fetch('meta')).not_to have_key('store_name_layout')
+      expect(restored.dig(:candidates, 'store_name')).to eq('Sample Store')
+      expect(restored.fetch(:candidates)).not_to have_key('store_name_evidence')
     end
   end
 

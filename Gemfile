@@ -102,6 +102,7 @@ group :test do
   gem "capybara"
   gem "selenium-webdriver"
   gem "webmock"
+  gem "json_schemer", require: false
 end
 
 # 認証基盤 [https://github.com/heartcombo/devise]

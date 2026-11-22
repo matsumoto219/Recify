@@ -91,6 +91,10 @@ module Analysis
         text.match?(profile.analysis_receipt_discount_kind_pattern)
       end
 
+      def printed_discount_block?
+        PrintedDiscountBlock.call(proposal: proposal, lines: lines, items: items, profile: profile).present?
+      end
+
       def cashless_reward_text?
         text.match?(profile.analysis_cashless_reward_adjustment_pattern) ||
           text.match?(profile.ocr_payment_adjustment_discount_label_pattern)

@@ -99,6 +99,15 @@ RSpec.describe ReceiptAnalysisProfiles do
       expect('サンプル北町店').not_to match(profile.store_context_noise_pattern)
       expect('サンプル北町店').not_to match(profile.store_message_line_pattern)
     end
+
+    it '店舗の構成行の間で許可する帳票見出しは既知ラベル全体に一致する' do
+      %w[納品書 領収書 領収証 レシート お客様控え 納品書(領収書) 領収書(お客様控え)].each do |text|
+        expect(text).to match(profile.store_document_title_pattern)
+      end
+      [ 'サンプル領収書', '領収書サンプル', 'サンプル(領収書)', '領収書(サンプル)', '納品書(領収書)控え', '納品書((領収書))' ].each do |text|
+        expect(text).not_to match(profile.store_document_title_pattern)
+      end
+    end
   end
 
   describe 'JPN profile analysis fallback amount candidates' do
@@ -116,6 +125,26 @@ RSpec.describe ReceiptAnalysisProfiles do
         expect('商品 A5'.scan(pattern)).to be_empty
         expect('商品 1000ml'.scan(pattern)).to be_empty
       end
+    end
+  end
+
+  describe 'JPN profile printed discount blocks' do
+    let(:profile) { described_class.fetch('JPN') }
+
+    it '割引・数量・小計ラベルを完全行で限定する' do
+      [ '半額', '会員 AB半額', '商品割引', '半額値引合計' ].each do |text|
+        expect(text).to match(profile.analysis_printed_discount_label_pattern)
+      end
+      [ '半額120円', '50%割引', '半額の商品', "#{'例' * 25}半額" ].each do |text|
+        expect(text).not_to match(profile.analysis_printed_discount_label_pattern)
+      end
+      expect('数量 2点').to match(profile.analysis_printed_discount_quantity_pattern)
+      expect('2').to match(profile.analysis_printed_discount_quantity_pattern)
+      [ '2円', '0', '10000', '2.5点', '2点 3点' ].each do |text|
+        expect(text).not_to match(profile.analysis_printed_discount_quantity_pattern)
+      end
+      expect('商品小計').to match(profile.analysis_printed_discount_subtotal_label_pattern)
+      expect('商品小計 600円').not_to match(profile.analysis_printed_discount_subtotal_label_pattern)
     end
   end
 
@@ -149,6 +178,30 @@ RSpec.describe ReceiptAnalysisProfiles do
   end
 
   describe 'JPN profile payment method token boundaries' do
+    it '同一行の支払ラベルと決済名の完全一致語彙を所有する' do
+      profile = described_class.fetch('JPN')
+
+      aggregate_failures do
+        expect('売上').to match(profile.ocr_payment_method_label_pattern)
+        expect('支払方法').to match(profile.ocr_payment_method_label_pattern)
+        expect('売上予定').not_to match(profile.ocr_payment_method_label_pattern)
+        expect('取引ID').not_to match(profile.ocr_payment_method_label_pattern)
+        expect('iD').to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('ID').to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('クレジットカード').to match(profile.ocr_payment_method_value_patterns.fetch('credit_card'))
+        expect('VISA').not_to match(profile.ocr_payment_method_value_patterns.fetch('credit_card'))
+        expect('Mastercard').not_to match(profile.ocr_payment_method_value_patterns.fetch('credit_card'))
+        expect('JCB').not_to match(profile.ocr_payment_method_value_patterns.fetch('credit_card'))
+        expect('VISA Debit').to match(profile.ocr_payment_method_value_patterns.fetch('debit_card'))
+        expect('iD使えます').not_to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('Transaction ID').not_to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('Apple Pay').not_to match(profile.ocr_payment_method_value_patterns.fetch('e_money'))
+        expect('一括').to match(profile.ocr_payment_schedule_value_pattern)
+        expect('一括 Cash').not_to match(profile.ocr_payment_schedule_value_pattern)
+        expect('UnknownPay').not_to match(profile.ocr_payment_schedule_value_pattern)
+      end
+    end
+
     it 'd paymentは独立したtokenとして検出し他方式や英単語の内部へ部分一致しない' do
       patterns = described_class.fetch('JPN').fallback_payment_method_patterns.fetch('qr_payment')
 
