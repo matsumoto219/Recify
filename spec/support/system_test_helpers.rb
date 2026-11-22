@@ -1,4 +1,5 @@
 require "webmock/rspec"
+require_relative "system_test_webdriver_client"
 
 module SystemTestHelpers
   SYSTEM_TEST_ENV = {
@@ -89,7 +90,7 @@ RSpec.configure do |config|
     screen_size ||= SystemTestHelpers::DEFAULT_SCREEN_SIZE
     browser = ENV["SYSTEM_TEST_HEADLESS"] == "0" ? :chrome : :headless_chrome
 
-    driven_by :selenium, using: browser, screen_size: screen_size do |options|
+    driven_by :selenium, using: browser, screen_size: screen_size, options: { http_client: SystemTestWebDriverClient.new } do |options|
       options.add_argument("--disable-background-networking")
       # Avoid Chrome's click-navigation race:
       # https://github.com/teamcapybara/capybara/issues/2800#issuecomment-5152341389
