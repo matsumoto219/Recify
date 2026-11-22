@@ -101,7 +101,11 @@ export default class extends Controller {
     this.stopCameraWhenHidden = () => {
       if (document.hidden) this.stopCamera()
     }
-    this.refreshUploadControls = () => this.setCameraState(this.cameraState)
+    this.refreshUploadControls = (event) => {
+      // 通信エラーの案内を含めて高さを揃え、操作を再開した後でボタンが移動するのを防ぐ。
+      if (event.detail?.error) this.syncUploadHeight()
+      this.setCameraState(this.cameraState)
+    }
     this.discardSelectedImage = () => {
       this.stopCamera()
       this.clearPreview()

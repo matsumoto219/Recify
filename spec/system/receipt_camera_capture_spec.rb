@@ -68,6 +68,10 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
 
   def start_camera
     click_button I18n.t("receipts.new_upload.buttons.camera")
+    expect_camera_live
+  end
+
+  def expect_camera_live
     expect(page).to have_css("[data-receipt-upload-target='cameraLive']:not(.hidden)")
     expect(page).to have_button(I18n.t("receipts.new_upload.camera.capture"), disabled: false)
     expect(page).to have_css("svg.receipt-camera-guide:not(.invisible)")
@@ -264,7 +268,14 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
         state.calls += 1
         return new Promise((resolve, reject) => state.pending.push({ resolve, reject }))
       }
-      form.addEventListener('turbo:submit-end', () => { state.ended += 1 })
+      form.addEventListener('turbo:submit-end', (event) => {
+        state.ended += 1
+        if (event.detail.error) {
+          const button = form.querySelector('[data-receipt-upload-target=cameraButton]')
+          const rect = button.getBoundingClientRect()
+          state.cameraButtonCenter = [Math.round(rect.left + rect.width / 2), Math.round(rect.top + rect.height / 2)]
+        }
+      })
       form.addEventListener('turbo:fetch-request-error', () => { state.errors += 1 })
       window.receiptUploadTest = state
     JAVASCRIPT
@@ -309,7 +320,10 @@ RSpec.describe "レシートのPCカメラ撮影", type: :system do
     expect(page).to have_button(I18n.t("receipts.new_upload.buttons.upload"), disabled: false)
     expect(page).to have_button(I18n.t("receipts.new_upload.buttons.camera"), disabled: false)
     expect(page.evaluate_script("[window.receiptUploadTest.ended, window.receiptUploadTest.errors]")).to eq([ 2, 1 ])
-    start_camera
+    camera_button_center = page.evaluate_script("window.receiptUploadTest.cameraButtonCenter")
+    page.driver.browser.action.move_to_location(*camera_button_center).click.perform
+    expect_camera_live
+    expect(page.evaluate_script("window.receiptCameraTest.calls.length")).to eq(1)
     click_button I18n.t("receipts.new_upload.camera.cancel")
     expect(page).to have_button(I18n.t("receipts.new_upload.buttons.upload"), disabled: false)
     click_button I18n.t("receipts.new_upload.buttons.upload")
